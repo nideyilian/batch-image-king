@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QSlider, QFrame,
                                QToolButton, QButtonGroup, QSizePolicy, QCheckBox,
                                QTextEdit, QLineEdit, QComboBox, QScrollArea, QDialog, QCompleter,
-                               QTabBar, QGridLayout)
+                               QGridLayout)
 from PySide6.QtCore import Qt, Signal, QSize, QStringListModel
 from PySide6.QtGui import QColor, QFont, QPixmap, QPainter, QIcon
 
@@ -314,19 +314,6 @@ class IntegratedTextPanel(QWidget):
             QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
                 border-color: #2F9CF4;
             }
-            QTabBar::tab {
-                color: #C7C7C9;
-                padding: 7px 12px;
-                border: none;
-                background: transparent;
-            }
-            QTabBar::tab:selected {
-                color: #FFFFFF;
-                border-bottom: 2px solid #2F9CF4;
-            }
-            QTabBar::tab:hover {
-                color: #FFFFFF;
-            }
             QSlider::groove:horizontal {
                 height: 4px;
                 background: #3A3A3D;
@@ -547,16 +534,7 @@ class IntegratedTextPanel(QWidget):
         action_bar.addStretch()
         action_bar.addWidget(self.binding_mode_check)
 
-        self.section_tabs = QTabBar()
-        self.section_tabs.addTab("文字内容")
-        self.section_tabs.addTab("样式预设")
-        self.section_tabs.addTab("最近使用")
-        self.section_tabs.setDrawBase(False)
-        self.section_tabs.setExpanding(False)
-        self.section_tabs.currentChanged.connect(self._on_section_tab_changed)
-
         card_layout.addLayout(action_bar)
-        card_layout.addWidget(self.section_tabs)
         parent_layout.addWidget(action_card)
 
     def create_text_content_card(self, parent_layout):
@@ -1499,22 +1477,6 @@ class IntegratedTextPanel(QWidget):
             self._block_panel_controls(False)
 
     # 事件处理
-    def _on_section_tab_changed(self, index):
-        """顶部标签用于快速展开对应参数区，模拟属性面板的快速定位。"""
-        if index == 0:
-            if hasattr(self, "pos_group"):
-                self.pos_group.set_collapsed(True)
-            if hasattr(self, "bg_group"):
-                self.bg_group.set_collapsed(True)
-        elif index == 1:
-            if hasattr(self, "pos_group"):
-                self.pos_group.set_collapsed(False)
-            if hasattr(self, "bg_group"):
-                self.bg_group.set_collapsed(False)
-        elif index == 2:
-            if hasattr(self, "effects_group") and self.effects_group.isVisible():
-                self.effects_group.set_collapsed(False)
-
     def _is_checked(self, state):
         """兼容 PySide6 int 与 Qt.CheckState。"""
         if isinstance(state, bool):
