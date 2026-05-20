@@ -592,20 +592,42 @@ class IntegratedTextPanel(QWidget):
 
         def label(text):
             widget = QLabel(text)
-            widget.setMinimumWidth(58)
+            widget.setFixedWidth(58)
+            widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             widget.setStyleSheet("font-size: 12px; font-weight: 700; color: #F4F4F5;")
             return widget
 
         def row(title, *widgets, stretch_last=True):
             line = QHBoxLayout()
-            line.setSpacing(8)
+            line.setSpacing(6)
             line.addWidget(label(title))
             for widget in widgets:
                 if stretch_last and widget is widgets[-1]:
                     line.addWidget(widget, 1)
                 else:
                     line.addWidget(widget)
+            card_layout.addLayout(line)
+            return line
+
+        def inline_label(text, width=None):
+            widget = QLabel(text)
+            if width is not None:
+                widget.setFixedWidth(width)
+            widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            widget.setStyleSheet("font-size: 12px; font-weight: 700; color: #F4F4F5;")
+            return widget
+
+        def grouped_row(*items):
+            line = QHBoxLayout()
+            line.setSpacing(6)
+            for item in items:
+                if item is None:
+                    line.addSpacing(22)
+                else:
+                    line.addWidget(item)
+            line.addStretch(1)
             card_layout.addLayout(line)
             return line
 
@@ -742,7 +764,7 @@ class IntegratedTextPanel(QWidget):
         self.letter_spacing_spin.setRange(-20, 100)  # -20px 到 100px
         self.letter_spacing_spin.setValue(0)  # 默认0px
         self.letter_spacing_spin.setSuffix("px")
-        row("间距", self.line_spacing_spin, QLabel("字距"), self.letter_spacing_spin, stretch_last=False)
+        grouped_row(label("间距"), self.line_spacing_spin, None, inline_label("字距", 34), self.letter_spacing_spin)
 
         card_layout.addWidget(self._make_core_divider())
 
@@ -752,7 +774,7 @@ class IntegratedTextPanel(QWidget):
         self.text_box_padding_spin.setRange(0, 200)
         self.text_box_padding_spin.setValue(5)
         self.text_box_padding_spin.setSuffix("px")
-        row("文本框", self.auto_fit_check, QLabel("边距"), self.text_box_padding_spin, stretch_last=False)
+        grouped_row(label("文本框"), self.auto_fit_check, None, inline_label("边距", 34), self.text_box_padding_spin)
 
         parent_layout.addWidget(card)
 
