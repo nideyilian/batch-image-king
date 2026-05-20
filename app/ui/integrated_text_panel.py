@@ -619,17 +619,30 @@ class IntegratedTextPanel(QWidget):
             widget.setStyleSheet("font-size: 12px; font-weight: 700; color: #F4F4F5;")
             return widget
 
-        def grouped_row(*items):
-            line = QHBoxLayout()
-            line.setSpacing(6)
-            for item in items:
-                if item is None:
-                    line.addSpacing(22)
-                else:
-                    line.addWidget(item)
-            line.addStretch(1)
-            card_layout.addLayout(line)
-            return line
+        def parameter_grid(*pairs):
+            container = QWidget()
+            container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            grid = QGridLayout(container)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setHorizontalSpacing(6)
+            grid.setVerticalSpacing(8)
+
+            for index, (title, control) in enumerate(pairs):
+                row_index = index // 2
+                base_col = (index % 2) * 3
+                title_label = label(title) if index % 2 == 0 else inline_label(title, 40)
+                grid.addWidget(title_label, row_index, base_col)
+                grid.addWidget(control, row_index, base_col + 1)
+                if index % 2 == 0:
+                    grid.setColumnMinimumWidth(base_col + 2, 18)
+                if index == 1:
+                    container._responsive_second_label = title_label
+                    container._responsive_second_control = control
+
+            grid.setColumnStretch(2, 1)
+            grid.setColumnStretch(5, 1)
+            card_layout.addWidget(container)
+            return container
 
         def make_spin(width=76):
             spin = QSpinBox()
@@ -764,7 +777,10 @@ class IntegratedTextPanel(QWidget):
         self.letter_spacing_spin.setRange(-20, 100)  # -20px 到 100px
         self.letter_spacing_spin.setValue(0)  # 默认0px
         self.letter_spacing_spin.setSuffix("px")
-        grouped_row(label("间距"), self.line_spacing_spin, None, inline_label("字距", 34), self.letter_spacing_spin)
+        self.spacing_params_row = parameter_grid(
+            ("间距", self.line_spacing_spin),
+            ("字距", self.letter_spacing_spin),
+        )
 
         card_layout.addWidget(self._make_core_divider())
 
@@ -774,9 +790,38 @@ class IntegratedTextPanel(QWidget):
         self.text_box_padding_spin.setRange(0, 200)
         self.text_box_padding_spin.setValue(5)
         self.text_box_padding_spin.setSuffix("px")
-        grouped_row(label("文本框"), self.auto_fit_check, None, inline_label("边距", 34), self.text_box_padding_spin)
+        self.text_box_params_row = parameter_grid(
+            ("文本框", self.auto_fit_check),
+            ("边距", self.text_box_padding_spin),
+        )
 
         parent_layout.addWidget(card)
+
+    def resizeEvent(self, event):
+        """窄面板下拆分参数行，避免标签和控件互相压住。"""
+        super().resizeEvent(event)
+        self._update_responsive_parameter_rows()
+
+    def _update_responsive_parameter_rows(self):
+        available_width = self.width()
+        stacked = available_width < 360
+        for container in (
+            getattr(self, "spacing_params_row", None),
+            getattr(self, "text_box_params_row", None),
+        ):
+            if container is None:
+                continue
+            grid = container.layout()
+            second_label = getattr(container, "_responsive_second_label", None)
+            second_control = getattr(container, "_responsive_second_control", None)
+            if not isinstance(grid, QGridLayout) or second_label is None or second_control is None:
+                continue
+            if stacked:
+                grid.addWidget(second_label, 1, 0)
+                grid.addWidget(second_control, 1, 1)
+            else:
+                grid.addWidget(second_label, 0, 3)
+                grid.addWidget(second_control, 0, 4)
 
     def create_advanced_settings(self, parent_layout):
         """创建高级设置区域 - 补充完整内容"""
