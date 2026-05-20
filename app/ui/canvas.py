@@ -2252,6 +2252,25 @@ class CanvasWidget(QWidget):
 
         event.accept()
 
+    def mouseDoubleClickEvent(self, event):
+        """双击文字图层时打开文案编辑器。"""
+        if event.button() == Qt.LeftButton:
+            layer_index = self.get_layer_at_position(event.pos())
+            if layer_index >= 0:
+                layer = self.document.layers[layer_index]
+                try:
+                    from app.models.text_layer import TextLayer
+                    if isinstance(layer, TextLayer):
+                        main_window = self._get_main_window()
+                        if main_window and hasattr(main_window, 'edit_text_layer'):
+                            main_window.edit_text_layer(layer_index)
+                            event.accept()
+                            return
+                except Exception as e:
+                    print(f"双击编辑文字图层时出错: {e}")
+
+        super().mouseDoubleClickEvent(event)
+
     def mouseMoveEvent(self, event):
         """鼠标移动事件处理"""
         # 跟踪鼠标位置用于拖拽方向指示器
@@ -2815,6 +2834,13 @@ class CanvasWidget(QWidget):
             menu.addSeparator()
 
             # 图层管理
+            edit_text_action = None
+            try:
+                from app.models.text_layer import TextLayer
+                if isinstance(layer, TextLayer):
+                    edit_text_action = menu.addAction("编辑文案")
+            except Exception:
+                edit_text_action = None
             rename_action = menu.addAction("重命名图层")
             delete_action = menu.addAction("删除图层")
 
@@ -2890,7 +2916,9 @@ class CanvasWidget(QWidget):
 
         # 处理图层相关操作
         if layer_index >= 0:
-            if action.text() == "复制图层" and main_window:
+            if 'edit_text_action' in locals() and edit_text_action and action == edit_text_action and main_window:
+                main_window.edit_text_layer(layer_index)
+            elif action.text() == "复制图层" and main_window:
                 main_window.copy_layer()
             elif paste_action and action == paste_action and main_window:
                 main_window.paste_layer()

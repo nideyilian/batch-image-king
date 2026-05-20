@@ -1529,6 +1529,13 @@ class LayerPanel(QWidget):
 
         # 基础操作
         rename_action = menu.addAction("重命名")
+        edit_text_action = None
+        try:
+            from app.models.text_layer import TextLayer
+            if isinstance(layer, TextLayer):
+                edit_text_action = menu.addAction("编辑文案")
+        except Exception:
+            edit_text_action = None
 
         menu.addSeparator()
 
@@ -1606,6 +1613,8 @@ class LayerPanel(QWidget):
         # 处理用户选择（操作被右键点击的图层，不改变当前选中状态）
         if action == rename_action:
             self.rename_layer_at_index(actual_index)
+        elif edit_text_action and action == edit_text_action:
+            self.edit_text_layer_at_index(actual_index)
         elif has_multi_selection and action == show_selected_action:
             self.set_selected_layers_visible(True)
         elif has_multi_selection and action == hide_selected_action:
@@ -1638,6 +1647,24 @@ class LayerPanel(QWidget):
             self.edit_layer_effects_at_index(actual_index)
         elif 'shaped_action' in locals() and action == shaped_action:
             self.edit_shaped_layer_at_index(actual_index)
+
+    def edit_text_layer_at_index(self, index):
+        """编辑指定索引的文字图层文案。"""
+        try:
+            if not self.document or index < 0 or index >= len(self.document.layers):
+                return
+
+            layer = self.document.layers[index]
+            from app.models.text_layer import TextLayer
+            if not isinstance(layer, TextLayer):
+                return
+
+            main_window = self._get_main_window()
+            if main_window and hasattr(main_window, 'edit_text_layer'):
+                main_window.edit_text_layer(index)
+
+        except Exception as e:
+            print(f"编辑文字图层文案时出错: {e}")
 
     def edit_shaped_layer_at_index(self, index):
         """编辑指定索引的异形图层"""

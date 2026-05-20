@@ -1834,6 +1834,45 @@ class MainWindow(QMainWindow):
             # 提供用户反馈
             if hasattr(self, 'statusbar'):
                 self.statusBar().showMessage(f"图层已重命名为 '{new_name.strip()}'", 2000)
+
+    def edit_text_layer(self, layer_index=None):
+        """打开文字图层文案编辑器。"""
+        if not self.document or not getattr(self.document, 'layers', None):
+            return False
+
+        if layer_index is None:
+            layer_index = getattr(self.document, 'selected_layer_index', -1)
+        if layer_index < 0 or layer_index >= len(self.document.layers):
+            return False
+
+        layer = self.document.layers[layer_index]
+        from app.models.text_layer import TextLayer
+        if not isinstance(layer, TextLayer):
+            QMessageBox.information(self, "编辑文案", "请先选择文字图层")
+            return False
+
+        if hasattr(self.document, 'select_layers'):
+            self.document.select_layers([layer_index], primary_index=layer_index)
+        else:
+            self.document.select_layer(layer_index)
+
+        if hasattr(self, 'properties_dock'):
+            self.properties_dock.show()
+            self.properties_dock.raise_()
+
+        panel = getattr(self, 'properties_panel', None)
+        if panel:
+            panel.layer_selected(layer_index)
+            text_panel = getattr(panel, 'text_layer_panel', None)
+            if text_panel:
+                text_panel.set_text_layer(layer)
+                integrated_panel = getattr(text_panel, 'integrated_panel', None)
+                if integrated_panel and hasattr(integrated_panel, 'open_text_editor'):
+                    integrated_panel.open_text_editor()
+                    return True
+
+        QMessageBox.warning(self, "编辑文案", "无法打开文字编辑器")
+        return False
     
     def copy_layer_style(self):
         result = self.layer_controller.copy_layer_style()
