@@ -1538,6 +1538,7 @@ class TextLayer(QObject):
             'font_size': self._font_size,
             'stroke_width': self._stroke_width,
             'letter_spacing': self._letter_spacing,
+            'text_box_padding': self._text_box_padding,
             'background_padding': self._background_padding
         }
 
@@ -1548,6 +1549,7 @@ class TextLayer(QObject):
             self._font_size = int(self._font_size * scale)
             self._stroke_width = int(self._stroke_width * scale)
             self._letter_spacing = int(self._letter_spacing * scale)
+            self._text_box_padding = int(self._text_box_padding * scale)
             self._background_padding = int(self._background_padding * scale)
 
             # 锁住自适配，避免在放大参数下重算图层尺寸
@@ -1556,7 +1558,7 @@ class TextLayer(QObject):
             # 重新渲染为大图
             large_image = self._render_text_internal()
             # 缩回目标尺寸
-            return large_image.resize((original['width'], original['height']), Image.Resampling.LANCZOS)
+            image = large_image.resize((original['width'], original['height']), Image.Resampling.LANCZOS)
         finally:
             # 还原参数
             self._width = original['width']
@@ -1564,8 +1566,46 @@ class TextLayer(QObject):
             self._font_size = original['font_size']
             self._stroke_width = original['stroke_width']
             self._letter_spacing = original['letter_spacing']
+            self._text_box_padding = original['text_box_padding']
             self._background_padding = original['background_padding']
             self._auto_fit_lock = prev_auto_fit_lock
+
+        return self._normalize_auto_fit_padding(image)
+
+    def _normalize_auto_fit_padding(self, image: Image.Image) -> Image.Image:
+        """自动适配时按真实非透明像素统一四边内边距。"""
+        if not self._auto_fit_text_box or self._auto_fit_lock or self._background_enabled:
+            return image
+
+        try:
+            bbox = image.getchannel('A').getbbox()
+            if not bbox:
+                return image
+
+            pad = max(0, int(self._text_box_padding))
+            left, top, right, bottom = bbox
+            content_width = max(1, right - left)
+            content_height = max(1, bottom - top)
+            target_width = max(1, content_width + pad * 2)
+            target_height = max(1, content_height + pad * 2)
+
+            already_normalized = (
+                image.width == target_width
+                and image.height == target_height
+                and left == pad
+                and top == pad
+            )
+            if already_normalized:
+                return image
+
+            cropped = image.crop(bbox)
+            normalized = Image.new('RGBA', (target_width, target_height), (0, 0, 0, 0))
+            normalized.paste(cropped, (pad, pad))
+            self._width = target_width
+            self._height = target_height
+            return normalized
+        except Exception:
+            return image
 
     def _render_text_internal(self) -> Image.Image:
         """内部渲染实现（不写缓存）"""
@@ -1766,7 +1806,7 @@ class TextLayer(QObject):
             alpha = alpha.point(lambda p: int(p * self._opacity))
             image.putalpha(alpha)
 
-        return image
+        return self._normalize_auto_fit_padding(image)
 
     def _render_text_vertical_internal(self, font, lines: List[str], temp_draw: ImageDraw.Draw) -> Image.Image:
         """竖排渲染实现。"""
@@ -1856,7 +1896,7 @@ class TextLayer(QObject):
             alpha = alpha.point(lambda p: int(p * self._opacity))
             image.putalpha(alpha)
 
-        return image
+        return self._normalize_auto_fit_padding(image)
     
     # 属性访问器
     @Property(str)
