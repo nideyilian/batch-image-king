@@ -1,5 +1,7 @@
 from PySide6.QtCore import QObject, Signal, Property
 import os
+import builtins
+import sys
 import random
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageChops
 from PIL.Image import Resampling, Transpose
@@ -13,6 +15,38 @@ from typing import List, Tuple
 import math
 from app.utils.image.high_quality_resampler import HighQualityResampler
 from app.utils.render_diagnostics import log_branch
+
+
+_LAYER_DEBUG = os.environ.get("BTPW_LAYER_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def print(*args, **kwargs):
+    """Keep noisy layer diagnostics off the interactive preview path by default."""
+    if _LAYER_DEBUG:
+        builtins.print(*args, **kwargs)
+
+
+def _is_batch_render_context() -> bool:
+    """Cheap call-stack check used by legacy layer code.
+
+    The previous inspect.stack() call allocates FrameInfo objects for the whole
+    stack on every image load. Walking frames directly is much lighter and keeps
+    the same behavior for batch/export detection.
+    """
+    frame = sys._getframe(1)
+    checked = 0
+    while frame is not None and checked < 32:
+        name = frame.f_code.co_name
+        if (
+            "batch_export" in name
+            or "render_batch" in name
+            or "export_batch" in name
+            or "generate_combinations" in name
+        ):
+            return True
+        frame = frame.f_back
+        checked += 1
+    return False
 
 
 class FitMode(Enum):
@@ -1408,18 +1442,9 @@ class Layer(QObject):
             restrict_to_bound_files: 限制可选择的文件列表（用于绑定管理器）
         """
         # 🔧 智能修复：检测是否为批量模式，预览启用缓存，批量禁用缓存
-        import inspect
-        is_batch_mode = False
+        is_batch_mode = _is_batch_render_context()
 
         # 检查调用栈，判断是否为批量导出模式
-        for frame_info in inspect.stack():
-            if ('batch_export' in frame_info.function or
-                'render_batch' in frame_info.function or
-                'export_batch' in frame_info.function or
-                'generate_combinations' in frame_info.function):
-                is_batch_mode = True
-                break
-
         if is_batch_mode:
             # 批量模式：禁用缓存验证，避免重复图片问题
             print(f"[图层] 🔧 批量模式：强制重新加载图像: {self.name}")
@@ -1770,15 +1795,7 @@ class Layer(QObject):
         """加载并处理图像，支持去除空白像素模式（优化版本）"""
         try:
             # 🔧 检测是否为批量模式
-            import inspect
-            is_batch_mode = False
-            for frame_info in inspect.stack():
-                if ('batch_export' in frame_info.function or
-                    'render_batch' in frame_info.function or
-                    'export_batch' in frame_info.function or
-                    'generate_combinations' in frame_info.function):
-                    is_batch_mode = True
-                    break
+            is_batch_mode = _is_batch_render_context()
 
             # 尝试使用图像优化器进行快速加载
             try:

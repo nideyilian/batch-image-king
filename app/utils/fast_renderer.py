@@ -206,6 +206,9 @@ class FastRenderer:
         self.intelligent_cache = get_intelligent_cache()
         # 集成智能内存管理系统
         self.memory_manager = get_memory_manager()
+        self._memory_status_cache = None
+        self._memory_status_cache_time = 0.0
+        self._memory_status_cache_ttl = 0.75
         self._last_render_time = {}
         self._verbose_logging = False
         # 图层级 surface 缓存（Photoshop 风格：仅重算脏图层）
@@ -300,6 +303,19 @@ class FastRenderer:
     def get_memory_status(self):
         """获取内存状态"""
         return self.memory_manager.get_memory_status()
+
+    def _get_cached_memory_status(self):
+        """Throttle psutil-heavy memory probes during interactive preview."""
+        now = time.time()
+        if (
+            self._memory_status_cache is not None
+            and now - self._memory_status_cache_time < self._memory_status_cache_ttl
+        ):
+            return self._memory_status_cache
+        status = self.memory_manager.get_memory_status()
+        self._memory_status_cache = status
+        self._memory_status_cache_time = now
+        return status
     
     def optimize_memory(self):
         """优化内存使用"""
@@ -343,7 +359,7 @@ class FastRenderer:
                 return self._last_preview_snapshot.copy()
         
         # 检查内存状态
-        memory_status = self.memory_manager.get_memory_status()
+        memory_status = self._get_cached_memory_status()
         if memory_status['pressure_level'] in ['high', 'critical']:
             if self._verbose_logging:
                 print(f"[快速渲染] 内存压力较高: {memory_status['pressure_level']}，执行优化")

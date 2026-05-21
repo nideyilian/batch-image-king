@@ -128,6 +128,10 @@ class CanvasWidget(QWidget):
         self._panel_interaction_idle_timer = QTimer(self)
         self._panel_interaction_idle_timer.setSingleShot(True)
         self._panel_interaction_idle_timer.timeout.connect(self._on_panel_interaction_idle)
+        self._zoom_interaction_active = False
+        self._zoom_idle_timer = QTimer(self)
+        self._zoom_idle_timer.setSingleShot(True)
+        self._zoom_idle_timer.timeout.connect(self._on_zoom_interaction_idle)
 
         # 棋盘格背景缓存，避免每帧逐格填充
         self._checkerboard_cache = None
@@ -809,11 +813,12 @@ class CanvasWidget(QWidget):
         if self._scaled_composition_pixmap_cache is not None and self._scaled_composition_cache_key == cache_key:
             return self._scaled_composition_pixmap_cache
 
+        transform_mode = Qt.FastTransformation if self._zoom_interaction_active else Qt.SmoothTransformation
         scaled = source_pixmap.scaled(
             target_width,
             target_height,
             Qt.IgnoreAspectRatio,
-            Qt.SmoothTransformation
+            transform_mode
         )
         self._scaled_composition_pixmap_cache = scaled
         self._scaled_composition_cache_key = cache_key
@@ -1352,6 +1357,14 @@ class CanvasWidget(QWidget):
         self._invalidate_composition_cache()
         self.update()
 
+    def _on_zoom_interaction_idle(self):
+        """滚轮缩放停止后回填一帧平滑缩放的预览。"""
+        if not self._zoom_interaction_active:
+            return
+        self._zoom_interaction_active = False
+        self._invalidate_scaled_pixmap_cache()
+        self.update()
+
     def get_canvas_rect(self):
         """获取画布在屏幕上的矩形区域"""
         if self.document.canvas_width <= 0 or self.document.canvas_height <= 0:
@@ -1382,6 +1395,8 @@ class CanvasWidget(QWidget):
 
         # 限制缩放范围
         self.zoom_factor = max(0.1, min(10.0, self.zoom_factor))
+        self._zoom_interaction_active = True
+        self._zoom_idle_timer.start(140)
         self._invalidate_scaled_pixmap_cache()
         self._persist_view_settings_to_document()
 

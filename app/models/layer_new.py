@@ -1,5 +1,6 @@
 from PySide6.QtCore import QObject, Signal
 import os
+import builtins
 import random
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageChops
 from PIL.Image import Resampling, Transpose
@@ -15,6 +16,12 @@ from app.models.layer_properties import LayerPropertyManager, CommonLayerOperati
 from app.utils.render_diagnostics import log_branch, log_sampling
 
 _LAYER_RENDER_VERBOSE = os.environ.get("BTPW_LAYER_RENDER_VERBOSE", "0") == "1"
+
+
+def print(*args, **kwargs):
+    """Keep noisy layer diagnostics off unless explicitly enabled."""
+    if _LAYER_RENDER_VERBOSE:
+        builtins.print(*args, **kwargs)
 
 
 class FitMode(Enum):
