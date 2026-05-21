@@ -129,6 +129,9 @@ class CanvasWidget(QWidget):
         self._panel_interaction_idle_timer = QTimer(self)
         self._panel_interaction_idle_timer.setSingleShot(True)
         self._panel_interaction_idle_timer.timeout.connect(self._on_panel_interaction_idle)
+        self._hover_hit_test_interval_ms = 35
+        self._last_hover_hit_test_ms = 0.0
+        self._last_hover_pos = QPoint(-100000, -100000)
         self._zoom_interaction_active = False
         self._zoom_idle_timer = QTimer(self)
         self._zoom_idle_timer.setSingleShot(True)
@@ -1501,6 +1504,18 @@ class CanvasWidget(QWidget):
         self._invalidate_scaled_pixmap_cache()
         self.update()
 
+    def _should_skip_hover_hit_test(self, pos: QPoint) -> bool:
+        """Throttle expensive hover hit testing when the mouse is simply moving."""
+        now_ms = time.time() * 1000.0
+        if (
+            now_ms - self._last_hover_hit_test_ms < self._hover_hit_test_interval_ms
+            and (pos - self._last_hover_pos).manhattanLength() < 4
+        ):
+            return True
+        self._last_hover_hit_test_ms = now_ms
+        self._last_hover_pos = QPoint(pos)
+        return False
+
     def get_canvas_rect(self):
         """获取画布在屏幕上的矩形区域"""
         if self.document.canvas_width <= 0 or self.document.canvas_height <= 0:
@@ -2774,6 +2789,9 @@ class CanvasWidget(QWidget):
         # 根据鼠标位置更新光标
         # 检查是否在控制点上
         if self.document.selected_layer_index >= 0:
+            if self._should_skip_hover_hit_test(event.pos()):
+                event.accept()
+                return
             handle_node_index, _ = self.get_vector_handle_at_position(event.pos(), self.document.selected_layer_index)
             if handle_node_index >= 0:
                 self.setCursor(Qt.PointingHandCursor)
@@ -2796,6 +2814,9 @@ class CanvasWidget(QWidget):
                 return
 
         # 检查是否在图层上
+        if self.document.selected_layer_index < 0 and self._should_skip_hover_hit_test(event.pos()):
+            event.accept()
+            return
         layer_index = self.get_layer_at_position(event.pos())
 
         if layer_index >= 0:
