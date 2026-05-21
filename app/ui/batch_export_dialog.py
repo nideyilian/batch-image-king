@@ -127,6 +127,38 @@ class BatchExportDialog(QDialog):
 
         form_layout.addRow(basic_export_layout)
 
+        memory_group = QGroupBox("内存保护")
+        memory_layout = QHBoxLayout(memory_group)
+        memory_layout.setContentsMargins(8, 8, 8, 8)
+        memory_layout.setSpacing(10)
+        memory_layout.addWidget(QLabel("模式:"))
+        self.memory_guard_combo = QComboBox()
+        self.memory_guard_combo.addItem("自动", "auto")
+        self.memory_guard_combo.addItem("低内存", "low")
+        self.memory_guard_combo.addItem("自定义", "custom")
+        self.memory_guard_combo.addItem("关闭", "off")
+        self.memory_guard_combo.setToolTip("自动会按系统剩余内存限速；低内存会关闭预读并降低并发；自定义可指定进程内存上限。")
+        self.memory_guard_combo.currentIndexChanged.connect(self._update_memory_guard_controls)
+        memory_layout.addWidget(self.memory_guard_combo)
+
+        memory_layout.addWidget(QLabel("最大内存(MB):"))
+        self.memory_limit_spin = QSpinBox()
+        self.memory_limit_spin.setRange(512, 131072)
+        self.memory_limit_spin.setSingleStep(256)
+        self.memory_limit_spin.setValue(4096)
+        self.memory_limit_spin.setToolTip("仅自定义模式生效。若低于程序当前基线，会自动按最低并发继续导出。")
+        memory_layout.addWidget(self.memory_limit_spin)
+
+        memory_layout.addWidget(QLabel("系统预留(MB):"))
+        self.memory_reserve_spin = QSpinBox()
+        self.memory_reserve_spin.setRange(512, 65536)
+        self.memory_reserve_spin.setSingleStep(256)
+        self.memory_reserve_spin.setValue(2048)
+        self.memory_reserve_spin.setToolTip("自动和低内存模式会尽量给系统保留这部分内存，避免导出时拖慢系统。")
+        memory_layout.addWidget(self.memory_reserve_spin)
+        memory_layout.addStretch()
+        form_layout.addRow(memory_group)
+
         # 动态预算（迭代3）
         self.dynamic_budget_group = QGroupBox("动态尝试预算（迭代3）")
         dynamic_layout = QVBoxLayout(self.dynamic_budget_group)
@@ -617,6 +649,16 @@ class BatchExportDialog(QDialog):
             self.dynamic_budget_binding_check.setEnabled(bool(enabled))
         if hasattr(self, 'dynamic_budget_standard_check'):
             self.dynamic_budget_standard_check.setEnabled(bool(enabled))
+
+    def _update_memory_guard_controls(self, *_args):
+        if not hasattr(self, 'memory_guard_combo'):
+            return
+        mode = str(self.memory_guard_combo.currentData() or 'auto')
+        custom_enabled = mode == 'custom'
+        if hasattr(self, 'memory_limit_spin'):
+            self.memory_limit_spin.setEnabled(custom_enabled)
+        if hasattr(self, 'memory_reserve_spin'):
+            self.memory_reserve_spin.setEnabled(mode in ('auto', 'low'))
 
     def _collect_recent_export_reports(self, n: int):
         history = getattr(self.document, '_export_report_history', None)
@@ -1195,6 +1237,16 @@ class BatchExportDialog(QDialog):
         if not settings.get('export_backend'):
             settings['export_backend'] = 'pillow'
 
+        if hasattr(self, 'memory_guard_combo'):
+            memory_mode = str(settings.get('export_memory_guard_mode', 'auto') or 'auto')
+            idx = self.memory_guard_combo.findData(memory_mode)
+            self.memory_guard_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, 'memory_limit_spin'):
+            self.memory_limit_spin.setValue(int(settings.get('export_memory_limit_mb', 4096) or 4096))
+        if hasattr(self, 'memory_reserve_spin'):
+            self.memory_reserve_spin.setValue(int(settings.get('export_memory_reserve_mb', 2048) or 2048))
+        self._update_memory_guard_controls()
+
         if hasattr(self, 'use_current_time_for_path'):
             self.use_current_time_for_path.blockSignals(True)
             try:
@@ -1286,6 +1338,9 @@ class BatchExportDialog(QDialog):
             'auto_runtime_tuning_enabled': True,
             'freeze_preview_during_export': True,
             'batch_preload_enabled': True,
+            'export_memory_guard_mode': self.memory_guard_combo.currentData() if hasattr(self, 'memory_guard_combo') else 'auto',
+            'export_memory_limit_mb': self.memory_limit_spin.value() if hasattr(self, 'memory_limit_spin') else 0,
+            'export_memory_reserve_mb': self.memory_reserve_spin.value() if hasattr(self, 'memory_reserve_spin') else 2048,
             'unique_use_enabled': self.unique_use_enabled.isChecked(),
             'unique_use_layers': [
                 int(cb.property("layer_index"))
@@ -1394,6 +1449,16 @@ class BatchExportDialog(QDialog):
 
         if 'use_current_time_for_path' in settings and hasattr(self, 'use_current_time_for_path'):
             self.use_current_time_for_path.setChecked(bool(settings['use_current_time_for_path']))
+
+        if hasattr(self, 'memory_guard_combo'):
+            memory_mode = str(settings.get('export_memory_guard_mode', 'auto') or 'auto')
+            idx = self.memory_guard_combo.findData(memory_mode)
+            self.memory_guard_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if 'export_memory_limit_mb' in settings and hasattr(self, 'memory_limit_spin'):
+            self.memory_limit_spin.setValue(int(settings.get('export_memory_limit_mb') or 4096))
+        if 'export_memory_reserve_mb' in settings and hasattr(self, 'memory_reserve_spin'):
+            self.memory_reserve_spin.setValue(int(settings.get('export_memory_reserve_mb') or 2048))
+        self._update_memory_guard_controls()
 
         # 动态预算（默认自动）：强制回归默认，不应用外部自定义参数
         self.dynamic_budget_enabled_check.setChecked(True)
@@ -1773,6 +1838,13 @@ class BatchExportDialog(QDialog):
         safety_timeout = int(stats.get('safety_stopped_by_timeout', 0) or 0)
         safety_failures = int(stats.get('safety_stopped_by_failures', 0) or 0)
         safety_throttle = int(stats.get('safety_throttle_events', 0) or 0)
+        memory_mode = str(stats.get('memory_guard_mode', '') or 'auto')
+        memory_limit = float(stats.get('memory_limit_mb', 0.0) or 0.0)
+        memory_peak = float(stats.get('memory_peak_mb', 0.0) or 0.0)
+        memory_soft = int(stats.get('memory_soft_throttle_events', 0) or 0)
+        memory_hard = int(stats.get('memory_hard_throttle_events', 0) or 0)
+        memory_wait = float(stats.get('memory_wait_seconds', 0.0) or 0.0)
+        memory_clears = int(stats.get('memory_cache_clear_events', 0) or 0)
         worker_seed = int(stats.get('worker_document_seed_available', 0) or 0)
         shared_renders = int(stats.get('shared_document_render_count', 0) or 0)
         worker_failures = int(stats.get('worker_document_create_failures', 0) or 0)
@@ -1789,6 +1861,11 @@ class BatchExportDialog(QDialog):
             safety_text += f"，worker创建失败 {worker_failures} 次"
         if mutation_warnings:
             safety_text += f"，主文档变更警告 {mutation_warnings} 个"
+        if memory_limit > 0:
+            safety_text += (
+                f"，内存 {memory_peak:.0f}/{memory_limit:.0f}MB"
+                f"（{memory_mode}，软/硬限流 {memory_soft}/{memory_hard}，等待 {memory_wait:.1f}s，清缓存 {memory_clears}）"
+            )
 
         shown_exported = report_exported if report_exported else exported_count
         requested_text = str(requested_count) if requested_count else "-"

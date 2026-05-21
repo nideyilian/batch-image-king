@@ -68,6 +68,11 @@ class OptimizedBatchExecutor:
         self._export_safety_failure_rate_limit = 0.45
         self._export_safety_failure_rate_min_samples = 12
         self._export_safety_stall_timeout_seconds = 180
+        self._export_memory_guard_mode = "auto"
+        self._export_memory_limit_mb = 0
+        self._export_memory_reserve_mb = 2048
+        self._export_memory_soft_ratio = 0.88
+        self._export_memory_hard_ratio = 0.98
         try:
             if hasattr(self.document, 'export_settings') and isinstance(self.document.export_settings, dict):
                 self._max_file_size_kb = int(self.document.export_settings.get('max_file_size_kb', 0) or 0)
@@ -103,6 +108,19 @@ class OptimizedBatchExecutor:
                     30,
                     int(self.document.export_settings.get('export_safety_stall_timeout_seconds', 180) or 180)
                 )
+                self._export_memory_guard_mode = str(
+                    self.document.export_settings.get('export_memory_guard_mode', 'auto') or 'auto'
+                ).strip().lower()
+                if self._export_memory_guard_mode not in ('auto', 'low', 'custom', 'off'):
+                    self._export_memory_guard_mode = 'auto'
+                self._export_memory_limit_mb = max(
+                    0,
+                    int(self.document.export_settings.get('export_memory_limit_mb', 0) or 0)
+                )
+                self._export_memory_reserve_mb = max(
+                    512,
+                    int(self.document.export_settings.get('export_memory_reserve_mb', 2048) or 2048)
+                )
         except Exception:
             self._max_file_size_kb = 0
             self._io_profile = "balanced"
@@ -121,9 +139,20 @@ class OptimizedBatchExecutor:
             self._export_safety_failure_rate_limit = 0.45
             self._export_safety_failure_rate_min_samples = 12
             self._export_safety_stall_timeout_seconds = 180
+            self._export_memory_guard_mode = "auto"
+            self._export_memory_limit_mb = 0
+            self._export_memory_reserve_mb = 2048
 
         selected_workers = max_workers if max_workers is not None else self._calculate_optimal_workers()
         self.max_workers = self._apply_worker_hard_cap(selected_workers)
+        if self._export_memory_guard_mode == 'low':
+            self.max_workers = max(1, min(self.max_workers, 2))
+            self._preload_enabled = False
+        self._memory_budget_limit_mb = 0.0
+        self._memory_budget_requested_mb = float(self._export_memory_limit_mb or 0)
+        self._last_memory_check_ts = 0.0
+        self._last_memory_rss_mb = 0.0
+        self._memory_budget_warning_printed = False
         self._export_trace_enabled = bool(
             os_module.environ.get("BTPW_EXPORT_TRACE", "0") == "1"
             or (
@@ -173,6 +202,15 @@ class OptimizedBatchExecutor:
             'safety_throttle_events': 0,
             'safety_stopped_by_failures': 0,
             'safety_stopped_by_timeout': 0,
+            'memory_guard_mode': self._export_memory_guard_mode,
+            'memory_limit_mb': 0.0,
+            'memory_requested_limit_mb': float(self._export_memory_limit_mb or 0),
+            'memory_current_mb': 0.0,
+            'memory_peak_mb': 0.0,
+            'memory_soft_throttle_events': 0,
+            'memory_hard_throttle_events': 0,
+            'memory_wait_seconds': 0.0,
+            'memory_cache_clear_events': 0,
             'safety_initial_in_flight_cap': 0,
             'min_in_flight_limit': 0,
             'max_in_flight_limit': 0,
@@ -220,16 +258,21 @@ class OptimizedBatchExecutor:
         self._image_preload_cache = OrderedDict()
         self._image_preload_cache_bytes = 0
         # 批导默认启用预读，配合内存上限自适应
-        self._preload_enabled = bool(self._batch_preload_enabled_setting)
+        self._preload_enabled = bool(self._batch_preload_enabled_setting) and self._export_memory_guard_mode != 'low'
         # 记录最近一次错误，供UI提示
         self.last_error_message = ""
         # 默认关闭高频调试日志，降低批量导出的控制台I/O开销
         self._verbose_logs = os_module.environ.get("BTPW_BATCH_EXPORT_VERBOSE", "0") == "1"
 
         if self.is_batch_mode:
+            self._refresh_memory_budget(force=True)
             print(f"[批处理] 最大工作线程: {self.max_workers}")
             print(f"[批处理] 预读开关: {'开' if self._preload_enabled else '关'} (上限{self._batch_preload_max_images}张 / {self._batch_preload_memory_mb}MB)")
             print(f"[批处理] 导出后端: {self._export_backend} (保留CPU核心: {self._reserve_cpu_cores}, CPU占用上限: {self._cpu_utilization_cap:.2f})")
+            print(
+                f"[批处理] 内存保护: {self._export_memory_guard_mode} "
+                f"(限制 {self._memory_budget_limit_mb:.0f}MB, 系统预留 {self._export_memory_reserve_mb}MB)"
+            )
             print(
                 f"[批处理] 安全保护: {'开' if self._export_safety_enabled else '关'} "
                 f"(内存保护比{self._export_safety_memory_guard_ratio:.2f}, "
@@ -255,6 +298,158 @@ class OptimizedBatchExecutor:
         except Exception:
             return 24.0
 
+    def _get_process_rss_mb(self) -> float:
+        """返回当前进程 RSS 内存，失败时返回最近一次值。"""
+        try:
+            import psutil
+            rss_mb = float(psutil.Process().memory_info().rss) / (1024 * 1024)
+        except Exception:
+            rss_mb = float(getattr(self, '_last_memory_rss_mb', 0.0) or 0.0)
+        self._last_memory_rss_mb = rss_mb
+        with self._lock:
+            self.stats['memory_current_mb'] = rss_mb
+            self.stats['memory_peak_mb'] = max(float(self.stats.get('memory_peak_mb', 0.0) or 0.0), rss_mb)
+            self.stats['peak_memory_mb'] = max(float(self.stats.get('peak_memory_mb', 0.0) or 0.0), rss_mb)
+        return rss_mb
+
+    def _refresh_memory_budget(self, force: bool = False) -> float:
+        """计算并缓存本次批导的进程级内存预算。"""
+        now = time.time()
+        if (not force) and self._memory_budget_limit_mb > 0:
+            return float(self._memory_budget_limit_mb)
+        self._last_memory_check_ts = now
+
+        rss_mb = self._get_process_rss_mb()
+        mode = str(getattr(self, '_export_memory_guard_mode', 'auto') or 'auto').lower()
+        if mode == 'off':
+            self._memory_budget_limit_mb = 0.0
+            with self._lock:
+                self.stats['memory_limit_mb'] = 0.0
+            return 0.0
+
+        try:
+            import psutil
+            vm = psutil.virtual_memory()
+            total_mb = float(vm.total) / (1024 * 1024)
+            available_mb = float(vm.available) / (1024 * 1024)
+        except Exception:
+            total_mb = max(4096.0, rss_mb * 2.0)
+            available_mb = max(1024.0, rss_mb)
+
+        reserve_mb = float(getattr(self, '_export_memory_reserve_mb', 2048) or 2048)
+        available_for_growth = max(256.0, available_mb - reserve_mb)
+        task_floor_mb = max(384.0, self._estimate_single_task_memory_mb() * 1.6)
+
+        if mode == 'custom' and self._export_memory_limit_mb > 0:
+            requested_limit = float(self._export_memory_limit_mb)
+            # 自定义值低于当前基线时仍允许导出继续，但会立刻降到最低并发。
+            limit_mb = max(requested_limit, rss_mb + task_floor_mb)
+            if limit_mb > requested_limit and not self._memory_budget_warning_printed:
+                self._memory_budget_warning_printed = True
+                if self.is_batch_mode:
+                    print(
+                        f"[批处理] 自定义内存限制 {requested_limit:.0f}MB 低于当前运行基线，"
+                        f"本次临时使用有效限制 {limit_mb:.0f}MB"
+                    )
+        elif mode == 'low':
+            limit_mb = rss_mb + max(512.0, min(1024.0, available_for_growth * 0.25))
+            limit_mb = min(limit_mb, max(task_floor_mb, total_mb * 0.35))
+        else:
+            limit_mb = rss_mb + max(768.0, available_for_growth * 0.45)
+            limit_mb = min(limit_mb, max(task_floor_mb, total_mb * 0.55))
+
+        self._memory_budget_limit_mb = max(task_floor_mb, float(limit_mb))
+        with self._lock:
+            self.stats['memory_limit_mb'] = float(self._memory_budget_limit_mb)
+            self.stats['memory_requested_limit_mb'] = float(self._export_memory_limit_mb or 0)
+            self.stats['memory_guard_mode'] = mode
+        return float(self._memory_budget_limit_mb)
+
+    def _memory_pressure_ratio(self) -> float:
+        limit_mb = self._refresh_memory_budget()
+        if limit_mb <= 0:
+            return 0.0
+        return self._get_process_rss_mb() / max(1.0, limit_mb)
+
+    def _clear_memory_pressure_caches(self):
+        """内存压力下清理批导可丢弃缓存。"""
+        cleared = False
+        try:
+            if getattr(self, '_image_preload_cache', None):
+                self._clear_preload_cache()
+                cleared = True
+        except Exception:
+            pass
+        try:
+            if getattr(self, '_render_cache', None):
+                self._render_cache.clear()
+                cleared = True
+        except Exception:
+            pass
+        try:
+            renderer = getattr(self._thread_local, 'fast_renderer', None)
+            if renderer is not None and hasattr(renderer, 'clear_cache'):
+                renderer.clear_cache()
+                cleared = True
+        except Exception:
+            pass
+        try:
+            gc.collect()
+        except Exception:
+            pass
+        if cleared:
+            with self._lock:
+                self.stats['memory_cache_clear_events'] += 1
+
+    def _enforce_memory_budget(
+        self,
+        wait_for_relief: bool = False,
+        cancel_event: Optional[threading.Event] = None,
+        cancel_callback: Optional[Callable[[], bool]] = None,
+    ) -> bool:
+        """按进程级预算限流。返回 False 表示当前不宜继续提交新任务。"""
+        if self._export_memory_guard_mode == 'off':
+            return True
+        limit_mb = self._refresh_memory_budget()
+        if limit_mb <= 0:
+            return True
+
+        ratio = self._memory_pressure_ratio()
+        if ratio < self._export_memory_soft_ratio:
+            return True
+
+        hard_pressure = ratio >= self._export_memory_hard_ratio
+        with self._lock:
+            if hard_pressure:
+                self.stats['memory_hard_throttle_events'] += 1
+            else:
+                self.stats['memory_soft_throttle_events'] += 1
+            self.stats['safety_throttle_events'] += 1
+
+        self._clear_memory_pressure_caches()
+
+        if not wait_for_relief:
+            return not hard_pressure
+
+        wait_started = time.time()
+        max_wait = 8.0 if hard_pressure else 2.5
+        while time.time() - wait_started < max_wait:
+            if self._is_cancel_requested(cancel_event, cancel_callback):
+                return False
+            if self._memory_pressure_ratio() < self._export_memory_soft_ratio:
+                break
+            time.sleep(0.15 if hard_pressure else 0.08)
+            try:
+                gc.collect()
+            except Exception:
+                pass
+
+        waited = time.time() - wait_started
+        if waited > 0:
+            with self._lock:
+                self.stats['memory_wait_seconds'] += waited
+        return self._memory_pressure_ratio() < self._export_memory_hard_ratio
+
     def _calculate_memory_guard_in_flight_limit(self, current_limit: int) -> int:
         """基于可用内存计算在途任务上限，防止任务堆积触发卡死/闪退。"""
         if not self._export_safety_enabled:
@@ -264,6 +459,11 @@ class OptimizedBatchExecutor:
             available_mb = float(psutil.virtual_memory().available) / (1024 * 1024)
             task_mem_mb = self._estimate_single_task_memory_mb()
             budget_mb = max(64.0, available_mb * float(self._export_safety_memory_guard_ratio))
+            process_limit_mb = self._refresh_memory_budget()
+            if process_limit_mb > 0:
+                rss_mb = self._get_process_rss_mb()
+                process_budget_mb = max(task_mem_mb, process_limit_mb - rss_mb)
+                budget_mb = min(budget_mb, process_budget_mb)
             guard_limit = max(1, int(budget_mb / max(1.0, task_mem_mb)))
             return max(1, min(int(current_limit), guard_limit))
         except Exception:
@@ -578,6 +778,7 @@ class OptimizedBatchExecutor:
         self.total_tasks = len(plan.tasks)
         self.current_progress = 0
         self.is_canceled = False
+        self._refresh_memory_budget(force=True)
         self._plan_mutable_doc_indices = self._collect_plan_mutable_doc_indices(plan, self.document)
         main_doc_runtime_before = self._capture_document_runtime_fingerprint(
             self.document,
@@ -602,6 +803,7 @@ class OptimizedBatchExecutor:
 
         #  
         self._preload_images_for_plan(plan, cancel_callback=cancel_callback)
+        self._enforce_memory_budget(wait_for_relief=True, cancel_callback=cancel_callback)
 
         self.stats['start_time'] = time.time()
         
@@ -1013,6 +1215,8 @@ class OptimizedBatchExecutor:
             io_workers = max(1, min(4, max(1, self.max_workers // 2)))
         else:
             io_workers = max(2, min(6, max(2, self.max_workers)))
+        if self._export_memory_guard_mode == 'low':
+            io_workers = max(1, min(io_workers, 2))
         io_executor = ThreadPoolExecutor(max_workers=io_workers)
         render_future_to_task = {}
         save_future_to_task = {}
@@ -1021,8 +1225,13 @@ class OptimizedBatchExecutor:
         min_in_flight_limit = max(2, self.max_workers)
         if self._export_safety_enabled:
             min_in_flight_limit = max(1, min(min_in_flight_limit, max(1, self.max_workers // 2)))
+        if self._export_memory_guard_mode == 'low':
+            min_in_flight_limit = 1
         max_in_flight_limit = max(min_in_flight_limit, self.max_workers * 3)
         in_flight_limit = max(3, self.max_workers + 1)
+        if self._export_memory_guard_mode == 'low':
+            in_flight_limit = min(in_flight_limit, 2)
+            max_in_flight_limit = min(max_in_flight_limit, 3)
         in_flight_limit = max(min_in_flight_limit, min(max_in_flight_limit, in_flight_limit))
         safety_in_flight_cap = self._calculate_memory_guard_in_flight_limit(in_flight_limit)
         if self._export_safety_enabled and safety_in_flight_cap < in_flight_limit:
@@ -1090,6 +1299,12 @@ class OptimizedBatchExecutor:
                     in_flight_limit = max(min_in_flight_limit, guarded_limit)
                     with self._lock:
                         self.stats['safety_throttle_events'] += 1
+            if self._export_memory_guard_mode != 'off':
+                pressure = self._memory_pressure_ratio()
+                if pressure >= self._export_memory_hard_ratio:
+                    in_flight_limit = min(in_flight_limit, 1)
+                elif pressure >= self._export_memory_soft_ratio:
+                    in_flight_limit = max(min_in_flight_limit, in_flight_limit - 1)
 
             if in_flight_limit != old_limit:
                 with self._lock:
@@ -1105,6 +1320,14 @@ class OptimizedBatchExecutor:
             ):
                 if self._is_cancel_requested(cancel_event, cancel_callback):
                     break
+                if not self._enforce_memory_budget(
+                    wait_for_relief=True,
+                    cancel_event=cancel_event,
+                    cancel_callback=cancel_callback,
+                ):
+                    # 如果已有任务在途，等待它们释放内存；否则允许以最低并发继续推进。
+                    if render_future_to_task or save_future_to_task:
+                        break
                 try:
                     task = next(task_iter)
                 except StopIteration:
@@ -1157,6 +1380,11 @@ class OptimizedBatchExecutor:
                         try:
                             render_success, canvas, render_time = future.result()
                             if render_success and canvas is not None:
+                                self._enforce_memory_budget(
+                                    wait_for_relief=False,
+                                    cancel_event=cancel_event,
+                                    cancel_callback=cancel_callback,
+                                )
                                 save_future = io_executor.submit(
                                     self._save_rendered_task,
                                     task,
@@ -1198,6 +1426,11 @@ class OptimizedBatchExecutor:
                                 if len(recent_io_times) > 48:
                                     del recent_io_times[:-48]
                             _rebalance_in_flight_limit()
+                            self._enforce_memory_budget(
+                                wait_for_relief=False,
+                                cancel_event=cancel_event,
+                                cancel_callback=cancel_callback,
+                            )
                             _record_pipeline_depths()
                             with self._lock:
                                 self.stats['render_time'] += render_time
@@ -1349,6 +1582,11 @@ class OptimizedBatchExecutor:
             )
         finally:
             try:
+                if hasattr(canvas, 'close'):
+                    canvas.close()
+            except Exception:
+                pass
+            try:
                 del canvas
             except Exception:
                 pass
@@ -1408,6 +1646,17 @@ class OptimizedBatchExecutor:
             print(f"[] : {task.filename}, : {e}")
             self.last_error_message = msg
             return False
+        finally:
+            try:
+                if 'canvas' in locals() and hasattr(canvas, 'close'):
+                    canvas.close()
+            except Exception:
+                pass
+            try:
+                if 'canvas' in locals():
+                    del canvas
+            except Exception:
+                pass
     
     def _apply_layer_combination(self, combination):
         """"""
@@ -1997,6 +2246,10 @@ class OptimizedBatchExecutor:
         max_preload = min(len(unique_images), self._batch_preload_max_images if self.is_batch_mode else 50)
         preload_count = 0
         max_bytes = max(64, self._batch_preload_memory_mb) * 1024 * 1024
+        memory_limit_mb = self._refresh_memory_budget()
+        if self.is_batch_mode and memory_limit_mb > 0:
+            preload_budget_ratio = 0.06 if self._export_memory_guard_mode == 'low' else 0.14
+            max_bytes = min(max_bytes, int(memory_limit_mb * preload_budget_ratio) * 1024 * 1024)
         try:
             import psutil
             available_bytes = int(psutil.virtual_memory().available)
@@ -2012,6 +2265,9 @@ class OptimizedBatchExecutor:
         for image_path in preload_candidates:
             if self._is_cancel_requested(None, cancel_callback):
                 return
+            if self._memory_pressure_ratio() >= self._export_memory_soft_ratio:
+                skipped_by_memory += 1
+                break
             try:
                 from PIL import Image
                 with Image.open(image_path) as img:
@@ -2987,6 +3243,15 @@ class OptimizedBatchExportManager:
                     'pillow_save_count': int(stats.get('pillow_save_count', 0) or 0),
                     'vips_save_count': int(stats.get('vips_save_count', 0) or 0),
                     'save_error_count': int(stats.get('save_error_count', 0) or 0),
+                    'memory_guard_mode': str(stats.get('memory_guard_mode', getattr(executor, '_export_memory_guard_mode', 'auto'))),
+                    'memory_limit_mb': float(stats.get('memory_limit_mb', 0.0) or 0.0),
+                    'memory_requested_limit_mb': float(stats.get('memory_requested_limit_mb', 0.0) or 0.0),
+                    'memory_current_mb': float(stats.get('memory_current_mb', 0.0) or 0.0),
+                    'memory_peak_mb': float(stats.get('memory_peak_mb', 0.0) or 0.0),
+                    'memory_soft_throttle_events': int(stats.get('memory_soft_throttle_events', 0) or 0),
+                    'memory_hard_throttle_events': int(stats.get('memory_hard_throttle_events', 0) or 0),
+                    'memory_wait_seconds': float(stats.get('memory_wait_seconds', 0.0) or 0.0),
+                    'memory_cache_clear_events': int(stats.get('memory_cache_clear_events', 0) or 0),
                     'runtime_fallback_attempted': bool(fallback_attempted),
                     'runtime_fallback_succeeded': bool(fallback_succeeded),
                 }
@@ -3053,6 +3318,17 @@ class OptimizedBatchExportManager:
                             "skipped_by_memory": int(stats.get('preload_skipped_by_memory', 0) or 0),
                             "memory_mb": float(stats.get('preload_memory_mb', 0.0) or 0.0),
                             "hits": int(stats.get('preload_hits', 0) or 0),
+                        },
+                        "memory": {
+                            "mode": str(stats.get('memory_guard_mode', getattr(executor, '_export_memory_guard_mode', 'auto'))),
+                            "limit_mb": float(stats.get('memory_limit_mb', 0.0) or 0.0),
+                            "requested_limit_mb": float(stats.get('memory_requested_limit_mb', 0.0) or 0.0),
+                            "current_mb": float(stats.get('memory_current_mb', 0.0) or 0.0),
+                            "peak_mb": float(stats.get('memory_peak_mb', 0.0) or 0.0),
+                            "soft_throttle_events": int(stats.get('memory_soft_throttle_events', 0) or 0),
+                            "hard_throttle_events": int(stats.get('memory_hard_throttle_events', 0) or 0),
+                            "wait_seconds": float(stats.get('memory_wait_seconds', 0.0) or 0.0),
+                            "cache_clear_events": int(stats.get('memory_cache_clear_events', 0) or 0),
                         },
                         "precompute_diagnostics": precompute_diagnostics,
                         "precompute_summary": precompute_summary,
