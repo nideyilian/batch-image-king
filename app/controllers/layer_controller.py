@@ -16,6 +16,13 @@ except ImportError:
     from app.models.shaped_layer import ShapedLayer, ShapeType
 from app.ui.add_text_layer_dialog_simple import AddTextLayerDialog
 from app.ui.add_shaped_layer_dialog import AddShapedLayerDialog
+from app.utils.layer_tree import (
+    child_indices_for_group,
+    expand_group_indices,
+    is_effectively_locked,
+    is_layer_group,
+    set_parent_group_id,
+)
 
 
 class LayerController(QObject):
@@ -39,6 +46,21 @@ class LayerController(QObject):
         if layer is None or not hasattr(layer, 'serialize'):
             return None
         try:
+            if is_layer_group(layer):
+                from app.models.document_serializer import DocumentSerializer
+
+                layer_data = copy.deepcopy(layer.serialize())
+                layer_data['children'] = []
+                for child_idx in child_indices_for_group(self.document.layers, getattr(layer, 'group_id', ''), include_hidden=True):
+                    child_data = DocumentSerializer.serialize_layer(self.document.layers[child_idx])
+                    child_data.pop('parent_group_id', None)
+                    child_data.pop('_parent_group_id', None)
+                    layer_data['children'].append(child_data)
+                return {
+                    'format': 'layer_serialized_v1',
+                    'layer_data': layer_data,
+                    'layer_name': getattr(layer, 'name', '图层组'),
+                }
             return {
                 'format': 'layer_serialized_v1',
                 'layer_data': layer.serialize(),
@@ -49,23 +71,48 @@ class LayerController(QObject):
 
     def _create_layer_from_clipboard_item(self, item):
         """从剪贴板条目创建图层（支持新旧剪贴板格式）"""
+        layers = self._create_layers_from_clipboard_item(item)
+        return layers[0] if layers else None
+
+    def _create_layers_from_clipboard_item(self, item):
+        """从剪贴板条目创建一个或一组图层。"""
         # 新格式：序列化数据（推荐，支持跨文档完整复制）
         if isinstance(item, dict) and item.get('format') == 'layer_serialized_v1':
             layer_data = item.get('layer_data')
             if not isinstance(layer_data, dict):
-                return None
+                return []
             # 深拷贝避免粘贴时污染剪贴板原始数据
-            return self.document.create_layer_from_data(copy.deepcopy(layer_data))
+            layer_data = copy.deepcopy(layer_data)
+            if layer_data.get('type') == 'group':
+                child_data_list = list(layer_data.get('children', []) or [])
+                layer_data.pop('children', None)
+                layer_data.pop('group_id', None)
+                group = self.document.create_layer_from_data(layer_data)
+                if group is None:
+                    return []
+                result = [group]
+                group_id = getattr(group, 'group_id', None)
+                for child_data in child_data_list:
+                    if not isinstance(child_data, dict):
+                        continue
+                    child = self.document.create_layer_from_data(copy.deepcopy(child_data))
+                    if child is None:
+                        continue
+                    set_parent_group_id(child, group_id)
+                    result.append(child)
+                return result
+            layer = self.document.create_layer_from_data(layer_data)
+            return [layer] if layer is not None else []
 
         # 旧格式：直接存图层对象（兼容）
         if item is not None and hasattr(item, 'duplicate'):
             try:
-                return item.duplicate(parent=self.document)
+                return [item.duplicate(parent=self.document)]
             except TypeError:
-                return item.duplicate()
+                return [item.duplicate()]
             except Exception:
-                return None
-        return None
+                return []
+        return []
         
     @property
     def document(self):
@@ -81,9 +128,16 @@ class LayerController(QObject):
         """获取当前有效选中图层索引，优先使用文档级多选状态。"""
         if not self.document:
             return []
-        indices = list(getattr(self.document, 'selected_layer_indices', []) or [])
-        if not indices and self.layer_panel and hasattr(self.layer_panel, 'get_selected_indices'):
-            indices = list(self.layer_panel.get_selected_indices())
+        panel_indices = []
+        if self.layer_panel and hasattr(self.layer_panel, 'get_selected_indices'):
+            panel_indices = list(self.layer_panel.get_selected_indices())
+        document_indices = list(getattr(self.document, 'selected_layer_indices', []) or [])
+        if len(panel_indices) > 1:
+            indices = panel_indices
+        elif len(document_indices) > 1:
+            indices = document_indices
+        else:
+            indices = panel_indices or document_indices
         if not indices and getattr(self.document, 'selected_layer_index', -1) >= 0:
             indices = [self.document.selected_layer_index]
         valid = []
@@ -272,19 +326,35 @@ class LayerController(QObject):
             self.status_message.emit("请先选择要删除的图层", 3000)
             return False
 
-        unlocked_indices = [
-            idx for idx in selected_indices
-            if not getattr(self.document.layers[idx], 'locked', False)
-        ]
-        skipped_locked = len(selected_indices) - len(unlocked_indices)
-        if not unlocked_indices:
+        group_delete_indices = set()
+        for idx in selected_indices:
+            if not (0 <= idx < len(self.document.layers)):
+                continue
+            layer = self.document.layers[idx]
+            if is_layer_group(layer) and not is_effectively_locked(layer, self.document.layers):
+                group_delete_indices.add(idx)
+                group_delete_indices.update(
+                    child_indices_for_group(self.document.layers, getattr(layer, 'group_id', ''), include_hidden=True)
+                )
+
+        unlocked_indices = []
+        for idx in selected_indices:
+            if not (0 <= idx < len(self.document.layers)):
+                continue
+            if idx in group_delete_indices:
+                continue
+            if not is_effectively_locked(self.document.layers[idx], self.document.layers):
+                unlocked_indices.append(idx)
+        delete_indices = sorted(set(unlocked_indices).union(group_delete_indices))
+        skipped_locked = len(selected_indices) - len(unlocked_indices) - len([idx for idx in selected_indices if idx in group_delete_indices])
+        if not delete_indices:
             self.status_message.emit("选中的图层都已锁定，无法删除", 3000)
             return False
 
-        if len(unlocked_indices) == 1:
-            message = f"确定要删除图层 '{self.document.layers[unlocked_indices[0]].name}' 吗？"
+        if len(delete_indices) == 1:
+            message = f"确定要删除图层 '{self.document.layers[delete_indices[0]].name}' 吗？"
         else:
-            message = f"确定要删除选中的 {len(unlocked_indices)} 个图层吗？"
+            message = f"确定要删除选中的 {len(delete_indices)} 个图层/组内容吗？"
             if skipped_locked:
                 message += f"\n将跳过 {skipped_locked} 个锁定图层。"
 
@@ -296,25 +366,25 @@ class LayerController(QObject):
 
         if reply == QMessageBox.Yes:
             try:
-                self.document.save_state("批量删除图层前" if len(unlocked_indices) > 1 else "删除图层前")
-                for idx in sorted(unlocked_indices, reverse=True):
+                self.document.save_state("批量删除图层前" if len(delete_indices) > 1 else "删除图层前")
+                for idx in sorted(delete_indices, reverse=True):
                     layer_to_remove = self.document.layers[idx]
                     if hasattr(self.document, 'binding_manager') and self.document.binding_manager:
                         self.document.binding_manager.remove_layer_from_group(layer_to_remove)
                     del self.document.layers[idx]
                 new_selection = []
                 if self.document.layers:
-                    fallback = min(min(unlocked_indices), len(self.document.layers) - 1)
+                    fallback = min(min(delete_indices), len(self.document.layers) - 1)
                     new_selection = [fallback]
                 if hasattr(self.document, 'select_layers'):
                     self.document.select_layers(new_selection)
                 else:
                     self.document.selected_layer_index = new_selection[0] if new_selection else -1
                 self._refresh_after_batch_operation(new_selection)
-                self.document.save_state("批量删除图层" if len(unlocked_indices) > 1 else "删除图层")
+                self.document.save_state("批量删除图层" if len(delete_indices) > 1 else "删除图层")
 
                 suffix = f"，跳过 {skipped_locked} 个锁定图层" if skipped_locked else ""
-                self.status_message.emit(f"已删除 {len(unlocked_indices)} 个图层{suffix}", 3000)
+                self.status_message.emit(f"已删除 {len(delete_indices)} 个图层/组内容{suffix}", 3000)
                 self.layer_operation_completed.emit("delete_layer", True)
                 return True
 
@@ -403,7 +473,15 @@ class LayerController(QObject):
 
         try:
             copied_layers = []
+            copied_child_indices = set()
             for idx in selected_indices:
+                if 0 <= idx < len(self.document.layers) and is_layer_group(self.document.layers[idx]):
+                    copied_child_indices.update(
+                        child_indices_for_group(self.document.layers, getattr(self.document.layers[idx], 'group_id', ''), include_hidden=True)
+                    )
+            for idx in selected_indices:
+                if idx in copied_child_indices:
+                    continue
                 layer = self.document.layers[idx]
                 copied_layer = self._serialize_layer_for_clipboard(layer)
                 if copied_layer is not None:
@@ -443,21 +521,23 @@ class LayerController(QObject):
             pasted_count = 0
             pasted_indices = []
             for item in clipboard:
-                new_layer = self._create_layer_from_clipboard_item(item)
-                if new_layer is None:
+                new_layers = self._create_layers_from_clipboard_item(item)
+                if not new_layers:
                     continue
-                # 稍微偏移位置避免完全重叠
-                new_layer.x += 10
-                new_layer.y += 10
+                for new_layer in new_layers:
+                    # 稍微偏移位置避免完全重叠；组头没有几何位置，只偏移子图层。
+                    if not is_layer_group(new_layer):
+                        new_layer.x += 10
+                        new_layer.y += 10
 
-                try:
-                    if hasattr(new_layer, 'changed') and hasattr(new_layer.changed, 'connect'):
-                        new_layer.changed.connect(self.document.document_changed.emit)
-                except Exception:
-                    pass
-                self.document.layers.append(new_layer)
-                pasted_indices.append(len(self.document.layers) - 1)
-                pasted_count += 1
+                    try:
+                        if hasattr(new_layer, 'changed') and hasattr(new_layer.changed, 'connect'):
+                            new_layer.changed.connect(self.document.document_changed.emit)
+                    except Exception:
+                        pass
+                    self.document.layers.append(new_layer)
+                    pasted_indices.append(len(self.document.layers) - 1)
+                    pasted_count += 1
 
             if pasted_count == 0:
                 self.status_message.emit("剪贴板数据无效，无法粘贴图层", 3000)

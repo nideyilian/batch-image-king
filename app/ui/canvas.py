@@ -2,6 +2,14 @@ from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QL
 from PySide6.QtGui import QPainter, QColor, QPen, QImage, QPixmap, QCursor, QBrush, QPainterPath
 from PySide6.QtCore import Qt, QRect, QPoint, QSize, Signal, QTimer
 from app.ui.dark_theme import CursorDarkTheme
+from app.utils.layer_tree import (
+    child_indices_for_group,
+    expand_group_indices,
+    group_bounds,
+    is_layer_group,
+    is_effectively_locked,
+    is_effectively_visible,
+)
 import time
 
 class CanvasWidget(QWidget):
@@ -26,6 +34,7 @@ class CanvasWidget(QWidget):
         self.resize_handle_index = -1  # 表示当前拖动的控制点索引
         self.resize_start_rect = None  # 记录调整大小开始时的图层矩形
         self.resize_start_point = None  # 记录调整大小开始时的鼠标位置
+        self.resize_start_group_child_rects = {}
         self.is_dragging_vector_node = False
         self.vector_node_index = -1
         self.is_dragging_vector_handle = False
@@ -52,6 +61,9 @@ class CanvasWidget(QWidget):
         self.drag_threshold = 5           # 拖拽检测阈值（像素）
         self.drag_start_pos = None        # 拖拽开始位置
         self.potential_drag = False       # 是否可能开始拖拽
+        self.dragging_layer_indices = []
+        self.dragging_layer_start_positions = {}
+        self.dragging_group_start_bounds = None
 
         # 设置焦点策略以便接收键盘事件
         self.setFocusPolicy(Qt.ClickFocus)
@@ -239,6 +251,9 @@ class CanvasWidget(QWidget):
             # 如果有选中的图层，绘制图层边框和控制点
             if self.document.selected_layer_index >= 0 and self.document.selected_layer_index < len(self.document.layers):
                 layer = self.document.layers[self.document.selected_layer_index]
+                if is_layer_group(layer):
+                    self._draw_group_selection(painter, self.document.selected_layer_index)
+                    return
 
                 # 判断是否启用了分身效果（安全地检查属性是否存在）
                 is_clone_enabled = (hasattr(layer, 'clone_enabled') and layer.clone_enabled)
@@ -1246,6 +1261,7 @@ class CanvasWidget(QWidget):
         self._last_mouse_pos = None
         self.potential_drag = False
         self.drag_start_pos = None
+        self.dragging_group_start_bounds = None
         self._interactive_low_quality_active = False
 
         # 恢复正常光标
@@ -1385,6 +1401,18 @@ class CanvasWidget(QWidget):
         if not canvas_rect:
             return None
 
+        if is_layer_group(layer):
+            bounds = group_bounds(self.document.layers, layer, include_hidden=False)
+            if not bounds:
+                return None
+            left, top, right, bottom = bounds
+            return QRect(
+                canvas_rect.x() + int(left * self.zoom_factor),
+                canvas_rect.y() + int(top * self.zoom_factor),
+                max(1, int((right - left) * self.zoom_factor)),
+                max(1, int((bottom - top) * self.zoom_factor)),
+            )
+
         expand = self._get_vector_stroke_expand_px(layer)
         # 以图层几何为“矢量容器”，边框按有效渲染边界显示，而不是旧矩形框
         offset_x = int(getattr(layer, "_render_offset_x", -expand))
@@ -1395,6 +1423,37 @@ class CanvasWidget(QWidget):
         layer_height = int((layer.height + expand * 2) * self.zoom_factor)
 
         return QRect(layer_x, layer_y, layer_width, layer_height)
+
+    def _draw_group_selection(self, painter, group_index):
+        """Draw a Photoshop-like transform box around the selected group."""
+        if group_index < 0 or group_index >= len(self.document.layers):
+            return
+        group = self.document.layers[group_index]
+        if not is_layer_group(group):
+            return
+        rect = self.get_layer_rect(group_index)
+        if not rect:
+            return
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(0, 160, 230), 2, Qt.DashLine))
+        painter.drawRect(rect)
+        if is_effectively_locked(group, self.document.layers):
+            return
+        painter.setBrush(QBrush(QColor(0, 160, 230)))
+        handle_size = 8
+        points = [
+            QPoint(rect.left(), rect.top()),
+            QPoint(rect.left() + rect.width() // 2, rect.top()),
+            QPoint(rect.right(), rect.top()),
+            QPoint(rect.right(), rect.top() + rect.height() // 2),
+            QPoint(rect.right(), rect.bottom()),
+            QPoint(rect.left() + rect.width() // 2, rect.bottom()),
+            QPoint(rect.left(), rect.bottom()),
+            QPoint(rect.left(), rect.top() + rect.height() // 2),
+        ]
+        half = handle_size // 2
+        for point in points:
+            painter.drawRect(point.x() - half, point.y() - half, handle_size, handle_size)
 
     def _is_vector_container_active(self, layer) -> bool:
         if layer is None:
@@ -1566,7 +1625,7 @@ class CanvasWidget(QWidget):
         if layer_index < 0 or layer_index >= len(self.document.layers):
             return -1
         layer = self.document.layers[layer_index]
-        if layer is None or layer.locked:
+        if layer is None or is_layer_group(layer) or is_effectively_locked(layer, self.document.layers):
             return -1
         if not bool(getattr(layer, 'vector_path_enabled', False)):
             return -1
@@ -1589,7 +1648,7 @@ class CanvasWidget(QWidget):
         if layer_index < 0 or layer_index >= len(self.document.layers):
             return -1, None
         layer = self.document.layers[layer_index]
-        if layer is None or layer.locked:
+        if layer is None or is_layer_group(layer) or is_effectively_locked(layer, self.document.layers):
             return -1, None
         if not bool(getattr(layer, 'vector_path_enabled', False)):
             return -1, None
@@ -1628,7 +1687,7 @@ class CanvasWidget(QWidget):
         if layer_index < 0 or layer_index >= len(self.document.layers):
             return -1
         layer = self.document.layers[layer_index]
-        if layer is None or not bool(getattr(layer, 'vector_path_enabled', False)):
+        if layer is None or is_layer_group(layer) or not bool(getattr(layer, 'vector_path_enabled', False)):
             return -1
         rect = self.get_layer_rect(layer_index)
         if not rect:
@@ -1656,12 +1715,22 @@ class CanvasWidget(QWidget):
 
     def get_layer_at_position(self, pos):
         """获取鼠标位置所在的图层索引"""
+        # If a group is already selected, treat its visible child bounds as one
+        # editable object so dragging in the preview keeps the group selected.
+        selected_index = getattr(self.document, "selected_layer_index", -1)
+        if 0 <= selected_index < len(self.document.layers):
+            selected_layer = self.document.layers[selected_index]
+            if is_layer_group(selected_layer) and not is_effectively_locked(selected_layer, self.document.layers):
+                rect = self.get_layer_rect(selected_index)
+                if rect and rect.contains(pos):
+                    return selected_index
+
         # 从上到下（从顶层到底层）检查图层
         for i in range(len(self.document.layers) - 1, -1, -1):
             layer = self.document.layers[i]
-            if layer is None:
+            if layer is None or is_layer_group(layer):
                 continue
-            if not layer.visible or layer.locked:  # 忽略不可见或锁定的图层
+            if (not is_effectively_visible(layer, self.document.layers)) or is_effectively_locked(layer, self.document.layers):
                 continue
 
             # 判断是否启用了分身效果
@@ -1729,7 +1798,30 @@ class CanvasWidget(QWidget):
         layer = self.document.layers[layer_index]
         if layer is None:
             return -1
-        if layer.locked or layer.use_original_size:
+        if is_layer_group(layer):
+            if is_effectively_locked(layer, self.document.layers):
+                return -1
+            rect = self.get_layer_rect(layer_index)
+            if not rect:
+                return -1
+            handle_size = 8
+            half_handle = handle_size // 2
+            handle_points = [
+                QPoint(rect.left(), rect.top()),
+                QPoint(rect.left() + rect.width() // 2, rect.top()),
+                QPoint(rect.right(), rect.top()),
+                QPoint(rect.right(), rect.top() + rect.height() // 2),
+                QPoint(rect.right(), rect.bottom()),
+                QPoint(rect.left() + rect.width() // 2, rect.bottom()),
+                QPoint(rect.left(), rect.bottom()),
+                QPoint(rect.left(), rect.top() + rect.height() // 2),
+            ]
+            for i, point in enumerate(handle_points):
+                handle_rect = QRect(point.x() - half_handle, point.y() - half_handle, handle_size, handle_size)
+                if handle_rect.contains(pos):
+                    return i
+            return -1
+        if is_effectively_locked(layer, self.document.layers) or getattr(layer, 'use_original_size', False):
             return -1  # 锁定的图层或使用原始尺寸的图层不能调整大小
         if self._is_vector_container_active(layer):
             # 矢量容器模式下禁用旧矩形缩放控制点，避免和路径锚点编辑冲突
@@ -1893,7 +1985,7 @@ class CanvasWidget(QWidget):
         if layer_index < 0 or layer_index >= len(self.document.layers):
             return False
         layer = self.document.layers[layer_index]
-        if layer is None or layer.locked:
+        if layer is None or is_layer_group(layer) or is_effectively_locked(layer, self.document.layers):
             return False
         rect = self.get_layer_rect(layer_index)
         if not rect:
@@ -2182,7 +2274,25 @@ class CanvasWidget(QWidget):
                     layer = self.document.layers[self.document.selected_layer_index]
                     if bool(getattr(layer, 'auto_fit_text_box', False)):
                         layer.auto_fit_text_box = False
-                    self.resize_start_rect = QRect(layer.x, layer.y, layer.width, layer.height)
+                    if is_layer_group(layer):
+                        bounds = group_bounds(self.document.layers, layer, include_hidden=False)
+                        if not bounds:
+                            event.accept()
+                            return
+                        left, top, right, bottom = bounds
+                        self.resize_start_rect = QRect(left, top, max(1, right - left), max(1, bottom - top))
+                        self.resize_start_group_child_rects = {
+                            idx: QRect(
+                                int(getattr(self.document.layers[idx], 'x', 0)),
+                                int(getattr(self.document.layers[idx], 'y', 0)),
+                                int(getattr(self.document.layers[idx], 'width', 0)),
+                                int(getattr(self.document.layers[idx], 'height', 0)),
+                            )
+                            for idx in child_indices_for_group(self.document.layers, getattr(layer, 'group_id', ''), include_hidden=False)
+                        }
+                    else:
+                        self.resize_start_rect = QRect(layer.x, layer.y, layer.width, layer.height)
+                        self.resize_start_group_child_rects = {}
 
                     event.accept()
                     return
@@ -2212,14 +2322,24 @@ class CanvasWidget(QWidget):
                 active_selection = list(getattr(self.document, 'selected_layer_indices', []) or [layer_index])
                 if layer_index not in active_selection:
                     active_selection = [layer_index]
+                expanded_selection = expand_group_indices(self.document.layers, active_selection, include_groups=False)
                 self.dragging_layer_indices = [
-                    idx for idx in active_selection
-                    if 0 <= idx < len(self.document.layers) and not getattr(self.document.layers[idx], 'locked', False)
+                    idx for idx in expanded_selection
+                    if (
+                        0 <= idx < len(self.document.layers)
+                        and not is_layer_group(self.document.layers[idx])
+                        and not is_effectively_locked(self.document.layers[idx], self.document.layers)
+                    )
                 ]
                 self.dragging_layer_start_positions = {
                     idx: (int(self.document.layers[idx].x), int(self.document.layers[idx].y))
                     for idx in self.dragging_layer_indices
                 }
+                if is_layer_group(self.document.layers[layer_index]):
+                    bounds = group_bounds(self.document.layers, self.document.layers[layer_index], include_hidden=False)
+                    self.dragging_group_start_bounds = bounds
+                else:
+                    self.dragging_group_start_bounds = None
 
                 # 获取画布矩形
                 canvas_rect = self.get_canvas_rect()
@@ -2343,11 +2463,28 @@ class CanvasWidget(QWidget):
                     new_y = self.resize_start_rect.bottom() - min_size
                 new_height = min_size
 
-            # 更新图层属性
-            layer.x = new_x
-            layer.y = new_y
-            layer.width = new_width
-            layer.height = new_height
+            if is_layer_group(layer):
+                # Scale all visible child layers relative to the group's start bounds.
+                start_rect = self.resize_start_rect
+                child_rects = getattr(self, 'resize_start_group_child_rects', {}) or {}
+                scale_x = new_width / max(1, start_rect.width())
+                scale_y = new_height / max(1, start_rect.height())
+                for idx, child_rect in child_rects.items():
+                    if not (0 <= idx < len(self.document.layers)):
+                        continue
+                    child = self.document.layers[idx]
+                    if is_effectively_locked(child, self.document.layers):
+                        continue
+                    child.x = int(round(new_x + (child_rect.x() - start_rect.x()) * scale_x))
+                    child.y = int(round(new_y + (child_rect.y() - start_rect.y()) * scale_y))
+                    child.width = max(1, int(round(child_rect.width() * scale_x)))
+                    child.height = max(1, int(round(child_rect.height() * scale_y)))
+            else:
+                # 更新图层属性
+                layer.x = new_x
+                layer.y = new_y
+                layer.width = new_width
+                layer.height = new_height
 
             # 交互过程采用节流刷新，避免每个鼠标事件都触发完整重绘
             self._schedule_interactive_update(require_recompose=True)
@@ -2413,7 +2550,7 @@ class CanvasWidget(QWidget):
                     # 只有在潜在拖拽状态下才开始实际拖拽
                     layer = self.document.layers[self.dragging_layer_index]
                     drag_indices = getattr(self, 'dragging_layer_indices', [self.dragging_layer_index])
-                    if drag_indices and not layer.locked:  # 确保图层未锁定
+                    if drag_indices and not is_effectively_locked(layer, self.document.layers):  # 确保图层未锁定
                         self.potential_drag = False
                         self.is_dragging_layer = True
                         self.document.save_state("批量移动图层前" if len(drag_indices) > 1 else "移动图层前")
@@ -2428,7 +2565,7 @@ class CanvasWidget(QWidget):
             layer = self.document.layers[self.dragging_layer_index]
 
             # 如果图层被锁定，取消拖动
-            if layer.locked:
+            if is_effectively_locked(layer, self.document.layers):
                 self.is_dragging_layer = False
                 self.dragging_layer_index = -1
                 self.layer_drag_start = None
@@ -2441,12 +2578,17 @@ class CanvasWidget(QWidget):
                 # 考虑拖动偏移
                 new_x = int((event.pos().x() - canvas_rect.x() - self.drag_offset_x) / self.zoom_factor)
                 new_y = int((event.pos().y() - canvas_rect.y() - self.drag_offset_y) / self.zoom_factor)
-                new_x, new_y = self._apply_guide_snap_for_layer(layer, new_x, new_y)
+                if not is_layer_group(layer):
+                    new_x, new_y = self._apply_guide_snap_for_layer(layer, new_x, new_y)
                 start_positions = getattr(self, 'dragging_layer_start_positions', {})
-                base_start_x, base_start_y = start_positions.get(
-                    self.dragging_layer_index,
-                    (int(layer.x), int(layer.y)),
-                )
+                if is_layer_group(layer):
+                    bounds = getattr(self, 'dragging_group_start_bounds', None) or group_bounds(self.document.layers, layer, include_hidden=False)
+                    base_start_x, base_start_y = (bounds[0], bounds[1]) if bounds else (new_x, new_y)
+                else:
+                    base_start_x, base_start_y = start_positions.get(
+                        self.dragging_layer_index,
+                        (int(layer.x), int(layer.y)),
+                    )
                 delta_x = new_x - base_start_x
                 delta_y = new_y - base_start_y
 
@@ -2456,7 +2598,7 @@ class CanvasWidget(QWidget):
                     if not (0 <= idx < len(self.document.layers)):
                         continue
                     target_layer = self.document.layers[idx]
-                    if getattr(target_layer, 'locked', False):
+                    if is_effectively_locked(target_layer, self.document.layers):
                         continue
                     start_x, start_y = start_positions.get(idx, (int(target_layer.x), int(target_layer.y)))
                     target_layer.x = start_x + delta_x
@@ -2557,16 +2699,32 @@ class CanvasWidget(QWidget):
                 # 如果大小有变化，保存历史记录
                 if self.document.selected_layer_index >= 0 and self.resize_start_rect:
                     layer = self.document.layers[self.document.selected_layer_index]
-                    if (layer.x != self.resize_start_rect.x() or
-                        layer.y != self.resize_start_rect.y() or
-                        layer.width != self.resize_start_rect.width() or
-                        layer.height != self.resize_start_rect.height()):
-                        self.document.save_state("调整图层大小")
+                    changed = False
+                    if is_layer_group(layer):
+                        bounds = group_bounds(self.document.layers, layer, include_hidden=False)
+                        if bounds:
+                            left, top, right, bottom = bounds
+                            changed = (
+                                left != self.resize_start_rect.x() or
+                                top != self.resize_start_rect.y() or
+                                (right - left) != self.resize_start_rect.width() or
+                                (bottom - top) != self.resize_start_rect.height()
+                            )
+                    else:
+                        changed = (
+                            layer.x != self.resize_start_rect.x() or
+                            layer.y != self.resize_start_rect.y() or
+                            layer.width != self.resize_start_rect.width() or
+                            layer.height != self.resize_start_rect.height()
+                        )
+                    if changed:
+                        self.document.save_state("调整图层组大小" if is_layer_group(layer) else "调整图层大小")
                         self._request_high_quality_refresh()
 
                 self.resize_handle_index = -1
                 self.resize_start_rect = None
                 self.resize_start_point = None
+                self.resize_start_group_child_rects = {}
 
             elif self.is_dragging_corner_radius:
                 self.is_dragging_corner_radius = False
@@ -2602,6 +2760,7 @@ class CanvasWidget(QWidget):
                 self.layer_drag_start = None
                 self.dragging_layer_indices = []
                 self.dragging_layer_start_positions = {}
+                self.dragging_group_start_bounds = None
 
                 # 清理拖拽相关状态
                 self._clear_drag_state()
@@ -2751,9 +2910,14 @@ class CanvasWidget(QWidget):
                 dy = move_step
 
             if dx or dy:
+                expanded_indices = expand_group_indices(self.document.layers, selected_indices, include_groups=False)
                 movable_indices = [
-                    idx for idx in selected_indices
-                    if 0 <= idx < len(self.document.layers) and not getattr(self.document.layers[idx], 'locked', False)
+                    idx for idx in expanded_indices
+                    if (
+                        0 <= idx < len(self.document.layers)
+                        and not is_layer_group(self.document.layers[idx])
+                        and not is_effectively_locked(self.document.layers[idx], self.document.layers)
+                    )
                 ]
                 if not movable_indices:
                     event.accept()

@@ -2155,11 +2155,12 @@ class BatchExportPrecomputerV2:
 
         # 
         total_combinations = 1
+        from app.utils.layer_tree import is_layer_group, is_effectively_visible
         for doc_layer_idx, layer in enumerate(self.document.layers):
             if cancel_callback and cancel_callback():
                 self._was_canceled = True
                 return 0
-            if layer.visible:
+            if (not is_layer_group(layer)) and is_effectively_visible(layer, self.document.layers):
                 layer_pool_size = len(self.layer_image_pools.get(doc_layer_idx, []))
                 if layer_pool_size > 0:
                     total_combinations *= layer_pool_size
@@ -2172,11 +2173,12 @@ class BatchExportPrecomputerV2:
         print("[V2] ...")
 
         #  
+        from app.utils.layer_tree import is_layer_group, is_effectively_visible
         for doc_layer_idx, layer in enumerate(self.document.layers):
             if cancel_callback and cancel_callback():
                 self._was_canceled = True
                 return
-            if not layer.visible:
+            if is_layer_group(layer) or not is_effectively_visible(layer, self.document.layers):
                 continue
                 
             image_pool = []

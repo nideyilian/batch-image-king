@@ -20,6 +20,7 @@ from app.ui.layer_transform_widget import LayerTransformWidget
 from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
+from app.utils.layer_tree import is_layer_group
 
 class LayerPropertiesPanel(QWidget):
     """图层属性面板"""
@@ -316,6 +317,8 @@ class LayerPropertiesPanel(QWidget):
         for idx in indices:
             if 0 <= idx < len(self.document.layers):
                 layer = self.document.layers[idx]
+                if is_layer_group(layer):
+                    continue
                 if allow_locked or not getattr(layer, 'locked', False):
                     layers.append(layer)
         return layers
@@ -1577,6 +1580,17 @@ class LayerPropertiesPanel(QWidget):
         print(f"图层已选中: {self.current_layer.name}")
         print(f"图层形状类型: {getattr(self.current_layer, 'shape_type', '无')}")
 
+        if is_layer_group(self.current_layer):
+            self.text_layer_panel.hide()
+            self.shaped_layer_panel.hide()
+            self.normal_layer_panel.show()
+            if hasattr(self, 'transform_widget'):
+                self.transform_widget.set_layer(None)
+            if hasattr(self, 'random_transform_widget'):
+                self.random_transform_widget.set_layer(None)
+            self.update_panel()
+            return
+
         # 检查图层类型并切换面板
         from app.models.text_layer import TextLayer
         try:
@@ -1643,6 +1657,9 @@ class LayerPropertiesPanel(QWidget):
 
         layer = self.document.layers[layer_index]
         self.current_layer = layer
+        if is_layer_group(layer):
+            self._update_group_panel(layer)
+            return
         selected_layers = self._selected_editable_layers(allow_locked=True)
         is_multi = len(selected_layers) > 1
 
@@ -1990,6 +2007,36 @@ class LayerPropertiesPanel(QWidget):
         if is_multi:
             self.name_edit.setEnabled(False)
 
+    def _update_group_panel(self, group):
+        """显示图层组的基础属性，组不参与位置/尺寸/效果编辑。"""
+        self._block_all_signals(True)
+        try:
+            if self.text_layer_panel:
+                self.text_layer_panel.hide()
+            if hasattr(self, 'shaped_layer_panel') and self.shaped_layer_panel:
+                self.shaped_layer_panel.hide()
+            if hasattr(self, 'normal_layer_panel') and self.normal_layer_panel:
+                self.normal_layer_panel.show()
+
+            self.name_edit.setText(getattr(group, 'name', '图层组'))
+            self.visible_checkbox.setChecked(bool(getattr(group, 'visible', True)))
+            self.locked_checkbox.setChecked(bool(getattr(group, 'locked', False)))
+            if hasattr(self, 'opacity_label'):
+                self.opacity_label.setText("--")
+            if hasattr(self, 'current_image_label'):
+                self.current_image_label.setText("图层组")
+
+            self.set_controls_enabled(False)
+            self.name_edit.setEnabled(True)
+            self.visible_checkbox.setEnabled(True)
+            self.locked_checkbox.setEnabled(True)
+            if hasattr(self, 'transform_widget'):
+                self.transform_widget.set_layer(None)
+            if hasattr(self, 'random_transform_widget'):
+                self.random_transform_widget.set_layer(None)
+        finally:
+            self._block_all_signals(False)
+
     def mouseReleaseEvent(self, event):
         """鼠标释放事件，用于处理点击面板时自动选择图层"""
         super().mouseReleaseEvent(event)
@@ -2304,6 +2351,18 @@ class LayerPropertiesPanel(QWidget):
             return
 
         safe_print(f"更新锁定状态: {locked}")  # 调试信息
+
+        if is_layer_group(self.current_layer):
+            self.document.save_state("切换图层组锁定状态前")
+            self.current_layer.locked = locked
+            self._emit_document_change(
+                throttled=False,
+                fields=["lock"],
+                reason="lock"
+            )
+            self.document.save_state("切换图层组锁定状态")
+            self._update_group_panel(self.current_layer)
+            return
 
         if self._is_multi_layer_edit():
             self.document.save_state("批量切换图层锁定状态前")

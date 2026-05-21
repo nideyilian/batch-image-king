@@ -133,9 +133,13 @@ class DocumentSerializer(QObject):
         }
         
         # 序列化每个图层
-        for layer in document.layers:
-            layer_data = DocumentSerializer.serialize_layer(layer)
-            document_data['layers'].append(layer_data)
+        try:
+            from app.utils.layer_tree import serialize_layer_tree
+            document_data['layers'] = serialize_layer_tree(document.layers, DocumentSerializer.serialize_layer)
+        except Exception:
+            for layer in document.layers:
+                layer_data = DocumentSerializer.serialize_layer(layer)
+                document_data['layers'].append(layer_data)
         
         # 如果有绑定管理器，也保存（适配新接口，弃用旧方法）
         if hasattr(document, 'binding_manager') and document.binding_manager:
@@ -169,6 +173,7 @@ class DocumentSerializer(QObject):
         # 检查图层类型
         from app.models.text_layer import TextLayer
         from app.models.shaped_layer_new import ShapedLayer
+        from app.utils.layer_tree import is_layer_group
         
         # 优先使用图层自身的序列化能力，避免导出工作文档漏掉新样式字段
         layer_data: Dict[str, Any]
@@ -192,7 +197,9 @@ class DocumentSerializer(QObject):
         layer_data.setdefault('locked', getattr(layer, 'locked', False))
         
         # 根据图层类型添加类型标识
-        if isinstance(layer, TextLayer):
+        if is_layer_group(layer) or layer_data.get('type') == 'group':
+            layer_data['type'] = 'group'
+        elif isinstance(layer, TextLayer):
             layer_data['type'] = 'text'
         elif isinstance(layer, ShapedLayer):
             layer_data['type'] = 'shaped'
@@ -200,6 +207,10 @@ class DocumentSerializer(QObject):
             layer_data['type'] = 'image'  # 默认类型
         
         # 保存随机变换属性
+        parent_group_id = getattr(layer, 'parent_group_id', getattr(layer, '_parent_group_id', None))
+        if parent_group_id:
+            layer_data['parent_group_id'] = str(parent_group_id)
+
         if hasattr(layer, 'random_position_enabled'):
             layer_data['random_position_enabled'] = layer.random_position_enabled
             layer_data['random_position_range'] = getattr(layer, 'random_position_range', 10)
@@ -258,9 +269,15 @@ class DocumentSerializer(QObject):
             
             # 恢复图层
             layers_data = document_data.get('layers', [])
-            for layer_data in layers_data:
-                layer = DocumentSerializer.deserialize_layer(layer_data, parent=document)
-                document.layers.append(layer)
+            try:
+                from app.utils.layer_tree import deserialize_layer_tree
+                document.layers.extend(
+                    deserialize_layer_tree(layers_data, DocumentSerializer.deserialize_layer, parent=document)
+                )
+            except Exception:
+                for layer_data in layers_data:
+                    layer = DocumentSerializer.deserialize_layer(layer_data, parent=document)
+                    document.layers.append(layer)
             
             # 恢复选中图层
             document.selected_layer_index = document_data.get('selected_layer_index', -1)
@@ -317,18 +334,36 @@ class DocumentSerializer(QObject):
         # 根据图层类型创建相应的图层对象
         layer_type = layer_data.get('type', 'image')
         
-        if layer_type == 'text':
+        if layer_type == 'group':
+            from app.models.layer_group import LayerGroup
+            return LayerGroup.deserialize(layer_data, parent=parent)
+        elif layer_type == 'text':
             # 文字图层
             from app.models.text_layer import TextLayer
-            return TextLayer.deserialize(layer_data, parent=parent)
+            layer = TextLayer.deserialize(layer_data, parent=parent)
+            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
+            if parent_group_id:
+                setattr(layer, 'parent_group_id', str(parent_group_id))
+                setattr(layer, '_parent_group_id', str(parent_group_id))
+            return layer
         elif layer_type == 'shaped':
             # 异形图层
             from app.models.shaped_layer_new import ShapedLayer
-            return ShapedLayer.deserialize(layer_data, parent=parent)
+            layer = ShapedLayer.deserialize(layer_data, parent=parent)
+            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
+            if parent_group_id:
+                setattr(layer, 'parent_group_id', str(parent_group_id))
+                setattr(layer, '_parent_group_id', str(parent_group_id))
+            return layer
         else:
             # 普通图层
             from app.models.layer_new import Layer
-            return Layer.deserialize(layer_data, parent=parent)
+            layer = Layer.deserialize(layer_data, parent=parent)
+            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
+            if parent_group_id:
+                setattr(layer, 'parent_group_id', str(parent_group_id))
+                setattr(layer, '_parent_group_id', str(parent_group_id))
+            return layer
 
 
 if __name__ == "__main__":

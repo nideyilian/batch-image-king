@@ -432,7 +432,11 @@ class OptimizedBatchExecutor:
         try:
             if not hasattr(document, 'layers'):
                 return []
-            return [idx for idx, layer in enumerate(document.layers) if bool(getattr(layer, 'visible', True))]
+            from app.utils.layer_tree import is_layer_group, is_effectively_visible
+            return [
+                idx for idx, layer in enumerate(document.layers)
+                if not is_layer_group(layer) and is_effectively_visible(layer, document.layers)
+            ]
         except Exception:
             return []
 
@@ -1212,6 +1216,10 @@ class OptimizedBatchExecutor:
                             print(f"[] : {getattr(task, 'filename', '')}, : {e}")
                         else:
                             pass
+                        # A completed save frees one pipeline slot. Submit more render
+                        # work here as well as after render completion, otherwise the
+                        # exporter can stop after the initial in-flight window.
+                        _submit_render_tasks()
 
                     with self._lock:
                         self.current_progress = completed_count + failed_count
@@ -1268,7 +1276,12 @@ class OptimizedBatchExecutor:
             self.stats['final_in_flight_limit'] = int(in_flight_limit)
         print(f"[] : {completed_count}/{self.total_tasks} ({success_rate:.1%})")
         
-        return not self.is_canceled and failed_count == 0
+        processed_count = completed_count + failed_count
+        return (
+            not self.is_canceled
+            and failed_count == 0
+            and processed_count == self.total_tasks
+        )
 
     def _render_task(self, task: ExportTask, cancel_event: Optional[threading.Event] = None,
                      cancel_callback: Optional[Callable[[], bool]] = None):

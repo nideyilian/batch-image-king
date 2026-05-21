@@ -486,7 +486,11 @@ class FastRenderer:
             if _BATCH_RENDER_VERBOSE:
                 print(f"[批量渲染] 使用与预览一致的快速渲染方案")
                 print(f"[批量渲染] 文档信息: 画布={document.canvas_width}x{document.canvas_height}, 图层数={len(document.layers)}")
-                visible_layers = [layer for layer in document.layers if layer is not None and layer.visible]
+                from app.utils.layer_tree import is_layer_group, is_effectively_visible
+                visible_layers = [
+                    layer for layer in document.layers
+                    if layer is not None and not is_layer_group(layer) and is_effectively_visible(layer, document.layers)
+                ]
                 print(f"[批量渲染] 可见图层数: {len(visible_layers)}")
                 for i, layer in enumerate(visible_layers):
                     print(f"[批量渲染] 图层{i+1}: {layer.name}, 位置=({layer.x}, {layer.y}), 尺寸={layer.width}x{layer.height}")
@@ -551,12 +555,21 @@ class FastRenderer:
                     pass
         
         # 获取可见图层
-        visible_layers = []
-        for idx, layer in enumerate(document.layers):
-            if idx == skip_layer_index:
-                continue
-            if layer is not None and layer.visible:
-                visible_layers.append(layer)
+        try:
+            from app.utils.layer_tree import is_layer_group, is_effectively_visible
+            visible_layers = []
+            for idx, layer in enumerate(document.layers):
+                if idx == skip_layer_index or layer is None or is_layer_group(layer):
+                    continue
+                if is_effectively_visible(layer, document.layers):
+                    visible_layers.append(layer)
+        except Exception:
+            visible_layers = []
+            for idx, layer in enumerate(document.layers):
+                if idx == skip_layer_index:
+                    continue
+                if layer is not None and getattr(layer, 'visible', True):
+                    visible_layers.append(layer)
         if not visible_layers:
             return composition
 
@@ -2164,7 +2177,11 @@ class FastRenderer:
             composition = Image.new('RGBA', (document.canvas_width, document.canvas_height), (0, 0, 0, 0))
 
             # 获取可见图层
-            visible_layers = [layer for layer in document.layers if layer.visible]
+            from app.utils.layer_tree import is_layer_group, is_effectively_visible
+            visible_layers = [
+                layer for layer in document.layers
+                if not is_layer_group(layer) and is_effectively_visible(layer, document.layers)
+            ]
             if not visible_layers:
                 return composition
 

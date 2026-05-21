@@ -1536,8 +1536,13 @@ class Document(QObject):
         self._saving_state = True
         try:
             # 创建当前状态的快照 - 序列化图层以断开引用
+            try:
+                from app.models.document_serializer import DocumentSerializer
+                serialized_layers = [DocumentSerializer.serialize_layer(layer) for layer in self.layers]
+            except Exception:
+                serialized_layers = [layer.serialize() for layer in self.layers]
             state = {
-                'layers': [layer.serialize() for layer in self.layers],
+                'layers': serialized_layers,
                 'selected_layer_index': self.selected_layer_index,
                 'selected_layer_indices': list(getattr(self, 'selected_layer_indices', [])),
                 'action_name': action_name
@@ -2002,7 +2007,14 @@ class Document(QObject):
     def randomize_all_layers(self):
         """为所有可见图层重新随机选择图片/文字，严格按照绑定组设置执行"""
         # 只获取可见图层进行处理
-        visible_layers = [layer for layer in self.layers if layer.visible]
+        try:
+            from app.utils.layer_tree import is_layer_group, is_effectively_visible
+            visible_layers = [
+                layer for layer in self.layers
+                if not is_layer_group(layer) and is_effectively_visible(layer, self.layers)
+            ]
+        except Exception:
+            visible_layers = [layer for layer in self.layers if getattr(layer, 'visible', True)]
 
         # 预览随机化必须以绑定管理器为主链路，不能依赖导出模式推断
         # 否则公共分类分析失败时会被降级为标准随机化，导致绑定看似失效
@@ -2670,7 +2682,8 @@ class Document(QObject):
             from app.utils.performance_optimizer import PerformanceOptimizer, PerformanceMonitor
 
             # 获取可见图层
-            visible_layers = [layer for layer in self.layers if layer is not None and layer.visible]
+            from app.utils.layer_tree import render_layers
+            visible_layers = render_layers(self.layers)
 
             # 获取优化设置
             image_size = (self.canvas_width, self.canvas_height)
@@ -2706,7 +2719,8 @@ class Document(QObject):
                 'use_threading': False,
                 'memory_optimization': False
             }
-            visible_layers = [layer for layer in self.layers if layer is not None and layer.visible]
+            from app.utils.layer_tree import render_layers
+            visible_layers = render_layers(self.layers)
 
         # 绘制所有可见图层
         for layer_index, layer in enumerate(sorted(visible_layers, key=lambda l: self.layers.index(l))):
@@ -3208,7 +3222,14 @@ class Document(QObject):
         }
 
         # 1. 分析可见图层
-        visible_layers = [layer for layer in self.layers if layer.visible]
+        try:
+            from app.utils.layer_tree import is_layer_group, is_effectively_visible
+            visible_layers = [
+                layer for layer in self.layers
+                if not is_layer_group(layer) and is_effectively_visible(layer, self.layers)
+            ]
+        except Exception:
+            visible_layers = [layer for layer in self.layers if getattr(layer, 'visible', True)]
         analysis_result['layer_analysis']['visible_layers'] = visible_layers
         print(f"[文档分析] 发现 {len(visible_layers)} 个可见图层")
 
@@ -4163,10 +4184,21 @@ class Document(QObject):
             
             # 加载图层
             self.layers = []
-            for layer_data in document_data.get('layers', []):
-                layer = self.create_layer_from_data(layer_data)
-                if layer is not None:
-                    self.layers.append(layer)
+            layers_data = document_data.get('layers', [])
+            try:
+                from app.utils.layer_tree import deserialize_layer_tree
+                self.layers.extend(
+                    deserialize_layer_tree(
+                        layers_data,
+                        lambda data, parent=None: self.create_layer_from_data(data),
+                        parent=self,
+                    )
+                )
+            except Exception:
+                for layer_data in layers_data:
+                    layer = self.create_layer_from_data(layer_data)
+                    if layer is not None:
+                        self.layers.append(layer)
                 
             self.selected_layer_index = document_data.get('selected_layer_index', -1)
             self.selected_layer_indices = [self.selected_layer_index] if self.selected_layer_index >= 0 else []
@@ -4438,23 +4470,34 @@ class Document(QObject):
             layer_type = layer_data.get('layer_type') or layer_data.get('type', 'image')
             
             # 🔧 增强：通过检查关键字段来验证图层类型
-            if 'shape_type' in layer_data:
+            if 'shape_type' in layer_data and layer_type not in ('image', 'Layer'):
                 # 如果有 shape_type 字段，应该是异形图层
                 if layer_type != 'shaped':
                     print(f"[警告] 图层数据包含shape_type但layer_type为{layer_type}，强制使用异形图层")
                     layer_type = 'shaped'
             
-            if layer_type == 'text':
+            if layer_type == 'group':
+                from app.models.layer_group import LayerGroup
+                return LayerGroup.deserialize(layer_data, parent=self)
+            elif layer_type == 'text':
                 # 文字图层
                 from app.models.text_layer import TextLayer
-                return TextLayer.deserialize(layer_data)
+                layer = TextLayer.deserialize(layer_data)
             elif layer_type == 'shaped':
                 # 异形图层
                 from app.models.shaped_layer_new import ShapedLayer
-                return ShapedLayer.deserialize(layer_data)
+                layer = ShapedLayer.deserialize(layer_data)
             else:
                 # 普通图层
-                return NewLayer.deserialize(layer_data)
+                layer = NewLayer.deserialize(layer_data)
+            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
+            if parent_group_id:
+                try:
+                    setattr(layer, 'parent_group_id', str(parent_group_id))
+                    setattr(layer, '_parent_group_id', str(parent_group_id))
+                except Exception:
+                    pass
+            return layer
                 
         except Exception as e:
             print(f"从数据创建图层失败: {e}")
@@ -4532,8 +4575,9 @@ class Document(QObject):
             total_combinations = 1
             visible_layers = 0
 
+            from app.utils.layer_tree import is_layer_group, is_effectively_visible
             for layer in self.layers:
-                if not layer.visible:
+                if is_layer_group(layer) or not is_effectively_visible(layer, self.layers):
                     continue
 
                 visible_layers += 1

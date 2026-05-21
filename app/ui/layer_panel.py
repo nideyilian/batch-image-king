@@ -18,6 +18,14 @@ except ImportError:
 from app.ui.icon_manager import IconManager, create_random_button, create_lock_button, create_visibility_button
 from app.ui.visual_hierarchy import VisualHierarchy
 from app.ui.shaped_layer_panel import ShapedLayerPanel
+from app.models.layer_group import LayerGroup
+from app.utils.layer_tree import (
+    display_entries,
+    get_parent_group_id,
+    is_effectively_locked,
+    is_layer_group,
+    set_parent_group_id,
+)
 
 class DragDropLayerList(QListWidget):
     """支持拖放的图层列表组件"""
@@ -156,10 +164,11 @@ class DragDropLayerList(QListWidget):
 class LayerItem(QWidget):
     """图层列表项组件"""
 
-    def __init__(self, layer, index, panel=None):
+    def __init__(self, layer, index, panel=None, depth=0):
         super().__init__()
         self.layer = layer
         self.index = index
+        self.depth = depth
         self.panel = panel  # 保存对LayerPanel的引用
         self.is_selected = False
         self.is_hovered = False
@@ -168,14 +177,14 @@ class LayerItem(QWidget):
         self.setObjectName("layerItem")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 3, 5, 3)
+        layout.setContentsMargins(5 + depth * 18, 3, 5, 3)
         layout.setSpacing(5)
 
         # 可见性切换按钮 - 改为使用按钮显示眼睛图标
         self.visibility_btn = QPushButton()
         self.visibility_btn.setFixedSize(18, 18)
         self.visibility_btn.setCheckable(True)
-        self.visibility_btn.setChecked(layer.visible)
+        self.visibility_btn.setChecked(bool(getattr(layer, 'visible', True)))
         self.visibility_btn.clicked.connect(self.toggle_visibility)
         self.visibility_btn.setObjectName("visibilityButton")
         self.update_visibility_icon()
@@ -185,7 +194,7 @@ class LayerItem(QWidget):
         self.lock_btn = QPushButton()
         self.lock_btn.setFixedSize(18, 18)
         self.lock_btn.setCheckable(True)
-        self.lock_btn.setChecked(layer.locked)
+        self.lock_btn.setChecked(bool(getattr(layer, 'locked', False)))
         self.lock_btn.setObjectName("lockButton")
         self.update_lock_icon()
         self.lock_btn.clicked.connect(self.toggle_lock)
@@ -199,7 +208,7 @@ class LayerItem(QWidget):
         layout.addWidget(self.bind_label)
 
         # 图层名称
-        layer_name = getattr(layer, 'name', f'图层 {index}')
+        layer_name = self._display_name()
         self.name_label = QLabel(layer_name)
         self.name_label.setObjectName("nameLabel")
         self.name_label.setMinimumHeight(16)
@@ -212,9 +221,7 @@ class LayerItem(QWidget):
         layout.addStretch()
 
         # 图层尺寸信息
-        layer_width = getattr(layer, 'width', 0)
-        layer_height = getattr(layer, 'height', 0)
-        size_text = f"{layer_width}x{layer_height}"
+        size_text = "Group" if is_layer_group(layer) else f"{getattr(layer, 'width', 0)}x{getattr(layer, 'height', 0)}"
         self.size_label = QLabel(size_text)
         self.size_label.setObjectName("sizeLabel")
         self.size_label.setMinimumHeight(16)
@@ -240,10 +247,8 @@ class LayerItem(QWidget):
         current_size = self.size_label.text()
 
         # 计算新的内容
-        layer_name = getattr(self.layer, 'name', f'图层 {self.index}')
-        layer_width = getattr(self.layer, 'width', 0)
-        layer_height = getattr(self.layer, 'height', 0)
-        size_text = f"{layer_width}x{layer_height}"
+        layer_name = self._display_name()
+        size_text = "Group" if is_layer_group(self.layer) else f"{getattr(self.layer, 'width', 0)}x{getattr(self.layer, 'height', 0)}"
 
         # 只有内容实际发生变化时才更新
         content_changed = False
@@ -277,7 +282,7 @@ class LayerItem(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'name_label') and self.name_label:
-            text = getattr(self.layer, 'name', f'图层 {self.index}')
+            text = self._display_name()
             fm = self.name_label.fontMetrics()
             elided = fm.elidedText(text, Qt.ElideMiddle, max(80, self.name_label.width()))
             self.name_label.setText(elided)
@@ -285,6 +290,13 @@ class LayerItem(QWidget):
         # 减少调试输出 - 只在内容实际变化时输出
         # if content_changed:
         #     print(f"更新UI标签: 名称='{layer_name}', 尺寸='{size_text}', 选中={self.is_selected}")
+
+    def _display_name(self):
+        name = getattr(self.layer, 'name', f'图层 {self.index}')
+        if is_layer_group(self.layer):
+            marker = "[-]" if getattr(self.layer, 'expanded', True) else "[+]"
+            return f"{marker} {name}"
+        return name
 
     def apply_style(self):
         """应用现代化样式，使用视觉层级管理器"""
@@ -648,6 +660,10 @@ class LayerPanel(QWidget):
         self._update_timer.start(50)
         print(f"[图层面板] _schedule_update: 已开始50ms定时器")
 
+    def refresh_layers(self):
+        """兼容旧控制器调用的图层刷新入口。"""
+        self._schedule_update()
+
     def _perform_update(self):
         """执行实际的UI更新"""
         print(f"[图层面板] _perform_update: 被调用，更新等待: {self._update_pending}")
@@ -682,6 +698,7 @@ class LayerPanel(QWidget):
         # 图层列表 - 使用自定义的支持拖放的列表组件
         self.layer_list = DragDropLayerList()
         self.layer_list.itemClicked.connect(self.layer_selected)
+        self.layer_list.itemDoubleClicked.connect(self._toggle_group_expanded_for_item)
         self.layer_list.itemSelectionChanged.connect(self._on_layer_list_selection_changed)
         self.layer_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.layer_list.customContextMenuRequested.connect(self.show_context_menu)
@@ -724,6 +741,13 @@ class LayerPanel(QWidget):
         self._normalize_toolbar_button(self.down_btn)
         self._apply_button_style(self.down_btn, 'secondary', icon_button=True)
         button_layout.addWidget(self.down_btn)
+
+        self.group_btn = QPushButton("组")
+        self.group_btn.setToolTip("从所选图层建立组")
+        self.group_btn.clicked.connect(self.group_selected_layers)
+        self._normalize_toolbar_button(self.group_btn)
+        self._apply_button_style(self.group_btn, 'secondary', icon_button=True)
+        button_layout.addWidget(self.group_btn)
 
         # 添加分割线
         button_layout.addItem(self._create_separator())
@@ -1008,6 +1032,14 @@ class LayerPanel(QWidget):
         print(f"[图层面板] update_layers: 文档图层数={len(self.document.layers)}, 列表项数={self.layer_list.count()}")
 
         # 当前选中的图层索引（支持多选，首选图层作为主选中）
+        ui_selected = self._ordered_selected_indices_from_ui()
+        if len(ui_selected) > 1:
+            self._selected_layer_indices = list(ui_selected)
+            try:
+                if hasattr(self.document, 'select_layers'):
+                    self.document.select_layers(ui_selected, primary_index=ui_selected[0])
+            except Exception:
+                pass
         selected_indices = self._sanitize_selected_indices()
         selected_index = selected_indices[0] if selected_indices else -1
         print(f"[图层面板] update_layers: 选中图层索引={selected_indices}")
@@ -1033,8 +1065,22 @@ class LayerPanel(QWidget):
 
     def _can_incremental_update(self):
         """判断是否可以进行增量更新"""
-        # 如果图层数量没有变化，可以尝试增量更新
-        return len(self.document.layers) == self.layer_list.count()
+        # 分组会影响折叠/缩进/索引映射，统一重建更稳。
+        return False
+
+    def _actual_index_for_item(self, item):
+        if item is None:
+            return -1
+        value = item.data(Qt.UserRole)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return -1
+
+    def _actual_index_for_row(self, row):
+        if row < 0 or row >= self.layer_list.count():
+            return -1
+        return self._actual_index_for_item(self.layer_list.item(row))
 
     def _incremental_update(self, selected_indices, primary_index):
         """增量更新图层列表"""
@@ -1076,16 +1122,14 @@ class LayerPanel(QWidget):
         print(f"[图层面板] _full_rebuild: 开始重建，图层数={len(self.document.layers)}")
         selected_set = set(selected_indices)
 
-        # 清空现有列表
-        self.layer_list.clear()
-        print(f"[图层面板] _full_rebuild: 已清空列表")
-
         # 从顶部到底部填充列表 (界面中最上面的图层是列表索引0)
         self._selection_sync_in_progress = True
         try:
-            for i, layer in enumerate(reversed(self.document.layers)):
-            # 计算逆序之后的真实索引
-                real_index = len(self.document.layers) - 1 - i
+            # 清空列表会触发 itemSelectionChanged，必须在同步保护内执行。
+            self.layer_list.clear()
+            print(f"[图层面板] _full_rebuild: 已清空列表")
+
+            for i, (real_index, layer, depth) in enumerate(display_entries(self.document.layers)):
                 print(f"[图层面板] _full_rebuild: 创建图层项 {i}: {layer.name} (真实索引={real_index})")
 
                 try:
@@ -1093,10 +1137,11 @@ class LayerPanel(QWidget):
                     item = QListWidgetItem()
 
                     # 创建自定义小部件
-                    widget = LayerItem(layer, real_index, self)
+                    widget = LayerItem(layer, real_index, self, depth=depth)
 
                     # 设置项目大小
                     item.setSizeHint(widget.sizeHint())
+                    item.setData(Qt.UserRole, real_index)
 
                     # 添加到列表
                     self.layer_list.addItem(item)
@@ -1135,9 +1180,7 @@ class LayerPanel(QWidget):
             print("警告: document为空，无法处理图层选择")
             return
 
-        # 获取点击图层的实际索引（列表显示顺序与文档顺序相反）
-        display_index = self.layer_list.row(item)
-        actual_index = len(self.document.layers) - display_index - 1
+        actual_index = self._actual_index_for_item(item)
         if not (0 <= actual_index < len(self.document.layers)):
             return
 
@@ -1165,6 +1208,19 @@ class LayerPanel(QWidget):
         self._refresh_layer_widgets_selection()
         self._sync_primary_selection_to_document()
         self._update_selected_layer_controls()
+
+    def _toggle_group_expanded_for_item(self, item):
+        if not self.document:
+            return
+        actual_index = self._actual_index_for_item(item)
+        if not (0 <= actual_index < len(self.document.layers)):
+            return
+        layer = self.document.layers[actual_index]
+        if not is_layer_group(layer):
+            return
+        layer.expanded = not getattr(layer, 'expanded', True)
+        self.document.document_changed.emit()
+        self._schedule_update()
 
     def add_layer(self):
         """添加新图层 - 直接添加默认图层，无弹窗"""
@@ -1197,7 +1253,16 @@ class LayerPanel(QWidget):
         """获取选中的图层索引列表"""
         if self.document is None:
             return []
+        ui_selection = self._ordered_selected_indices_from_ui()
+        if len(ui_selection) > 1:
+            return list(ui_selection)
         doc_selection = getattr(self.document, 'selected_layer_indices', [])
+        if doc_selection and len(doc_selection) > 1:
+            return list(doc_selection)
+        if self._selected_layer_indices and len(self._selected_layer_indices) > 1:
+            return list(self._selected_layer_indices)
+        if ui_selection:
+            return list(ui_selection)
         if doc_selection:
             return list(doc_selection)
         if self._selected_layer_indices:
@@ -1212,7 +1277,7 @@ class LayerPanel(QWidget):
         for i in range(self.layer_list.count()):
             item = self.layer_list.item(i)
             if item and item.isSelected():
-                actual = len(self.document.layers) - i - 1
+                actual = self._actual_index_for_item(item)
                 if 0 <= actual < len(self.document.layers):
                     selected.append(actual)
         return selected
@@ -1246,7 +1311,7 @@ class LayerPanel(QWidget):
             for i in range(self.layer_list.count()):
                 list_item = self.layer_list.item(i)
                 widget = self.layer_list.itemWidget(list_item)
-                actual = len(self.document.layers) - i - 1
+                actual = self._actual_index_for_item(list_item)
                 is_selected = actual in selected_set
                 if list_item is not None:
                     list_item.setSelected(is_selected)
@@ -1286,13 +1351,14 @@ class LayerPanel(QWidget):
 
         self.selected_layer = self.document.layers[primary_index]
 
-        self.delete_btn.setEnabled(not self.selected_layer.locked)
-        self.up_btn.setEnabled(primary_index > 0 and not self.selected_layer.locked)
-        self.down_btn.setEnabled(primary_index < len(self.document.layers) - 1 and not self.selected_layer.locked)
+        locked = is_effectively_locked(self.selected_layer, self.document.layers)
+        self.delete_btn.setEnabled(not locked)
+        self.up_btn.setEnabled(primary_index > 0 and not locked)
+        self.down_btn.setEnabled(primary_index < len(self.document.layers) - 1 and not locked)
 
     def _on_layer_list_selection_changed(self):
         """处理列表选择变化（键盘选择、程序同步等场景）。"""
-        if self._selection_sync_in_progress or not self.document:
+        if self._selection_sync_in_progress or self._updating or not self.document:
             return
         ui_selected = self._ordered_selected_indices_from_ui()
         if not ui_selected:
@@ -1333,19 +1399,32 @@ class LayerPanel(QWidget):
         """删除选中的图层，支持多选并跳过锁定图层。"""
         if not self.document:
             return
-        selected_indices = [
-            idx for idx in self.get_selected_indices()
-            if 0 <= idx < len(self.document.layers) and not getattr(self.document.layers[idx], 'locked', False)
-        ]
+        selected_indices = []
+        for idx in self.get_selected_indices():
+            if not (0 <= idx < len(self.document.layers)):
+                continue
+            layer = self.document.layers[idx]
+            if is_effectively_locked(layer, self.document.layers):
+                continue
+            selected_indices.append(idx)
         if not selected_indices:
             return
         self.document.save_state("批量删除图层前" if len(selected_indices) > 1 else "删除图层前")
-        for idx in sorted(selected_indices, reverse=True):
+        delete_indices = set(selected_indices)
+        for idx in selected_indices:
+            layer = self.document.layers[idx]
+            if is_layer_group(layer):
+                gid = getattr(layer, 'group_id', None)
+                delete_indices.update(
+                    child_idx for child_idx, child in enumerate(self.document.layers)
+                    if get_parent_group_id(child) == str(gid)
+                )
+        for idx in sorted(delete_indices, reverse=True):
             layer_to_remove = self.document.layers[idx]
             if hasattr(self.document, 'binding_manager') and self.document.binding_manager:
                 self.document.binding_manager.remove_layer_from_group(layer_to_remove)
             del self.document.layers[idx]
-        fallback = min(min(selected_indices), len(self.document.layers) - 1) if self.document.layers else -1
+        fallback = min(min(delete_indices), len(self.document.layers) - 1) if self.document.layers else -1
         if hasattr(self.document, 'select_layers'):
             self.document.select_layers([fallback] if fallback >= 0 else [])
         else:
@@ -1353,6 +1432,85 @@ class LayerPanel(QWidget):
         self.document.document_changed.emit()
         self.document.layer_changed.emit()
         self.document.save_state("批量删除图层" if len(selected_indices) > 1 else "删除图层")
+
+    def group_selected_layers(self):
+        """把当前选中的普通图层建立为一个基础组。"""
+        if not self.document:
+            return
+        ui_selection = self._ordered_selected_indices_from_ui()
+        doc_selection = list(getattr(self.document, 'selected_layer_indices', []) or [])
+        panel_selection = list(self._selected_layer_indices or [])
+        if len(ui_selection) > 1:
+            source_selection = ui_selection
+        elif len(doc_selection) > 1:
+            source_selection = doc_selection
+        elif len(panel_selection) > 1:
+            source_selection = panel_selection
+        else:
+            source_selection = self.get_selected_indices()
+        selected_indices = sorted({
+            idx for idx in source_selection
+            if 0 <= idx < len(self.document.layers)
+        })
+        movable = [
+            idx for idx in selected_indices
+            if (not is_layer_group(self.document.layers[idx]))
+            and not get_parent_group_id(self.document.layers[idx])
+            and not is_effectively_locked(self.document.layers[idx], self.document.layers)
+        ]
+        if len(movable) < 2:
+            self._show_status_message("请选择至少两个未分组且未锁定的图层")
+            return
+
+        group = LayerGroup(name=f"图层组 {sum(1 for layer in self.document.layers if is_layer_group(layer)) + 1}")
+        self.document.save_state("建立图层组前")
+        selected_layers = [self.document.layers[idx] for idx in movable]
+        selected_set = set(movable)
+        insert_at = min(movable)
+        remaining = [
+            layer for idx, layer in enumerate(self.document.layers)
+            if idx not in selected_set
+        ]
+        for layer in selected_layers:
+            set_parent_group_id(layer, group.group_id)
+        removed_before_insert = sum(1 for idx in movable if idx < insert_at)
+        insert_at = max(0, insert_at - removed_before_insert)
+        self.document.layers = remaining[:insert_at] + [group] + selected_layers + remaining[insert_at:]
+        new_group_index = self.document.layers.index(group)
+        if hasattr(self.document, 'select_layers'):
+            self.document.select_layers([new_group_index], primary_index=new_group_index)
+        else:
+            self.document.selected_layer_index = new_group_index
+        self.document.layer_changed.emit()
+        self.document.document_changed.emit()
+        self.document.save_state("建立图层组")
+
+    def ungroup_selected_groups(self):
+        """解除当前选中组，子图层留在原位置。"""
+        if not self.document:
+            return
+        selected_groups = [
+            idx for idx in self.get_selected_indices()
+            if 0 <= idx < len(self.document.layers) and is_layer_group(self.document.layers[idx])
+        ]
+        if not selected_groups:
+            return
+        self.document.save_state("解散图层组前")
+        child_selection = []
+        for idx in sorted(selected_groups, reverse=True):
+            group = self.document.layers[idx]
+            gid = str(getattr(group, 'group_id', '') or '')
+            del self.document.layers[idx]
+            for child_idx, child in enumerate(self.document.layers):
+                if get_parent_group_id(child) == gid:
+                    set_parent_group_id(child, None)
+                    child_selection.append(child_idx)
+        child_selection = sorted(set(child_selection))
+        if hasattr(self.document, 'select_layers'):
+            self.document.select_layers(child_selection, primary_index=child_selection[0] if child_selection else -1)
+        self.document.layer_changed.emit()
+        self.document.document_changed.emit()
+        self.document.save_state("解散图层组")
 
     def move_layer_up(self):
         """上移图层"""
@@ -1521,8 +1679,9 @@ class LayerPanel(QWidget):
             return
 
         # 确定图层索引（不自动选中，保持当前选中状态）
-        index = self.layer_list.row(item)
-        actual_index = len(self.document.layers) - index - 1  # 转换为实际图层索引
+        actual_index = self._actual_index_for_item(item)
+        if not (0 <= actual_index < len(self.document.layers)):
+            return
 
         # 获取右键点击的图层实例（不改变当前选中状态）
         layer = self.document.layers[actual_index]
@@ -1543,6 +1702,7 @@ class LayerPanel(QWidget):
         has_multi_selection = len(selected_indices) > 1
         if has_multi_selection:
             multi_menu = menu.addMenu(f"多图层操作 ({len(selected_indices)})")
+            group_action = multi_menu.addAction("从所选图层建立组")
             show_selected_action = multi_menu.addAction("显示选中图层")
             hide_selected_action = multi_menu.addAction("隐藏选中图层")
             multi_menu.addSeparator()
@@ -1554,6 +1714,7 @@ class LayerPanel(QWidget):
             multi_menu.addSeparator()
             same_size_action = multi_menu.addAction("匹配首选图层尺寸")
         else:
+            group_action = None
             show_selected_action = None
             hide_selected_action = None
             lock_selected_action = None
@@ -1584,6 +1745,9 @@ class LayerPanel(QWidget):
         menu.addSeparator()
 
         # 图层操作
+        ungroup_action = None
+        if is_layer_group(layer):
+            ungroup_action = menu.addAction("解散组")
         delete_action = menu.addAction("删除图层")
 
         menu.addSeparator()
@@ -1611,7 +1775,11 @@ class LayerPanel(QWidget):
         action = menu.exec_(self.layer_list.mapToGlobal(position))
 
         # 处理用户选择（操作被右键点击的图层，不改变当前选中状态）
-        if action == rename_action:
+        if has_multi_selection and action == group_action:
+            self.group_selected_layers()
+        elif ungroup_action and action == ungroup_action:
+            self.ungroup_selected_groups()
+        elif action == rename_action:
             self.rename_layer_at_index(actual_index)
         elif edit_text_action and action == edit_text_action:
             self.edit_text_layer_at_index(actual_index)
@@ -1946,10 +2114,11 @@ class LayerPanel(QWidget):
 
     def on_layer_moved(self, source_index, target_index):
         """处理图层拖放移动"""
-        # 计算实际的图层索引（界面索引和数据索引是相反的）
-        layer_count = len(self.document.layers)
-        source_actual_index = layer_count - source_index - 1
-        target_actual_index = layer_count - target_index - 1
+        source_actual_index = self._actual_index_for_row(source_index)
+        target_actual_index = self._actual_index_for_row(target_index)
+        if not (0 <= source_actual_index < len(self.document.layers)) or not (0 <= target_actual_index < len(self.document.layers)):
+            self._schedule_update()
+            return
         selected_indices = self.get_selected_indices()
 
         if source_actual_index in selected_indices and len(selected_indices) > 1:
@@ -2727,6 +2896,8 @@ class LayerPanel(QWidget):
                               self.document.selected_layer_index > 0)
         self.down_btn.setEnabled(enabled and self.document and
                                self.document.selected_layer_index < len(self.document.layers) - 1)
+        if hasattr(self, 'group_btn'):
+            self.group_btn.setEnabled(enabled)
         self.random_btn.setEnabled(enabled)
 
         print(f"设置控件状态: {'启用' if enabled else '禁用'}")

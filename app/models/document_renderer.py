@@ -63,7 +63,14 @@ class DocumentRenderer(QObject):
                 canvas = Image.new('RGBA', (canvas_width, canvas_height), background_color)
             
             # 渲染每个可见图层
-            visible_layers = [layer for layer in layers if layer.visible]
+            try:
+                from app.utils.layer_tree import is_layer_group, is_effectively_visible
+                visible_layers = [
+                    layer for layer in layers
+                    if not is_layer_group(layer) and is_effectively_visible(layer, layers)
+                ]
+            except Exception:
+                visible_layers = [layer for layer in layers if getattr(layer, 'visible', True)]
             total_layers = len(visible_layers)
             
             for idx, layer in enumerate(visible_layers):
@@ -320,4 +327,3 @@ if __name__ == "__main__":
     # 测试代码
     renderer = DocumentRenderer()
     print("DocumentRenderer 创建成功")
-
