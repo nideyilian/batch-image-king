@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QMainWindow, QDockWidget, QFileDialog,
                                QVBoxLayout, QWidget, QMenu, QToolBar, QSplitter,
                                QLabel, QSpinBox, QHBoxLayout, QPushButton, QMessageBox, QInputDialog,
                                QTabWidget, QTabBar, QDialog, QFormLayout, QDialogButtonBox,
-                               QSizePolicy)
+                               QSizePolicy, QLineEdit)
 from PySide6.QtCore import Qt, QSize, QPoint, QRect, QSettings, QTimer
 from PySide6.QtGui import QIcon, QColor, QAction, QCloseEvent, QKeySequence, QPixmap
 
@@ -38,6 +38,9 @@ class MainWindow(QMainWindow):
         self.document = None
         
         self.preset_manager = PresetManager()
+        self._current_editing_preset_id = None
+        self._current_editing_preset_name = ""
+        self._current_editing_preset_description = ""
         
         # 初始化文档控制器
         from app.controllers.document_controller import DocumentController
@@ -1260,7 +1263,14 @@ class MainWindow(QMainWindow):
             return
             
         # 询问预设名称
-        preset_name, ok = QInputDialog.getText(self, "保存预设", "输入预设名称:")
+        default_name = self._current_editing_preset_name or ""
+        preset_name, ok = QInputDialog.getText(
+            self,
+            "保存预设",
+            "输入预设名称:",
+            QLineEdit.Normal,
+            default_name
+        )
         if not ok or not preset_name:
             return
         
@@ -1328,12 +1338,14 @@ class MainWindow(QMainWindow):
                     )
                     
                     if preset_id:
+                        self._set_current_editing_preset(preset_id, preset_name)
                         QMessageBox.information(self, "保存预设", f"预设 '{preset_name}' 已更新 (包含 {len(documents)} 个标签页)")
                     else:
                         QMessageBox.warning(self, "保存预设", "更新预设失败")
                 else:
                     QMessageBox.warning(self, "保存预设", "删除旧预设失败，无法完成更新")
         elif result:  # 保存成功
+            self._set_current_editing_preset(result, preset_name)
             QMessageBox.information(self, "保存预设", f"预设 '{preset_name}' 已保存 (包含 {len(documents)} 个标签页)")
         else:  # 保存失败
             QMessageBox.warning(self, "保存预设", "保存预设失败")
@@ -1351,13 +1363,15 @@ class MainWindow(QMainWindow):
         from app.ui.preset_store_dialog import PresetStoreDialog
 
         dialog = PresetStoreDialog(self, self)
-        dialog.preset_edit_requested.connect(self._edit_preset_from_store)
+        dialog.preset_edit_requested.connect(
+            lambda preset_id: dialog.accept() if self._edit_preset_from_store(preset_id) else None
+        )
         dialog.exec()
 
     def _edit_preset_from_store(self, preset_id):
         """从预设中心进入编辑。"""
         if not self._confirm_unsaved_before_loading_preset():
-            return
+            return False
 
         close_existing = False
         if self.document_manager.get_document_count() > 0:
@@ -1371,10 +1385,10 @@ class MainWindow(QMainWindow):
             msg_box.exec()
             clicked_button = msg_box.clickedButton()
             if clicked_button == cancel_btn:
-                return
+                return False
             close_existing = clicked_button == yes_btn
 
-        self.apply_preset_to_tabs(preset_id, close_existing=close_existing)
+        return self.apply_preset_to_tabs(preset_id, close_existing=close_existing)
 
     def _confirm_unsaved_before_loading_preset(self):
         """加载预设前处理未保存文档。"""
@@ -1431,6 +1445,11 @@ class MainWindow(QMainWindow):
                     tab_name = getattr(document, 'original_tab_name', None) or getattr(document, 'tab_name', None) or f"标签页 {tab_index + 1}"
                     self.tab_widget.setTabText(tab_index, tab_name)
                     created_tabs += 1
+                self._set_current_editing_preset(
+                    preset_id,
+                    preset_name,
+                    summary.get('description', '')
+                )
                 QMessageBox.information(self, "加载预设", f"已成功加载预设 '{preset_name}'，包含 {created_tabs} 个标签页")
                 return True
 
@@ -1442,6 +1461,15 @@ class MainWindow(QMainWindow):
             print(f"加载预设时出错: {e}\n{error_details}")
             QMessageBox.warning(self, "加载预设", f"无法加载预设 '{preset_name}':\n{str(e)}")
             return False
+
+    def _set_current_editing_preset(self, preset_id, name, description=None):
+        """记录当前从预设进入编辑的上下文，用于下次保存时默认回填名称。"""
+        summary = self.preset_manager.get_preset_summary(preset_id) or {}
+        self._current_editing_preset_id = preset_id
+        self._current_editing_preset_name = name or summary.get('name', '')
+        if description is None:
+            description = summary.get('description', '')
+        self._current_editing_preset_description = description or ""
     
     def update_position_label(self, x, y):
         """更新坐标显示"""

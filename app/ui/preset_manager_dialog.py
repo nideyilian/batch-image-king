@@ -343,12 +343,16 @@ class PresetSaveDialog(QDialog):
         # 预设名称
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("输入预设名称...")
+        if self.main_window:
+            self.name_edit.setText(getattr(self.main_window, '_current_editing_preset_name', '') or '')
         info_layout.addRow("预设名称:", self.name_edit)
 
         # 预设描述
         self.desc_edit = QTextEdit()
         self.desc_edit.setPlaceholderText("输入预设描述...")
         self.desc_edit.setMaximumHeight(60)
+        if self.main_window:
+            self.desc_edit.setText(getattr(self.main_window, '_current_editing_preset_description', '') or '')
         info_layout.addRow("预设描述:", self.desc_edit)
 
         info_group.setLayout(info_layout)
@@ -722,6 +726,12 @@ class PresetManagerDialog(QDialog):
                         )
 
                         if preset_id:
+                            if hasattr(self.main_window, '_set_current_editing_preset'):
+                                self.main_window._set_current_editing_preset(
+                                    preset_id,
+                                    preset_info["name"],
+                                    preset_info["description"]
+                                )
                             # 重新加载预设列表
                             self.load_presets()
 
@@ -740,6 +750,12 @@ class PresetManagerDialog(QDialog):
                 # 如果用户选择不更新，则不执行任何操作
 
             elif result:  # 正常保存成功
+                if hasattr(self.main_window, '_set_current_editing_preset'):
+                    self.main_window._set_current_editing_preset(
+                        result,
+                        preset_info["name"],
+                        preset_info["description"]
+                    )
                 # 重新加载预设列表
                 self.load_presets()
 

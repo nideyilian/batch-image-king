@@ -411,6 +411,8 @@ class PresetStoreDialog(QDialog):
             else:
                 return
         if result:
+            if self.main_window and hasattr(self.main_window, '_set_current_editing_preset'):
+                self.main_window._set_current_editing_preset(result, info["name"], info["description"])
             self.refresh_presets()
             QMessageBox.information(self, "保存预设", "预设已保存。")
         else:
