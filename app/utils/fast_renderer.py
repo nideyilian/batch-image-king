@@ -21,6 +21,10 @@ import gc
 _FAST_RENDERER_DEBUG = os.environ.get("BTPW_FAST_RENDERER_DEBUG", "0") == "1"
 # 默认关闭批量渲染高频日志，避免导出阶段控制台 I/O 成为瓶颈
 _BATCH_RENDER_VERBOSE = os.environ.get("BTPW_BATCH_RENDER_VERBOSE", "0") == "1"
+try:
+    _INTERACTIVE_PREVIEW_MAX_EDGE = max(480, int(os.environ.get("BTPW_INTERACTIVE_PREVIEW_MAX_EDGE", "1200")))
+except Exception:
+    _INTERACTIVE_PREVIEW_MAX_EDGE = 1200
 # 内孔检测算法版本号：用于缓存键，避免算法升级后命中旧检测结果
 _SIZE_MATCH_HOLE_DETECT_VER = "v10"
 # 自动倾斜最小触发角（度）：小于该值视为不倾斜，减少误判抖动
@@ -462,6 +466,7 @@ class FastRenderer:
             if layer_image is None:
                 return composition
 
+            render_scale = self._get_interactive_render_scale(document, True, interactive_low_quality)
             opacity = getattr(active_layer, 'opacity', 1.0)
             blend_mode = self._get_layer_blend_mode(active_layer)
             positions_info, mirror_mode = self._get_layer_positions_info_cached(active_layer, document)
@@ -476,8 +481,9 @@ class FastRenderer:
                     img_for_pos = mirrored_v if mirrored_v is not None else layer_image
                 else:
                     img_for_pos = layer_image
-                draw_x = int(pos_x) + int(getattr(active_layer, '_render_offset_x', 0))
-                draw_y = int(pos_y) + int(getattr(active_layer, '_render_offset_y', 0))
+                draw_x = int(round((int(pos_x) + int(getattr(active_layer, '_render_offset_x', 0))) * render_scale))
+                draw_y = int(round((int(pos_y) + int(getattr(active_layer, '_render_offset_y', 0))) * render_scale))
+                img_for_pos = self._scale_layer_for_interactive_preview(img_for_pos, render_scale)
                 composition = self._fast_composite(
                     composition,
                     img_for_pos,
@@ -550,8 +556,11 @@ class FastRenderer:
         skip_layer_index: int = -1
     ) -> Optional[Image.Image]:
         """快速渲染实现"""
+        render_scale = self._get_interactive_render_scale(document, preview_mode, low_quality_preview)
+        render_width = max(1, int(round(document.canvas_width * render_scale)))
+        render_height = max(1, int(round(document.canvas_height * render_scale)))
         # 创建画布
-        composition = Image.new('RGBA', (document.canvas_width, document.canvas_height), (0, 0, 0, 0))
+        composition = Image.new('RGBA', (render_width, render_height), (0, 0, 0, 0))
         export_trace_enabled = bool(getattr(document, '_export_debug_trace_enabled', False))
         export_trace_task = str(getattr(document, '_export_debug_trace_task', '') or '')
         export_trace_layer_paths = getattr(document, '_export_debug_trace_layer_paths', {}) or {}
@@ -663,8 +672,9 @@ class FastRenderer:
                     img_for_pos = mirrored_v if mirrored_v is not None else layer_image
                 else:
                     img_for_pos = layer_image
-                draw_x = int(pos_x) + int(getattr(layer, '_render_offset_x', 0))
-                draw_y = int(pos_y) + int(getattr(layer, '_render_offset_y', 0))
+                draw_x = int(round((int(pos_x) + int(getattr(layer, '_render_offset_x', 0))) * render_scale))
+                draw_y = int(round((int(pos_y) + int(getattr(layer, '_render_offset_y', 0))) * render_scale))
+                img_for_pos = self._scale_layer_for_interactive_preview(img_for_pos, render_scale)
                 composition = self._fast_composite(
                     composition,
                     img_for_pos,
@@ -677,6 +687,30 @@ class FastRenderer:
                 )
         
         return composition
+
+    def _get_interactive_render_scale(self, document, preview_mode: bool, low_quality_preview: bool) -> float:
+        """Return a temporary downsample ratio for interactive preview only."""
+        if not (preview_mode and low_quality_preview):
+            return 1.0
+        max_edge = max(int(getattr(document, "canvas_width", 1) or 1), int(getattr(document, "canvas_height", 1) or 1))
+        if max_edge <= _INTERACTIVE_PREVIEW_MAX_EDGE:
+            return 1.0
+        return max(0.20, min(1.0, _INTERACTIVE_PREVIEW_MAX_EDGE / float(max_edge)))
+
+    def _scale_layer_for_interactive_preview(self, image: Image.Image, render_scale: float) -> Image.Image:
+        """Downsample a layer surface for low-cost interaction frames."""
+        if image is None or render_scale >= 0.999:
+            return image
+        try:
+            target_size = (
+                max(1, int(round(image.width * render_scale))),
+                max(1, int(round(image.height * render_scale))),
+            )
+            if target_size == image.size:
+                return image
+            return image.resize(target_size, Image.Resampling.BILINEAR)
+        except Exception:
+            return image
 
     def _get_layer_surface_for_size(
         self,
@@ -2086,7 +2120,9 @@ class FastRenderer:
                 if cached is not None:
                     return cached.copy()
 
-        base_image = self._get_layer_image(layer, document, was_just_loaded)
+        base_image = self._get_interactive_cached_base_image(layer)
+        if base_image is None:
+            base_image = self._get_layer_image(layer, document, was_just_loaded)
         if base_image is None:
             return None
 
@@ -2105,6 +2141,26 @@ class FastRenderer:
 
         return surface
 
+    def _get_interactive_cached_base_image(self, layer) -> Optional[Image.Image]:
+        """Reuse an existing layer image during active dragging/resizing.
+
+        This avoids repeated disk reads and high-quality resize/effect work while
+        the mouse is still moving. The normal high-quality refresh after idle still
+        recomputes from the authoritative layer state.
+        """
+        try:
+            cached = getattr(layer, "_cached_image", None) or getattr(layer, "cached_image", None)
+            if cached is None:
+                return None
+            image = cached.copy()
+            target_w = max(1, int(getattr(layer, "width", image.width) or image.width))
+            target_h = max(1, int(getattr(layer, "height", image.height) or image.height))
+            if image.size != (target_w, target_h):
+                image = image.resize((target_w, target_h), Image.Resampling.BILINEAR)
+            return image
+        except Exception:
+            return None
+
     def _get_batch_preloaded_raw_image(self, document, image_path: str):
         """优先从执行器预读缓存获取原图。"""
         preload_cache = getattr(document, '_batch_preloaded_images', None)
@@ -2120,6 +2176,7 @@ class FastRenderer:
             f"{id(document)}:{active_layer_index}",
             f"canvas:{document.canvas_width}x{document.canvas_height}",
             f"lowq:{int(bool(interactive_low_quality))}",
+            f"scale:{self._get_interactive_render_scale(document, True, interactive_low_quality):.4f}",
         ]
         for idx, layer in enumerate(document.layers):
             if idx == active_layer_index or layer is None or not getattr(layer, 'visible', True):
