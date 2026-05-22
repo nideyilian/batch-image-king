@@ -819,7 +819,7 @@ class CanvasWidget(QWidget):
 
         self._composition_invalidation_generation += 1
         self._composition_cache_valid = False
-        self._composition_pixmap_cache = None
+        # Keep the last completed preview visible while the async renderer catches up.
         self._invalidate_scaled_pixmap_cache()
 
     def _invalidate_scaled_pixmap_cache(self):
@@ -932,28 +932,43 @@ class CanvasWidget(QWidget):
     def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, snapshot_data=None):
         """Render a PIL composition outside paintEvent; QPixmap conversion stays on the GUI thread."""
         render_document = self._restore_async_render_snapshot(snapshot_data)
-        if render_document is None:
+        using_snapshot = render_document is not None
+        if not using_snapshot:
             render_document = self.document
         try:
             from app.utils.fast_renderer import get_global_fast_renderer
             fast_renderer = get_global_fast_renderer()
             if interactive_low_quality and active_layer_index >= 0:
-                return fast_renderer.render_preview_incremental(
+                image = fast_renderer.render_preview_incremental(
                     render_document,
                     active_layer_index=active_layer_index,
                     force_refresh=force_refresh,
                     interactive_low_quality=True
                 )
-            return fast_renderer.render_preview(
-                render_document,
-                force_refresh=force_refresh,
-                interactive_low_quality=interactive_low_quality
-            )
+            else:
+                image = fast_renderer.render_preview(
+                    render_document,
+                    force_refresh=force_refresh,
+                    interactive_low_quality=interactive_low_quality
+                )
+            if image is not None:
+                return image
         except Exception:
+            pass
+
+        try:
+            image = render_document.render_composition()
+            if image is not None:
+                return image
+        except Exception:
+            pass
+
+        if using_snapshot:
             try:
-                return render_document.render_composition()
+                return self.document.render_composition()
             except Exception:
                 return None
+        return None
 
     def _composition_to_pixmap(self, composition):
         if not composition:
@@ -1044,15 +1059,15 @@ class CanvasWidget(QWidget):
             self._async_render_restart_args = None
             self._async_render_request_key = None
 
-        if image is None and error is None:
+        if image is None and error is None and not restart:
             self._async_render_timer.stop()
             return
 
-        if image is not None and not restart:
+        if image is not None:
             pixmap = self._composition_to_pixmap(image)
             if pixmap is not None:
                 self._composition_pixmap_cache = pixmap
-                self._composition_cache_valid = True
+                self._composition_cache_valid = not restart
                 self._invalidate_scaled_pixmap_cache()
                 self.update()
 
