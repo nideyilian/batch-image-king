@@ -124,12 +124,29 @@ class CanvasWidget(QWidget):
             "size",
             "rotation",
             "opacity",
+            "visibility",
             "random_position_range",
             "random_scale_min",
             "random_scale_max",
             "random_rotation_range",
             "trapezoid_params",
             "polygon_params",
+            "vector_corner_radius",
+            "vector_corner_radius_detail",
+            "vector_path",
+            "stroke_enabled",
+            "stroke_width",
+            "stroke_type",
+            "stroke_color",
+            "stroke_join",
+            "stroke_cap",
+            "stroke_dash",
+            "fill_solid_enabled",
+            "fill_solid_color",
+            "fill_gradient_enabled",
+            "fill_gradient_colors",
+            "fill_gradient_angle",
+            "fill_gradient_opacity",
             "clone_grid",
             "clone_custom_size",
             "fill_spacing",
@@ -818,9 +835,23 @@ class CanvasWidget(QWidget):
                 return
 
         self._composition_invalidation_generation += 1
+        self._cancel_pending_async_preview()
         self._composition_cache_valid = False
         # Keep the last completed preview visible while the async renderer catches up.
         self._invalidate_scaled_pixmap_cache()
+
+    def _cancel_pending_async_preview(self):
+        """Prevent stale background preview results from replacing newer local frames."""
+        with self._async_render_lock:
+            if not self._async_render_pending:
+                return
+            self._async_render_generation += 1
+            self._async_render_pending = False
+            self._async_render_result = None
+            self._async_render_error = None
+            self._async_render_restart_requested = False
+            self._async_render_restart_args = None
+            self._async_render_request_key = None
 
     def _invalidate_scaled_pixmap_cache(self):
         """使缩放后的QPixmap缓存失效"""
@@ -894,12 +925,35 @@ class CanvasWidget(QWidget):
             bool(interactive_low_quality),
             int(active_layer_index),
         )
+        if interactive_low_quality and active_layer_index >= 0:
+            pixmap = self._render_interactive_preview_now()
+            if pixmap is not None:
+                return pixmap
+
         if self._composition_pixmap_cache is not None:
             self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
             return self._composition_pixmap_cache
 
         self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
         return self._create_blank_composition_pixmap()
+
+    def _render_interactive_preview_now(self):
+        """Render an optimistic low-cost preview on the GUI thread during interaction."""
+        try:
+            from app.utils.fast_renderer import get_global_fast_renderer
+            image = get_global_fast_renderer().render_preview_live(
+                self.document,
+                interactive_low_quality=True
+            )
+            pixmap = self._composition_to_pixmap(image)
+            if pixmap is None:
+                return None
+            self._composition_pixmap_cache = pixmap
+            self._composition_cache_valid = True
+            self._invalidate_scaled_pixmap_cache()
+            return pixmap
+        except Exception:
+            return None
 
     def _build_async_render_snapshot(self):
         """Capture an immutable document snapshot for the background preview worker."""
@@ -938,11 +992,9 @@ class CanvasWidget(QWidget):
         try:
             from app.utils.fast_renderer import get_global_fast_renderer
             fast_renderer = get_global_fast_renderer()
-            if interactive_low_quality and active_layer_index >= 0:
-                image = fast_renderer.render_preview_incremental(
+            if interactive_low_quality:
+                image = fast_renderer.render_preview_live(
                     render_document,
-                    active_layer_index=active_layer_index,
-                    force_refresh=force_refresh,
                     interactive_low_quality=True
                 )
             else:
@@ -1017,7 +1069,7 @@ class CanvasWidget(QWidget):
             self.document._needs_cache_refresh = False
         if self._force_high_quality_refresh:
             self._force_high_quality_refresh = False
-        snapshot_data = self._build_async_render_snapshot()
+        snapshot_data = self._build_async_render_snapshot() if self._should_isolate_async_preview(interactive_low_quality) else None
 
         def _worker():
             image = None
@@ -1043,6 +1095,12 @@ class CanvasWidget(QWidget):
             threading.Thread(target=_worker, name="CanvasPreviewRender", daemon=True).start()
         if not self._async_render_timer.isActive():
             self._async_render_timer.start()
+
+    def _should_isolate_async_preview(self, interactive_low_quality: bool) -> bool:
+        """Use heavyweight document snapshots only when export state may mutate layers."""
+        if interactive_low_quality:
+            return False
+        return bool(getattr(self.document, '_is_batch_export_running', False))
 
     def _poll_async_render_result(self):
         """Install a completed background render result on the GUI thread."""

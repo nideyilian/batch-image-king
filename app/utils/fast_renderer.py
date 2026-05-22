@@ -499,6 +499,25 @@ class FastRenderer:
             print(f"[快速渲染] 增量预览失败，回退普通预览: {e}")
             return self.render_preview(force_refresh=force_refresh, document=document, interactive_low_quality=interactive_low_quality)
     
+    def render_preview_live(
+        self,
+        document,
+        interactive_low_quality: bool = True
+    ) -> Optional[Image.Image]:
+        """Render the current document state directly for responsive interaction."""
+        try:
+            composition = self._fast_render(
+                document,
+                preview_mode=True,
+                was_just_loaded=False,
+                low_quality_preview=interactive_low_quality
+            )
+            if composition is not None:
+                self._last_preview_snapshot = composition.copy()
+            return composition
+        except Exception:
+            return None
+
     def render_batch(self, document) -> Optional[Image.Image]:
         """批量渲染 - 导出优先保证混合模式与结果正确性"""
         start_time = time.time()
@@ -1887,6 +1906,7 @@ class FastRenderer:
                 f"overlay_c:{str(getattr(layer, 'color_overlay_color', getattr(layer, '_color_overlay_color', (255, 255, 255, 255))))}",
                 f"overlay_op:{float(getattr(layer, 'color_overlay_opacity', getattr(layer, '_color_overlay_opacity', 1.0))):.4f}",
                 f"grad_on:{int(bool(getattr(layer, 'gradient_overlay_enabled', getattr(layer, '_gradient_overlay_enabled', False))))}",
+                f"grad_colors:{str(getattr(layer, 'gradient_overlay_colors', getattr(layer, '_gradient_overlay_colors', [])))}",
                 f"grad_angle:{float(getattr(layer, 'gradient_overlay_angle', getattr(layer, '_gradient_overlay_angle', 0.0))):.3f}",
                 f"grad_op:{float(getattr(layer, 'gradient_overlay_opacity', getattr(layer, '_gradient_overlay_opacity', 1.0))):.4f}",
                 f"rnd_dx:{getattr(layer, '_current_random_offset_x', 0)}",
@@ -1898,10 +1918,48 @@ class FastRenderer:
                 f"trap:{getattr(layer, 'trapezoid_top_width', '')},{getattr(layer, 'trapezoid_bottom_width', '')},{getattr(layer, 'trapezoid_slope_side', '')}",
                 f"poly:{getattr(layer, 'polygon_rotation', '')},{getattr(layer, 'polygon_corner_radius', '')}",
             ]
+            self._append_text_surface_key_parts(layer, layer_parts)
             raw_key = "|".join([str(p) for p in layer_parts])
             return hashlib.md5(raw_key.encode('utf-8')).hexdigest()
         except Exception:
             return f"fallback_layer_surface_{id(layer)}_{time.time()}"
+
+    def _append_text_surface_key_parts(self, layer, parts):
+        """Add text-layer fields that change rendered pixels to a surface key."""
+        if not hasattr(layer, 'current_text') and not hasattr(layer, 'get_text_lines'):
+            return
+        text_lines = getattr(layer, 'text_lines', None)
+        if text_lines is None and hasattr(layer, 'get_text_lines'):
+            try:
+                text_lines = layer.get_text_lines()
+            except Exception:
+                text_lines = None
+        parts.extend([
+            f"text_lines:{hashlib.md5(str(text_lines or '').encode('utf-8')).hexdigest()[:10]}",
+            f"font_family:{getattr(layer, 'font_family', '')}",
+            f"font_size:{getattr(layer, 'font_size', '')}",
+            f"font_style:{getattr(layer, 'font_style', '')}",
+            f"text_color:{getattr(layer, 'text_color', '')}",
+            f"text_align:{getattr(layer, 'text_align', '')}",
+            f"line_spacing:{getattr(layer, 'line_spacing', '')}",
+            f"letter_spacing:{getattr(layer, 'letter_spacing', '')}",
+            f"text_padding:{getattr(layer, 'text_box_padding', '')}",
+            f"auto_fit:{int(bool(getattr(layer, 'auto_fit_text_box', False)))}",
+            f"vertical:{int(bool(getattr(layer, 'vertical_layout', False)))}",
+            f"text_gradient:{int(bool(getattr(layer, 'gradient_enabled', False)))}",
+            f"text_gradient_type:{getattr(layer, 'gradient_type', '')}",
+            f"text_gradient_dir:{getattr(layer, 'gradient_direction', '')}",
+            f"text_gradient_angle:{getattr(layer, 'gradient_angle', '')}",
+            f"text_gradient_start:{getattr(layer, 'gradient_start_color', '')}",
+            f"text_gradient_end:{getattr(layer, 'gradient_end_color', '')}",
+            f"text_gradient_center:{getattr(layer, 'gradient_center_x', '')},{getattr(layer, 'gradient_center_y', '')}",
+            f"text_bg:{int(bool(getattr(layer, 'background_enabled', False)))}",
+            f"text_bg_color:{getattr(layer, 'background_color', '')}",
+            f"text_bg_padding:{getattr(layer, 'background_padding', '')}",
+            f"supersample:{int(bool(getattr(layer, 'supersample_enabled', False)))}:{getattr(layer, 'supersample_scale', '')}",
+            f"shadow:{int(bool(getattr(layer, 'shadow_enabled', False)))}:{getattr(layer, 'shadow_offset_x', '')}:{getattr(layer, 'shadow_offset_y', '')}:{getattr(layer, 'shadow_blur', '')}:{getattr(layer, 'shadow_color', '')}",
+            f"glow:{int(bool(getattr(layer, 'glow_enabled', False)))}:{getattr(layer, 'glow_strength', '')}:{getattr(layer, 'glow_radius', '')}",
+        ])
 
     def _get_layer_surface_cached(self, layer, document, was_just_loaded: bool = False) -> Optional[Image.Image]:
         """获取图层surface缓存；未命中时重新生成并缓存"""
@@ -2088,8 +2146,19 @@ class FastRenderer:
                 f"shape:{getattr(getattr(layer, 'shape_type', ''), 'value', getattr(layer, 'shape_type', ''))}",
                 f"trap:{getattr(layer, 'trapezoid_top_width', '')},{getattr(layer, 'trapezoid_bottom_width', '')},{getattr(layer, 'trapezoid_slope_side', '')}",
                 f"poly:{getattr(layer, 'polygon_rotation', '')},{getattr(layer, 'polygon_corner_radius', '')}",
+                f"stroke_on:{int(bool(getattr(layer, 'stroke_enabled', getattr(layer, '_stroke_enabled', False))))}",
+                f"stroke_w:{int(getattr(layer, 'stroke_width', getattr(layer, '_stroke_width', 0)))}",
+                f"stroke_c:{str(getattr(layer, 'stroke_color', getattr(layer, '_stroke_color', (0, 0, 0, 255))))}",
+                f"overlay_on:{int(bool(getattr(layer, 'color_overlay_enabled', getattr(layer, '_color_overlay_enabled', False))))}",
+                f"overlay_c:{str(getattr(layer, 'color_overlay_color', getattr(layer, '_color_overlay_color', (255, 255, 255, 255))))}",
+                f"overlay_op:{float(getattr(layer, 'color_overlay_opacity', getattr(layer, '_color_overlay_opacity', 1.0))):.4f}",
+                f"grad_on:{int(bool(getattr(layer, 'gradient_overlay_enabled', getattr(layer, '_gradient_overlay_enabled', False))))}",
+                f"grad_colors:{str(getattr(layer, 'gradient_overlay_colors', getattr(layer, '_gradient_overlay_colors', [])))}",
+                f"grad_angle:{float(getattr(layer, 'gradient_overlay_angle', getattr(layer, '_gradient_overlay_angle', 0.0))):.3f}",
+                f"grad_op:{float(getattr(layer, 'gradient_overlay_opacity', getattr(layer, '_gradient_overlay_opacity', 1.0))):.4f}",
                 f"just_loaded:{int(bool(was_just_loaded))}",
             ]
+            self._append_text_surface_key_parts(layer, parts)
             raw_key = "|".join([str(p) for p in parts])
             return hashlib.md5(raw_key.encode('utf-8')).hexdigest()
         except Exception:
