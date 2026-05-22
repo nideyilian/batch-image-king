@@ -267,7 +267,8 @@ class CanvasWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        view_transform_active = self._is_view_transform_active()
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, not view_transform_active)
 
         # 绘制画布背景（棋盘格背景表示透明区域）
         self.draw_transparency_checkerboard(painter)
@@ -288,10 +289,13 @@ class CanvasWidget(QWidget):
             center_x = canvas_rect.x()
             center_y = canvas_rect.y()
 
-            # 绘制缩放后的图像（优先使用缩放缓存）
-            scaled_pixmap = self._get_scaled_composition_pixmap(pixmap, canvas_width, canvas_height)
-            if scaled_pixmap:
-                painter.drawPixmap(center_x, center_y, scaled_pixmap)
+            # 视图交互时直接让 Qt 绘制到目标矩形，避免每个滚轮/平移帧分配新的大 QPixmap。
+            if view_transform_active:
+                painter.drawPixmap(QRect(center_x, center_y, canvas_width, canvas_height), pixmap)
+            else:
+                scaled_pixmap = self._get_scaled_composition_pixmap(pixmap, canvas_width, canvas_height)
+                if scaled_pixmap:
+                    painter.drawPixmap(center_x, center_y, scaled_pixmap)
 
             # 绘制画布边框
             painter.setPen(QPen(QColor(CursorDarkTheme.BORDER_SECONDARY), 1, Qt.SolidLine))
@@ -857,6 +861,10 @@ class CanvasWidget(QWidget):
         """使缩放后的QPixmap缓存失效"""
         self._scaled_composition_pixmap_cache = None
         self._scaled_composition_cache_key = None
+
+    def _is_view_transform_active(self) -> bool:
+        """Return True while the user is only changing the viewport."""
+        return bool(self._zoom_interaction_active or self.is_dragging)
 
     def _get_scaled_composition_pixmap(self, source_pixmap, target_width, target_height):
         """获取按当前缩放尺寸缓存的QPixmap"""
@@ -1609,6 +1617,7 @@ class CanvasWidget(QWidget):
             return
         self._zoom_interaction_active = False
         self._invalidate_scaled_pixmap_cache()
+        self._persist_view_settings_to_document()
         self.update()
 
     def _should_skip_hover_hit_test(self, pos: QPoint) -> bool:
@@ -1644,6 +1653,16 @@ class CanvasWidget(QWidget):
     def wheelEvent(self, event):
         """处理鼠标滚轮事件实现缩放"""
         delta = event.angleDelta().y()
+        if delta == 0:
+            event.accept()
+            return
+
+        old_zoom = float(self.zoom_factor)
+        old_canvas_rect = self.get_canvas_rect()
+        cursor_doc_x = cursor_doc_y = None
+        if old_canvas_rect and old_zoom > 0:
+            cursor_doc_x = (event.position().x() - old_canvas_rect.x()) / old_zoom
+            cursor_doc_y = (event.position().y() - old_canvas_rect.y()) / old_zoom
 
         # 计算放大或缩小的新缩放因子
         if delta > 0:
@@ -1653,12 +1672,26 @@ class CanvasWidget(QWidget):
 
         # 限制缩放范围
         self.zoom_factor = max(0.1, min(10.0, self.zoom_factor))
+        if abs(self.zoom_factor - old_zoom) < 1e-6:
+            event.accept()
+            return
+
         self._zoom_interaction_active = True
         self._zoom_idle_timer.start(140)
         self._invalidate_scaled_pixmap_cache()
-        self._persist_view_settings_to_document()
+
+        if cursor_doc_x is not None and cursor_doc_y is not None:
+            new_canvas_rect = self.get_canvas_rect()
+            if new_canvas_rect:
+                target_x = event.position().x() - cursor_doc_x * self.zoom_factor
+                target_y = event.position().y() - cursor_doc_y * self.zoom_factor
+                self.offset += QPoint(
+                    int(round(target_x - new_canvas_rect.x())),
+                    int(round(target_y - new_canvas_rect.y()))
+                )
 
         self.update()
+        event.accept()
 
     def get_layer_rect(self, layer_index):
         """获取指定图层在视图中的矩形区域"""
