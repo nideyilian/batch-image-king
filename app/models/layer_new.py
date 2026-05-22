@@ -1767,7 +1767,7 @@ class Layer(QObject):
         
         # 阶段3：描边与最终收敛（可缓存）
         stage3_extra_parts = [
-            "vec_pipe_ver:v4",
+            "vec_pipe_ver:v5",
             f"base:{stage2_key}",
             f"stroke_on:{int(bool(stroke_enabled))}",
             f"stroke_type:{int(getattr(self, 'stroke_type', 0))}",
@@ -2438,40 +2438,20 @@ class Layer(QObject):
         
         return layer
     def _resize_rgba_premultiplied(self, image, size, resample=Resampling.LANCZOS):
-        if image.mode != 'RGBA':
-            image = image.convert('RGBA')
-        arr = np.array(image, dtype=np.float32) / 255.0
-        rgb = arr[:, :, :3]
-        a = arr[:, :, 3:4]
-        premul = rgb * a
-        premul_img = Image.fromarray((np.concatenate([premul, a], axis=2) * 255.0).astype(np.uint8), 'RGBA')
-        resized = premul_img.resize(size, resample)
-        arr2 = np.array(resized, dtype=np.float32) / 255.0
-        rgb2 = arr2[:, :, :3]
-        a2 = arr2[:, :, 3:4]
-        mask = a2 > 1e-6
-        rgb_out = np.zeros_like(rgb2)
-        rgb_out[mask.squeeze()] = rgb2[mask.squeeze()] / a2[mask.squeeze()]
-        out = np.concatenate([rgb_out, a2], axis=2)
-        return Image.fromarray((np.clip(out, 0.0, 1.0) * 255.0).astype(np.uint8), 'RGBA')
+        from app.utils.rgba_resampler import resize_rgba_premultiplied
+
+        return resize_rgba_premultiplied(image, size, resample)
 
     def _rotate_rgba_premultiplied(self, image, angle, resample=Resampling.BICUBIC, fillcolor=(0, 0, 0, 0)):
-        if image.mode != 'RGBA':
-            image = image.convert('RGBA')
-        arr = np.array(image, dtype=np.float32) / 255.0
-        rgb = arr[:, :, :3]
-        a = arr[:, :, 3:4]
-        premul = rgb * a
-        premul_img = Image.fromarray((np.concatenate([premul, a], axis=2) * 255.0).astype(np.uint8), 'RGBA')
-        rotated = premul_img.rotate(angle, expand=True, fillcolor=fillcolor, resample=resample)
-        arr2 = np.array(rotated, dtype=np.float32) / 255.0
-        rgb2 = arr2[:, :, :3]
-        a2 = arr2[:, :, 3:4]
-        mask = a2 > 1e-6
-        rgb_out = np.zeros_like(rgb2)
-        rgb_out[mask.squeeze()] = rgb2[mask.squeeze()] / a2[mask.squeeze()]
-        out = np.concatenate([rgb_out, a2], axis=2)
-        return Image.fromarray((np.clip(out, 0.0, 1.0) * 255.0).astype(np.uint8), 'RGBA')
+        from app.utils.rgba_resampler import rotate_rgba_premultiplied
+
+        return rotate_rgba_premultiplied(
+            image,
+            angle,
+            resample=resample,
+            expand=True,
+            fillcolor=fillcolor,
+        )
 
     def _bleed_transparent_edges(self, image: Image.Image) -> Image.Image:
         """将不透明区域的颜色向半透明边缘传播，避免白/黑边缘晕圈"""

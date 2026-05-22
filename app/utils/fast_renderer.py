@@ -708,6 +708,9 @@ class FastRenderer:
             )
             if target_size == image.size:
                 return image
+            if image.mode == 'RGBA':
+                from app.utils.rgba_resampler import resize_rgba_premultiplied
+                return resize_rgba_premultiplied(image, target_size, Image.Resampling.BILINEAR)
             return image.resize(target_size, Image.Resampling.BILINEAR)
         except Exception:
             return image
@@ -877,7 +880,11 @@ class FastRenderer:
         resized_w = max(1, int(round(src_w * scale)))
         resized_h = max(1, int(round(src_h * scale)))
         try:
-            resized = image.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
+            if image.mode == 'RGBA':
+                from app.utils.rgba_resampler import resize_rgba_premultiplied
+                resized = resize_rgba_premultiplied(image, (resized_w, resized_h), Image.Resampling.LANCZOS)
+            else:
+                resized = image.resize((resized_w, resized_h), Image.Resampling.LANCZOS)
         except Exception:
             resized = image.resize((resized_w, resized_h))
 
@@ -888,7 +895,11 @@ class FastRenderer:
         cropped = resized.crop((left, top, right, bottom))
         if cropped.size != (target_w, target_h):
             try:
-                cropped = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                if cropped.mode == 'RGBA':
+                    from app.utils.rgba_resampler import resize_rgba_premultiplied
+                    cropped = resize_rgba_premultiplied(cropped, (target_w, target_h), Image.Resampling.LANCZOS)
+                else:
+                    cropped = cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
             except Exception:
                 cropped = cropped.resize((target_w, target_h))
         return cropped
@@ -1856,7 +1867,7 @@ class FastRenderer:
         """构建图层surface缓存键（仅包含影响图层图像像素的参数）"""
         try:
             layer_parts = [
-                "vec_pipe_ver:v4",
+                "vec_pipe_ver:v5",
                 f"src:{getattr(layer, 'image_source', '')}",
                 f"current:{getattr(layer, '_current_image_path', '') or getattr(layer, 'current_image_path', '')}",
                 f"size:{getattr(layer, 'width', 0)}x{getattr(layer, 'height', 0)}",
@@ -2156,7 +2167,11 @@ class FastRenderer:
             target_w = max(1, int(getattr(layer, "width", image.width) or image.width))
             target_h = max(1, int(getattr(layer, "height", image.height) or image.height))
             if image.size != (target_w, target_h):
-                image = image.resize((target_w, target_h), Image.Resampling.BILINEAR)
+                if image.mode == 'RGBA':
+                    from app.utils.rgba_resampler import resize_rgba_premultiplied
+                    image = resize_rgba_premultiplied(image, (target_w, target_h), Image.Resampling.BILINEAR)
+                else:
+                    image = image.resize((target_w, target_h), Image.Resampling.BILINEAR)
             return image
         except Exception:
             return None

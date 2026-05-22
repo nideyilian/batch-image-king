@@ -731,38 +731,12 @@ class LegacyLayer:
     def _resize_with_premultiplied_alpha(self, image, size):
         """使用预乘Alpha方法缩放图像，避免半透明边缘暗晕"""
         try:
-            import numpy as np
-            
             if image.mode != 'RGBA':
                 return image.resize(size, Resampling.BICUBIC)
-            
-            # 转换为浮点数组
-            arr = np.array(image, dtype=np.float32) / 255.0
-            rgb = arr[:, :, :3]
-            alpha = arr[:, :, 3:4]
-            
-            # 预乘Alpha
-            premul_rgb = rgb * alpha
-            premul_img_arr = np.concatenate([premul_rgb, alpha], axis=2)
-            premul_img = Image.fromarray((np.clip(premul_img_arr, 0.0, 1.0) * 255.0).astype(np.uint8), 'RGBA')
-            
-            # 缩放
-            resized_premul = premul_img.resize(size, Resampling.BICUBIC)
-            
-            # 反预乘
-            resized_arr = np.array(resized_premul, dtype=np.float32) / 255.0
-            r_rgb = resized_arr[:, :, :3]
-            r_alpha = resized_arr[:, :, 3:4]
-            
-            # 避免除零
-            mask = r_alpha > 1e-6
-            unpremul_rgb = np.zeros_like(r_rgb)
-            mask_3ch = np.repeat(mask, 3, axis=2)
-            np.divide(r_rgb, r_alpha, out=unpremul_rgb, where=mask_3ch)
-            
-            # 重组
-            result_arr = np.concatenate([unpremul_rgb, r_alpha], axis=2)
-            return Image.fromarray((np.clip(result_arr, 0.0, 1.0) * 255.0).astype(np.uint8), 'RGBA')
+
+            from app.utils.rgba_resampler import resize_rgba_premultiplied
+
+            return resize_rgba_premultiplied(image, size, Resampling.BICUBIC)
             
         except Exception as e:
             print(f"预乘Alpha缩放失败: {e}")
@@ -814,7 +788,9 @@ class LegacyLayer:
         # 应用旋转
         if abs(self.rotation) > 0.001:  # 避免浮点数精度问题
             # 使用高质量旋转，保持透明度
-            result = result.rotate(
+            from app.utils.rgba_resampler import rotate_rgba_premultiplied
+            result = rotate_rgba_premultiplied(
+                result,
                 -self.rotation,  # PIL使用逆时针为正，我们使用顺时针为正
                 expand=True,       # 扩展画布以容纳完整的旋转后图像
                 fillcolor=(0, 0, 0, 0),  # 透明填充
@@ -842,13 +818,15 @@ class LegacyLayer:
             new_width = int(image.width * self._current_random_scale)
             new_height = int(image.height * self._current_random_scale)
             
-            result = result.resize((new_width, new_height), Resampling.BICUBIC)
+            result = self._resize_with_premultiplied_alpha(result, (new_width, new_height))
             print(f"随机缩放: {image.width}x{image.height} -> {new_width}x{new_height} (比例: {self._current_random_scale:.3f})")
         
         # 应用随机旋转
         if self.random_rotation_enabled and abs(self._current_random_rotation) > 0.001:
             # 使用expand=True让旋转后的图像完整显示，不被裁剪
-            result = result.rotate(
+            from app.utils.rgba_resampler import rotate_rgba_premultiplied
+            result = rotate_rgba_premultiplied(
+                result,
                 -self._current_random_rotation,  # PIL使用逆时针为正，我们使用顺时针为正
                 expand=True,       # 扩展画布以容纳完整的旋转后图像
                 fillcolor=(0, 0, 0, 0),  # 透明填充

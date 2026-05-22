@@ -116,9 +116,18 @@ def _float_to_uint8_with_dithering(array: np.ndarray, use_dithering: bool = True
     # 确保数组在有效范围内
     array = np.clip(array, 0.0, 1.0)
     
-    # 应用抖动
+    # 应用抖动。RGBA 图像只抖动颜色通道，不抖动 Alpha；
+    # 否则半透明边缘会变成随机透明度噪点。
     if use_dithering:
-        array = _apply_dithering(array)
+        if array.ndim == 3 and array.shape[2] == 4:
+            rgb = _apply_dithering(array[:, :, :3])
+            array = np.concatenate([rgb, array[:, :, 3:4]], axis=2)
+        else:
+            array = _apply_dithering(array)
+
+    # 抖动可能把 0/1 边界推出有效范围，必须在转 uint8 前再次裁剪；
+    # 否则负数会绕回 255，表现为半透明区域的马赛克/噪点。
+    array = np.clip(array, 0.0, 1.0)
     
     # 转换为8位，使用四舍五入而不是截断
     # 四舍五入可以减少系统性误差

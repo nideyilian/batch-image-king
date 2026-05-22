@@ -1909,7 +1909,7 @@ class Layer(QObject):
                     print(f"等比缩放: 源图更高，以宽度为基准，缩放尺寸 {scale_width}x{scale_height}")
                 
                 # 等比缩放
-                scaled_image = processed_image.resize((scale_width, scale_height), Resampling.BICUBIC)
+                scaled_image = self._resize_with_premultiplied_alpha(processed_image, (scale_width, scale_height))
                 
                 # 根据裁剪方向决定裁剪区域
                 if self._crop_direction == 0:  # 居中
@@ -1965,7 +1965,7 @@ class Layer(QObject):
                 scale_height = max(1, scale_height)
                 
                 # 等比缩放
-                scaled_image = processed_image.resize((scale_width, scale_height), Resampling.BICUBIC)
+                scaled_image = self._resize_with_premultiplied_alpha(processed_image, (scale_width, scale_height))
                 
                 # 计算居中位置
                 x = (target_width - scale_width) // 2
@@ -1981,7 +1981,7 @@ class Layer(QObject):
             else:  # 拉伸适配
                 if not is_batch_mode:
                     print(f"使用拉伸适配调整到图层尺寸: {target_width}x{target_height}")
-                resized_image = processed_image.resize((target_width, target_height), Resampling.BICUBIC)
+                resized_image = self._resize_with_premultiplied_alpha(processed_image, (target_width, target_height))
                 final_image = resized_image
             
             # 🔧 智能修复：预览模式启用缓存存储，批量模式禁用缓存存储
@@ -2058,7 +2058,7 @@ class Layer(QObject):
                 print(f"等比缩放: 原图更高, 缩放尺寸 {scale_width}x{scale_height}")
                 
             # 等比缩放图像
-            scaled_image = image.resize((scale_width, scale_height), Resampling.BICUBIC)
+            scaled_image = self._resize_with_premultiplied_alpha(image, (scale_width, scale_height))
             
             # 根据裁剪方向决定裁剪区域
             if self._crop_direction == 0:
@@ -2485,7 +2485,7 @@ class Layer(QObject):
             else:
                 if not is_batch_mode:
                     print(f"警告：图像尺寸与图层尺寸不匹配，调整图像大小: {image.width}x{image.height} => {self._width}x{self._height}")
-                image = image.resize((self._width, self._height), Resampling.BICUBIC)
+                image = self._resize_with_premultiplied_alpha(image, (self._width, self._height))
         
         stroke_enabled = self._stroke_enabled and self._stroke_width > 0
         log_branch(
@@ -2545,7 +2545,7 @@ class Layer(QObject):
         
         # 阶段3：描边与最终收敛（可缓存）
         stage3_extra_parts = [
-            "vec_pipe_ver:v4",
+            "vec_pipe_ver:v5",
             f"base:{stage2_key}",
             f"stroke_on:{int(bool(stroke_enabled))}",
             f"stroke_type:{int(self._stroke_type)}",
@@ -2607,7 +2607,7 @@ class Layer(QObject):
             if (not use_vector_stroke_pipeline) and self._fit_mode != 2 and (final_result.width != self._width or final_result.height != self._height):
                 if not is_batch_mode:
                     print(f"警告：应用特效后图像尺寸变化: {final_result.width}x{final_result.height}，调整为图层尺寸: {self._width}x{self._height}")
-                final_result = final_result.resize((self._width, self._height), Resampling.BICUBIC)
+                final_result = self._resize_with_premultiplied_alpha(final_result, (self._width, self._height))
             self._set_effects_stage_cache(stage3_key, final_result)
 
         self._render_offset_x = int(getattr(final_result, 'info', {}).get('vector_offset_x', 0))
@@ -3373,7 +3373,7 @@ class Layer(QObject):
                         new_height = int(result.height * scale_ratio)
                         
                         # 缩放图像
-                        scaled_result = result.resize((new_width, new_height), Resampling.BICUBIC)
+                        scaled_result = self._resize_with_premultiplied_alpha(result, (new_width, new_height))
                         
                         # 创建图层尺寸的画布并居中放置
                         centered_result = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
@@ -3385,15 +3385,16 @@ class Layer(QObject):
                         print(f"旋转后智能缩放: {result.width}x{result.height} -> {new_width}x{new_height}, 居中于 ({paste_x}, {paste_y})")
                     else:
                         # 对于其他模式，直接调整尺寸
-                        result = result.resize((self._width, self._height), Resampling.BICUBIC)
+                        result = self._resize_with_premultiplied_alpha(result, (self._width, self._height))
                         print(f"旋转后调整尺寸: {self._width}x{self._height}")
             else:
                 # 对于非90度倍数的旋转，也扩展画布以避免裁剪
-                result = result.rotate(
+                result = HighQualityResampler.rotate_high_quality(
+                    result,
                     -self._rotation,  # PIL使用逆时针为正，我们使用顺时针为正
                     expand=True,       # 扩展画布以容纳完整的旋转后图像
-                    fillcolor=(0, 0, 0, 0),  # 透明填充
-                    resample=Resampling.BICUBIC   # 高质量重采样
+                    resample=Resampling.BICUBIC,   # 高质量重采样
+                    enable_premultiplied=True
                 )
                 print(f"应用任意角度旋转: {self._rotation}度 (扩展画布)")
         
@@ -3436,11 +3437,12 @@ class Layer(QObject):
         
         # 应用随机旋转
         if self._random_rotation_enabled and abs(self._current_random_rotation) > 0.001:
-            result = result.rotate(
+            result = HighQualityResampler.rotate_high_quality(
+                result,
                 -self._current_random_rotation,  # PIL使用逆时针为正，我们使用顺时针为正
                 expand=False,      # 不扩展画布尺寸
-                fillcolor=(0, 0, 0, 0),  # 透明填充
-                resample=Resampling.BICUBIC   # 高质量重采样
+                resample=Resampling.BICUBIC,   # 高质量重采样
+                enable_premultiplied=True
             )
             print(f"应用随机旋转: {self._current_random_rotation:.1f}度")
         
@@ -3477,38 +3479,12 @@ class Layer(QObject):
     def _resize_with_premultiplied_alpha(self, image, size):
         """使用预乘Alpha方法缩放图像，避免半透明边缘暗晕"""
         try:
-            import numpy as np
-            
             if image.mode != 'RGBA':
                 return image.resize(size, Resampling.BICUBIC)
-            
-            # 转换为浮点数组
-            arr = np.array(image, dtype=np.float32) / 255.0
-            rgb = arr[:, :, :3]
-            alpha = arr[:, :, 3:4]
-            
-            # 预乘Alpha
-            premul_rgb = rgb * alpha
-            premul_img_arr = np.concatenate([premul_rgb, alpha], axis=2)
-            premul_img = Image.fromarray((np.clip(premul_img_arr, 0.0, 1.0) * 255.0).astype(np.uint8), 'RGBA')
-            
-            # 缩放
-            resized_premul = premul_img.resize(size, Resampling.BICUBIC)
-            
-            # 反预乘
-            resized_arr = np.array(resized_premul, dtype=np.float32) / 255.0
-            r_rgb = resized_arr[:, :, :3]
-            r_alpha = resized_arr[:, :, 3:4]
-            
-            # 避免除零
-            mask = r_alpha > 1e-6
-            unpremul_rgb = np.zeros_like(r_rgb)
-            mask_3ch = np.repeat(mask, 3, axis=2)
-            np.divide(r_rgb, r_alpha, out=unpremul_rgb, where=mask_3ch)
-            
-            # 重组
-            result_arr = np.concatenate([unpremul_rgb, r_alpha], axis=2)
-            return Image.fromarray((np.clip(result_arr, 0.0, 1.0) * 255.0).astype(np.uint8), 'RGBA')
+
+            from app.utils.rgba_resampler import resize_rgba_premultiplied
+
+            return resize_rgba_premultiplied(image, size, Resampling.BICUBIC)
             
         except Exception as e:
             print(f"预乘Alpha缩放失败: {e}")
