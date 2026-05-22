@@ -111,7 +111,7 @@ class CanvasWidget(QWidget):
         self.document.layer_changed.connect(self._invalidate_composition_cache)
 
         # 交互过程（拖拽/缩放）刷新节流，避免高频事件导致掉帧
-        self._interactive_frame_interval_ms = 33  # 约30FPS，优先保障交互流畅
+        self._interactive_frame_interval_ms = 16  # 约60FPS，交互期间优先保障鼠标跟手
         self._last_interactive_update_ms = 0.0
         self._interactive_update_pending = False
         self._interactive_requires_recompose = False
@@ -925,35 +925,12 @@ class CanvasWidget(QWidget):
             bool(interactive_low_quality),
             int(active_layer_index),
         )
-        if interactive_low_quality and active_layer_index >= 0:
-            pixmap = self._render_interactive_preview_now()
-            if pixmap is not None:
-                return pixmap
-
         if self._composition_pixmap_cache is not None:
             self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
             return self._composition_pixmap_cache
 
         self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
         return self._create_blank_composition_pixmap()
-
-    def _render_interactive_preview_now(self):
-        """Render an optimistic low-cost preview on the GUI thread during interaction."""
-        try:
-            from app.utils.fast_renderer import get_global_fast_renderer
-            image = get_global_fast_renderer().render_preview_live(
-                self.document,
-                interactive_low_quality=True
-            )
-            pixmap = self._composition_to_pixmap(image)
-            if pixmap is None:
-                return None
-            self._composition_pixmap_cache = pixmap
-            self._composition_cache_valid = True
-            self._invalidate_scaled_pixmap_cache()
-            return pixmap
-        except Exception:
-            return None
 
     def _build_async_render_snapshot(self):
         """Capture an immutable document snapshot for the background preview worker."""
@@ -992,7 +969,14 @@ class CanvasWidget(QWidget):
         try:
             from app.utils.fast_renderer import get_global_fast_renderer
             fast_renderer = get_global_fast_renderer()
-            if interactive_low_quality:
+            if interactive_low_quality and active_layer_index >= 0:
+                image = fast_renderer.render_preview_incremental(
+                    render_document,
+                    active_layer_index=active_layer_index,
+                    force_refresh=force_refresh,
+                    interactive_low_quality=True
+                )
+            elif interactive_low_quality:
                 image = fast_renderer.render_preview_live(
                     render_document,
                     interactive_low_quality=True
@@ -1606,8 +1590,9 @@ class CanvasWidget(QWidget):
             self._panel_interaction_layer_index = -1
             return
         if self._interactive_requires_recompose:
-            # 交互期间只做渲染缓存失效，避免高频 document_changed 触发全局UI负担
-            self._invalidate_composition_cache()
+            # 交互期间只标记画面过期，不取消正在跑的后台预览，避免鼠标高频移动导致渲染线程一直重启。
+            self._composition_cache_valid = False
+            self._invalidate_scaled_pixmap_cache()
         self._interactive_requires_recompose = False
         self.update()
 
