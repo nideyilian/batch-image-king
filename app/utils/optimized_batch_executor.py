@@ -6,6 +6,7 @@
 import os as os_module  # 避免局部变量遮蔽
 import time
 import threading
+import builtins
 from collections import Counter, OrderedDict
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -15,6 +16,24 @@ from PIL import Image
 import gc
 import io
 import math
+
+_BATCH_EXPORT_VERBOSE = os_module.environ.get("BTPW_BATCH_EXPORT_VERBOSE", "0") == "1"
+_BATCH_EXPORT_ALWAYS_LOG_KEYWORDS = (
+    "出错", "错误", "失败", "警告", "异常", "取消", "保护触发",
+    "❌", "⚠", "error", "failed", "warning", "exception", "cancel", "Traceback",
+)
+
+
+def print(*args, **kwargs):
+    if _BATCH_EXPORT_VERBOSE:
+        builtins.print(*args, **kwargs)
+        return
+    try:
+        message = " ".join(str(arg) for arg in args)
+    except Exception:
+        message = ""
+    if any(keyword in message for keyword in _BATCH_EXPORT_ALWAYS_LOG_KEYWORDS):
+        builtins.print(*args, **kwargs)
 
 try:
     from .batch_export_precomputer import PrecomputedExportPlan, ExportTask
@@ -1237,7 +1256,9 @@ class OptimizedBatchExecutor:
         if self._export_safety_enabled and safety_in_flight_cap < in_flight_limit:
             with self._lock:
                 self.stats['safety_throttle_events'] += 1
-            in_flight_limit = max(min_in_flight_limit, safety_in_flight_cap)
+            in_flight_limit = max(1, safety_in_flight_cap)
+            min_in_flight_limit = min(min_in_flight_limit, in_flight_limit)
+            max_in_flight_limit = max(min_in_flight_limit, min(max_in_flight_limit, max(1, in_flight_limit)))
         last_progress_ts = time.time()
         consecutive_failures = 0
         recent_render_times: List[float] = []

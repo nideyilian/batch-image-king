@@ -6,6 +6,28 @@ from PySide6.QtCore import Qt, Signal, QTimer, QRect, QPoint
 from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, QDropEvent, QPen, QBrush
 import sys
 import os
+import builtins
+
+_LAYER_PANEL_DEBUG = (
+    os.environ.get("BTPW_LAYER_PANEL_DEBUG", "0") == "1"
+    or os.environ.get("BTPW_UI_DEBUG", "0") == "1"
+)
+_LAYER_PANEL_ALWAYS_LOG_KEYWORDS = (
+    "出错", "错误", "失败", "警告", "异常",
+    "error", "failed", "warning", "exception", "Traceback",
+)
+
+
+def print(*args, **kwargs):
+    if _LAYER_PANEL_DEBUG:
+        builtins.print(*args, **kwargs)
+        return
+    try:
+        message = " ".join(str(arg) for arg in args)
+    except Exception:
+        message = ""
+    if any(keyword in message for keyword in _LAYER_PANEL_ALWAYS_LOG_KEYWORDS):
+        builtins.print(*args, **kwargs)
 
 # 注释掉冲突的导入，使用本文件中定义的类
 # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

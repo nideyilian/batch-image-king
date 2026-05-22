@@ -150,10 +150,13 @@ class CanvasWidget(QWidget):
         self._async_render_result = None
         self._async_render_error = None
         self._async_render_generation = 0
+        self._async_render_request_key = None
+        self._async_render_restart_args = None
         self._async_render_restart_requested = False
         self._async_render_timer = QTimer(self)
         self._async_render_timer.setInterval(16)
         self._async_render_timer.timeout.connect(self._poll_async_render_result)
+        self._composition_invalidation_generation = 0
         # 按当前缩放尺寸缓存缩放后的QPixmap，减少平移阶段重复缩放
         self._scaled_composition_pixmap_cache = None
         self._scaled_composition_cache_key = None
@@ -801,6 +804,7 @@ class CanvasWidget(QWidget):
                 self._invalidate_scaled_pixmap_cache()
                 return
 
+        self._composition_invalidation_generation += 1
         self._composition_cache_valid = False
         self._composition_pixmap_cache = None
         self._invalidate_scaled_pixmap_cache()
@@ -837,6 +841,20 @@ class CanvasWidget(QWidget):
         self._scaled_composition_cache_key = cache_key
         return scaled
 
+    def _create_blank_composition_pixmap(self):
+        """Create a transparent placeholder so paintEvent never performs a full render."""
+        try:
+            pixmap = QPixmap(1, 1)
+            if pixmap.isNull():
+                return None
+            pixmap.fill(Qt.transparent)
+            self._composition_pixmap_cache = pixmap
+            self._composition_cache_valid = False
+            self._invalidate_scaled_pixmap_cache()
+            return pixmap
+        except Exception:
+            return None
+
     def _get_cached_composition_pixmap(self):
         """获取合成图QPixmap缓存，必要时重新生成"""
         self._sync_panel_interaction_state()
@@ -857,70 +875,18 @@ class CanvasWidget(QWidget):
             )
         )
         active_layer_index = self._get_interaction_active_layer_index()
+        request_key = (
+            int(self._composition_invalidation_generation),
+            bool(force_refresh),
+            bool(interactive_low_quality),
+            int(active_layer_index),
+        )
         if self._composition_pixmap_cache is not None:
-            self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index)
+            self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
             return self._composition_pixmap_cache
 
-        # 绘制合成图像 - 使用真正的快速渲染器
-        try:
-            from app.utils.fast_renderer import get_global_fast_renderer
-            fast_renderer = get_global_fast_renderer()
-            interactive_low_quality = bool(
-                self._interactive_low_quality_active
-                and not self._force_high_quality_refresh
-                and (
-                    self.is_dragging_layer
-                    or self.is_resizing
-                    or self.is_dragging_corner_radius
-                    or self._panel_interaction_active
-                )
-            )
-            active_layer_index = self._get_interaction_active_layer_index()
-            if force_refresh:
-                self.document._needs_cache_refresh = False
-            if interactive_low_quality and active_layer_index >= 0:
-                composition = fast_renderer.render_preview_incremental(
-                    self.document,
-                    active_layer_index=active_layer_index,
-                    force_refresh=force_refresh,
-                    interactive_low_quality=True
-                )
-            else:
-                composition = fast_renderer.render_preview(
-                    self.document,
-                    force_refresh=force_refresh,
-                    interactive_low_quality=interactive_low_quality
-                )
-            if self._force_high_quality_refresh:
-                self._force_high_quality_refresh = False
-        except Exception as e:
-            # 后备方案：使用快速预览模式渲染
-            print(f"[画布] 快速渲染失败，使用预览模式回退: {e}")
-            composition = self.document.render_composition()
-
-        if not composition:
-            return None
-
-        # 将PIL图像转换为QImage
-        qimage = None
-        try:
-            from PIL import ImageQt
-            qimage = ImageQt.toqimage(composition)
-        except Exception as e:
-            print(f"ImageQt转换失败，尝试手动转换: {e}")
-            try:
-                img_data = composition.convert("RGBA").tobytes("raw", "RGBA")
-                qimage = QImage(img_data, composition.width, composition.height,
-                               composition.width * 4, QImage.Format_RGBA8888)
-            except Exception as e:
-                print(f"图像转换失败: {e}")
-                img_data = composition.tobytes("raw", "RGBA")
-                qimage = QImage(img_data, composition.width, composition.height,
-                              QImage.Format_RGBA8888)
-
-        self._composition_pixmap_cache = QPixmap.fromImage(qimage)
-        self._composition_cache_valid = True
-        return self._composition_pixmap_cache
+        self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
+        return self._create_blank_composition_pixmap()
 
     def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int):
         """Render a PIL composition outside paintEvent; QPixmap conversion stays on the GUI thread."""
@@ -959,15 +925,31 @@ class CanvasWidget(QWidget):
                 return None
         return QPixmap.fromImage(qimage)
 
-    def _start_async_composition_render(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int):
+    def _start_async_composition_render(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, request_key=None):
         """Start one background preview render and keep painting the previous pixmap meanwhile."""
+        if request_key is None:
+            request_key = (
+                int(self._composition_invalidation_generation),
+                bool(force_refresh),
+                bool(interactive_low_quality),
+                int(active_layer_index),
+            )
         with self._async_render_lock:
             if self._async_render_pending:
-                self._async_render_restart_requested = True
+                if self._async_render_request_key != request_key:
+                    self._async_render_restart_requested = True
+                    self._async_render_restart_args = (
+                        force_refresh,
+                        interactive_low_quality,
+                        active_layer_index,
+                        request_key,
+                    )
                 return
             self._async_render_pending = True
             self._async_render_result = None
             self._async_render_error = None
+            self._async_render_request_key = request_key
+            self._async_render_restart_args = None
             self._async_render_generation += 1
             generation = self._async_render_generation
 
@@ -1001,9 +983,12 @@ class CanvasWidget(QWidget):
             image = self._async_render_result
             error = self._async_render_error
             restart = self._async_render_restart_requested
+            restart_args = self._async_render_restart_args
             self._async_render_result = None
             self._async_render_error = None
             self._async_render_restart_requested = False
+            self._async_render_restart_args = None
+            self._async_render_request_key = None
 
         if image is None and error is None:
             self._async_render_timer.stop()
@@ -1018,18 +1003,28 @@ class CanvasWidget(QWidget):
                 self.update()
 
         if restart:
-            force_refresh = bool(getattr(self.document, '_needs_cache_refresh', False) or self._force_high_quality_refresh)
-            interactive_low_quality = bool(
-                self._interactive_low_quality_active
-                and not self._force_high_quality_refresh
-                and (
-                    self.is_dragging_layer
-                    or self.is_resizing
-                    or self.is_dragging_corner_radius
-                    or self._panel_interaction_active
+            if restart_args:
+                self._start_async_composition_render(*restart_args)
+            else:
+                force_refresh = bool(getattr(self.document, '_needs_cache_refresh', False) or self._force_high_quality_refresh)
+                interactive_low_quality = bool(
+                    self._interactive_low_quality_active
+                    and not self._force_high_quality_refresh
+                    and (
+                        self.is_dragging_layer
+                        or self.is_resizing
+                        or self.is_dragging_corner_radius
+                        or self._panel_interaction_active
+                    )
                 )
-            )
-            self._start_async_composition_render(force_refresh, interactive_low_quality, self._get_interaction_active_layer_index())
+                active_layer_index = self._get_interaction_active_layer_index()
+                request_key = (
+                    int(self._composition_invalidation_generation),
+                    bool(force_refresh),
+                    bool(interactive_low_quality),
+                    int(active_layer_index),
+                )
+                self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
         else:
             self._async_render_timer.stop()
 
