@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QLabel, QMenu
 from PySide6.QtGui import QPainter, QColor, QPen, QImage, QPixmap, QCursor, QBrush, QPainterPath
-from PySide6.QtCore import Qt, QRect, QPoint, QSize, Signal, QTimer
+from PySide6.QtCore import Qt, QRect, QPoint, QSize, Signal, QTimer, QRunnable, QThreadPool
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import (
     child_indices_for_group,
@@ -12,6 +12,19 @@ from app.utils.layer_tree import (
 )
 import time
 import threading
+
+
+class _CanvasPreviewRenderTask(QRunnable):
+    """Small QRunnable wrapper for preview renders; results are installed by CanvasWidget polling."""
+
+    def __init__(self, callback):
+        super().__init__()
+        self._callback = callback
+        self.setAutoDelete(True)
+
+    def run(self):
+        self._callback()
+
 
 class CanvasWidget(QWidget):
     """画布控件，用于显示和编辑图像"""
@@ -888,27 +901,59 @@ class CanvasWidget(QWidget):
         self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
         return self._create_blank_composition_pixmap()
 
-    def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int):
+    def _build_async_render_snapshot(self):
+        """Capture an immutable document snapshot for the background preview worker."""
+        try:
+            from app.models.document_serializer import DocumentSerializer
+            snapshot = DocumentSerializer.serialize_document_data(self.document)
+            if isinstance(snapshot, dict):
+                return snapshot
+        except Exception:
+            pass
+        return None
+
+    def _restore_async_render_snapshot(self, snapshot_data):
+        """Restore a preview-only document from serialized data in the worker thread."""
+        if not isinstance(snapshot_data, dict):
+            return None
+        try:
+            from app.models.document import Document
+            from app.models.document_serializer import DocumentSerializer
+            snapshot_document = Document(parent=None)
+            if not DocumentSerializer.restore_document_data(snapshot_document, snapshot_data):
+                return None
+            snapshot_document._is_batch_export_running = False
+            snapshot_document._export_canceled = False
+            snapshot_document._needs_cache_refresh = False
+            return snapshot_document
+        except Exception:
+            return None
+
+    def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, snapshot_data=None):
         """Render a PIL composition outside paintEvent; QPixmap conversion stays on the GUI thread."""
+        render_document = self._restore_async_render_snapshot(snapshot_data)
+        if render_document is None:
+            render_document = self.document
         try:
             from app.utils.fast_renderer import get_global_fast_renderer
             fast_renderer = get_global_fast_renderer()
-            if force_refresh:
-                self.document._needs_cache_refresh = False
             if interactive_low_quality and active_layer_index >= 0:
                 return fast_renderer.render_preview_incremental(
-                    self.document,
+                    render_document,
                     active_layer_index=active_layer_index,
                     force_refresh=force_refresh,
                     interactive_low_quality=True
                 )
             return fast_renderer.render_preview(
-                self.document,
+                render_document,
                 force_refresh=force_refresh,
                 interactive_low_quality=interactive_low_quality
             )
         except Exception:
-            return self.document.render_composition()
+            try:
+                return render_document.render_composition()
+            except Exception:
+                return None
 
     def _composition_to_pixmap(self, composition):
         if not composition:
@@ -957,12 +1002,18 @@ class CanvasWidget(QWidget):
             self.document._needs_cache_refresh = False
         if self._force_high_quality_refresh:
             self._force_high_quality_refresh = False
+        snapshot_data = self._build_async_render_snapshot()
 
         def _worker():
             image = None
             error = None
             try:
-                image = self._render_composition_image_for_async(force_refresh, interactive_low_quality, active_layer_index)
+                image = self._render_composition_image_for_async(
+                    force_refresh,
+                    interactive_low_quality,
+                    active_layer_index,
+                    snapshot_data
+                )
             except Exception as exc:
                 error = exc
             with self._async_render_lock:
@@ -971,7 +1022,10 @@ class CanvasWidget(QWidget):
                     self._async_render_error = error
                     self._async_render_pending = False
 
-        threading.Thread(target=_worker, name="CanvasPreviewRender", daemon=True).start()
+        try:
+            QThreadPool.globalInstance().start(_CanvasPreviewRenderTask(_worker))
+        except Exception:
+            threading.Thread(target=_worker, name="CanvasPreviewRender", daemon=True).start()
         if not self._async_render_timer.isActive():
             self._async_render_timer.start()
 
@@ -994,7 +1048,7 @@ class CanvasWidget(QWidget):
             self._async_render_timer.stop()
             return
 
-        if image is not None:
+        if image is not None and not restart:
             pixmap = self._composition_to_pixmap(image)
             if pixmap is not None:
                 self._composition_pixmap_cache = pixmap
