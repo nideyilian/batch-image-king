@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QLabel, QMenu
 from PySide6.QtGui import QPainter, QColor, QPen, QImage, QPixmap, QCursor, QBrush, QPainterPath
 from PySide6.QtCore import Qt, QRect, QPoint, QSize, Signal, QTimer, QRunnable, QThreadPool
@@ -188,8 +190,11 @@ class CanvasWidget(QWidget):
         self._async_render_timer.timeout.connect(self._poll_async_render_result)
         self._composition_invalidation_generation = 0
         # 按当前缩放尺寸缓存缩放后的QPixmap，减少平移阶段重复缩放
-        self._scaled_composition_pixmap_cache = None
         self._scaled_composition_cache_key = None
+        self._scaled_composition_pixmap_cache = OrderedDict()
+        self._max_scaled_composition_cache_entries = 8
+        self._composition_mipmap_cache_key = None
+        self._composition_mipmap_cache = []
 
         # Photoshop风格标尺与参考线
         self.show_rulers = True
@@ -859,8 +864,10 @@ class CanvasWidget(QWidget):
 
     def _invalidate_scaled_pixmap_cache(self):
         """使缩放后的QPixmap缓存失效"""
-        self._scaled_composition_pixmap_cache = None
+        self._scaled_composition_pixmap_cache.clear()
         self._scaled_composition_cache_key = None
+        self._composition_mipmap_cache_key = None
+        self._composition_mipmap_cache = []
 
     def _is_view_transform_active(self) -> bool:
         """Return True while the user is only changing the viewport."""
@@ -879,19 +886,69 @@ class CanvasWidget(QWidget):
             int(target_width),
             int(target_height),
         )
-        if self._scaled_composition_pixmap_cache is not None and self._scaled_composition_cache_key == cache_key:
-            return self._scaled_composition_pixmap_cache
+        cached = self._scaled_composition_pixmap_cache.get(cache_key)
+        if cached is not None:
+            self._scaled_composition_pixmap_cache.move_to_end(cache_key)
+            return cached
 
         transform_mode = Qt.FastTransformation if self._zoom_interaction_active else Qt.SmoothTransformation
-        scaled = source_pixmap.scaled(
+        source_for_scale = self._select_mipmap_source(source_pixmap, target_width, target_height)
+        scaled = source_for_scale.scaled(
             target_width,
             target_height,
             Qt.IgnoreAspectRatio,
             transform_mode
         )
-        self._scaled_composition_pixmap_cache = scaled
+        self._scaled_composition_pixmap_cache[cache_key] = scaled
+        self._scaled_composition_pixmap_cache.move_to_end(cache_key)
+        while len(self._scaled_composition_pixmap_cache) > self._max_scaled_composition_cache_entries:
+            self._scaled_composition_pixmap_cache.popitem(last=False)
         self._scaled_composition_cache_key = cache_key
         return scaled
+
+    def _select_mipmap_source(self, source_pixmap, target_width: int, target_height: int):
+        """Choose the smallest cached mip level that is still larger than the target."""
+        source_max_edge = max(source_pixmap.width(), source_pixmap.height())
+        target_max_edge = max(int(target_width), int(target_height))
+        if target_max_edge <= 0 or target_max_edge >= int(source_max_edge * 0.75):
+            return source_pixmap
+
+        levels = self._get_composition_mipmap_chain(source_pixmap)
+        best = source_pixmap
+        for level in levels[1:]:
+            level_max_edge = max(level.width(), level.height())
+            if level_max_edge >= target_max_edge:
+                best = level
+            else:
+                break
+        return best
+
+    def _get_composition_mipmap_chain(self, source_pixmap):
+        """Build a small half-size pixmap pyramid for large zoomed-out previews."""
+        source_key = int(source_pixmap.cacheKey())
+        if self._composition_mipmap_cache_key == source_key and self._composition_mipmap_cache:
+            return self._composition_mipmap_cache
+
+        levels = [source_pixmap]
+        current = source_pixmap
+        for _ in range(6):
+            next_width = max(1, current.width() // 2)
+            next_height = max(1, current.height() // 2)
+            if next_width == current.width() and next_height == current.height():
+                break
+            current = current.scaled(
+                next_width,
+                next_height,
+                Qt.IgnoreAspectRatio,
+                Qt.SmoothTransformation
+            )
+            levels.append(current)
+            if max(next_width, next_height) <= 512:
+                break
+
+        self._composition_mipmap_cache_key = source_key
+        self._composition_mipmap_cache = levels
+        return levels
 
     def _create_blank_composition_pixmap(self):
         """Create a transparent placeholder so paintEvent never performs a full render."""
