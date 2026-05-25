@@ -108,8 +108,15 @@ class DocumentManager(QObject):
         document = self.documents[index]
         if document.current_file_path:
             return os.path.basename(document.current_file_path)
-        else:
-            return f"未命名-{index + 1}"
+
+        for attr_name in ("tab_name", "original_tab_name", "name"):
+            name = getattr(document, attr_name, None)
+            if isinstance(name, str):
+                name = name.strip()
+                if name:
+                    return name
+
+        return f"未命名-{index + 1}"
     
     def is_document_modified(self, index):
         """检查文档是否已修改"""

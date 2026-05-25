@@ -963,6 +963,8 @@ class MainWindow(QMainWindow):
             # 如果文档模型中有name属性，也要同步更新
             if hasattr(document, 'name'):
                 document.name = new_name
+            document.tab_name = new_name
+            document.original_tab_name = new_name
             
             # 更新标签页文本
             self.tab_widget.setTabText(index, new_name)
