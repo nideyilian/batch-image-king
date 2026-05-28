@@ -64,6 +64,10 @@ class ExportService:
         try:
             prepared = prepare_image_for_export(image, file_format, policy)
 
+            if file_format in ("jpg", "jpeg") and int(job.max_file_size_kb or 0) > 0:
+                written = self._save_size_limited_jpeg(prepared, job.file_path, job, source_image=image)
+                return ExportReport(True, job.file_path, time.time() - start, written, "pillow", quality_profile)
+
             if self._should_try_vips(job, file_format):
                 try:
                     from app.utils.vips_export_engine import VipsExportEngine
@@ -103,7 +107,8 @@ class ExportService:
                 quality=self._jpeg_quality(job),
                 optimize=(profile != "speed"),
                 progressive=(profile == "size"),
-                subsampling=0 if profile == "quality" else -1,
+                subsampling=0 if profile in ("quality", "balanced") else -1,
+                **self._jpeg_metadata_save_kwargs(image),
             )
             return
 
@@ -162,26 +167,87 @@ class ExportService:
             return "size"
         return "balanced"
 
+    def _jpeg_metadata_save_kwargs(self, image: Image.Image, source_image: Optional[Image.Image] = None) -> dict:
+        """Keep color profile metadata when Pillow provides one."""
+        icc_profile = None
+        try:
+            icc_profile = (getattr(image, "info", {}) or {}).get("icc_profile")
+        except Exception:
+            icc_profile = None
+        if icc_profile is None and source_image is not None:
+            try:
+                icc_profile = (getattr(source_image, "info", {}) or {}).get("icc_profile")
+            except Exception:
+                icc_profile = None
+        return {"icc_profile": icc_profile} if icc_profile else {}
+
+    def _encode_jpeg_to_bytes(
+        self,
+        image: Image.Image,
+        quality: int,
+        *,
+        source_image: Optional[Image.Image] = None,
+    ) -> bytes:
+        """Encode JPEG in memory using color-preserving 4:4:4 sampling."""
+        buf = io.BytesIO()
+        image.save(
+            buf,
+            format="JPEG",
+            quality=max(1, min(98, int(quality))),
+            optimize=True,
+            progressive=False,
+            subsampling=0,
+            **self._jpeg_metadata_save_kwargs(image, source_image),
+        )
+        return buf.getvalue()
+
+    def _save_size_limited_jpeg(
+        self,
+        image: Image.Image,
+        file_path: str,
+        job: ExportJob,
+        *,
+        source_image: Optional[Image.Image] = None,
+    ) -> int:
+        """Find the highest 4:4:4 JPEG quality that fits, then write once."""
+        target = int(job.max_file_size_kb or 0) * 1024
+        high = min(98, max(1, self._jpeg_quality(job)))
+        low = 35
+
+        best_data = self._encode_jpeg_to_bytes(image, high, source_image=source_image)
+        if target <= 0 or len(best_data) <= target:
+            with open(file_path, "wb") as f:
+                f.write(best_data)
+            return len(best_data)
+
+        best_under_target = None
+        search_low = low
+        search_high = high - 1
+        while search_low <= search_high:
+            q = (search_low + search_high) // 2
+            data = self._encode_jpeg_to_bytes(image, q, source_image=source_image)
+            if len(data) <= target:
+                best_under_target = data
+                search_low = q + 1
+            else:
+                search_high = q - 1
+
+        if best_under_target is None:
+            # Keep 4:4:4 sampling even in the fallback. Lowering quality hurts less
+            # than silently switching chroma subsampling for text and saturated colors.
+            best_under_target = self._encode_jpeg_to_bytes(image, 25, source_image=source_image)
+
+        with open(file_path, "wb") as f:
+            f.write(best_under_target)
+        return len(best_under_target)
+
     def _enforce_size_limit(self, image: Image.Image, file_path: str, file_format: str, job: ExportJob) -> None:
         target = int(job.max_file_size_kb or 0) * 1024
         if target <= 0 or self._written_bytes(file_path) <= target:
             return
 
         if file_format in ("jpg", "jpeg"):
-            low, high = 35, min(95, self._jpeg_quality(job))
-            best = None
-            for _ in range(7):
-                q = (low + high) // 2
-                buf = io.BytesIO()
-                image.save(buf, format="JPEG", quality=q, optimize=True)
-                if buf.tell() <= target:
-                    best = buf.getvalue()
-                    low = q + 1
-                else:
-                    high = q - 1
-            if best is not None:
-                with open(file_path, "wb") as f:
-                    f.write(best)
+            self._save_size_limited_jpeg(image, file_path, job)
             return
 
         if file_format == "png":

@@ -223,6 +223,11 @@ class FastRenderer:
         self._export_layer_surface_cache = OrderedDict()
         self._export_layer_surface_lock = threading.RLock()
         self._max_export_layer_surface_entries = 320
+        self._export_layer_surface_bytes = 0
+        self._export_layer_surface_entry_bytes = {}
+        self._max_export_layer_surface_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_EXPORT_LAYER_CACHE_MB", 384, minimum_mb=64
+        )
         # 图层分身/填充位置缓存，减少重复几何计算
         self._layer_positions_cache = OrderedDict()
         self._layer_positions_lock = threading.RLock()
@@ -248,9 +253,19 @@ class FastRenderer:
         self._batch_raw_image_cache = OrderedDict()
         self._batch_raw_image_lock = threading.RLock()
         self._max_batch_raw_entries = 128
+        self._batch_raw_image_bytes = 0
+        self._batch_raw_image_entry_bytes = {}
+        self._max_batch_raw_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_BATCH_RAW_CACHE_MB", 256, minimum_mb=32
+        )
         self._batch_processed_image_cache = OrderedDict()
         self._batch_processed_image_lock = threading.RLock()
         self._max_batch_processed_entries = 512
+        self._batch_processed_image_bytes = 0
+        self._batch_processed_image_entry_bytes = {}
+        self._max_batch_processed_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_BATCH_PROCESSED_CACHE_MB", 512, minimum_mb=64
+        )
         
         if self._verbose_logging:
             print("[快速渲染] 初始化完成，使用智能缓存系统和内存管理")
@@ -274,6 +289,99 @@ class FastRenderer:
             if key not in cls._batch_metrics:
                 cls._batch_metrics[key] = 0
             cls._batch_metrics[key] += int(delta)
+
+    @staticmethod
+    def _resolve_cache_budget_bytes(env_name: str, default_mb: int, minimum_mb: int = 16) -> int:
+        try:
+            value_mb = int(os.environ.get(env_name, str(default_mb)) or default_mb)
+        except Exception:
+            value_mb = int(default_mb)
+        value_mb = max(int(minimum_mb), int(value_mb))
+        return int(value_mb) * 1024 * 1024
+
+    @staticmethod
+    def _estimate_image_bytes(image: Optional[Image.Image]) -> int:
+        if image is None:
+            return 0
+        try:
+            bands = max(1, len(image.getbands()))
+            return int(image.width) * int(image.height) * bands
+        except Exception:
+            return 0
+
+    def _cached_value_image(self, value):
+        if isinstance(value, dict):
+            return value.get("image")
+        return value
+
+    def _close_cached_value(self, value):
+        image = self._cached_value_image(value)
+        try:
+            if image is not None and hasattr(image, "close"):
+                image.close()
+        except Exception:
+            pass
+
+    def _cache_value_bytes(self, value) -> int:
+        if isinstance(value, dict) and "bytes" in value:
+            try:
+                return int(value.get("bytes") or 0)
+            except Exception:
+                return 0
+        return self._estimate_image_bytes(self._cached_value_image(value))
+
+    def _trim_cache_by_budget_unlocked(
+        self,
+        cache: OrderedDict,
+        entry_bytes: dict,
+        total_attr: str,
+        max_entries: int,
+        max_bytes: int,
+    ):
+        while cache and (len(cache) > max_entries or int(getattr(self, total_attr, 0)) > int(max_bytes)):
+            old_key, old_value = cache.popitem(last=False)
+            old_bytes = int(entry_bytes.pop(old_key, self._cache_value_bytes(old_value)) or 0)
+            setattr(self, total_attr, max(0, int(getattr(self, total_attr, 0)) - old_bytes))
+            self._close_cached_value(old_value)
+
+    def _set_cache_value_unlocked(
+        self,
+        cache: OrderedDict,
+        entry_bytes: dict,
+        total_attr: str,
+        key,
+        value,
+        max_entries: int,
+        max_bytes: int,
+    ):
+        old_value = cache.pop(key, None)
+        if old_value is not None:
+            old_bytes = int(entry_bytes.pop(key, self._cache_value_bytes(old_value)) or 0)
+            setattr(self, total_attr, max(0, int(getattr(self, total_attr, 0)) - old_bytes))
+            self._close_cached_value(old_value)
+
+        value_bytes = self._cache_value_bytes(value)
+        cache[key] = value
+        entry_bytes[key] = value_bytes
+        setattr(self, total_attr, int(getattr(self, total_attr, 0)) + value_bytes)
+        cache.move_to_end(key)
+        self._trim_cache_by_budget_unlocked(cache, entry_bytes, total_attr, max_entries, max_bytes)
+
+    def _remove_cache_keys_unlocked(self, cache: OrderedDict, entry_bytes: dict, total_attr: str, keys):
+        for key in keys:
+            old_value = cache.pop(key, None)
+            if old_value is None:
+                continue
+            old_bytes = int(entry_bytes.pop(key, self._cache_value_bytes(old_value)) or 0)
+            setattr(self, total_attr, max(0, int(getattr(self, total_attr, 0)) - old_bytes))
+            self._close_cached_value(old_value)
+
+    def _clear_budgeted_cache_unlocked(self, cache: OrderedDict, entry_bytes: dict, total_attr: str):
+        for value in list(cache.values()):
+            self._close_cached_value(value)
+        cache.clear()
+        entry_bytes.clear()
+        setattr(self, total_attr, 0)
     
     def clear_cache(self):
         """清空缓存"""
@@ -2008,15 +2116,20 @@ class FastRenderer:
 
         if is_batch_session:
             with self._export_layer_surface_lock:
-                self._export_layer_surface_cache[export_entry_key] = {
-                    "cache_key": cache_key,
-                    "image": layer_image.copy(),
-                    "offset_x": int(getattr(layer, "_render_offset_x", 0)),
-                    "offset_y": int(getattr(layer, "_render_offset_y", 0)),
-                }
-                self._export_layer_surface_cache.move_to_end(export_entry_key)
-                while len(self._export_layer_surface_cache) > self._max_export_layer_surface_entries:
-                    self._export_layer_surface_cache.popitem(last=False)
+                self._set_cache_value_unlocked(
+                    self._export_layer_surface_cache,
+                    self._export_layer_surface_entry_bytes,
+                    "_export_layer_surface_bytes",
+                    export_entry_key,
+                    {
+                        "cache_key": cache_key,
+                        "image": layer_image.copy(),
+                        "offset_x": int(getattr(layer, "_render_offset_x", 0)),
+                        "offset_y": int(getattr(layer, "_render_offset_y", 0)),
+                    },
+                    self._max_export_layer_surface_entries,
+                    self._max_export_layer_surface_bytes,
+                )
 
         with self._layer_surface_lock:
             self._layer_surface_cache[entry_key] = {
@@ -2036,7 +2149,11 @@ class FastRenderer:
         with self._layer_surface_lock:
             self._layer_surface_cache.clear()
         with self._export_layer_surface_lock:
-            self._export_layer_surface_cache.clear()
+            self._clear_budgeted_cache_unlocked(
+                self._export_layer_surface_cache,
+                self._export_layer_surface_entry_bytes,
+                "_export_layer_surface_bytes",
+            )
     
     def _clear_layer_positions_cache(self):
         """清空图层位置缓存"""
@@ -2094,23 +2211,43 @@ class FastRenderer:
     def _clear_batch_session_caches(self):
         """清空批量导出会话缓存。"""
         with self._batch_raw_image_lock:
-            self._batch_raw_image_cache.clear()
+            self._clear_budgeted_cache_unlocked(
+                self._batch_raw_image_cache,
+                self._batch_raw_image_entry_bytes,
+                "_batch_raw_image_bytes",
+            )
         with self._batch_processed_image_lock:
-            self._batch_processed_image_cache.clear()
+            self._clear_budgeted_cache_unlocked(
+                self._batch_processed_image_cache,
+                self._batch_processed_image_entry_bytes,
+                "_batch_processed_image_bytes",
+            )
         with self._export_layer_surface_lock:
-            self._export_layer_surface_cache.clear()
+            self._clear_budgeted_cache_unlocked(
+                self._export_layer_surface_cache,
+                self._export_layer_surface_entry_bytes,
+                "_export_layer_surface_bytes",
+            )
 
     def _invalidate_batch_session_caches_for_document(self, document):
         """清理指定文档的批量导出会话缓存。"""
         doc_prefix = f"{id(document)}:"
         with self._batch_raw_image_lock:
             keys_to_remove = [k for k in self._batch_raw_image_cache.keys() if str(k).startswith(doc_prefix)]
-            for k in keys_to_remove:
-                self._batch_raw_image_cache.pop(k, None)
+            self._remove_cache_keys_unlocked(
+                self._batch_raw_image_cache,
+                self._batch_raw_image_entry_bytes,
+                "_batch_raw_image_bytes",
+                keys_to_remove,
+            )
         with self._batch_processed_image_lock:
             keys_to_remove = [k for k in self._batch_processed_image_cache.keys() if str(k).startswith(doc_prefix)]
-            for k in keys_to_remove:
-                self._batch_processed_image_cache.pop(k, None)
+            self._remove_cache_keys_unlocked(
+                self._batch_processed_image_cache,
+                self._batch_processed_image_entry_bytes,
+                "_batch_processed_image_bytes",
+                keys_to_remove,
+            )
 
     def _get_batch_processed_cache_key(self, document, layer, image_path: str) -> str:
         parts = [
@@ -2562,20 +2699,30 @@ class FastRenderer:
                                 source_image = LayerImageLoader.load_image_from_path(current_image_path)
                                 if source_image is not None:
                                     with self._batch_raw_image_lock:
-                                        self._batch_raw_image_cache[raw_cache_key] = source_image.copy()
-                                        self._batch_raw_image_cache.move_to_end(raw_cache_key)
-                                        while len(self._batch_raw_image_cache) > self._max_batch_raw_entries:
-                                            self._batch_raw_image_cache.popitem(last=False)
+                                        self._set_cache_value_unlocked(
+                                            self._batch_raw_image_cache,
+                                            self._batch_raw_image_entry_bytes,
+                                            "_batch_raw_image_bytes",
+                                            raw_cache_key,
+                                            source_image.copy(),
+                                            self._max_batch_raw_entries,
+                                            self._max_batch_raw_bytes,
+                                        )
 
                             if source_image is not None:
                                 processed = layer._process_image(source_image.copy())
                                 if processed is not None:
                                     if processed_cache_key is not None:
                                         with self._batch_processed_image_lock:
-                                            self._batch_processed_image_cache[processed_cache_key] = processed.copy()
-                                            self._batch_processed_image_cache.move_to_end(processed_cache_key)
-                                            while len(self._batch_processed_image_cache) > self._max_batch_processed_entries:
-                                                self._batch_processed_image_cache.popitem(last=False)
+                                            self._set_cache_value_unlocked(
+                                                self._batch_processed_image_cache,
+                                                self._batch_processed_image_entry_bytes,
+                                                "_batch_processed_image_bytes",
+                                                processed_cache_key,
+                                                processed.copy(),
+                                                self._max_batch_processed_entries,
+                                                self._max_batch_processed_bytes,
+                                            )
                                     _emit_layer_source_trace(
                                         f"任务={export_trace_task} 图层={getattr(layer, 'name', '')} "
                                         f"实际图源={current_image_path} 图源模式=current_image_path "
@@ -2589,10 +2736,15 @@ class FastRenderer:
                             if image:
                                 if processed_cache_key is not None:
                                     with self._batch_processed_image_lock:
-                                        self._batch_processed_image_cache[processed_cache_key] = image.copy()
-                                        self._batch_processed_image_cache.move_to_end(processed_cache_key)
-                                        while len(self._batch_processed_image_cache) > self._max_batch_processed_entries:
-                                            self._batch_processed_image_cache.popitem(last=False)
+                                        self._set_cache_value_unlocked(
+                                            self._batch_processed_image_cache,
+                                            self._batch_processed_image_entry_bytes,
+                                            "_batch_processed_image_bytes",
+                                            processed_cache_key,
+                                            image.copy(),
+                                            self._max_batch_processed_entries,
+                                            self._max_batch_processed_bytes,
+                                        )
                                 _emit_layer_source_trace(
                                     f"任务={export_trace_task} 图层={getattr(layer, 'name', '')} "
                                     f"实际图源={current_image_path} 图源模式=current_image_path "
@@ -2605,10 +2757,15 @@ class FastRenderer:
                         image = LayerImageLoader.load_image_from_path(current_image_path)
                         if image is not None and processed_cache_key is not None:
                             with self._batch_processed_image_lock:
-                                self._batch_processed_image_cache[processed_cache_key] = image.copy()
-                                self._batch_processed_image_cache.move_to_end(processed_cache_key)
-                                while len(self._batch_processed_image_cache) > self._max_batch_processed_entries:
-                                    self._batch_processed_image_cache.popitem(last=False)
+                                self._set_cache_value_unlocked(
+                                    self._batch_processed_image_cache,
+                                    self._batch_processed_image_entry_bytes,
+                                    "_batch_processed_image_bytes",
+                                    processed_cache_key,
+                                    image.copy(),
+                                    self._max_batch_processed_entries,
+                                    self._max_batch_processed_bytes,
+                                )
                         if image is not None:
                             _emit_layer_source_trace(
                                 f"任务={export_trace_task} 图层={getattr(layer, 'name', '')} "
