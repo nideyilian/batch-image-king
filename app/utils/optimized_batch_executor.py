@@ -242,6 +242,8 @@ class OptimizedBatchExecutor:
             'worker_document_seed_available': 0,
             'worker_document_create_failures': 0,
             'shared_document_render_count': 0,
+            'worker_renderer_count': 0,
+            'worker_renderer_cache_clear_events': 0,
             'main_document_mutation_warnings': 0,
             'preload_unique_images': 0,
             'preload_loaded_images': 0,
@@ -266,6 +268,9 @@ class OptimizedBatchExecutor:
         self._render_cache = {}  # 
         self.max_cache_size = 100  # 
         self._thread_local = threading.local()
+        self._worker_renderers_lock = threading.Lock()
+        self._worker_renderers = []
+        self._worker_renderer_ids = set()
         self._worker_document_seed = None
         self._plan_mutable_doc_indices = set()
         self._prepare_worker_document_seed()
@@ -406,9 +411,7 @@ class OptimizedBatchExecutor:
         except Exception:
             pass
         try:
-            renderer = getattr(self._thread_local, 'fast_renderer', None)
-            if renderer is not None and hasattr(renderer, 'clear_cache'):
-                renderer.clear_cache()
+            if self._clear_registered_worker_renderer_caches() > 0:
                 cleared = True
         except Exception:
             pass
@@ -419,6 +422,63 @@ class OptimizedBatchExecutor:
         if cleared:
             with self._lock:
                 self.stats['memory_cache_clear_events'] += 1
+
+    def _register_worker_renderer(self, renderer):
+        """Track every worker FastRenderer so memory pressure can clear all of them."""
+        if renderer is None:
+            return renderer
+        try:
+            renderer_id = id(renderer)
+            with self._worker_renderers_lock:
+                if renderer_id not in self._worker_renderer_ids:
+                    self._worker_renderer_ids.add(renderer_id)
+                    self._worker_renderers.append(renderer)
+                    renderer_count = len(self._worker_renderers)
+                else:
+                    renderer_count = len(self._worker_renderers)
+            with self._lock:
+                self.stats['worker_renderer_count'] = int(renderer_count)
+        except Exception:
+            pass
+        return renderer
+
+    def _clear_registered_worker_renderer_caches(self, count_event: bool = True) -> int:
+        """Clear FastRenderer caches held by all worker threads."""
+        try:
+            with self._worker_renderers_lock:
+                renderers = list(self._worker_renderers)
+        except Exception:
+            renderers = []
+
+        cleared_count = 0
+        for renderer in renderers:
+            if renderer is None:
+                continue
+            try:
+                if hasattr(renderer, 'clear_cache'):
+                    renderer.clear_cache()
+                    cleared_count += 1
+            except Exception:
+                pass
+
+        if cleared_count > 0 and count_event:
+            with self._lock:
+                self.stats['worker_renderer_cache_clear_events'] += 1
+                self.stats['worker_renderer_count'] = len(renderers)
+        return cleared_count
+
+    def _release_registered_worker_renderers(self):
+        """Clear and release worker renderer references after the export finishes."""
+        try:
+            self._clear_registered_worker_renderer_caches(count_event=False)
+        except Exception:
+            pass
+        try:
+            with self._worker_renderers_lock:
+                self._worker_renderers.clear()
+                self._worker_renderer_ids.clear()
+        except Exception:
+            pass
 
     def _enforce_memory_budget(
         self,
@@ -748,16 +808,16 @@ class OptimizedBatchExecutor:
         """获取线程独立 FastRenderer，避免高并发导出时状态串扰。"""
         cached_renderer = getattr(self._thread_local, 'fast_renderer', None)
         if cached_renderer is not None:
-            return cached_renderer
+            return self._register_worker_renderer(cached_renderer)
         try:
             from app.utils.fast_renderer import FastRenderer
             renderer = FastRenderer()
             self._thread_local.fast_renderer = renderer
-            return renderer
+            return self._register_worker_renderer(renderer)
         except Exception:
             # 保底回退：若实例化失败，继续使用全局渲染器
             from app.utils.fast_renderer import get_global_fast_renderer
-            return get_global_fast_renderer()
+            return self._register_worker_renderer(get_global_fast_renderer())
     
     def execute_plan(self, plan: PrecomputedExportPlan, 
                     progress_callback: Optional[Callable[[int], None]] = None,
@@ -2671,6 +2731,7 @@ class OptimizedBatchExecutor:
         try:
             # 
             self._render_cache.clear()
+            self._release_registered_worker_renderers()
             
             # 
             gc.collect()
@@ -3249,6 +3310,8 @@ class OptimizedBatchExportManager:
                     'worker_document_seed_available': int(stats.get('worker_document_seed_available', 0) or 0),
                     'worker_document_create_failures': int(stats.get('worker_document_create_failures', 0) or 0),
                     'shared_document_render_count': int(stats.get('shared_document_render_count', 0) or 0),
+                    'worker_renderer_count': int(stats.get('worker_renderer_count', 0) or 0),
+                    'worker_renderer_cache_clear_events': int(stats.get('worker_renderer_cache_clear_events', 0) or 0),
                     'main_document_mutation_warnings': int(stats.get('main_document_mutation_warnings', 0) or 0),
                     'snapshot_warning': str(getattr(document, '_last_export_snapshot_warning', '') or ''),
                     'preload_unique_images': int(stats.get('preload_unique_images', 0) or 0),
@@ -3330,6 +3393,8 @@ class OptimizedBatchExportManager:
                             "worker_seed_available": int(stats.get('worker_document_seed_available', 0) or 0),
                             "worker_create_failures": int(stats.get('worker_document_create_failures', 0) or 0),
                             "shared_document_render_count": int(stats.get('shared_document_render_count', 0) or 0),
+                            "worker_renderer_count": int(stats.get('worker_renderer_count', 0) or 0),
+                            "worker_renderer_cache_clear_events": int(stats.get('worker_renderer_cache_clear_events', 0) or 0),
                             "main_document_mutation_warnings": int(stats.get('main_document_mutation_warnings', 0) or 0),
                             "warning": str(getattr(document, '_last_export_snapshot_warning', '') or ''),
                         },
