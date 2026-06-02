@@ -321,7 +321,7 @@ class BatchExportDialog(QDialog):
         self.date_format.setEnabled(True)
         date_layout.addWidget(self.date_format)
 
-        self.use_date.stateChanged.connect(lambda state: self.date_format.setEnabled(state == Qt.Checked))
+        self.use_date.toggled.connect(self.date_format.setEnabled)
 
         name_layout.addLayout(date_layout)
 
@@ -341,10 +341,10 @@ class BatchExportDialog(QDialog):
 
         self.layer_combo = QComboBox()
         self.update_layer_list()
-        self.layer_combo.setEnabled(True)
+        self.layer_combo.setEnabled(self.use_layer_name.isChecked())
         layer_layout.addWidget(self.layer_combo)
 
-        self.use_layer_name.stateChanged.connect(lambda state: self.layer_combo.setEnabled(state == Qt.Checked))
+        self.use_layer_name.toggled.connect(self.layer_combo.setEnabled)
 
         # 提示标签，解释图层文件名将使用实际随机选择的图像文件名
         layer_info_label = QLabel("导出时将使用实际随机选择的图像文件名，而不是固定的图层名称")
