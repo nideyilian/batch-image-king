@@ -4552,14 +4552,24 @@ class Document(QObject):
         try:
             total_combinations = 1
             visible_layers = 0
+            image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.webp'}
+            unique_caps = []
+            combination_limit_applied = False
+            export_settings = getattr(self, 'export_settings', {}) or {}
+            unique_use_enabled = bool(export_settings.get('unique_use_enabled', False))
+            try:
+                unique_use_layers = {int(idx) for idx in export_settings.get('unique_use_layers', [])}
+            except Exception:
+                unique_use_layers = set()
 
             from app.utils.layer_tree import is_layer_group, is_effectively_visible
-            for layer in self.layers:
+            for doc_layer_idx, layer in enumerate(self.layers):
                 if is_layer_group(layer) or not is_effectively_visible(layer, self.layers):
                     continue
 
                 visible_layers += 1
                 layer_combinations = 1
+                is_image_candidate_layer = False
 
                 # 检查是否是文字图层
                 from app.models.text_layer import TextLayer
@@ -4571,10 +4581,10 @@ class Document(QObject):
                         layer_combinations = 1
                 elif hasattr(layer, '_is_folder') and layer._is_folder:
                     # 文件夹图层：计算文件夹中的图片数量
+                    is_image_candidate_layer = True
                     if hasattr(layer, 'image_source') and layer.image_source:
                         try:
                             if os.path.isdir(layer.image_source):
-                                image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp']
                                 image_files = []
                                 for file in os.listdir(layer.image_source):
                                     ext = os.path.splitext(file)[1].lower()
@@ -4587,11 +4597,12 @@ class Document(QObject):
                 elif hasattr(layer, 'image_source') and layer.image_source:
                     # 检查是否是单个文件
                     if os.path.isfile(layer.image_source):
+                        is_image_candidate_layer = True
                         layer_combinations = 1
                     elif os.path.isdir(layer.image_source):
                         # 如果image_source是目录，按文件夹处理
+                        is_image_candidate_layer = True
                         try:
-                            image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp']
                             image_files = []
                             for file in os.listdir(layer.image_source):
                                 ext = os.path.splitext(file)[1].lower()
@@ -4608,11 +4619,15 @@ class Document(QObject):
 
                 print(f"图层 '{layer.name}': {layer_combinations} 种可能")
                 total_combinations *= layer_combinations
+                if unique_use_enabled and doc_layer_idx in unique_use_layers and is_image_candidate_layer:
+                    unique_caps.append(layer_combinations)
 
                 # 防止数值过大
                 if total_combinations > 1000000:  # 限制在100万以内
-                    print(f"组合数量过大，限制为1000000")
-                    return 1000000
+                    if not combination_limit_applied:
+                        print(f"组合数量过大，限制为1000000")
+                        combination_limit_applied = True
+                    total_combinations = 1000000
 
             # 如果没有可见图层，返回1
             if visible_layers == 0:
@@ -4620,6 +4635,11 @@ class Document(QObject):
                 return 1
 
             result = max(1, total_combinations)
+            if unique_use_enabled and unique_caps:
+                unique_cap = max(1, min(unique_caps))
+                if result > unique_cap:
+                    print(f"图像唯一使用限制生效，组合数量从 {result} 调整为 {unique_cap}")
+                    result = unique_cap
             print(f"计算得到的总组合数量: {result}")
             return result
 

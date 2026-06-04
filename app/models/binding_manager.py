@@ -42,7 +42,7 @@ except ImportError as e:
 
 class BindingGroup:
     """绑定组类"""
-    _supported_image_ext = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff')
+    _supported_image_ext = ('.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.webp')
     _folder_category_index_cache = {}  # key: abs_dir -> {'mtime_ns': int, 'files': [{'path': str, 'categories': [str]}]}
     _folder_category_index_dirty = False
     _folder_category_index_last_save_time = 0.0
@@ -2803,7 +2803,7 @@ class LayerBindingManager:
                 if layer.image_source and os.path.isdir(layer.image_source):
                     # 获取该图层文件夹中的所有文件
                     layer_files = []
-                    image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff']
+                    image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.webp']
 
                     try:
                         for file in os.listdir(layer.image_source):

@@ -1755,7 +1755,7 @@ class BatchExportPrecomputerV2:
         self._precompute_total_possible = None
         self._precompute_progress_last_time = 0.0
         self._was_canceled = False
-        self._supported_image_ext = ('.png', '.jpg', '.jpeg', '.bmp', '.gif')
+        self._supported_image_ext = ('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tif', '.tiff', '.webp')
         self._folder_index_cache = {}  # key: abs_dir -> {'mtime_ns': int, 'files': List[str]}
         self._folder_index_cache_dirty = False
         self._folder_index_last_save_time = 0.0
