@@ -200,6 +200,12 @@ def main() -> int:
     # 设置日志
     logger = setup_logging()
     logger.info("程序启动")
+    try:
+        from app.utils.crash_reporter import install_crash_reporter
+        crash_log_path = install_crash_reporter(logger=logger)
+        logger.info(f"Crash diagnostics enabled: {crash_log_path}")
+    except Exception as crash_reporter_error:
+        logger.warning(f"Crash diagnostics unavailable: {crash_reporter_error}")
 
     # 显示简洁的依赖检查信息
     show_dependency_status()
