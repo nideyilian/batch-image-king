@@ -191,6 +191,23 @@ class LayerPropertiesPanel(QWidget):
                 text-align: center;
                 font-weight: 600;
             }}
+            QPushButton[segmentButton="true"] {{
+                min-height: 26px;
+                padding: 3px 4px;
+                font-size: 12px;
+            }}
+            QPushButton[segmentButton="true"]:checked {{
+                background-color: {CursorDarkTheme.ACCENT_PRIMARY};
+                border-color: {CursorDarkTheme.ACCENT_HOVER};
+                color: #FFFFFF;
+                font-weight: 700;
+            }}
+            QLabel#propertySectionLabel {{
+                color: #8E95A3;
+                font-size: 11px;
+                font-weight: 700;
+                padding-top: 2px;
+            }}
             QFrame#propertyDivider {{
                 background-color: #34363A;
                 min-height: 1px;
@@ -214,6 +231,26 @@ class LayerPropertiesPanel(QWidget):
         divider.setObjectName("propertyDivider")
         divider.setFrameShape(QFrame.HLine)
         return divider
+
+    def _section_label(self, text):
+        label = QLabel(text)
+        label.setObjectName("propertySectionLabel")
+        return label
+
+    def _make_segment_button(self, text, checked=False):
+        button = QPushButton(text)
+        button.setCheckable(True)
+        button.setChecked(checked)
+        button.setProperty("segmentButton", True)
+        button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        return button
+
+    def _make_control_group(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        return widget, layout
 
     def _is_export_ui_frozen(self):
         """导出期间是否冻结属性面板更新（由导出设置控制）"""
@@ -545,18 +582,37 @@ class LayerPropertiesPanel(QWidget):
         self.scroll_layout.addWidget(self.basic_group)
         self._register_module_group("basic", "基本属性", self.basic_group)
 
-        # 形状设置（紧凑布局，减少占位）
-        self.shape_group = CollapsibleGroupBox("形状设置", collapsed=False)
+        # 形状（几何参数优先，减少默认认知负担）
+        self.shape_group = CollapsibleGroupBox("形状", collapsed=False)
         shape_layout = QVBoxLayout()
         shape_layout.setSpacing(6)
 
-        # 形状类型
+        # 形状类型：保留隐藏下拉框作为兼容层，用户入口改为分段按钮
         self.shape_type_combo = QComboBox()
         self.shape_type_combo.addItems(["矩形", "直角梯形", "圆形", "正五边形", "正六边形"])
         self.shape_type_combo.currentTextChanged.connect(self.update_shape_type)
-        shape_type_form = QFormLayout()
-        shape_type_form.addRow(self._label("形状类型:"), self.shape_type_combo)
-        shape_layout.addLayout(shape_type_form)
+        self.shape_type_combo.hide()
+
+        shape_segment_layout = QHBoxLayout()
+        shape_segment_layout.setSpacing(5)
+        self.shape_type_button_group = QButtonGroup(self)
+        self.shape_type_button_group.setExclusive(True)
+        self.shape_type_buttons = []
+        shape_button_specs = [
+            ("矩形", "矩形"),
+            ("梯形", "直角梯形"),
+            ("圆形", "圆形"),
+            ("五边", "正五边形"),
+            ("六边", "正六边形"),
+        ]
+        for text, shape_text in shape_button_specs:
+            button = self._make_segment_button(text, checked=(shape_text == "矩形"))
+            button.setProperty("shapeText", shape_text)
+            button.clicked.connect(lambda checked=False, value=shape_text: self.update_shape_type(value))
+            self.shape_type_button_group.addButton(button)
+            self.shape_type_buttons.append(button)
+            shape_segment_layout.addWidget(button)
+        shape_layout.addLayout(shape_segment_layout)
 
         # 形状参数 + 形状预览并排
         shape_main_row = QHBoxLayout()
@@ -613,24 +669,20 @@ class LayerPropertiesPanel(QWidget):
         shape_main_row.addWidget(preview_container, 0, Qt.AlignTop)
 
         shape_layout.addLayout(shape_main_row)
-        self.shape_group.add_content_layout(shape_layout)
-        self.scroll_layout.addWidget(self.shape_group)
-        self._register_module_group("shape", "形状设置", self.shape_group)
+        for row in range(self.shape_params_layout.rowCount()):
+            for role in (QFormLayout.LabelRole, QFormLayout.FieldRole):
+                item = self.shape_params_layout.itemAt(row, role)
+                if item and item.widget():
+                    item.widget().hide()
 
-        # 矢量与填充（折叠，减少面板高度）
-        self.appearance_group = CollapsibleGroupBox("矢量与填充（高级）", collapsed=False)
-        appearance_form = QFormLayout()
-
+        corner_form = QFormLayout()
         self.vector_corner_radius_spin = QSpinBox()
         self.vector_corner_radius_spin.setRange(0, 1000)
         self.vector_corner_radius_spin.valueChanged.connect(self.update_vector_corner_radius_all)
-        appearance_form.addRow(self._label("矢量圆角:"), self.vector_corner_radius_spin)
-
-        self.convert_to_path_btn = QPushButton("矩形转路径节点")
-        self.convert_to_path_btn.clicked.connect(self.convert_rect_to_path_nodes)
-        appearance_form.addRow("", self.convert_to_path_btn)
+        corner_form.addRow(self._label("统一圆角:"), self.vector_corner_radius_spin)
 
         vector_corner_layout = QHBoxLayout()
+        vector_corner_layout.setSpacing(5)
         self.vector_corner_tl_spin = QSpinBox()
         self.vector_corner_tl_spin.setRange(0, 1000)
         self.vector_corner_tl_spin.setPrefix("TL  ")
@@ -651,7 +703,117 @@ class LayerPropertiesPanel(QWidget):
         self.vector_corner_bl_spin.setPrefix("BL  ")
         self.vector_corner_bl_spin.valueChanged.connect(self.update_vector_corner_radii_detail)
         vector_corner_layout.addWidget(self.vector_corner_bl_spin)
-        appearance_form.addRow(self._label("四角圆角:"), vector_corner_layout)
+        corner_form.addRow(self._label("四角圆角:"), vector_corner_layout)
+
+        self.convert_to_path_btn = QPushButton("矩形转路径节点")
+        self.convert_to_path_btn.clicked.connect(self.convert_rect_to_path_nodes)
+        corner_form.addRow("", self.convert_to_path_btn)
+        shape_layout.addLayout(corner_form)
+
+        self.shape_group.add_content_layout(shape_layout)
+        self.scroll_layout.addWidget(self.shape_group)
+        self._register_module_group("shape", "形状", self.shape_group)
+
+        # 外观：填充模式与描边按开关渐进展开
+        self.appearance_group = CollapsibleGroupBox("外观", collapsed=False)
+        appearance_layout = QVBoxLayout()
+        appearance_layout.setSpacing(8)
+
+        appearance_layout.addWidget(self._section_label("填充"))
+        fill_mode_layout = QHBoxLayout()
+        fill_mode_layout.setSpacing(5)
+        self.fill_mode_button_group = QButtonGroup(self)
+        self.fill_mode_button_group.setExclusive(True)
+        self.fill_mode_buttons = []
+        for text, mode in [("无", "none"), ("纯色", "solid"), ("渐变", "gradient")]:
+            button = self._make_segment_button(text, checked=(mode == "none"))
+            button.setProperty("fillMode", mode)
+            button.clicked.connect(lambda checked=False, value=mode: self._set_fill_mode(value))
+            self.fill_mode_button_group.addButton(button)
+            self.fill_mode_buttons.append(button)
+            fill_mode_layout.addWidget(button)
+        appearance_layout.addLayout(fill_mode_layout)
+
+        self.fill_solid_enabled_checkbox = QCheckBox("启用纯色填充")
+        self.fill_solid_enabled_checkbox.clicked.connect(self.update_fill_solid_enabled)
+        self.fill_solid_enabled_checkbox.hide()
+
+        self.fill_solid_controls_widget, fill_solid_controls_layout = self._make_control_group()
+        fill_solid_form = QFormLayout()
+        self.fill_solid_color_btn = QPushButton("填充颜色")
+        self.fill_solid_color_btn.setObjectName("colorSwatchButton")
+        self.fill_solid_color_btn.setProperty("swatchLabel", "")
+        self.fill_solid_color_btn.clicked.connect(self.pick_fill_solid_color)
+        fill_solid_form.addRow(self._label("填充颜色:"), self.fill_solid_color_btn)
+        fill_solid_controls_layout.addLayout(fill_solid_form)
+        appearance_layout.addWidget(self.fill_solid_controls_widget)
+
+        self.fill_gradient_enabled_checkbox = QCheckBox("启用渐变填充")
+        self.fill_gradient_enabled_checkbox.clicked.connect(self.update_fill_gradient_enabled)
+        self.fill_gradient_enabled_checkbox.hide()
+
+        self.fill_gradient_controls_widget, fill_gradient_controls_layout = self._make_control_group()
+        gradient_color_layout = QHBoxLayout()
+        self.fill_gradient_start_btn = QPushButton("起点色")
+        self.fill_gradient_start_btn.setObjectName("colorSwatchButton")
+        self.fill_gradient_start_btn.setProperty("swatchLabel", "起点色")
+        self.fill_gradient_start_btn.clicked.connect(self.pick_gradient_start_color)
+        gradient_color_layout.addWidget(self.fill_gradient_start_btn)
+        self.fill_gradient_end_btn = QPushButton("终点色")
+        self.fill_gradient_end_btn.setObjectName("colorSwatchButton")
+        self.fill_gradient_end_btn.setProperty("swatchLabel", "终点色")
+        self.fill_gradient_end_btn.clicked.connect(self.pick_gradient_end_color)
+        gradient_color_layout.addWidget(self.fill_gradient_end_btn)
+        fill_gradient_form = QFormLayout()
+        fill_gradient_form.addRow(self._label("渐变颜色:"), gradient_color_layout)
+
+        self.fill_gradient_angle_spin = QDoubleSpinBox()
+        self.fill_gradient_angle_spin.setRange(0.0, 360.0)
+        self.fill_gradient_angle_spin.setDecimals(1)
+        self.fill_gradient_angle_spin.valueChanged.connect(self.update_fill_gradient_angle)
+        fill_gradient_form.addRow(self._label("渐变角度:"), self.fill_gradient_angle_spin)
+
+        self.fill_gradient_opacity_spin = QSpinBox()
+        self.fill_gradient_opacity_spin.setRange(0, 100)
+        self.fill_gradient_opacity_spin.valueChanged.connect(self.update_fill_gradient_opacity)
+        fill_gradient_form.addRow(self._label("渐变不透明:"), self.fill_gradient_opacity_spin)
+        fill_gradient_controls_layout.addLayout(fill_gradient_form)
+        appearance_layout.addWidget(self.fill_gradient_controls_widget)
+
+        appearance_layout.addWidget(self._divider())
+        appearance_layout.addWidget(self._section_label("描边"))
+
+        self.stroke_enabled_checkbox = QCheckBox("启用描边")
+        self.stroke_enabled_checkbox.clicked.connect(self.update_stroke_enabled)
+        appearance_layout.addWidget(self.stroke_enabled_checkbox)
+
+        self.stroke_controls_widget, stroke_controls_layout = self._make_control_group()
+
+        self.stroke_width_spin = QSpinBox()
+        self.stroke_width_spin.setRange(1, 200)
+        self.stroke_width_spin.valueChanged.connect(self.update_stroke_width)
+        stroke_width_layout = QHBoxLayout()
+        stroke_width_layout.setSpacing(8)
+        stroke_width_layout.addWidget(self.stroke_width_spin)
+
+        self.stroke_type_combo = QComboBox()
+        self.stroke_type_combo.addItems(["内描边", "居中描边", "外描边"])
+        self.stroke_type_combo.currentIndexChanged.connect(self.update_stroke_type)
+        stroke_width_layout.addWidget(self._label("描边对齐:"))
+        stroke_width_layout.addWidget(self.stroke_type_combo)
+        stroke_controls_form = QFormLayout()
+        stroke_controls_form.addRow(self._label("描边粗细:"), stroke_width_layout)
+
+        self.stroke_color_btn = QPushButton("描边颜色")
+        self.stroke_color_btn.setObjectName("colorSwatchButton")
+        self.stroke_color_btn.setProperty("swatchLabel", "")
+        self.stroke_color_btn.clicked.connect(self.pick_stroke_color)
+        stroke_controls_form.addRow(self._label("描边颜色:"), self.stroke_color_btn)
+        stroke_controls_layout.addLayout(stroke_controls_form)
+        appearance_layout.addWidget(self.stroke_controls_widget)
+
+        self.stroke_advanced_group = CollapsibleGroupBox("高级线条", collapsed=True)
+        stroke_advanced_form = QFormLayout()
 
         self.stroke_join_combo = QComboBox()
         self.stroke_join_combo.addItems(["斜接", "圆角", "斜切"])
@@ -665,7 +827,7 @@ class LayerPropertiesPanel(QWidget):
         self.stroke_cap_combo.currentTextChanged.connect(self.update_stroke_cap)
         stroke_line_layout.addWidget(self._label("描边端点:"))
         stroke_line_layout.addWidget(self.stroke_cap_combo)
-        appearance_form.addRow(self._label("描边连接:"), stroke_line_layout)
+        stroke_advanced_form.addRow(self._label("描边连接:"), stroke_line_layout)
 
         stroke_dash_layout = QHBoxLayout()
         self.stroke_dash_length_spin = QSpinBox()
@@ -680,75 +842,14 @@ class LayerPropertiesPanel(QWidget):
         self.stroke_dash_gap_spin.setToolTip("虚线间隔；连续实线时请设为 0")
         stroke_dash_layout.addWidget(self._label("间隔"))
         stroke_dash_layout.addWidget(self.stroke_dash_gap_spin)
-        appearance_form.addRow(self._label("虚线:"), stroke_dash_layout)
+        stroke_advanced_form.addRow(self._label("虚线:"), stroke_dash_layout)
+        self.stroke_advanced_group.add_content_layout(stroke_advanced_form)
+        appearance_layout.addWidget(self.stroke_advanced_group)
 
-        self.stroke_enabled_checkbox = QCheckBox("启用描边")
-        self.stroke_enabled_checkbox.clicked.connect(self.update_stroke_enabled)
-        appearance_form.addRow("", self.stroke_enabled_checkbox)
-
-        self.stroke_width_spin = QSpinBox()
-        self.stroke_width_spin.setRange(1, 200)
-        self.stroke_width_spin.valueChanged.connect(self.update_stroke_width)
-        stroke_width_layout = QHBoxLayout()
-        stroke_width_layout.setSpacing(8)
-        stroke_width_layout.addWidget(self.stroke_width_spin)
-
-        self.stroke_type_combo = QComboBox()
-        self.stroke_type_combo.addItems(["内描边", "居中描边", "外描边"])
-        self.stroke_type_combo.currentIndexChanged.connect(self.update_stroke_type)
-        stroke_width_layout.addWidget(self._label("描边对齐:"))
-        stroke_width_layout.addWidget(self.stroke_type_combo)
-        appearance_form.addRow(self._label("描边粗细:"), stroke_width_layout)
-
-        self.stroke_color_btn = QPushButton("描边颜色")
-        self.stroke_color_btn.setObjectName("colorSwatchButton")
-        self.stroke_color_btn.setProperty("swatchLabel", "")
-        self.stroke_color_btn.clicked.connect(self.pick_stroke_color)
-        appearance_form.addRow(self._label("描边颜色:"), self.stroke_color_btn)
-        appearance_form.addRow("", self._divider())
-
-        self.fill_solid_enabled_checkbox = QCheckBox("启用纯色填充")
-        self.fill_solid_enabled_checkbox.clicked.connect(self.update_fill_solid_enabled)
-        appearance_form.addRow("", self.fill_solid_enabled_checkbox)
-
-        self.fill_solid_color_btn = QPushButton("填充颜色")
-        self.fill_solid_color_btn.setObjectName("colorSwatchButton")
-        self.fill_solid_color_btn.setProperty("swatchLabel", "")
-        self.fill_solid_color_btn.clicked.connect(self.pick_fill_solid_color)
-        appearance_form.addRow(self._label("填充颜色:"), self.fill_solid_color_btn)
-        appearance_form.addRow("", self._divider())
-
-        self.fill_gradient_enabled_checkbox = QCheckBox("启用渐变填充")
-        self.fill_gradient_enabled_checkbox.clicked.connect(self.update_fill_gradient_enabled)
-        appearance_form.addRow("", self.fill_gradient_enabled_checkbox)
-
-        gradient_color_layout = QHBoxLayout()
-        self.fill_gradient_start_btn = QPushButton("起点色")
-        self.fill_gradient_start_btn.setObjectName("colorSwatchButton")
-        self.fill_gradient_start_btn.setProperty("swatchLabel", "起点色")
-        self.fill_gradient_start_btn.clicked.connect(self.pick_gradient_start_color)
-        gradient_color_layout.addWidget(self.fill_gradient_start_btn)
-        self.fill_gradient_end_btn = QPushButton("终点色")
-        self.fill_gradient_end_btn.setObjectName("colorSwatchButton")
-        self.fill_gradient_end_btn.setProperty("swatchLabel", "终点色")
-        self.fill_gradient_end_btn.clicked.connect(self.pick_gradient_end_color)
-        gradient_color_layout.addWidget(self.fill_gradient_end_btn)
-        appearance_form.addRow(self._label("渐变颜色:"), gradient_color_layout)
-
-        self.fill_gradient_angle_spin = QDoubleSpinBox()
-        self.fill_gradient_angle_spin.setRange(0.0, 360.0)
-        self.fill_gradient_angle_spin.setDecimals(1)
-        self.fill_gradient_angle_spin.valueChanged.connect(self.update_fill_gradient_angle)
-        appearance_form.addRow(self._label("渐变角度:"), self.fill_gradient_angle_spin)
-
-        self.fill_gradient_opacity_spin = QSpinBox()
-        self.fill_gradient_opacity_spin.setRange(0, 100)
-        self.fill_gradient_opacity_spin.valueChanged.connect(self.update_fill_gradient_opacity)
-        appearance_form.addRow(self._label("渐变不透明:"), self.fill_gradient_opacity_spin)
-
-        self.appearance_group.add_content_layout(appearance_form)
+        self.appearance_group.add_content_layout(appearance_layout)
         self.scroll_layout.addWidget(self.appearance_group)
-        self._register_module_group("appearance", "矢量与填充（高级）", self.appearance_group)
+        self._register_module_group("appearance", "外观", self.appearance_group)
+        self._sync_appearance_visibility()
 
         # 2. 图像源设置组 (默认展开)
         self.source_group = CollapsibleGroupBox("图像源设置", collapsed=False)
@@ -1490,6 +1591,9 @@ class LayerPropertiesPanel(QWidget):
             shape_enabled = enabled and not is_locked
             if hasattr(self, 'shape_type_combo'):
                 self.shape_type_combo.setEnabled(shape_enabled)
+            if hasattr(self, 'shape_type_buttons'):
+                for button in self.shape_type_buttons:
+                    button.setEnabled(shape_enabled)
             if hasattr(self, 'shape_params_widget'):
                 self.shape_params_widget.setEnabled(shape_enabled)
             if hasattr(self, 'vector_corner_radius_spin'):
@@ -1522,6 +1626,9 @@ class LayerPropertiesPanel(QWidget):
                 self.stroke_color_btn.setEnabled(shape_enabled)
             if hasattr(self, 'fill_solid_enabled_checkbox'):
                 self.fill_solid_enabled_checkbox.setEnabled(shape_enabled)
+            if hasattr(self, 'fill_mode_buttons'):
+                for button in self.fill_mode_buttons:
+                    button.setEnabled(shape_enabled)
             if hasattr(self, 'fill_solid_color_btn'):
                 self.fill_solid_color_btn.setEnabled(shape_enabled)
             if hasattr(self, 'fill_gradient_enabled_checkbox'):
@@ -1800,6 +1907,7 @@ class LayerPropertiesPanel(QWidget):
             }
             shape_type_text = shape_type_map.get(shape_type, "矩形")
             self.shape_type_combo.setCurrentText(shape_type_text)
+            self._sync_shape_segment_buttons(shape_type_text)
 
             # 更新形状参数控件的可见性
             print(f"准备更新形状参数可见性: shape_type={shape_type}")
@@ -1860,6 +1968,7 @@ class LayerPropertiesPanel(QWidget):
             self.fill_gradient_enabled_checkbox.setChecked(bool(getattr(layer, 'gradient_overlay_enabled', False)))
             self.fill_gradient_angle_spin.setValue(float(getattr(layer, 'gradient_overlay_angle', 90.0)))
             self.fill_gradient_opacity_spin.setValue(int(float(getattr(layer, 'gradient_overlay_opacity', 1.0)) * 100))
+            self._sync_appearance_visibility()
 
             # 更新形状预览
             try:
@@ -3108,6 +3217,7 @@ class LayerPropertiesPanel(QWidget):
                 }
                 shape_type_text = shape_type_map.get(shape_type_value, "矩形")
                 self.shape_type_combo.setCurrentText(shape_type_text)
+                self._sync_shape_segment_buttons(shape_type_text)
 
                 self.update_shape_params_visibility(shape_type_value)
 
@@ -3156,6 +3266,9 @@ class LayerPropertiesPanel(QWidget):
         # 形状控件
         if hasattr(self, 'shape_type_combo'):
             self.shape_type_combo.blockSignals(block)
+        if hasattr(self, 'shape_type_buttons'):
+            for button in self.shape_type_buttons:
+                button.blockSignals(block)
         if hasattr(self, 'trapezoid_top_spin'):
             self.trapezoid_top_spin.blockSignals(block)
         if hasattr(self, 'trapezoid_bottom_spin'):
@@ -3194,6 +3307,9 @@ class LayerPropertiesPanel(QWidget):
             self.fill_solid_enabled_checkbox.blockSignals(block)
         if hasattr(self, 'fill_gradient_enabled_checkbox'):
             self.fill_gradient_enabled_checkbox.blockSignals(block)
+        if hasattr(self, 'fill_mode_buttons'):
+            for button in self.fill_mode_buttons:
+                button.blockSignals(block)
         if hasattr(self, 'fill_gradient_angle_spin'):
             self.fill_gradient_angle_spin.blockSignals(block)
         if hasattr(self, 'fill_gradient_opacity_spin'):
@@ -3653,9 +3769,97 @@ class LayerPropertiesPanel(QWidget):
             # 触发文档变更
             self.document.document_changed.emit()
 
+    def _sync_shape_segment_buttons(self, shape_type_text):
+        """同步形状分段按钮状态，保留隐藏下拉框兼容旧逻辑。"""
+        if not hasattr(self, "shape_type_buttons"):
+            return
+        text_map = {
+            "矩形": "矩形",
+            "直角梯形": "梯形",
+            "圆形": "圆形",
+            "正五边形": "五边",
+            "正六边形": "六边",
+        }
+        visible_text = text_map.get(shape_type_text, "矩形")
+        for button in self.shape_type_buttons:
+            button.blockSignals(True)
+            try:
+                button.setChecked(button.text() == visible_text)
+            finally:
+                button.blockSignals(False)
+
+    def _current_fill_mode(self):
+        if getattr(self, "fill_gradient_enabled_checkbox", None) and self.fill_gradient_enabled_checkbox.isChecked():
+            return "gradient"
+        if getattr(self, "fill_solid_enabled_checkbox", None) and self.fill_solid_enabled_checkbox.isChecked():
+            return "solid"
+        return "none"
+
+    def _set_fill_mode(self, mode, update_layer=True):
+        """切换填充模式，并保持旧复选框与新分段按钮同步。"""
+        if mode not in {"none", "solid", "gradient"}:
+            mode = "none"
+
+        solid_enabled = mode == "solid"
+        gradient_enabled = mode == "gradient"
+
+        for button in getattr(self, "fill_mode_buttons", []):
+            button.blockSignals(True)
+            try:
+                button.setChecked(button.property("fillMode") == mode)
+            finally:
+                button.blockSignals(False)
+
+        self._block_all_signals(True)
+        try:
+            if hasattr(self, "fill_solid_enabled_checkbox"):
+                self.fill_solid_enabled_checkbox.setChecked(solid_enabled)
+            if hasattr(self, "fill_gradient_enabled_checkbox"):
+                self.fill_gradient_enabled_checkbox.setChecked(gradient_enabled)
+        finally:
+            self._block_all_signals(False)
+
+        if update_layer and self.current_layer and not self.current_layer.locked:
+            self.current_layer.color_overlay_enabled = solid_enabled
+            self.current_layer.gradient_overlay_enabled = gradient_enabled
+            self._emit_document_change(throttled=True, fields=["fill_mode"], reason="fill_mode")
+            self._save_state_deferred("切换填充模式")
+
+        self._sync_appearance_visibility()
+
+    def _sync_appearance_visibility(self):
+        """根据填充/描边开关收起无关控件。"""
+        mode = self._current_fill_mode()
+        for button in getattr(self, "fill_mode_buttons", []):
+            button.blockSignals(True)
+            try:
+                button.setChecked(button.property("fillMode") == mode)
+            finally:
+                button.blockSignals(False)
+
+        if hasattr(self, "fill_solid_controls_widget"):
+            self.fill_solid_controls_widget.setVisible(mode == "solid")
+        if hasattr(self, "fill_gradient_controls_widget"):
+            self.fill_gradient_controls_widget.setVisible(mode == "gradient")
+
+        stroke_enabled = bool(
+            hasattr(self, "stroke_enabled_checkbox") and self.stroke_enabled_checkbox.isChecked()
+        )
+        if hasattr(self, "stroke_controls_widget"):
+            self.stroke_controls_widget.setVisible(stroke_enabled)
+        if hasattr(self, "stroke_advanced_group"):
+            self.stroke_advanced_group.setVisible(stroke_enabled)
+
     def update_shape_type(self, shape_type_text):
         """更新形状类型"""
         if not self.current_layer or self.current_layer.locked:
+            if hasattr(self, "shape_type_combo"):
+                self.shape_type_combo.blockSignals(True)
+                try:
+                    self.shape_type_combo.setCurrentText(shape_type_text)
+                finally:
+                    self.shape_type_combo.blockSignals(False)
+            self._sync_shape_segment_buttons(shape_type_text)
             return
 
         safe_print(f"更新形状类型: {shape_type_text}")
@@ -3679,6 +3883,13 @@ class LayerPropertiesPanel(QWidget):
 
         # 更新图层形状类型
         self.current_layer.shape_type = shape_type_value
+        if hasattr(self, "shape_type_combo"):
+            self.shape_type_combo.blockSignals(True)
+            try:
+                self.shape_type_combo.setCurrentText(shape_type_text)
+            finally:
+                self.shape_type_combo.blockSignals(False)
+        self._sync_shape_segment_buttons(shape_type_text)
 
         # 更新形状参数控件的可见性
         print(f"形状类型变更: {shape_type_value.value}")
@@ -3847,10 +4058,12 @@ class LayerPropertiesPanel(QWidget):
                 allow_locked=False,
                 clear_cache=True,
             )
+            self._sync_appearance_visibility()
             return
         if self.current_layer.locked:
             return
         self.current_layer.stroke_enabled = bool(enabled)
+        self._sync_appearance_visibility()
         self._emit_document_change(throttled=True, fields=["stroke_enabled"], reason="stroke_enabled")
         self._save_state_deferred("切换描边")
 
@@ -3899,7 +4112,14 @@ class LayerPropertiesPanel(QWidget):
             return
         rgba = (color.red(), color.green(), color.blue(), color.alpha())
         self.current_layer.stroke_color = rgba
+        self.current_layer.stroke_enabled = True
         self._set_button_color(self.stroke_color_btn, rgba)
+        self._block_all_signals(True)
+        try:
+            self.stroke_enabled_checkbox.setChecked(True)
+        finally:
+            self._block_all_signals(False)
+        self._sync_appearance_visibility()
         self._emit_document_change(throttled=False, fields=["stroke_color"], reason="stroke_color")
         self._save_state_deferred("修改描边颜色")
 
@@ -3907,6 +4127,14 @@ class LayerPropertiesPanel(QWidget):
         if not self.current_layer or self.current_layer.locked:
             return
         self.current_layer.color_overlay_enabled = bool(enabled)
+        if enabled:
+            self.current_layer.gradient_overlay_enabled = False
+            self._block_all_signals(True)
+            try:
+                self.fill_gradient_enabled_checkbox.setChecked(False)
+            finally:
+                self._block_all_signals(False)
+        self._sync_appearance_visibility()
         self._emit_document_change(throttled=True, fields=["fill_solid_enabled"], reason="fill_solid_enabled")
         self._save_state_deferred("切换纯色填充")
 
@@ -3920,12 +4148,15 @@ class LayerPropertiesPanel(QWidget):
         rgba = (color.red(), color.green(), color.blue(), color.alpha())
         self.current_layer.color_overlay_color = rgba
         self.current_layer.color_overlay_enabled = True
+        self.current_layer.gradient_overlay_enabled = False
         self._set_button_color(self.fill_solid_color_btn, rgba)
         self._block_all_signals(True)
         try:
             self.fill_solid_enabled_checkbox.setChecked(True)
+            self.fill_gradient_enabled_checkbox.setChecked(False)
         finally:
             self._block_all_signals(False)
+        self._sync_appearance_visibility()
         self._emit_document_change(throttled=False, fields=["fill_solid_color"], reason="fill_solid_color")
         self._save_state_deferred("修改填充颜色")
 
@@ -3933,6 +4164,14 @@ class LayerPropertiesPanel(QWidget):
         if not self.current_layer or self.current_layer.locked:
             return
         self.current_layer.gradient_overlay_enabled = bool(enabled)
+        if enabled:
+            self.current_layer.color_overlay_enabled = False
+            self._block_all_signals(True)
+            try:
+                self.fill_solid_enabled_checkbox.setChecked(False)
+            finally:
+                self._block_all_signals(False)
+        self._sync_appearance_visibility()
         self._emit_document_change(throttled=True, fields=["fill_gradient_enabled"], reason="fill_gradient_enabled")
         self._save_state_deferred("切换渐变填充")
 
@@ -3955,12 +4194,15 @@ class LayerPropertiesPanel(QWidget):
         colors[idx] = (color.red(), color.green(), color.blue(), color.alpha())
         self.current_layer.gradient_overlay_colors = colors
         self.current_layer.gradient_overlay_enabled = True
+        self.current_layer.color_overlay_enabled = False
         self._set_button_color(btn, colors[idx])
         self._block_all_signals(True)
         try:
             self.fill_gradient_enabled_checkbox.setChecked(True)
+            self.fill_solid_enabled_checkbox.setChecked(False)
         finally:
             self._block_all_signals(False)
+        self._sync_appearance_visibility()
         self._emit_document_change(throttled=False, fields=["fill_gradient_colors"], reason="fill_gradient_colors")
         self._save_state_deferred("修改渐变颜色")
 
