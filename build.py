@@ -40,6 +40,8 @@ def build():
         # 隐藏导入
         '--hidden-import=PySide6',
         '--hidden-import=PIL',
+        '--hidden-import=pyvips',
+        '--hidden-import=app.workers.export_worker',
         '--hidden-import=cv2',
         '--hidden-import=numpy',
         '--hidden-import=scipy',

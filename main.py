@@ -9,6 +9,10 @@ from typing import Optional
 from app.utils.stream_redirector import setup_streams
 setup_streams()
 
+if len(sys.argv) >= 2 and sys.argv[1] == "--export-worker":
+    from app.workers.export_worker import main as export_worker_main
+    sys.exit(export_worker_main(sys.argv[2:]))
+
 def _safe_print(message):
     """安全打印，避免在GBK控制台因emoji导致启动中断"""
     try:

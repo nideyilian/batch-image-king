@@ -31,7 +31,7 @@ class ExportJob:
     max_file_size_kb: int = 0
     jpeg_quality: int = 0
     png_compress_level: int = -1
-    backend: str = "pillow"  # pillow | pyvips | auto
+    backend: str = "auto"  # auto | pillow | pyvips
     allow_lossy_size_reduction: bool = False
 
 
@@ -128,8 +128,14 @@ class ExportService:
         image.save(file_path)
 
     def _should_try_vips(self, job: ExportJob, file_format: str) -> bool:
-        backend = str(job.backend or "pillow").lower()
+        backend = str(job.backend or "auto").lower()
+        # "pillow" is the legacy persisted default. Treat it as auto so old
+        # project settings can benefit from pyvips while retaining fallback.
+        if backend == "pillow" and os.environ.get("BTPW_FORCE_PILLOW_EXPORT", "0") != "1":
+            backend = "auto"
         if backend not in ("auto", "pyvips", "vips"):
+            return False
+        if os.environ.get("BTPW_DISABLE_VIPS", "0") == "1":
             return False
         if file_format not in ("jpg", "jpeg", "png", "webp"):
             return False

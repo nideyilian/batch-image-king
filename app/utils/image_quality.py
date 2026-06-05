@@ -35,7 +35,7 @@ class ImageQualityManager:
                     file_path=file_path,
                     file_format=format_hint or "",
                     quality_profile="quality",
-                    backend="pillow",
+                    backend="auto",
                     max_file_size_kb=0,
                     allow_lossy_size_reduction=False,
                 )

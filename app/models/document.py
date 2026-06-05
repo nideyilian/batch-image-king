@@ -1404,7 +1404,7 @@ class Document(QObject):
             'io_profile': 'balanced',  # speed | balanced | size
             'export_quality_profile': 'quality',  # quality | balanced | speed | size
             'allow_lossy_size_reduction': False,
-            'export_backend': 'pillow',
+            'export_backend': 'auto',
             'png_compress_level_override': -1,  # -1 表示自动
             'jpeg_quality_override': 0,  # 0 表示自动
             'auto_runtime_tuning_enabled': True,
@@ -1413,6 +1413,10 @@ class Document(QObject):
             'batch_preload_enabled': True,
             'batch_preload_max_images': 120,
             'batch_preload_memory_mb': 384,
+            # 大批量导出隔离：主进程只负责 UI，导出放到独立 Worker 进程
+            'export_external_worker_enabled': True,
+            'export_worker_min_count': 500,
+            'export_worker_resume_enabled': True,
             # 批量导出安全保护：防止过多任务导致卡死/闪退
             'export_safety_enabled': True,
             'export_safety_memory_guard_ratio': 0.40,
@@ -3313,6 +3317,53 @@ class Document(QObject):
             self._last_export_error = "导出已取消"
             self._is_batch_export_running = False
             return False
+        try:
+            from app.utils.export_worker_client import export_with_worker, should_use_export_worker
+            if should_use_export_worker(self, int(count or 0)):
+                def worker_progress_wrapper(current_count):
+                    if hasattr(self, 'export_progress_updated'):
+                        self.export_progress_updated.emit(int(current_count or 0))
+
+                def worker_file_completed_wrapper(message):
+                    if hasattr(self, 'file_exported'):
+                        self.file_exported.emit(str(message or ""))
+
+                def worker_stage_wrapper(stage_name):
+                    if hasattr(self, 'export_stage_updated'):
+                        self.export_stage_updated.emit(str(stage_name or ""))
+
+                worker_result = export_with_worker(
+                    self,
+                    directory=directory,
+                    count=int(count or 0),
+                    filename_template=filename_template or "image_{number:04d}",
+                    file_format=file_format,
+                    start_index=start_index,
+                    traverse_mode=traverse_mode,
+                    avoid_duplicates=use_smart_sampling,
+                    progress_callback=worker_progress_wrapper,
+                    file_completed_callback=worker_file_completed_wrapper,
+                    stage_callback=worker_stage_wrapper,
+                    cancel_callback=cancel_callback,
+                )
+                if worker_result.attempted:
+                    self._is_batch_export_running = False
+                    if hasattr(self, 'export_stage_updated'):
+                        self.export_stage_updated.emit("收尾清理")
+                    try:
+                        self._cleanup_layers_after_export()
+                    except Exception:
+                        pass
+                    if worker_result.success:
+                        if hasattr(self, 'export_stage_updated'):
+                            self.export_stage_updated.emit("导出完成")
+                        return True
+                    self._last_export_error = worker_result.error or "独立导出进程失败"
+                    if hasattr(self, 'export_stage_updated'):
+                        self.export_stage_updated.emit("导出失败")
+                    return False
+        except Exception as worker_launch_error:
+            print(f"[批量导出] 独立导出进程不可用，回退内部导出: {worker_launch_error}")
         if hasattr(self, 'export_stage_updated'):
             self.export_stage_updated.emit("准备导出")
         print("=" * 80)
