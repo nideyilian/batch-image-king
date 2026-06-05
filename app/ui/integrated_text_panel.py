@@ -584,6 +584,101 @@ class IntegratedTextPanel(QWidget):
 
         parent_layout.addWidget(card)
 
+    def _checked_segment_value(self, buttons, property_name, default_value):
+        for button in buttons:
+            if button.isChecked():
+                return button.property(property_name) or default_value
+        return default_value
+
+    def _set_text_fill_mode(self, mode, update_layer=True):
+        mode = mode if mode in {"none", "solid", "gradient"} else "solid"
+        for button in getattr(self, "text_fill_mode_buttons", []):
+            button.setChecked(button.property("textFillMode") == mode)
+
+        if update_layer and self.text_layer:
+            gradient_enabled = mode == "gradient"
+            if hasattr(self.text_layer, "gradient_enabled"):
+                self.text_layer.gradient_enabled = gradient_enabled
+                self.property_changed.emit("gradient_enabled", gradient_enabled)
+
+            current_color = getattr(self.text_layer, "text_color", (0, 0, 0, 255))
+            if len(current_color) >= 4:
+                if mode == "none" and current_color[3] != 0:
+                    new_color = (current_color[0], current_color[1], current_color[2], 0)
+                    self.text_layer.text_color = new_color
+                    self.text_color.current_color = new_color
+                    self.text_color.update_color_display()
+                    self.property_changed.emit("text_color", new_color)
+                elif mode != "none" and current_color[3] == 0:
+                    new_color = (current_color[0], current_color[1], current_color[2], 255)
+                    self.text_layer.text_color = new_color
+                    self.text_color.current_color = new_color
+                    self.text_color.update_color_display()
+                    self.property_changed.emit("text_color", new_color)
+
+        self._sync_appearance_visibility(text_fill_mode=mode)
+
+    def _set_background_mode(self, mode, update_layer=True):
+        mode = mode if mode in {"none", "solid", "gradient"} else "none"
+        for button in getattr(self, "background_mode_buttons", []):
+            button.setChecked(button.property("backgroundMode") == mode)
+
+        enabled = mode != "none"
+        if update_layer and self.text_layer and hasattr(self.text_layer, "background_enabled"):
+            self.text_layer.background_enabled = enabled
+            self.property_changed.emit("background_enabled", enabled)
+
+        if hasattr(self, "bg_enable_check"):
+            self.bg_enable_check.setChecked(enabled)
+        self._sync_appearance_visibility(background_mode=mode)
+
+    def _sync_appearance_visibility(self, text_fill_mode=None, background_mode=None):
+        if text_fill_mode is None:
+            if self.text_layer:
+                color = getattr(self.text_layer, "text_color", (0, 0, 0, 255))
+                if getattr(self.text_layer, "gradient_enabled", False):
+                    text_fill_mode = "gradient"
+                elif len(color) >= 4 and color[3] == 0:
+                    text_fill_mode = "none"
+                else:
+                    text_fill_mode = "solid"
+            else:
+                text_fill_mode = self._checked_segment_value(
+                    getattr(self, "text_fill_mode_buttons", []), "textFillMode", "solid"
+                )
+
+        if background_mode is None:
+            if self.text_layer:
+                background_mode = "solid" if getattr(self.text_layer, "background_enabled", False) else "none"
+            else:
+                background_mode = self._checked_segment_value(
+                    getattr(self, "background_mode_buttons", []), "backgroundMode", "none"
+                )
+
+        for button in getattr(self, "text_fill_mode_buttons", []):
+            button.setChecked(button.property("textFillMode") == text_fill_mode)
+        for button in getattr(self, "background_mode_buttons", []):
+            button.setChecked(button.property("backgroundMode") == background_mode)
+
+        text_color_visible = text_fill_mode == "solid"
+        gradient_visible = text_fill_mode == "gradient"
+        if hasattr(self, "text_color_controls"):
+            self.text_color_controls.setVisible(text_color_visible)
+        if hasattr(self, "gradient_controls"):
+            self.gradient_controls.setVisible(gradient_visible)
+        if hasattr(self, "gradient_enable_check"):
+            self.gradient_enable_check.setChecked(gradient_visible)
+        for control_name in ("gradient_type_combo", "gradient_start_color", "gradient_end_color"):
+            if hasattr(self, control_name):
+                getattr(self, control_name).setEnabled(gradient_visible)
+
+        background_visible = background_mode != "none"
+        if hasattr(self, "background_controls"):
+            self.background_controls.setVisible(background_visible)
+        for control_name in ("bg_color", "bg_opacity_slider", "bg_size_slider"):
+            if hasattr(self, control_name):
+                getattr(self, control_name).setEnabled(background_visible)
+
     def create_core_params_card(self, parent_layout):
         """创建核心参数卡片。"""
         card, card_layout = self._make_section_card("核心参数", self.reset_core_params)
