@@ -98,6 +98,7 @@ class TextLayer(QObject):
         
         # 文字样式
         self._text_color = (0, 0, 0, 255)  # 文字颜色 RGBA
+        self._text_color_ranges = []
         self._text_align = TextAlign.LEFT  # 对齐方式
         self._line_spacing = 1.2  # 行间距倍数
         self._letter_spacing = 0  # 字间距（像素），0表示正常间距，正值增加间距，负值减少间距
@@ -2061,6 +2062,7 @@ class TextLayer(QObject):
             return False
 
         self._current_text = value
+        self._clip_text_color_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
 
@@ -2084,6 +2086,105 @@ class TextLayer(QObject):
     def set_current_text_silent(self, value):
         """批量/后台任务专用：更新文字并清缓存，但不发射 UI 信号。"""
         return self.set_current_text(value, emit_signals=False)
+
+    def _normalize_color_tuple(self, color):
+        if not isinstance(color, (tuple, list)) or len(color) < 3:
+            return self._text_color
+        r = max(0, min(255, int(color[0])))
+        g = max(0, min(255, int(color[1])))
+        b = max(0, min(255, int(color[2])))
+        a = max(0, min(255, int(color[3]))) if len(color) > 3 else 255
+        return (r, g, b, a)
+
+    def _clamp_text_range(self, start, end):
+        text_len = len(self._current_text or "")
+        start = max(0, min(text_len, int(start)))
+        end = max(0, min(text_len, int(end)))
+        if end < start:
+            start, end = end, start
+        return start, end
+
+    def _subtract_color_range(self, ranges, start, end):
+        next_ranges = []
+        for item in ranges:
+            item_start = int(item.get("start", 0))
+            item_end = int(item.get("end", 0))
+            color = self._normalize_color_tuple(item.get("color", self._text_color))
+            if item_end <= start or item_start >= end:
+                next_ranges.append({"start": item_start, "end": item_end, "color": color})
+                continue
+            if item_start < start:
+                next_ranges.append({"start": item_start, "end": start, "color": color})
+            if item_end > end:
+                next_ranges.append({"start": end, "end": item_end, "color": color})
+        return self._merge_text_color_ranges(next_ranges)
+
+    def _merge_text_color_ranges(self, ranges):
+        valid_ranges = []
+        text_len = len(self._current_text or "")
+        for item in ranges:
+            try:
+                start = max(0, min(text_len, int(item.get("start", 0))))
+                end = max(0, min(text_len, int(item.get("end", 0))))
+            except (TypeError, ValueError):
+                continue
+            if end <= start:
+                continue
+            valid_ranges.append({
+                "start": start,
+                "end": end,
+                "color": self._normalize_color_tuple(item.get("color", self._text_color)),
+            })
+
+        valid_ranges.sort(key=lambda item: (item["start"], item["end"]))
+        merged = []
+        for item in valid_ranges:
+            if merged and merged[-1]["color"] == item["color"] and item["start"] <= merged[-1]["end"]:
+                merged[-1]["end"] = max(merged[-1]["end"], item["end"])
+            else:
+                merged.append(dict(item))
+        return merged
+
+    def _set_text_color_ranges(self, ranges):
+        if not isinstance(ranges, list):
+            ranges = []
+        self._text_color_ranges = self._merge_text_color_ranges(ranges)
+
+    def _clip_text_color_ranges_to_current_text(self):
+        clipped = self._merge_text_color_ranges(self._text_color_ranges)
+        if clipped != self._text_color_ranges:
+            self._text_color_ranges = clipped
+            return True
+        return False
+
+    def get_text_color_ranges(self):
+        return [
+            {"start": item["start"], "end": item["end"], "color": tuple(item["color"])}
+            for item in self._text_color_ranges
+        ]
+
+    def set_text_color_range(self, start, end, color):
+        start, end = self._clamp_text_range(start, end)
+        if start >= end:
+            return False
+        ranges = self._subtract_color_range(self._text_color_ranges, start, end)
+        ranges.append({"start": start, "end": end, "color": self._normalize_color_tuple(color)})
+        self._text_color_ranges = self._merge_text_color_ranges(ranges)
+        self._cached_image = None
+        self.changed.emit()
+        return True
+
+    def clear_text_color_range(self, start, end):
+        start, end = self._clamp_text_range(start, end)
+        if start >= end:
+            return False
+        next_ranges = self._subtract_color_range(self._text_color_ranges, start, end)
+        if next_ranges == self._text_color_ranges:
+            return False
+        self._text_color_ranges = next_ranges
+        self._cached_image = None
+        self.changed.emit()
+        return True
 
     # 文字样式属性
     @Property(tuple)
@@ -2378,6 +2479,7 @@ class TextLayer(QObject):
         self._text_lines = lines.copy()
         if self._text_lines and (self._current_text is None or str(self._current_text).strip() == ""):
             self._current_text = self._text_lines[0]
+        self._clip_text_color_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
         self.text_changed.emit()
@@ -2470,6 +2572,7 @@ class TextLayer(QObject):
         parsed_lines = self.parse_text_input_to_lines(source_text)
         self._text_lines = parsed_lines
         self._current_text = parsed_lines[0] if parsed_lines else ""
+        self._clip_text_color_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
         self.text_changed.emit()
@@ -2496,6 +2599,7 @@ class TextLayer(QObject):
             'font_size': self._font_size,
             'font_style': self._font_style.name,
             'text_color': self._text_color,
+            'text_color_ranges': self.get_text_color_ranges(),
             'text_align': self._text_align.name,
             'line_spacing': self._line_spacing,
             'letter_spacing': self._letter_spacing,
@@ -2552,6 +2656,7 @@ class TextLayer(QObject):
         layer._font_size = data.get('font_size', 24)
         layer._font_style = FontStyle[data.get('font_style', 'NORMAL')]
         layer._text_color = tuple(data.get('text_color', (0, 0, 0, 255)))
+        layer._set_text_color_ranges(data.get('text_color_ranges', []))
         layer._text_align = TextAlign[data.get('text_align', 'LEFT')]
         layer._line_spacing = data.get('line_spacing', 1.2)
         layer._letter_spacing = data.get('letter_spacing', 0)
@@ -2640,6 +2745,7 @@ class TextLayer(QObject):
         
         # 复制文字样式
         new_layer._text_color = self._text_color
+        new_layer._text_color_ranges = self.get_text_color_ranges()
         new_layer._text_align = self._text_align
         new_layer._line_spacing = self._line_spacing
         new_layer._letter_spacing = self._letter_spacing
