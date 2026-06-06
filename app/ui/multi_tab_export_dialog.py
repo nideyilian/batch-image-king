@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt, Signal, QThreadPool, QRunnable, QObject, Slot, QM
 import os
 import time
 import concurrent.futures
-import threading
 import gc
 import logging
 
@@ -24,20 +23,18 @@ class ExportWorkerSignals(QObject):
 class ExportWorker(QRunnable):
     """导出工作线程"""
 
-    def __init__(self, document, tab_index, tab_name, export_params=None, output_dir=None):
+    def __init__(self, document, tab_index, tab_name, export_request=None):
         super().__init__()
         self.document = document
         self.tab_index = tab_index
         self.tab_name = tab_name
-        self.export_params = export_params
+        self.export_request = export_request or {}
         self.signals = ExportWorkerSignals()
-        self.output_dir = output_dir
         self._mutex = QMutex()  # 添加线程安全保护
         self._is_cancelled = False
 
     def run(self):
         """执行导出任务"""
-        dialog = None
         try:
             # 检查是否已取消
             self._mutex.lock()
@@ -46,25 +43,25 @@ class ExportWorker(QRunnable):
                 return
             self._mutex.unlock()
 
-            # 创建临时的批量导出对话框
-            dialog = BatchExportDialog(self.document, None)
+            if not self.export_request:
+                self.signals.finished.emit(self.tab_index, False, "导出参数无效")
+                return
 
-            # 如果有导出参数，应用这些参数
-            if self.export_params:
-                dialog.apply_export_params(self.export_params)
+            def check_canceled():
+                self._mutex.lock()
+                cancelled = bool(self._is_cancelled)
+                self._mutex.unlock()
+                return cancelled or bool(getattr(self.document, '_export_canceled', False))
 
-            # 如果有指定输出目录，覆盖对话框中的设置
-            if self.output_dir:
-                dialog.directory = self.output_dir
-                if hasattr(dialog, 'path_edit'):
-                    dialog.path_edit.setText(self.output_dir)
-
-            # 执行导出操作
-            success = dialog.do_export()
+            success = BatchExportDialog.execute_export_request(
+                self.document,
+                self.export_request,
+                cancel_callback=check_canceled
+            )
 
             # 清理内存
-            if hasattr(dialog, 'document') and hasattr(dialog.document, '_optimize_memory'):
-                dialog.document._optimize_memory()
+            if hasattr(self.document, '_optimize_memory'):
+                self.document._optimize_memory()
 
             # 发送完成信号
             self.signals.finished.emit(self.tab_index, success, "")
@@ -82,8 +79,6 @@ class ExportWorker(QRunnable):
         finally:
             # 确保资源清理
             try:
-                if dialog:
-                    dialog.deleteLater()
                 # 强制垃圾回收
                 gc.collect()
             except:
@@ -94,6 +89,13 @@ class ExportWorker(QRunnable):
         self._mutex.lock()
         self._is_cancelled = True
         self._mutex.unlock()
+        try:
+            if hasattr(self.document, '_export_canceled'):
+                self.document._export_canceled = True
+            if hasattr(self.document, 'cancel_export'):
+                self.document.cancel_export()
+        except Exception:
+            pass
 
 
 class MultiTabExportDialog(QDialog):
@@ -218,6 +220,28 @@ class MultiTabExportDialog(QDialog):
             safe_print(str(message))
         except Exception:
             pass
+
+    def _build_tab_export_request(self, document, output_dir=None):
+        """Build a plain export request on the GUI thread before handing work to QRunnable."""
+        dialog = None
+        try:
+            dialog = BatchExportDialog(document, self)
+            if getattr(self, 'use_batch_params', False):
+                dialog.apply_export_params(self.export_params)
+            if output_dir:
+                dialog.directory = output_dir
+                if hasattr(dialog, 'path_edit'):
+                    dialog.path_edit.setText(output_dir)
+            request, error_message = dialog.build_export_request()
+            return request, error_message
+        except Exception as e:
+            return None, str(e)
+        finally:
+            try:
+                if dialog is not None:
+                    dialog.deleteLater()
+            except Exception:
+                pass
 
     def update_tab_list(self):
         """更新标签页列表"""
@@ -435,15 +459,18 @@ class MultiTabExportDialog(QDialog):
                                 safe_print(f"为标签页 '{tab_name}' 创建目录失败: {str(e)}")
                                 output_dir = base_output_dir  # 回退到基础目录
 
+                        request, error_message = self._build_tab_export_request(document, output_dir)
+                        if not request:
+                            QTimer.singleShot(
+                                0,
+                                lambda idx=tab_index, err=error_message or "导出参数无效": self._handle_export_finished(idx, False, err)
+                            )
+                            continue
+
                         # 创建工作线程
-                        worker = ExportWorker(
-                            document,
-                            tab_index,
-                            tab_name,
-                            self.export_params if self.use_batch_params else None,
-                            output_dir
-                        )
+                        worker = ExportWorker(document, tab_index, tab_name, request)
                         worker.signals.finished.connect(on_export_finished)
+                        self.running_exports[tab_index] = worker
 
                         # 优化：设置导出任务优先级，更均匀地分配任务
                         self.thread_pool.start(worker, self.max_threads - (tab_index % self.max_threads))
@@ -483,6 +510,10 @@ class MultiTabExportDialog(QDialog):
         """在主线程中处理导出完成事件"""
         try:
             self.mutex.lock()
+            try:
+                self.running_exports.pop(tab_index, None)
+            except Exception:
+                pass
             self.export_results['completed'] += 1
 
             if success:
@@ -592,39 +623,28 @@ class MultiTabExportDialog(QDialog):
                         safe_print(f"为标签页 '{tab_name}' 创建目录失败: {str(e)}")
                         output_dir = self.base_output_dir  # 回退到基础目录
 
-                # 执行批量导出
-                from app.ui.batch_export_dialog import BatchExportDialog
-                dialog = BatchExportDialog(document, self)
+                request, error_message = self._build_tab_export_request(document, output_dir)
+                if not request:
+                    QTimer.singleShot(0, lambda err=error_message or "导出参数无效": self._handle_export_error(tab_name, err))
+                    return
 
-                # 如果有批量参数，应用这些参数
-                if self.use_batch_params:
-                    dialog.apply_export_params(self.export_params)
-
-                # 如果有指定输出目录，设置目录
-                if output_dir:
-                    dialog.directory = output_dir
-                    dialog.path_edit.setText(output_dir)
-
-                # 添加处理中标记，防止界面冻结
                 QApplication.processEvents()
 
-                # 执行导出（使用非阻塞模式）
-                def perform_export():
-                    try:
-                        # 执行导出并返回结果
-                        result = dialog.do_export()
-                        # 在主线程中更新UI
-                        QTimer.singleShot(0, lambda: self._handle_export_result(result, tab_name))
-                    except Exception as e:
-                        error_msg = str(e)
-                        # 在主线程中处理错误
-                        QTimer.singleShot(0, lambda err=error_msg: self._handle_export_error(tab_name, err))
+                worker = ExportWorker(document, tab_index, tab_name, request)
 
-                # 创建线程执行导出
-                export_thread = threading.Thread(target=perform_export)
-                # 不再设置为守护线程，避免程序退出时的锁竞争问题
-                # export_thread.daemon = True
-                export_thread.start()
+                def on_finished(finished_tab_index, success, error_msg):
+                    try:
+                        self.running_exports.pop(finished_tab_index, None)
+                    except Exception:
+                        pass
+                    if success:
+                        self._handle_export_result(True, tab_name)
+                    else:
+                        self._handle_export_error(tab_name, error_msg or "导出失败")
+
+                worker.signals.finished.connect(on_finished)
+                self.running_exports[tab_index] = worker
+                self.thread_pool.start(worker)
 
                 # 不立即处理下一个，等待当前导出完成
                 return

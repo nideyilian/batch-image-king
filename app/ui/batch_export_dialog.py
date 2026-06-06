@@ -3,14 +3,26 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                            QFileDialog, QDialogButtonBox, QComboBox, QCheckBox, QGroupBox, QMessageBox,
                            QInputDialog, QListWidget, QProgressBar, QListWidgetItem, QAbstractItemView, QWidget, QGridLayout,
                            QDoubleSpinBox)
-from PySide6.QtCore import Qt, QMetaObject, Q_ARG, Slot, QTimer, QSettings
+from PySide6.QtCore import Qt, QMetaObject, Q_ARG, Slot, QTimer, QSettings, QRunnable, QThreadPool
 import shiboken6
 import datetime
 import re
 import os
 import json
-import threading
 import time
+
+
+class _BatchExportTask(QRunnable):
+    """Run one batch export without touching Qt widgets from the worker thread."""
+
+    def __init__(self, callback):
+        super().__init__()
+        self._callback = callback
+        self.setAutoDelete(True)
+
+    def run(self):
+        self._callback()
+
 
 class BatchExportDialog(QDialog):
     """批量导出对话框"""
@@ -1002,6 +1014,63 @@ class BatchExportDialog(QDialog):
         # 组合模板
         return "-".join(parts)
 
+    def build_export_request(self):
+        """Capture UI export settings into a plain dict for background workers."""
+        output_dir = self._resolved_export_directory()
+        if not output_dir:
+            return None, "请选择导出目录"
+
+        is_traverse_mode = self.traverse_export_check.isChecked()
+        if is_traverse_mode:
+            try:
+                count = self.document._calculate_possible_combinations()
+                if count <= 0:
+                    return None, "没有可导出的组合"
+            except Exception as e:
+                return None, f"无法计算组合数量: {str(e)}"
+        else:
+            count = self.count_spin.value()
+            if count <= 0:
+                return None, "导出数量必须大于0"
+
+        filename_template = self.get_filename_template()
+        if not filename_template:
+            return None, "请输入文件名模板"
+
+        format_map = {0: 'png', 1: 'jpg', 2: 'bmp'}
+        return {
+            'directory': output_dir,
+            'count': int(count),
+            'filename_template': filename_template,
+            'format_name': format_map.get(self.format_combo.currentIndex(), 'png'),
+            'traverse_mode': bool(is_traverse_mode),
+            'use_smart_sampling': bool(self.smart_sampling_check.isChecked()),
+        }, ""
+
+    @staticmethod
+    def execute_export_request(document, request, cancel_callback=None):
+        """Execute a captured export request without reading QWidget state."""
+        if not isinstance(request, dict):
+            return False
+
+        output_dir = str(request.get('directory') or '').strip()
+        if not output_dir:
+            return False
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
+        return document.batch_export(
+            output_dir,
+            int(request.get('count', 0) or 0),
+            str(request.get('filename_template') or ''),
+            str(request.get('format_name') or 'png'),
+            start_index=1,
+            cancel_callback=cancel_callback,
+            use_high_performance=True,
+            traverse_mode=bool(request.get('traverse_mode', False)),
+            use_smart_sampling=bool(request.get('use_smart_sampling', True))
+        )
+
     def accept(self):
         """确认导出"""
         directory = self._resolved_export_directory()
@@ -1554,6 +1623,14 @@ class BatchExportDialog(QDialog):
         # 获取输出格式
         format_map = {0: 'png', 1: 'jpg', 2: 'bmp'}
         format_name = format_map.get(self.format_combo.currentIndex(), 'png')
+        export_request = {
+            'directory': directory,
+            'count': int(count),
+            'filename_template': filename_template,
+            'format_name': format_name,
+            'traverse_mode': bool(is_traverse_mode),
+            'use_smart_sampling': bool(self.smart_sampling_check.isChecked()),
+        }
 
         # 保存设置
         self.save_settings()
@@ -1623,16 +1700,10 @@ class BatchExportDialog(QDialog):
                 # 🔧 关键修复：直接一次性导出所有图片，不再分批处理
                 # 这样可以确保避重机制在整个导出过程中生效，避免批次间重复
                 print(f"[批量导出] 🚀 开始一次性导出 {count} 张图片（不分批）")
-                result = self.document.batch_export(
-                    directory,
-                    count,  # 🔧 直接使用完整数量，不再分批
-                    filename_template,
-                    format_name,
-                    start_index=1,  # 文件名序号从1开始
-                    cancel_callback=check_canceled,
-                    use_high_performance=True,  # 始终使用高性能导出
-                    traverse_mode=is_traverse_mode,
-                    use_smart_sampling=self.smart_sampling_check.isChecked()
+                result = BatchExportDialog.execute_export_request(
+                    self.document,
+                    export_request,
+                    cancel_callback=check_canceled
                 )
 
                 # 根据导出结果通知UI
@@ -1656,11 +1727,9 @@ class BatchExportDialog(QDialog):
                 # 更新UI
                 _safe_invoke_export_completed(False, str(e))
 
-        # 创建并启动线程
-        self.export_thread = threading.Thread(target=export_thread)
-        # 不再设置为守护线程，避免程序退出时的锁竞争问题
-        # self.export_thread.daemon = True
-        self.export_thread.start()
+        # 使用 Qt 线程池执行，后台任务不访问 QWidget 状态。
+        self.export_task = _BatchExportTask(export_thread)
+        QThreadPool.globalInstance().start(self.export_task)
 
     def cancel_export(self):
         """取消导出操作"""
@@ -2069,63 +2138,20 @@ class BatchExportDialog(QDialog):
             bool: 是否成功导出
         """
         try:
-            # 获取设置
-            output_dir = self._resolved_export_directory()
-            if not output_dir:
+            request, error_message = self.build_export_request()
+            if not request:
+                if error_message:
+                    print(error_message)
                 return False
 
-            # 直接调用导出方法，不启动新线程
-            if not os.path.isdir(output_dir):
-                try:
-                    os.makedirs(output_dir)
-                    print(f"已创建导出目录: {output_dir}")
-                except Exception as e:
-                    print(f"无法创建导出目录: {e}")
-                    return False
-
-            # 根据导出模式确定数量
-            is_traverse_mode = self.traverse_export_check.isChecked()
-            if is_traverse_mode:
-                # 遍历模式：计算所有可能的组合数量
-                try:
-                    count = self.document._calculate_possible_combinations()
-                    if count <= 0:
-                        print("没有可导出的组合")
-                        return False
-                    print(f"遍历模式：将导出 {count} 个组合")
-                except Exception as e:
-                    print(f"无法计算组合数量: {str(e)}")
-                    return False
-            else:
-                # 随机模式：使用用户指定的数量
-                count = self.count_spin.value()
-                if count <= 0:
-                    return False
-
-            filename_template = self.get_filename_template()
-            if not filename_template:
-                return False
-
-            # 获取输出格式
-            format_map = {0: 'png', 1: 'jpg', 2: 'bmp'}
-            format_name = format_map.get(self.format_combo.currentIndex(), 'png')
-
-            # 定义取消检查函数
             def check_canceled():
                 return (self.export_canceled or
                        (hasattr(self.document, '_export_canceled') and self.document._export_canceled))
 
-            # 直接调用document的导出方法，使用高性能渲染方案
-            result = self.document.batch_export(
-                output_dir,
-                count,
-                filename_template,
-                format_name,
-                start_index=1,  # 文件名起始索引从1开始
+            result = BatchExportDialog.execute_export_request(
+                self.document,
+                request,
                 cancel_callback=check_canceled,
-                use_high_performance=True,  # 始终使用高性能导出
-                traverse_mode=is_traverse_mode,
-                use_smart_sampling=self.smart_sampling_check.isChecked()
             )
             return result
 

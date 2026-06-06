@@ -2327,6 +2327,20 @@ class OptimizedBatchExecutor:
         max_preload = min(len(unique_images), self._batch_preload_max_images if self.is_batch_mode else 50)
         preload_count = 0
         max_bytes = max(64, self._batch_preload_memory_mb) * 1024 * 1024
+        if self.is_batch_mode:
+            try:
+                task_mem_mb = float(self._estimate_single_task_memory_mb())
+                if task_mem_mb >= 512:
+                    max_preload = min(max_preload, 16)
+                    max_bytes = min(max_bytes, 64 * 1024 * 1024)
+                elif task_mem_mb >= 256:
+                    max_preload = min(max_preload, 32)
+                    max_bytes = min(max_bytes, 96 * 1024 * 1024)
+                elif task_mem_mb >= 128:
+                    max_preload = min(max_preload, 64)
+                    max_bytes = min(max_bytes, 160 * 1024 * 1024)
+            except Exception:
+                pass
         memory_limit_mb = self._refresh_memory_budget()
         if self.is_batch_mode and memory_limit_mb > 0:
             preload_budget_ratio = 0.06 if self._export_memory_guard_mode == 'low' else 0.14
