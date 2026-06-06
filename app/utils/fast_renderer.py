@@ -117,6 +117,7 @@ class SmartCache:
                     layer_key += f":af{int(bool(getattr(layer, 'auto_fit_text_box', False)))}"
                     layer_key += f":pad{int(getattr(layer, 'text_box_padding', 0))}"
                     layer_key += f":tc{getattr(layer, 'text_color', '')}"
+                    layer_key += f":tcr{getattr(layer, 'text_color_ranges', getattr(layer, '_text_color_ranges', []))}"
                     layer_key += f":se{int(bool(getattr(layer, 'stroke_enabled', False)))}"
                     layer_key += f":sw{getattr(layer, 'stroke_width', 0)}"
                     layer_key += f":sc{getattr(layer, 'stroke_color', '')}"
@@ -2048,6 +2049,7 @@ class FastRenderer:
             f"font_size:{getattr(layer, 'font_size', '')}",
             f"font_style:{getattr(layer, 'font_style', '')}",
             f"text_color:{getattr(layer, 'text_color', '')}",
+            f"text_color_ranges:{getattr(layer, 'text_color_ranges', getattr(layer, '_text_color_ranges', []))}",
             f"text_align:{getattr(layer, 'text_align', '')}",
             f"line_spacing:{getattr(layer, 'line_spacing', '')}",
             f"letter_spacing:{getattr(layer, 'letter_spacing', '')}",
