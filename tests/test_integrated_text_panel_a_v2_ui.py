@@ -3,7 +3,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from app.ui.integrated_text_panel import IntegratedTextPanel
 
@@ -47,7 +47,22 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
         self.panel.height_spin.setValue(34)
         self.panel._sync_position_summary()
         self.assertIn("X 50", self.panel.position_summary_label.text())
-        self.assertIn("106 × 34", self.panel.position_summary_label.text())
+        self.assertEqual(self.panel.position_summary_label.text(), "X 50 · Y 51 · 106 × 34")
+
+    def test_a_v2_cards_have_header_summaries(self):
+        self.assertEqual(self.panel.content_summary_label.text(), "0 条 · 绑定模式开启")
+        self.assertIn("24px", self.panel.font_summary_label.text())
+        self.assertIn("左对齐", self.panel.typography_summary_label.text())
+        self.assertIn("纯色文字", self.panel.appearance_summary_label.text())
+
+    def test_a_v2_uses_compact_full_width_controls(self):
+        self.assertTrue(all(
+            button.sizePolicy().horizontalPolicy() == QSizePolicy.Expanding
+            for button in self.panel.quick_font_buttons
+        ))
+        self.assertEqual(self.panel.stroke_enable_check.text(), "")
+        self.assertEqual(self.panel.stroke_title_label.text(), "启用描边")
+        self.assertTrue(self.panel.background_controls.isHidden())
 
 
 if __name__ == "__main__":

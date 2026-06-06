@@ -240,6 +240,7 @@ class IntegratedTextPanel(QWidget):
 
         # 3. 高级设置区域
         self.create_advanced_settings(main_layout)
+        self._sync_panel_summaries()
 
         # 添加弹性空间
         main_layout.addStretch()
@@ -257,9 +258,20 @@ class IntegratedTextPanel(QWidget):
                 background: transparent;
             }
             QFrame[role="section"] {
-                background-color: #1F1F1F;
+                background-color: #202123;
                 border: 1px solid #303033;
                 border-radius: 7px;
+            }
+            QFrame[role="sectionHeader"] {
+                background-color: #2A2B2E;
+                border: none;
+                border-bottom: 1px solid #34363A;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+            }
+            QFrame[role="sectionBody"] {
+                background-color: transparent;
+                border: none;
             }
             QLabel[role="sectionTitle"] {
                 color: #FFFFFF;
@@ -358,32 +370,56 @@ class IntegratedTextPanel(QWidget):
                 color: #FFFFFF;
                 font-weight: 700;
             }
+            QPushButton[compactValue="true"] {
+                min-height: 28px;
+                background-color: #111315;
+                border-color: #35383C;
+                font-weight: 700;
+            }
         """
 
     def _make_section_card(self, title_text, reset_handler=None):
-        """创建统一的参数分区卡片。"""
+        """创建 A v2 风格的模块卡片：标题栏带右侧摘要，正文保持紧凑。"""
         card = QFrame()
         card.setProperty("role", "section")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(10, 8, 10, 8)  # 减少内边距
-        card_layout.setSpacing(6)  # 减少内部间距
+        outer_layout = QVBoxLayout(card)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
 
-        title_row = QHBoxLayout()
+        header = QFrame()
+        header.setProperty("role", "sectionHeader")
+        title_row = QHBoxLayout(header)
+        title_row.setContentsMargins(10, 7, 10, 7)
         title_row.setSpacing(8)
+
         title = QLabel(title_text)
         title.setProperty("role", "sectionTitle")
+        summary = QLabel("")
+        summary.setProperty("role", "summaryLabel")
+        summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        summary.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
         card.title_label = title
+        card.summary_label = summary
+        card.title_layout = title_row
         title_row.addWidget(title)
-        title_row.addStretch()
+        title_row.addWidget(summary, 1)
 
         if reset_handler:
             reset_btn = QToolButton()
-            reset_btn.setText("🔄 重置")  # 添加刷新图标
+            reset_btn.setText("重置")
             reset_btn.setToolTip(f"重置{title_text}")
             reset_btn.clicked.connect(reset_handler)
+            card.reset_button = reset_btn
             title_row.addWidget(reset_btn)
 
-        card_layout.addLayout(title_row)
+        body = QFrame()
+        body.setProperty("role", "sectionBody")
+        card_layout = QVBoxLayout(body)
+        card_layout.setContentsMargins(10, 8, 10, 8)
+        card_layout.setSpacing(6)
+        outer_layout.addWidget(header)
+        outer_layout.addWidget(body)
         return card, card_layout
 
     def _make_core_divider(self, vertical=False):
@@ -471,7 +507,10 @@ class IntegratedTextPanel(QWidget):
     def _make_tool(self, text, width=42):
         button = QToolButton()
         button.setText(text)
-        button.setFixedSize(width, 30)
+        button.setFixedHeight(30)
+        if width:
+            button.setMinimumWidth(width)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
     def _make_segment_button(self, text, checked=False):
@@ -479,7 +518,7 @@ class IntegratedTextPanel(QWidget):
         button.setCheckable(True)
         button.setChecked(checked)
         button.setProperty("segmentButton", True)
-        button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
     def _make_segment_row(self, specs, active_value, handler=None, property_name="mode"):
@@ -502,9 +541,16 @@ class IntegratedTextPanel(QWidget):
         panel = QFrame()
         panel.setProperty("role", "subPanel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(8, 7, 8, 7)
         layout.setSpacing(6)
         return panel, layout
+
+    def _make_compact_value_button(self, text):
+        button = QPushButton(text)
+        button.setProperty("compactValue", True)
+        button.setFixedHeight(30)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        return button
 
     def _make_parameter_grid(self, *pairs):
         container = QWidget()
@@ -666,28 +712,20 @@ class IntegratedTextPanel(QWidget):
         """创建可直接编辑的文字内容卡片。"""
         card, card_layout = self._make_section_card("文字内容")
         self.content_card_title = card.title_label
-        title_item = card_layout.itemAt(0)
-        title_layout = title_item.layout() if title_item else None
-        if title_layout:
-            self.create_btn = QPushButton("+ 文字")
-            self.create_btn.setFixedHeight(26)
-            self.create_btn.setMinimumWidth(58)
-            self.create_btn.setToolTip("创建新的文字图层")
-            title_layout.addWidget(self.create_btn)
+        self.content_summary_label = card.summary_label
 
-            self.reset_btn = QPushButton("重置")
-            self.reset_btn.setFixedHeight(26)
-            self.reset_btn.setMinimumWidth(54)
-            self.reset_btn.setEnabled(False)
-            self.reset_btn.setToolTip("重置文字样式")
-            title_layout.addWidget(self.reset_btn)
+        self.create_btn = QPushButton("+ 文字", self)
+        self.create_btn.setToolTip("创建新的文字图层")
+        self.create_btn.hide()
 
-            self.full_edit_text_btn = QPushButton("编辑文案")
-            self.full_edit_text_btn.setFixedHeight(26)
-            self.full_edit_text_btn.setMinimumWidth(72)
-            self.full_edit_text_btn.setToolTip("打开文字编辑器")
-            title_layout.addWidget(self.full_edit_text_btn)
+        self.reset_btn = QPushButton("重置", self)
+        self.reset_btn.setEnabled(False)
+        self.reset_btn.setToolTip("重置文字样式")
+        self.reset_btn.hide()
 
+        self.full_edit_text_btn = QPushButton("编辑文案", self)
+        self.full_edit_text_btn.setToolTip("打开文字编辑器")
+        self.full_edit_text_btn.hide()
         self.edit_btn = self.full_edit_text_btn
 
         self.binding_mode_check = QCheckBox("绑定")
@@ -704,8 +742,9 @@ class IntegratedTextPanel(QWidget):
         text_actions = QHBoxLayout()
         text_actions.setSpacing(8)
 
-        self.apply_text_btn = QPushButton("应用")
+        self.apply_text_btn = QPushButton("应用", self)
         self.apply_text_btn.setToolTip("将输入框内容应用到当前文字图层")
+        self.apply_text_btn.hide()
         self.prev_text_btn = QToolButton()
         self.prev_text_btn.setText("上一条")
         self.prev_text_btn.setToolTip("切换到上一条候选文案")
@@ -719,10 +758,10 @@ class IntegratedTextPanel(QWidget):
         self.text_count_label = QLabel("0 条")
         self.text_count_label.setStyleSheet("color: #8E8E93;")
 
-        text_actions.addWidget(self.apply_text_btn)
-        text_actions.addWidget(self.prev_text_btn)
-        text_actions.addWidget(self.next_text_btn)
-        text_actions.addWidget(self.random_text_btn)
+        for button in (self.prev_text_btn, self.next_text_btn, self.random_text_btn):
+            button.setFixedHeight(30)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            text_actions.addWidget(button)
         text_actions.addWidget(self.binding_mode_check)
         text_actions.addStretch()
         text_actions.addWidget(self.text_count_label)
@@ -734,6 +773,8 @@ class IntegratedTextPanel(QWidget):
         """创建字体卡片。"""
         card, card_layout = self._make_section_card("字体", self.reset_core_params)
         self.font_card_title = card.title_label
+        self.font_summary_label = card.summary_label
+        self.font_reset_btn = getattr(card, "reset_button", None)
         card_layout.setContentsMargins(12, 10, 12, 10)
         card_layout.setSpacing(8)
 
@@ -766,16 +807,18 @@ class IntegratedTextPanel(QWidget):
 
         card_layout.addWidget(self._make_core_divider())
         card_layout.addWidget(self._muted_label("常用"))
-        quick_buttons_row = QGridLayout()
-        quick_buttons_row.setHorizontalSpacing(8)
-        quick_buttons_row.setVerticalSpacing(6)
+        quick_buttons_row = QHBoxLayout()
+        quick_buttons_row.setSpacing(8)
+        self.quick_font_button_group = QButtonGroup(self)
+        self.quick_font_button_group.setExclusive(True)
         self.quick_font_buttons = []
-        for index, (font_name, display_name) in enumerate([("SimHei", "黑体"), ("SimSun", "宋体"), ("KaiTi", "楷体"), ("Arial", "Arial")]):
-            btn = self._make_tool(display_name, width=56)
+        for font_name, display_name in [("Microsoft YaHei", "雅黑"), ("SimSun", "宋体"), ("KaiTi", "楷体"), ("Arial", "Arial")]:
+            btn = self._make_segment_button(display_name, checked=(font_name == "Microsoft YaHei"))
             btn.setCursor(Qt.PointingHandCursor)
             btn.setToolTip(f"快速切换到 {display_name}")
             btn.clicked.connect(lambda checked=False, fn=font_name: self._apply_font_selection(fn))
-            quick_buttons_row.addWidget(btn, index // 4, index % 4)
+            self.quick_font_button_group.addButton(btn)
+            quick_buttons_row.addWidget(btn)
             self.quick_font_buttons.append(btn)
         card_layout.addLayout(quick_buttons_row)
 
@@ -793,6 +836,7 @@ class IntegratedTextPanel(QWidget):
         """创建排版卡片。"""
         card, card_layout = self._make_section_card("排版")
         self.typography_card_title = card.title_label
+        self.typography_summary_label = card.summary_label
         card_layout.setContentsMargins(12, 10, 12, 10)
         card_layout.setSpacing(8)
 
@@ -807,8 +851,11 @@ class IntegratedTextPanel(QWidget):
         card_layout.addLayout(self._make_param_row("大小", self.font_size_spin, self.bold_btn, self.italic_btn, stretch_last=False))
 
         self.align_group = AlignButtonGroup()
-        for button in (self.align_group.left_btn, self.align_group.center_btn, self.align_group.right_btn):
-            button.setFixedSize(42, 30)
+        for text, button in (("左", self.align_group.left_btn), ("中", self.align_group.center_btn), ("右", self.align_group.right_btn)):
+            button.setText(text)
+            button.setFixedHeight(30)
+            button.setMinimumWidth(42)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.vertical_layout_check = QCheckBox("竖排")
         card_layout.addLayout(self._make_param_row("对齐", self.align_group, self.vertical_layout_check, stretch_last=False))
 
@@ -848,6 +895,7 @@ class IntegratedTextPanel(QWidget):
         """创建外观卡片。"""
         card, card_layout = self._make_section_card("外观")
         self.appearance_card_title = card.title_label
+        self.appearance_summary_label = card.summary_label
         card_layout.setContentsMargins(12, 10, 12, 10)
         card_layout.setSpacing(8)
 
@@ -862,7 +910,9 @@ class IntegratedTextPanel(QWidget):
 
         self.text_color_controls, text_color_layout = self._make_subpanel()
         self.text_color = ColorIndicator((0, 0, 0, 255), size=30)
-        text_color_layout.addLayout(self._make_param_row("颜色", self.text_color, stretch_last=False))
+        self.text_color_button = self._make_compact_value_button("文字颜色")
+        self.text_color_button.clicked.connect(self.text_color.click)
+        text_color_layout.addLayout(self._make_param_row("颜色", self.text_color_button, self.text_color, stretch_last=False))
         card_layout.addWidget(self.text_color_controls)
 
         self.opacity_slider = QSlider(Qt.Horizontal)
@@ -897,19 +947,31 @@ class IntegratedTextPanel(QWidget):
 
         card_layout.addWidget(self._make_core_divider())
         card_layout.addWidget(self._muted_label("描边"))
-        self.stroke_enable_check = QCheckBox("启用描边")
+        self.stroke_toggle_panel, stroke_toggle_layout = self._make_subpanel()
+        stroke_toggle_row = QHBoxLayout()
+        stroke_toggle_row.setContentsMargins(0, 0, 0, 0)
+        stroke_toggle_row.setSpacing(8)
+        self.stroke_title_label = QLabel("启用描边")
+        self.stroke_title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #F4F4F5;")
+        self.stroke_enable_check = QCheckBox("")
+        self._style_switch_checkbox(self.stroke_enable_check)
         self.stroke_enable_check.stateChanged.connect(self.on_stroke_enabled_changed)
-        card_layout.addWidget(self.stroke_enable_check)
+        stroke_toggle_row.addWidget(self.stroke_title_label)
+        stroke_toggle_row.addStretch()
+        stroke_toggle_row.addWidget(self.stroke_enable_check)
+        stroke_toggle_layout.addLayout(stroke_toggle_row)
+        card_layout.addWidget(self.stroke_toggle_panel)
         self.stroke_controls, stroke_layout = self._make_subpanel()
         self.stroke_color = ColorIndicator((0, 0, 0, 255), size=30)
         self.stroke_color.setEnabled(False)
+        self.stroke_color_button = self._make_compact_value_button("描边色")
+        self.stroke_color_button.clicked.connect(self.stroke_color.click)
         self.stroke_width_spin = self._make_spin(76)
         self.stroke_width_spin.setRange(1, 20)
         self.stroke_width_spin.setValue(2)
         self.stroke_width_spin.setSuffix("px")
         self.stroke_width_spin.setEnabled(False)
-        stroke_layout.addLayout(self._make_param_row("描边色", self.stroke_color, stretch_last=False))
-        stroke_layout.addLayout(self._make_param_row("描边宽", self.stroke_width_spin, stretch_last=False))
+        stroke_layout.addLayout(self._make_param_row("描边宽", self.stroke_width_spin, self.stroke_color_button, self.stroke_color, stretch_last=False))
         card_layout.addWidget(self.stroke_controls)
 
         card_layout.addWidget(self._make_core_divider())
@@ -928,7 +990,9 @@ class IntegratedTextPanel(QWidget):
         self.bg_enable_check.stateChanged.connect(self.on_background_enabled_changed)
         self.bg_color = ColorIndicator((255, 255, 255, 255))
         self.bg_color.color_changed.connect(self.on_background_color_changed)
-        bg_layout.addLayout(self._make_param_row("背景颜色", self.bg_color, stretch_last=False))
+        self.bg_color_button = self._make_compact_value_button("背景颜色")
+        self.bg_color_button.clicked.connect(self.bg_color.click)
+        bg_layout.addLayout(self._make_param_row("背景颜色", self.bg_color_button, self.bg_color, stretch_last=False))
 
         self.bg_opacity_slider = QSlider(Qt.Horizontal)
         self.bg_opacity_slider.setRange(0, 100)
@@ -948,6 +1012,18 @@ class IntegratedTextPanel(QWidget):
         self.bg_size_label.setAlignment(Qt.AlignCenter)
         bg_layout.addLayout(self._make_param_row("背景大小", self.bg_size_slider, self.bg_size_label, stretch_last=False))
         card_layout.addWidget(self.background_controls)
+
+        self.background_advanced_row, background_advanced_layout = self._make_subpanel()
+        background_advanced_header = QHBoxLayout()
+        background_advanced_header.setContentsMargins(0, 0, 0, 0)
+        background_advanced_header.addWidget(self._muted_label("背景高级"))
+        self.background_advanced_summary = QLabel("透明度、大小、渐变类型")
+        self.background_advanced_summary.setProperty("role", "summaryLabel")
+        self.background_advanced_summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        background_advanced_header.addStretch()
+        background_advanced_header.addWidget(self.background_advanced_summary)
+        background_advanced_layout.addLayout(background_advanced_header)
+        card_layout.addWidget(self.background_advanced_row)
 
         self._sync_appearance_visibility()
         parent_layout.addWidget(card)
@@ -1046,6 +1122,53 @@ class IntegratedTextPanel(QWidget):
         for control_name in ("bg_color", "bg_opacity_slider", "bg_size_slider"):
             if hasattr(self, control_name):
                 getattr(self, control_name).setEnabled(background_visible)
+        if hasattr(self, "bg_color_button"):
+            self.bg_color_button.setEnabled(background_visible)
+        if hasattr(self, "stroke_enable_check"):
+            stroke_visible = self.stroke_enable_check.isChecked()
+            for control_name in ("stroke_width_spin", "stroke_color", "stroke_color_button"):
+                if hasattr(self, control_name):
+                    getattr(self, control_name).setEnabled(stroke_visible)
+        self._sync_panel_summaries(text_fill_mode=text_fill_mode, background_mode=background_mode)
+
+    def _set_summary_text(self, label_name, text):
+        label = getattr(self, label_name, None)
+        if label is not None:
+            label.setText(text)
+
+    def _alignment_summary_text(self):
+        if hasattr(self, "align_group"):
+            if self.align_group.center_btn.isChecked():
+                return "居中"
+            if self.align_group.right_btn.isChecked():
+                return "右对齐"
+        return "左对齐"
+
+    def _sync_panel_summaries(self, text_fill_mode=None, background_mode=None):
+        if hasattr(self, "text_count_label") and hasattr(self, "binding_mode_check"):
+            count_text = self.text_count_label.text() or "0 条"
+            binding_text = "绑定模式开启" if self.binding_mode_check.isChecked() else "绑定模式关闭"
+            self._set_summary_text("content_summary_label", f"{count_text} · {binding_text}")
+
+        if hasattr(self, "font_combo") and hasattr(self, "font_size_spin"):
+            font_text = self.font_combo.currentText().strip() or "微软雅黑"
+            self._set_summary_text("font_summary_label", f"{font_text} · {self.font_size_spin.value()}px")
+
+        if hasattr(self, "auto_fit_check"):
+            box_text = "自动边框" if self.auto_fit_check.isChecked() else "手动尺寸"
+            self._set_summary_text("typography_summary_label", f"{self._alignment_summary_text()} · {box_text}")
+
+        if text_fill_mode is None:
+            text_fill_mode = self._checked_segment_value(
+                getattr(self, "text_fill_mode_buttons", []), "textFillMode", "solid"
+            )
+        if background_mode is None:
+            background_mode = self._checked_segment_value(
+                getattr(self, "background_mode_buttons", []), "backgroundMode", "none"
+            )
+        text_fill_label = {"none": "无文字", "solid": "纯色文字", "gradient": "渐变文字"}.get(text_fill_mode, "纯色文字")
+        background_label = {"none": "无背景", "solid": "纯色背景", "gradient": "渐变背景"}.get(background_mode, "无背景")
+        self._set_summary_text("appearance_summary_label", f"{text_fill_label} · {background_label}")
 
     def create_core_params_card(self, parent_layout):
         """创建核心参数卡片。"""
@@ -1351,7 +1474,7 @@ class IntegratedTextPanel(QWidget):
         width_value = self.width_spin.value() if hasattr(self, "width_spin") else 1
         height_value = self.height_spin.value() if hasattr(self, "height_spin") else 1
         if hasattr(self, "position_summary_label"):
-            self.position_summary_label.setText(f"X {x_value}  Y {y_value}  |  {width_value} × {height_value}")
+            self.position_summary_label.setText(f"X {x_value} · Y {y_value} · {width_value} × {height_value}")
 
     def create_effects_content(self, parent_group):
         """创建效果和样式内容"""
@@ -1747,6 +1870,7 @@ class IntegratedTextPanel(QWidget):
 
         if add_to_recent:
             self._push_recent_font(font_name)
+        self._sync_panel_summaries()
 
     def _on_font_edit_finished(self):
         """输入框完成编辑后再提交字体，避免输入过程中频繁切换。"""
@@ -1799,6 +1923,7 @@ class IntegratedTextPanel(QWidget):
         display_entries = sorted(set(self._all_fonts + [self._font_display_name(f) for f in self._all_fonts]))
         self.font_model.setStringList(display_entries)
         self._refresh_recent_font_buttons()
+        self._sync_panel_summaries()
 
         # 其他信号连接
         self.font_size_spin.valueChanged.connect(self.on_font_size_changed)
@@ -1864,6 +1989,7 @@ class IntegratedTextPanel(QWidget):
                 buttons.append(self.full_edit_text_btn)
             for btn in buttons:
                 btn.setEnabled(False)
+            self._sync_panel_summaries()
             return
 
         self.setEnabled(True)
@@ -2022,6 +2148,8 @@ class IntegratedTextPanel(QWidget):
                 self._sync_position_summary()
 
         finally:
+            self._sync_appearance_visibility()
+            self._sync_panel_summaries()
             self._block_panel_controls(False)
 
     # 事件处理
@@ -2054,6 +2182,7 @@ class IntegratedTextPanel(QWidget):
         self.prev_text_btn.setEnabled(has_multiple)
         self.next_text_btn.setEnabled(has_multiple)
         self.random_text_btn.setEnabled(has_multiple)
+        self._sync_panel_summaries()
 
     def _current_text_index(self):
         if not self.text_layer:
@@ -2154,6 +2283,7 @@ class IntegratedTextPanel(QWidget):
         if self.text_layer:
             self.text_layer.font_size = size
             self.property_changed.emit("font_size", size)
+        self._sync_panel_summaries()
 
     def on_style_changed(self):
         if self.text_layer:
@@ -2175,6 +2305,7 @@ class IntegratedTextPanel(QWidget):
         if self.text_layer:
             self.text_layer.text_align = align
             self.property_changed.emit("text_align", align)
+        self._sync_panel_summaries()
 
     def on_position_changed(self, *args):
         if self.text_layer and hasattr(self, 'x_spin') and hasattr(self, 'y_spin'):
@@ -2196,6 +2327,7 @@ class IntegratedTextPanel(QWidget):
             self.text_layer.width = w
             self.text_layer.height = h
             self._sync_position_summary()
+            self._sync_panel_summaries()
             self.property_changed.emit("size", (w, h))
 
     def on_text_color_changed(self, color):
@@ -2217,6 +2349,8 @@ class IntegratedTextPanel(QWidget):
             # 启用/禁用描边控件
             self.stroke_width_spin.setEnabled(enabled)
             self.stroke_color.setEnabled(enabled)
+            if hasattr(self, "stroke_color_button"):
+                self.stroke_color_button.setEnabled(enabled)
 
             # 如果启用但描边宽度为0（不应该发生，因为范围从1开始），设置默认值
             if enabled and self.text_layer.stroke_width == 0:
@@ -2224,6 +2358,7 @@ class IntegratedTextPanel(QWidget):
                 self.stroke_width_spin.setValue(2)
 
             self.property_changed.emit("stroke_enabled", enabled)
+        self._sync_panel_summaries()
 
     def on_stroke_color_changed(self, color):
         if self.text_layer:
@@ -2260,6 +2395,7 @@ class IntegratedTextPanel(QWidget):
             if hasattr(self, 'height_spin'):
                 self.height_spin.setEnabled(not enabled)
             self.property_changed.emit("auto_fit_text_box", enabled)
+        self._sync_panel_summaries()
 
     def on_text_box_padding_changed(self, value):
         """文字边距改变"""
@@ -2358,6 +2494,7 @@ class IntegratedTextPanel(QWidget):
         self.text_layer.text_binding_enabled = enabled
         self.property_changed.emit("text_binding_enabled", enabled)
         self._sync_inline_text_editor()
+        self._sync_panel_summaries()
 
     def get_current_text_content(self):
         """获取当前文案内容，支持多种回退策略"""
@@ -2499,6 +2636,7 @@ class IntegratedTextPanel(QWidget):
             enabled = self._is_checked(state)
             self.text_layer.background_enabled = enabled
             self.property_changed.emit("background_enabled", enabled)
+            self._sync_appearance_visibility(background_mode="solid" if enabled else "none")
             self.update_preview()
 
     def on_background_color_changed(self, color):
@@ -2536,6 +2674,7 @@ class IntegratedTextPanel(QWidget):
             enabled = self._is_checked(state)
             self.text_layer.gradient_enabled = enabled
             self.property_changed.emit("gradient_enabled", enabled)
+            self._sync_appearance_visibility(text_fill_mode="gradient" if enabled else "solid")
             self.update_preview()
 
     def on_gradient_type_changed(self, gradient_type):
