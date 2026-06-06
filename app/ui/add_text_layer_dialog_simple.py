@@ -6,14 +6,13 @@
 """
 
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
-                               QLineEdit, QTextEdit, QPushButton, QDialogButtonBox, QCheckBox,
+                               QLineEdit, QTextEdit, QPushButton, QCheckBox,
                                QMessageBox, QFrame, QSpinBox, QComboBox)
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from app.models.text_layer import TextLayer, TextAlign
 from app.ui.color_picker_dialog_a2 import get_color_a2
-from app.ui.dark_theme import CursorDarkTheme
+from app.ui.dialog_a2 import DialogA2
 
 
 class AddTextLayerDialog(QDialog):
@@ -29,126 +28,45 @@ class AddTextLayerDialog(QDialog):
         self.resize(720, 560)
 
     def setup_ui(self):
-        """设置UI布局 - Photoshop 风格的文字创建面板"""
-        self.setStyleSheet(f"""
-            QDialog {{
-                background-color: {CursorDarkTheme.BACKGROUND_PRIMARY};
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-            }}
-            QLabel {{
-                color: {CursorDarkTheme.TEXT_SECONDARY};
-                background: transparent;
-                font-size: 12px;
-            }}
-            QLabel[role="title"] {{
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                font-size: 16px;
-                font-weight: 700;
-            }}
-            QLabel[role="sectionTitle"] {{
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                font-size: 13px;
-                font-weight: 700;
-            }}
-            QFrame[role="rail"] {{
-                background-color: {CursorDarkTheme.BACKGROUND_SECONDARY};
-                border: 1px solid {CursorDarkTheme.BORDER_PRIMARY};
-                border-radius: 7px;
-            }}
-            QFrame[role="section"] {{
-                background-color: {CursorDarkTheme.BACKGROUND_SECONDARY};
-                border: 1px solid {CursorDarkTheme.BORDER_PRIMARY};
-                border-radius: 7px;
-            }}
-            QTextEdit, QLineEdit, QSpinBox, QComboBox {{
-                background-color: {CursorDarkTheme.BACKGROUND_ELEVATED};
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                border: 1px solid {CursorDarkTheme.BORDER_SECONDARY};
-                border-radius: 4px;
-                padding: 5px 7px;
-                selection-background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-            }}
-            QTextEdit:focus, QLineEdit:focus, QSpinBox:focus, QComboBox:focus {{
-                border-color: {CursorDarkTheme.BORDER_FOCUS};
-            }}
-            QPushButton {{
-                min-height: 30px;
-                border: 1px solid {CursorDarkTheme.BORDER_SECONDARY};
-                border-radius: 4px;
-                background-color: {CursorDarkTheme.BACKGROUND_TERTIARY};
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                padding: 5px 14px;
-            }}
-            QPushButton:hover {{
-                background-color: {CursorDarkTheme.HOVER_BG};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-            }}
-            QPushButton#primaryButton {{
-                background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-                color: {CursorDarkTheme.TEXT_INVERTED};
-                font-weight: 700;
-            }}
-            QCheckBox {{
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                spacing: 6px;
-            }}
-            QCheckBox::indicator {{
-                width: 15px;
-                height: 15px;
-                border-radius: 3px;
-                border: 1px solid {CursorDarkTheme.BORDER_SECONDARY};
-                background: {CursorDarkTheme.BACKGROUND_ELEVATED};
-            }}
-            QCheckBox::indicator:checked {{
-                background: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-            }}
-        """)
+        """设置 Dialog A2 创建弹窗布局。"""
+        DialogA2.apply(self)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
-        layout.setSpacing(14)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+        )
+        root.setSpacing(DialogA2.CONTENT_GAP)
 
-        title_row = QHBoxLayout()
-        title = QLabel("文字突出")
-        title.setProperty("role", "title")
-        title_row.addWidget(title)
-        title_row.addStretch()
-        layout.addLayout(title_row)
+        self.title_label = QLabel("文字突出")
+        self.title_label.setProperty("role", "dialogTitle")
+        root.addWidget(self.title_label)
 
-        body_layout = QHBoxLayout()
-        body_layout.setSpacing(12)
+        self.content_card = self._make_card()
+        content_layout = QVBoxLayout(self.content_card)
+        content_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        content_layout.setSpacing(DialogA2.CARD_GAP)
 
-        rail = QFrame()
-        rail.setProperty("role", "rail")
-        rail.setFixedWidth(96)
-        rail_layout = QVBoxLayout(rail)
-        rail_layout.setContentsMargins(10, 12, 10, 12)
-        rail_layout.setSpacing(10)
-        text_mode = QPushButton("T\n文字")
-        text_mode.setObjectName("primaryButton")
-        text_mode.setEnabled(False)
-        rail_layout.addWidget(text_mode)
-        rail_layout.addStretch()
-        body_layout.addWidget(rail)
-
-        content_frame = QFrame()
-        content_frame.setProperty("role", "section")
-        content_layout = QVBoxLayout(content_frame)
-        content_layout.setContentsMargins(16, 16, 16, 16)
-        content_layout.setSpacing(12)
-
+        content_header = QHBoxLayout()
         content_title = QLabel("文字内容")
         content_title.setProperty("role", "sectionTitle")
-        content_layout.addWidget(content_title)
+        self.content_summary_label = QLabel("1 条 · 绑定模式开启")
+        self.content_summary_label.setProperty("role", "hint")
+        content_header.addWidget(content_title)
+        content_header.addStretch()
+        content_header.addWidget(self.content_summary_label)
+        content_layout.addLayout(content_header)
 
         name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("图层名称"))
+        name_layout.setSpacing(DialogA2.CONTENT_GAP)
+        name_layout.addWidget(self._field_label("图层名称"))
         self.name_edit = QLineEdit("新文字图层")
+        self.name_edit.setFixedHeight(DialogA2.CONTROL_HEIGHT)
         name_layout.addWidget(self.name_edit, 1)
 
-        self.binding_mode_check = QCheckBox("启用绑定模式(按行文案)")
+        self.binding_mode_check = QCheckBox("绑定")
         self.binding_mode_check.setChecked(True)
         self.binding_mode_check.toggled.connect(self._update_text_tip)
         name_layout.addWidget(self.binding_mode_check)
@@ -156,66 +74,108 @@ class AddTextLayerDialog(QDialog):
 
         self.text_edit = QTextEdit()
         self.text_edit.setPlainText("示例文字")
-        self.text_edit.setMinimumHeight(130)
+        self.text_edit.setMinimumHeight(150)
         self.text_edit.setPlaceholderText("请输入文字内容，每行一个选项（支持随机选择）")
+        self.text_edit.textChanged.connect(self._refresh_content_summary)
         content_layout.addWidget(self.text_edit)
 
-        # 提示文本
         self.tip_label = QLabel("")
-        self.tip_label.setStyleSheet(f"color: {CursorDarkTheme.TEXT_MUTED}; font-size: 11px;")
+        self.tip_label.setProperty("role", "hint")
         content_layout.addWidget(self.tip_label)
-        self._update_text_tip(self.binding_mode_check.isChecked())
+        root.addWidget(self.content_card, 1)
 
-        style_title = QLabel("核心参数")
-        style_title.setProperty("role", "sectionTitle")
-        content_layout.addWidget(style_title)
+        self.core_card = self._make_card()
+        core_layout = QVBoxLayout(self.core_card)
+        core_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        core_layout.setSpacing(DialogA2.CARD_GAP)
 
-        style_row = QHBoxLayout()
-        style_row.setSpacing(10)
-        style_row.addWidget(QLabel("字体"))
+        core_header = QHBoxLayout()
+        core_title = QLabel("核心参数")
+        core_title.setProperty("role", "sectionTitle")
+        self.core_summary_label = QLabel("微软雅黑 · 24px")
+        self.core_summary_label.setProperty("role", "hint")
+        core_header.addWidget(core_title)
+        core_header.addStretch()
+        core_header.addWidget(self.core_summary_label)
+        core_layout.addLayout(core_header)
+
+        font_row = QHBoxLayout()
+        font_row.setSpacing(DialogA2.CONTENT_GAP)
+        font_row.addWidget(self._field_label("字体"))
         self.font_combo = QComboBox()
         self.font_combo.addItems(["Microsoft YaHei", "SimHei", "SimSun", "KaiTi", "Arial"])
         self.font_combo.setEditable(True)
-        style_row.addWidget(self.font_combo, 1)
+        self.font_combo.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        self.font_combo.currentTextChanged.connect(self._refresh_core_summary)
+        font_row.addWidget(self.font_combo, 1)
+        self.color_btn = QPushButton("文字颜色")
+        self.color_btn.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        self.color_btn.clicked.connect(self.choose_text_color)
+        font_row.addWidget(self.color_btn)
+        core_layout.addLayout(font_row)
 
-        style_row.addWidget(QLabel("字号"))
+        params_row = QHBoxLayout()
+        params_row.setSpacing(DialogA2.CONTENT_GAP)
+        params_row.addWidget(self._field_label("字号"))
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setRange(6, 240)
         self.font_size_spin.setValue(24)
         self.font_size_spin.setSuffix(" px")
-        self.font_size_spin.setFixedWidth(92)
-        style_row.addWidget(self.font_size_spin)
-
-        self.color_btn = QPushButton("文字颜色")
-        self.color_btn.clicked.connect(self.choose_text_color)
-        style_row.addWidget(self.color_btn)
-        content_layout.addLayout(style_row)
-
-        align_row = QHBoxLayout()
-        align_row.addWidget(QLabel("对齐方式"))
+        self.font_size_spin.setFixedSize(92, DialogA2.CONTROL_HEIGHT)
+        self.font_size_spin.valueChanged.connect(self._refresh_core_summary)
+        params_row.addWidget(self.font_size_spin)
+        params_row.addWidget(self._field_label("对齐方式"))
         self.align_combo = QComboBox()
         self.align_combo.addItems(["左对齐", "居中", "右对齐"])
-        align_row.addWidget(self.align_combo)
-        align_row.addStretch()
-        content_layout.addLayout(align_row)
+        self.align_combo.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        params_row.addWidget(self.align_combo, 1)
+        core_layout.addLayout(params_row)
+        root.addWidget(self.core_card)
 
-        body_layout.addWidget(content_frame, 1)
-        layout.addLayout(body_layout, 1)
+        self.footer_frame = QFrame()
+        self.footer_frame.setProperty("role", "dialogFooter")
+        footer_layout = QHBoxLayout(self.footer_frame)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.addStretch()
+        self.ok_button = QPushButton("确定")
+        self.cancel_button = QPushButton("取消")
+        DialogA2.mark_primary(self.ok_button)
+        DialogA2.mark_secondary(self.cancel_button)
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button.clicked.connect(self.reject)
+        footer_layout.addWidget(self.ok_button)
+        footer_layout.addWidget(self.cancel_button)
+        root.addWidget(self.footer_frame)
 
-        # 按钮区域
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
-            Qt.Horizontal
-        )
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
+        self._update_text_tip(self.binding_mode_check.isChecked())
+        self._refresh_core_summary()
 
-        # 设置按钮中文文本
-        button_box.button(QDialogButtonBox.Ok).setText("确定")
-        button_box.button(QDialogButtonBox.Cancel).setText("取消")
-        button_box.button(QDialogButtonBox.Ok).setObjectName("primaryButton")
+    def _make_card(self):
+        card = QFrame()
+        card.setProperty("role", "dialogCard")
+        return card
 
-        layout.addWidget(button_box)
+    def _field_label(self, text):
+        label = QLabel(text)
+        label.setProperty("role", "fieldLabel")
+        label.setFixedWidth(DialogA2.FIELD_LABEL_WIDTH)
+        return label
+
+    def _refresh_content_summary(self):
+        if not hasattr(self, "content_summary_label"):
+            return
+        text_lines = [line for line in self.text_edit.toPlainText().splitlines() if line.strip()]
+        count = max(1, len(text_lines))
+        mode = "绑定模式开启" if self.binding_mode_check.isChecked() else "真实换行"
+        self.content_summary_label.setText(f"{count} 条 · {mode}")
+
+    def _refresh_core_summary(self):
+        if not hasattr(self, "core_summary_label"):
+            return
+        font = self.font_combo.currentText().strip() or "Microsoft YaHei"
+        if font == "Microsoft YaHei":
+            font = "微软雅黑"
+        self.core_summary_label.setText(f"{font} · {self.font_size_spin.value()}px")
 
     def get_text_layer(self) -> TextLayer:
         """获取配置好的文字图层 - 简化版本"""
@@ -276,6 +236,7 @@ class AddTextLayerDialog(QDialog):
         else:
             self.tip_label.setText("提示：关闭绑定模式后，输入框换行会作为同一文案的真实换行")
             self.text_edit.setPlaceholderText("请输入完整文案，支持真实换行")
+        self._refresh_content_summary()
 
     def choose_text_color(self):
         """选择新文字图层默认颜色。"""
@@ -285,7 +246,7 @@ class AddTextLayerDialog(QDialog):
             self.text_color = (color.red(), color.green(), color.blue(), color.alpha())
             self.color_btn.setStyleSheet(
                 f"background-color: rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()});"
-                "color: #FFFFFF; border-color: #55B2FF;"
+                "color: #FFFFFF; border-color: #55B2FF; font-weight: 700;"
             )
 
 

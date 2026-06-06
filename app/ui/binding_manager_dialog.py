@@ -7,17 +7,18 @@
 
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QListWidget, QListWidgetItem,
-                           QGroupBox, QLineEdit, QCheckBox, QComboBox,
-                           QMessageBox, QInputDialog, QTextEdit,
-                           QSplitter, QWidget, QFormLayout, QSpinBox)
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+                           QFrame, QLineEdit, QCheckBox,
+                           QMessageBox, QTextEdit,
+                           QSplitter)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
 import os
 
+from app.ui.dialog_a2 import DialogA2
 from app.ui.icon_manager import IconManager
 
 
-class BindingGroupWidget(QWidget):
+class BindingGroupWidget(QFrame):
     """绑定组显示组件"""
 
     def __init__(self, group_info, binding_manager, dialog, parent=None):
@@ -28,8 +29,10 @@ class BindingGroupWidget(QWidget):
         self.setup_ui()
 
     def setup_ui(self):
+        self.setProperty("role", "dialogSubPanel")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
 
         # 组名标题
         # 使用图标管理器创建绑定图标
@@ -45,35 +48,26 @@ class BindingGroupWidget(QWidget):
         info_text += f"可用分类: {', '.join(self.group_info['categories']) if self.group_info['categories'] else '无'}"
 
         info_label = QLabel(info_text)
-        info_label.setStyleSheet("color: #8E8E93; font-size: 9pt;")
+        info_label.setProperty("role", "hint")
         layout.addWidget(info_label)
 
         # 图层列表
         layers_text = "绑定图层: " + ", ".join(self.group_info['layers'])
         layers_label = QLabel(layers_text)
         layers_label.setWordWrap(True)
-        layers_label.setStyleSheet("color: #C7C7C9; font-size: 9pt;")
+        layers_label.setProperty("role", "hint")
         layout.addWidget(layers_label)
 
         # 操作按钮
         button_layout = QHBoxLayout()
 
         delete_btn = QPushButton("删除组")
+        delete_btn.setFixedHeight(DialogA2.CONTROL_HEIGHT)
         delete_btn.clicked.connect(self.delete_group)
         button_layout.addWidget(delete_btn)
 
         button_layout.addStretch()
         layout.addLayout(button_layout)
-
-        # 设置样式
-        self.setStyleSheet("""
-            BindingGroupWidget {
-                border: 1px solid #303033;
-                border-radius: 4px;
-                background-color: #1F1F1F;
-                margin: 2px;
-            }
-        """)
 
     def delete_group(self):
         """删除绑定组"""
@@ -101,120 +95,172 @@ class LayerBindingManagerDialog(QDialog):
         self.binding_manager = document.binding_manager
 
         self.setWindowTitle("图层绑定管理器")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(900, 680)
         self.setup_ui()
         self.refresh_groups()
 
     def setup_ui(self):
-        layout = QVBoxLayout(self)
+        DialogA2.apply(self)
 
-        # 创建分割器
+        root = QVBoxLayout(self)
+        root.setContentsMargins(
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+        )
+        root.setSpacing(DialogA2.CONTENT_GAP)
+
+        self.title_label = QLabel("图层绑定管理器")
+        self.title_label.setProperty("role", "dialogTitle")
+        root.addWidget(self.title_label)
+
         splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(splitter)
+        root.addWidget(splitter, 1)
 
-        # 左侧：绑定组列表
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
+        self.left_card = self._make_card()
+        left_layout = QVBoxLayout(self.left_card)
+        left_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        left_layout.setSpacing(DialogA2.CARD_GAP)
 
-        left_layout.addWidget(QLabel("现有绑定组:"))
+        left_header = QHBoxLayout()
+        left_title = QLabel("现有绑定组")
+        left_title.setProperty("role", "sectionTitle")
+        self.groups_summary_label = QLabel("暂无绑定组")
+        self.groups_summary_label.setProperty("role", "hint")
+        left_header.addWidget(left_title)
+        left_header.addStretch()
+        left_header.addWidget(self.groups_summary_label)
+        left_layout.addLayout(left_header)
 
         self.groups_list = QListWidget()
-        left_layout.addWidget(self.groups_list)
+        self.groups_list.setMinimumWidth(300)
+        left_layout.addWidget(self.groups_list, 1)
 
-        # 全局设置
-        global_group = QGroupBox("全局设置")
-        global_layout = QFormLayout()
-
-        self.global_enabled_cb = QCheckBox()
+        global_panel = QFrame()
+        global_panel.setProperty("role", "dialogSubPanel")
+        global_layout = QHBoxLayout(global_panel)
+        global_layout.setContentsMargins(10, 8, 10, 8)
+        global_layout.setSpacing(DialogA2.CONTENT_GAP)
+        global_title = QLabel("全局设置")
+        global_title.setProperty("role", "fieldLabel")
+        global_layout.addWidget(global_title)
+        global_layout.addStretch()
+        self.global_enabled_cb = QCheckBox("启用绑定功能")
         self.global_enabled_cb.setChecked(self.binding_manager.global_enabled)
         self.global_enabled_cb.clicked.connect(self.toggle_global_enabled)
-        global_layout.addRow("启用绑定功能:", self.global_enabled_cb)
+        global_layout.addWidget(self.global_enabled_cb)
+        left_layout.addWidget(global_panel)
+        splitter.addWidget(self.left_card)
 
-        global_group.setLayout(global_layout)
-        left_layout.addWidget(global_group)
+        self.right_card = self._make_card()
+        right_layout = QVBoxLayout(self.right_card)
+        right_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        right_layout.setSpacing(DialogA2.CARD_GAP)
 
-        splitter.addWidget(left_widget)
+        create_header = QLabel("创建新绑定组")
+        create_header.setProperty("role", "sectionTitle")
+        right_layout.addWidget(create_header)
 
-        # 右侧：创建绑定组
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-
-        # 创建新绑定组
-        create_group = QGroupBox("创建新绑定组")
-        create_layout = QFormLayout()
-
+        name_row = QHBoxLayout()
+        name_row.setSpacing(DialogA2.CONTENT_GAP)
+        name_row.addWidget(self._field_label("组名称"))
         self.group_name_edit = QLineEdit()
         self.group_name_edit.setPlaceholderText("输入绑定组名称，如：角色组")
-        create_layout.addRow("组名称:", self.group_name_edit)
+        self.group_name_edit.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        name_row.addWidget(self.group_name_edit, 1)
+        self.create_btn = QPushButton("创建绑定组")
+        self.create_btn.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        self.create_btn.clicked.connect(self.create_binding_group)
+        name_row.addWidget(self.create_btn)
+        right_layout.addLayout(name_row)
 
-        # 创建按钮
-        create_btn = QPushButton("创建绑定组")
-        create_btn.clicked.connect(self.create_binding_group)
-        create_layout.addRow("", create_btn)
-
-        # 完成组的布局设置
-        create_group.setLayout(create_layout)
-        right_layout.addWidget(create_group)
-
-        # 图层选择
-        layers_label = QLabel("选择要绑定的图层 (按住Ctrl多选):")
-        right_layout.addWidget(layers_label)
+        layers_row = QHBoxLayout()
+        layers_title = QLabel("选择要绑定的图层")
+        layers_title.setProperty("role", "sectionTitle")
+        layers_hint = QLabel("按住 Ctrl 多选")
+        layers_hint.setProperty("role", "hint")
+        layers_row.addWidget(layers_title)
+        layers_row.addStretch()
+        layers_row.addWidget(layers_hint)
+        right_layout.addLayout(layers_row)
 
         self.layers_list = QListWidget()
         self.layers_list.setSelectionMode(QListWidget.MultiSelection)
+        self._populate_layer_list()
+        right_layout.addWidget(self.layers_list, 1)
 
-        # 填充图层列表
+        self.preview_card = QFrame()
+        self.preview_card.setProperty("role", "dialogSubPanel")
+        preview_layout = QVBoxLayout(self.preview_card)
+        preview_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        preview_layout.setSpacing(DialogA2.CARD_GAP)
+
+        preview_header = QHBoxLayout()
+        preview_title = QLabel("文件分析预览")
+        preview_title.setProperty("role", "sectionTitle")
+        self.analyze_btn = QPushButton("分析所选图层文件")
+        self.analyze_btn.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        self.analyze_btn.clicked.connect(self.analyze_selected_layers)
+        preview_header.addWidget(preview_title)
+        preview_header.addStretch()
+        preview_header.addWidget(self.analyze_btn)
+        preview_layout.addLayout(preview_header)
+
+        self.analysis_text = QTextEdit()
+        self.analysis_text.setMaximumHeight(140)
+        self.analysis_text.setReadOnly(True)
+        preview_layout.addWidget(self.analysis_text)
+        right_layout.addWidget(self.preview_card)
+
+        splitter.addWidget(self.right_card)
+        splitter.setSizes([340, 460])
+
+        self.footer_frame = QFrame()
+        self.footer_frame.setProperty("role", "dialogFooter")
+        footer_layout = QHBoxLayout(self.footer_frame)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        self.refresh_btn = QPushButton("刷新")
+        DialogA2.mark_secondary(self.refresh_btn)
+        self.refresh_btn.clicked.connect(self._refresh_all)
+        footer_layout.addWidget(self.refresh_btn)
+        footer_layout.addStretch()
+        self.close_btn = QPushButton("关闭")
+        DialogA2.mark_secondary(self.close_btn)
+        self.close_btn.clicked.connect(self.accept)
+        footer_layout.addWidget(self.close_btn)
+        root.addWidget(self.footer_frame)
+
+    def _make_card(self):
+        card = QFrame()
+        card.setProperty("role", "dialogCard")
+        return card
+
+    def _field_label(self, text):
+        label = QLabel(text)
+        label.setProperty("role", "fieldLabel")
+        label.setFixedWidth(DialogA2.FIELD_LABEL_WIDTH)
+        return label
+
+    def _populate_layer_list(self):
+        self.layers_list.clear()
         for i, layer in enumerate(self.document.layers):
             item = QListWidgetItem(f"{layer.name} ({layer.width}x{layer.height})")
             item.setData(Qt.UserRole, i)  # 存储图层索引
 
-            # 如果图层已绑定，显示绑定信息
             binding_info = self.binding_manager.get_layer_binding_info(layer)
             if binding_info:
                 group_id, group_name = binding_info
                 item.setText(f"{layer.name} [已绑定到: {group_name}]")
-                item.setBackground(Qt.lightGray)
+                item.setBackground(QColor("#26384A"))
+            else:
+                item.setBackground(QColor(DialogA2.CONTROL_BG))
 
             self.layers_list.addItem(item)
 
-        right_layout.addWidget(self.layers_list)
-
-        # 文件分析预览
-        preview_group = QGroupBox("文件分析预览")
-        preview_layout = QVBoxLayout()
-
-        analyze_btn = QPushButton("分析所选图层文件")
-        analyze_btn.clicked.connect(self.analyze_selected_layers)
-        preview_layout.addWidget(analyze_btn)
-
-        self.analysis_text = QTextEdit()
-        self.analysis_text.setMaximumHeight(150)
-        self.analysis_text.setReadOnly(True)
-        preview_layout.addWidget(self.analysis_text)
-
-        preview_group.setLayout(preview_layout)
-        right_layout.addWidget(preview_group)
-
-        right_layout.addStretch()
-        splitter.addWidget(right_widget)
-
-        # 设置分割器比例
-        splitter.setSizes([400, 400])
-
-        # 底部按钮
-        button_layout = QHBoxLayout()
-
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.clicked.connect(self.refresh_groups)
-        button_layout.addWidget(refresh_btn)
-
-        button_layout.addStretch()
-
-        close_btn = QPushButton("关闭")
-        close_btn.clicked.connect(self.accept)
-        button_layout.addWidget(close_btn)
-
-        layout.addLayout(button_layout)
+    def _refresh_all(self):
+        self.refresh_groups()
+        self.refresh_layer_list()
 
     def refresh_groups(self):
         """刷新绑定组列表 - 增强版，重新分析文字图层"""
@@ -234,10 +280,14 @@ class LayerBindingManagerDialog(QDialog):
             item = QListWidgetItem("暂无绑定组")
             item.setFlags(Qt.NoItemFlags)
             self.groups_list.addItem(item)
+            if hasattr(self, "groups_summary_label"):
+                self.groups_summary_label.setText("暂无绑定组")
             print("[绑定管理器UI] 没有可用的绑定组")
             return
 
         print(f"[绑定管理器UI] 找到 {len(groups_info)} 个绑定组")
+        if hasattr(self, "groups_summary_label"):
+            self.groups_summary_label.setText(f"{len(groups_info)} 组")
 
         for group_info in groups_info:
             item = QListWidgetItem()
@@ -355,10 +405,10 @@ class LayerBindingManagerDialog(QDialog):
             if binding_info:
                 group_id, group_name = binding_info
                 item.setText(f"{layer.name} [已绑定到: {group_name}]")
-                item.setBackground(Qt.lightGray)
+                item.setBackground(QColor("#26384A"))
             else:
                 item.setText(f"{layer.name} ({layer.width}x{layer.height})")
-                item.setBackground(Qt.white)
+                item.setBackground(QColor(DialogA2.CONTROL_BG))
 
     def analyze_selected_layers(self):
         """分析选中图层的文件"""

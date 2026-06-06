@@ -114,6 +114,19 @@ class DialogA2:
                 selection-background-color: #0E76D8;
                 padding: 3px 6px;
             }}
+            QDialog[dialogA2="true"] QListWidget::item {{
+                min-height: 26px;
+                padding: 4px 6px;
+                border-radius: 3px;
+            }}
+            QDialog[dialogA2="true"] QListWidget::item:selected {{
+                background-color: {cls.ACCENT};
+                color: #FFFFFF;
+            }}
+            QDialog[dialogA2="true"] QSplitter::handle {{
+                background-color: {cls.BORDER};
+                margin: 0 6px;
+            }}
             QDialog[dialogA2="true"] QLineEdit:focus,
             QDialog[dialogA2="true"] QSpinBox:focus,
             QDialog[dialogA2="true"] QComboBox:focus,

@@ -6,11 +6,13 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget,
-    QListWidgetItem, QGroupBox, QFormLayout, QCheckBox, QComboBox, QSpinBox,
-    QMessageBox, QWidget, QSplitter, QAbstractItemView
+    QListWidgetItem, QFrame, QCheckBox, QComboBox, QSpinBox,
+    QMessageBox, QSplitter, QAbstractItemView
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+
+from app.ui.dialog_a2 import DialogA2
 
 
 class LayerSizeMatchDialog(QDialog):
@@ -22,146 +24,190 @@ class LayerSizeMatchDialog(QDialog):
         self.manager = getattr(document, "layer_size_match_manager", None)
         self._syncing_targets = False
         self.setWindowTitle("图层大小匹配管理器")
-        self.setMinimumSize(760, 520)
+        self.setMinimumSize(860, 620)
         self._setup_ui()
         self.refresh_layers()
         self.refresh_relations()
         self._update_action_buttons()
 
     def _setup_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(12, 10, 12, 10)
-        root.setSpacing(8)
-        splitter = QSplitter(Qt.Horizontal)
-        root.addWidget(splitter)
+        DialogA2.apply(self)
 
-        left = QWidget()
-        left_layout = QVBoxLayout(left)
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(6)
-        left_layout.addWidget(QLabel("现有匹配关系:"))
+        root = QVBoxLayout(self)
+        root.setContentsMargins(
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+            DialogA2.OUTER_MARGIN,
+        )
+        root.setSpacing(DialogA2.CONTENT_GAP)
+
+        self.title_label = QLabel("图层大小匹配管理器")
+        self.title_label.setProperty("role", "dialogTitle")
+        root.addWidget(self.title_label)
+
+        splitter = QSplitter(Qt.Horizontal)
+        root.addWidget(splitter, 1)
+
+        self.left_card = self._make_card()
+        left_layout = QVBoxLayout(self.left_card)
+        left_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        left_layout.setSpacing(DialogA2.CARD_GAP)
+
+        left_header = QHBoxLayout()
+        left_title = QLabel("现有匹配关系")
+        left_title.setProperty("role", "sectionTitle")
+        self.relations_summary_label = QLabel("暂无关系")
+        self.relations_summary_label.setProperty("role", "hint")
+        left_header.addWidget(left_title)
+        left_header.addStretch()
+        left_header.addWidget(self.relations_summary_label)
+        left_layout.addLayout(left_header)
+
         self.relations_list = QListWidget()
         self.relations_list.currentItemChanged.connect(self._on_relation_selected)
-        left_layout.addWidget(self.relations_list)
+        left_layout.addWidget(self.relations_list, 1)
 
-        global_group = QGroupBox("全局设置")
-        global_layout = QFormLayout()
-        self.global_enabled_cb = QCheckBox()
+        global_panel = QFrame()
+        global_panel.setProperty("role", "dialogSubPanel")
+        global_layout = QHBoxLayout(global_panel)
+        global_layout.setContentsMargins(10, 8, 10, 8)
+        global_layout.setSpacing(DialogA2.CONTENT_GAP)
+        global_title = QLabel("全局设置")
+        global_title.setProperty("role", "fieldLabel")
+        global_layout.addWidget(global_title)
+        global_layout.addStretch()
+        self.global_enabled_cb = QCheckBox("启用图层大小匹配")
         self.global_enabled_cb.setChecked(bool(getattr(self.manager, "global_enabled", False)))
         self.global_enabled_cb.clicked.connect(self._toggle_global_enabled)
-        global_layout.addRow("启用图层大小匹配:", self.global_enabled_cb)
-        global_group.setLayout(global_layout)
-        left_layout.addWidget(global_group)
-        splitter.addWidget(left)
+        global_layout.addWidget(self.global_enabled_cb)
+        left_layout.addWidget(global_panel)
+        splitter.addWidget(self.left_card)
 
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(6)
-        edit_group = QGroupBox("创建/编辑匹配关系")
-        edit_layout = QFormLayout()
-        edit_layout.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        edit_layout.setFormAlignment(Qt.AlignTop)
-        edit_layout.setHorizontalSpacing(12)
-        edit_layout.setVerticalSpacing(8)
+        self.right_card = self._make_card()
+        right_layout = QVBoxLayout(self.right_card)
+        right_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        right_layout.setSpacing(DialogA2.CARD_GAP)
+
+        edit_header = QLabel("创建/编辑匹配关系")
+        edit_header.setProperty("role", "sectionTitle")
+        right_layout.addWidget(edit_header)
 
         self.source_combo = QComboBox()
+        self.source_combo.setFixedHeight(DialogA2.CONTROL_HEIGHT)
         self.source_combo.currentTextChanged.connect(self._on_source_changed)
+        right_layout.addLayout(self._field_row("上层图层(A)", self.source_combo))
+
+        target_header = QHBoxLayout()
+        self.target_count_label = QLabel("下层匹配图层(B): 已选 0 个 / 可选 0 个")
+        self.target_count_label.setProperty("role", "fieldLabel")
+        target_header.addWidget(self.target_count_label)
+        target_header.addStretch()
+        self.select_all_targets_btn = QPushButton("全选")
+        self.clear_targets_btn = QPushButton("清空")
+        self.select_all_targets_btn.setFixedSize(DialogA2.SMALL_BUTTON_WIDTH, DialogA2.CONTROL_HEIGHT)
+        self.clear_targets_btn.setFixedSize(DialogA2.SMALL_BUTTON_WIDTH, DialogA2.CONTROL_HEIGHT)
+        self.select_all_targets_btn.clicked.connect(self._select_all_targets)
+        self.clear_targets_btn.clicked.connect(self._clear_selected_targets)
+        target_header.addWidget(self.select_all_targets_btn)
+        target_header.addWidget(self.clear_targets_btn)
+        right_layout.addLayout(target_header)
+
         self.target_list = QListWidget()
         self.target_list.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.target_list.setMinimumHeight(130)
+        self.target_list.setMinimumHeight(150)
         self.target_list.itemSelectionChanged.connect(self._on_target_selection_changed)
-        self.relation_enabled_cb = QCheckBox()
+        right_layout.addWidget(self.target_list, 1)
+
+        options_panel = QFrame()
+        options_panel.setProperty("role", "dialogSubPanel")
+        options_layout = QVBoxLayout(options_panel)
+        options_layout.setContentsMargins(10, 8, 10, 8)
+        options_layout.setSpacing(8)
+
+        option_row = QHBoxLayout()
+        self.relation_enabled_cb = QCheckBox("关系启用")
         self.relation_enabled_cb.setChecked(True)
-        self.one_to_many_cb = QCheckBox()
+        self.one_to_many_cb = QCheckBox("一对多匹配")
         self.one_to_many_cb.setChecked(False)
         self.one_to_many_cb.toggled.connect(self._on_one_to_many_toggled)
-        self.auto_rotate_cb = QCheckBox()
+        self.auto_rotate_cb = QCheckBox("自动倾斜")
         self.auto_rotate_cb.setChecked(False)
+        option_row.addWidget(self.relation_enabled_cb)
+        option_row.addWidget(self.one_to_many_cb)
+        option_row.addWidget(self.auto_rotate_cb)
+        option_row.addStretch()
+        options_layout.addLayout(option_row)
+
+        padding_row = QHBoxLayout()
+        padding_row.setSpacing(DialogA2.CONTENT_GAP)
+        padding_row.addWidget(self._field_label("边缘外扩"))
         self.padding_spin = QSpinBox()
         self.padding_spin.setRange(0, 20)
         self.padding_spin.setValue(1)
+        self.padding_spin.setSuffix(" px")
+        self.padding_spin.setFixedSize(100, DialogA2.CONTROL_HEIGHT)
         self.padding_spin.setToolTip("为避免镂空边缘出现缝隙，可增加1~2像素外扩。")
-
-        edit_layout.addRow("上层镂空图层(A):", self.source_combo)
-        self.target_count_label = QLabel("下层匹配图层(B): 已选 0 个 / 可选 0 个")
-        self.target_count_label.setStyleSheet("color: #BEBEC3;")
-        edit_layout.addRow(self.target_count_label, self.target_list)
-        target_tools = QHBoxLayout()
-        self.select_all_targets_btn = QPushButton("全选")
-        self.clear_targets_btn = QPushButton("清空")
-        self.select_all_targets_btn.clicked.connect(self._select_all_targets)
-        self.clear_targets_btn.clicked.connect(self._clear_selected_targets)
-        target_tools.addWidget(self.select_all_targets_btn)
-        target_tools.addWidget(self.clear_targets_btn)
-        target_tools.addStretch()
-        edit_layout.addRow("", target_tools)
-        edit_layout.addRow("关系启用:", self.relation_enabled_cb)
-        edit_layout.addRow("一对多匹配:", self.one_to_many_cb)
-        edit_layout.addRow("自动倾斜(矩形孔):", self.auto_rotate_cb)
-        edit_layout.addRow("边缘外扩(px):", self.padding_spin)
+        padding_row.addWidget(self.padding_spin)
+        padding_row.addStretch()
+        options_layout.addLayout(padding_row)
+        right_layout.addWidget(options_panel)
 
         buttons_row = QHBoxLayout()
+        buttons_row.setSpacing(DialogA2.CONTENT_GAP)
         self.add_btn = QPushButton("新增关系")
         self.update_btn = QPushButton("更新关系")
         self.remove_btn = QPushButton("删除关系")
+        for btn in (self.add_btn, self.update_btn, self.remove_btn):
+            btn.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+            buttons_row.addWidget(btn)
         self.add_btn.clicked.connect(self._create_relation)
         self.update_btn.clicked.connect(self._update_relation)
         self.remove_btn.clicked.connect(self._remove_relation)
-        buttons_row.addWidget(self.add_btn)
-        buttons_row.addWidget(self.update_btn)
-        buttons_row.addWidget(self.remove_btn)
-        edit_layout.addRow("", buttons_row)
+        right_layout.addLayout(buttons_row)
 
         tip = QLabel(
-            "说明: A图层需含透明镂空区域；可选择多个B图层。\n"
-            "一对多开启后会按镂空排序自动映射（横图左->右，竖图上->下）。"
+            "说明: A 图层需含透明镂空区域；一对多开启后会按镂空排序自动映射。"
         )
         tip.setWordWrap(True)
-        tip.setStyleSheet("color: #8E8E93; font-size: 9pt;")
-        edit_layout.addRow("", tip)
+        tip.setProperty("role", "hint")
+        right_layout.addWidget(tip)
 
-        edit_group.setLayout(edit_layout)
-        right_layout.addWidget(edit_group)
-        right_layout.addStretch()
-        splitter.addWidget(right)
+        splitter.addWidget(self.right_card)
         splitter.setSizes([340, 420])
 
-        bottom = QHBoxLayout()
-        refresh_btn = QPushButton("刷新")
-        refresh_btn.clicked.connect(self._refresh_all)
-        close_btn = QPushButton("关闭")
-        close_btn.clicked.connect(self.accept)
-        bottom.addWidget(refresh_btn)
-        bottom.addStretch()
-        bottom.addWidget(close_btn)
-        root.addLayout(bottom)
+        self.footer_frame = QFrame()
+        self.footer_frame.setProperty("role", "dialogFooter")
+        footer_layout = QHBoxLayout(self.footer_frame)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        self.refresh_btn = QPushButton("刷新")
+        DialogA2.mark_secondary(self.refresh_btn)
+        self.refresh_btn.clicked.connect(self._refresh_all)
+        footer_layout.addWidget(self.refresh_btn)
+        footer_layout.addStretch()
+        self.close_btn = QPushButton("关闭")
+        DialogA2.mark_secondary(self.close_btn)
+        self.close_btn.clicked.connect(self.accept)
+        footer_layout.addWidget(self.close_btn)
+        root.addWidget(self.footer_frame)
 
-        # 统一弹窗视觉（轻量，贴合现有深色风格）
-        self.setStyleSheet("""
-            QDialog { background: #1f1f22; }
-            QGroupBox {
-                border: 1px solid #3a3a3f;
-                border-radius: 6px;
-                margin-top: 8px;
-                padding-top: 8px;
-                font-weight: 600;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 4px;
-                color: #d7d7d7;
-            }
-            QListWidget, QComboBox, QSpinBox {
-                background: #2a2a30;
-                border: 1px solid #45454d;
-                border-radius: 4px;
-                padding: 4px;
-            }
-            QLabel { color: #d0d0d0; }
-            QPushButton { min-height: 28px; }
-        """)
+    def _make_card(self):
+        card = QFrame()
+        card.setProperty("role", "dialogCard")
+        return card
+
+    def _field_label(self, text):
+        label = QLabel(text)
+        label.setProperty("role", "fieldLabel")
+        label.setFixedWidth(DialogA2.FIELD_LABEL_WIDTH)
+        return label
+
+    def _field_row(self, label_text, widget):
+        row = QHBoxLayout()
+        row.setSpacing(DialogA2.CONTENT_GAP)
+        row.addWidget(self._field_label(label_text))
+        row.addWidget(widget, 1)
+        return row
 
     def refresh_layers(self):
         self.source_combo.clear()
@@ -184,7 +230,11 @@ class LayerSizeMatchDialog(QDialog):
             item = QListWidgetItem("暂无匹配关系")
             item.setFlags(item.flags() & ~Qt.ItemIsSelectable)
             self.relations_list.addItem(item)
+            if hasattr(self, "relations_summary_label"):
+                self.relations_summary_label.setText("暂无关系")
             return
+        if hasattr(self, "relations_summary_label"):
+            self.relations_summary_label.setText(f"{len(self.manager.relations)} 条")
         for relation in self.manager.relations:
             src = relation.get("source_layer_name", "")
             targets = relation.get("target_layer_names", None)
