@@ -6,6 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from app.ui.integrated_text_panel import IntegratedTextPanel
+from app.ui.property_panel_a2 import PropertyPanelA2
 
 
 class IntegratedTextPanelA2UiTest(unittest.TestCase):
@@ -63,6 +64,36 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
         self.assertEqual(self.panel.stroke_enable_check.text(), "")
         self.assertEqual(self.panel.stroke_title_label.text(), "启用描边")
         self.assertTrue(self.panel.background_controls.isHidden())
+
+    def test_a_v2_dimensions_follow_property_panel_spec(self):
+        self.assertEqual(self.panel.layout().getContentsMargins(), (
+            PropertyPanelA2.PANEL_MARGIN,
+            PropertyPanelA2.PANEL_MARGIN,
+            PropertyPanelA2.PANEL_MARGIN,
+            PropertyPanelA2.PANEL_MARGIN,
+        ))
+        self.assertEqual(self.panel.layout().spacing(), PropertyPanelA2.CARD_GAP)
+
+        for card in (
+            self.panel.content_card,
+            self.panel.font_card,
+            self.panel.typography_card,
+            self.panel.appearance_card,
+        ):
+            self.assertEqual(card.header_frame.minimumHeight(), PropertyPanelA2.HEADER_HEIGHT)
+            self.assertEqual(card.header_frame.maximumHeight(), PropertyPanelA2.HEADER_HEIGHT)
+            self.assertEqual(card.body_layout.getContentsMargins(), PropertyPanelA2.BODY_MARGINS)
+            self.assertEqual(card.body_layout.spacing(), PropertyPanelA2.SECTION_GAP)
+
+        self.assertEqual(self.panel.inline_text_edit.minimumHeight(), PropertyPanelA2.TEXT_AREA_HEIGHT)
+        self.assertEqual(self.panel.inline_text_edit.maximumHeight(), PropertyPanelA2.TEXT_AREA_HEIGHT)
+        for button in self.panel.text_fill_mode_buttons + self.panel.background_mode_buttons:
+            self.assertEqual(button.minimumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+            self.assertEqual(button.maximumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+        self.assertEqual(
+            (self.panel.stroke_enable_check.minimumWidth(), self.panel.stroke_enable_check.minimumHeight()),
+            PropertyPanelA2.SWITCH_SIZE,
+        )
 
 
 if __name__ == "__main__":

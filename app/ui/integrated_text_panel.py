@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.enhanced_font_selector import EnhancedFontSelector
 from app.ui.collapsible_group import CollapsibleGroupBox
+from app.ui.property_panel_a2 import PropertyPanelA2
 
 
 class ToggleButton(QToolButton):
@@ -31,28 +32,28 @@ class ToggleButton(QToolButton):
         self.setText(text)
         self.setCheckable(checkable)
         self.setAutoRaise(True)
-        self.setFixedSize(28, 28)
-        self.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #5A5A5A;
+        self.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
+        self.setStyleSheet(f"""
+            QToolButton {{
+                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
                 border-radius: 4px;
-                background-color: #2F2F2F;
-                color: #F4F4F5;
+                background-color: {PropertyPanelA2.CONTROL_BG_ALT};
+                color: {PropertyPanelA2.TEXT_PRIMARY};
                 font-weight: bold;
                 font-size: 12px;
-            }
-            QToolButton:hover {
-                background-color: #4A4A4A;
-                border-color: #606064;
-            }
-            QToolButton:checked {
-                background-color: #2F9CF4;
-                border-color: #55B2FF;
+            }}
+            QToolButton:hover {{
+                background-color: {PropertyPanelA2.CONTROL_BG_HOVER};
+                border-color: {PropertyPanelA2.ACCENT_HOVER};
+            }}
+            QToolButton:checked {{
+                background-color: {PropertyPanelA2.ACCENT};
+                border-color: {PropertyPanelA2.ACCENT_HOVER};
                 color: #FFFFFF;
-            }
-            QToolButton:pressed {
-                background-color: #0D5A8C;
-            }
+            }}
+            QToolButton:pressed {{
+                background-color: {PropertyPanelA2.ACCENT_PRESSED};
+            }}
         """)
 
 
@@ -77,19 +78,21 @@ class AlignButtonGroup(QWidget):
         self.left_btn.setText("L")
         self.left_btn.setCheckable(True)
         self.left_btn.setChecked(True)
-        self.left_btn.setFixedSize(28, 28)
+        self.left_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.apply_button_style(self.left_btn)
 
         # 居中对齐
         self.center_btn = QToolButton()
         self.center_btn.setText("C")
         self.center_btn.setCheckable(True)
+        self.center_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.apply_button_style(self.center_btn)
 
         # 右对齐
         self.right_btn = QToolButton()
         self.right_btn.setText("R")
         self.right_btn.setCheckable(True)
+        self.right_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.apply_button_style(self.right_btn)
 
         self.button_group.addButton(self.left_btn, 0)
@@ -106,24 +109,24 @@ class AlignButtonGroup(QWidget):
         self.right_btn.clicked.connect(lambda: self.alignment_changed.emit(TextAlign.RIGHT))
 
     def apply_button_style(self, button):
-        button.setStyleSheet("""
-            QToolButton {
-                border: 1px solid #5A5A5A;
+        button.setStyleSheet(f"""
+            QToolButton {{
+                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
                 border-radius: 4px;
-                background-color: #2F2F2F;
-                color: #F4F4F5;
-                font-size: 14px;
+                background-color: {PropertyPanelA2.CONTROL_BG_ALT};
+                color: {PropertyPanelA2.TEXT_PRIMARY};
+                font-size: 12px;
                 font-weight: bold;
-            }
-            QToolButton:hover {
-                background-color: #4A4A4A;
-                border-color: #606064;
-            }
-            QToolButton:checked {
-                background-color: #2F9CF4;
-                border-color: #55B2FF;
+            }}
+            QToolButton:hover {{
+                background-color: {PropertyPanelA2.CONTROL_BG_HOVER};
+                border-color: {PropertyPanelA2.ACCENT_HOVER};
+            }}
+            QToolButton:checked {{
+                background-color: {PropertyPanelA2.ACCENT};
+                border-color: {PropertyPanelA2.ACCENT_HOVER};
                 color: #FFFFFF;
-            }
+            }}
         """)
 
     def set_alignment(self, align):
@@ -154,7 +157,7 @@ class ColorIndicator(QPushButton):
         self.setStyleSheet(f"""
             QPushButton {{
                 background-color: rgba({r}, {g}, {b}, {a});
-                border: 1px solid #8E8E93;
+                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
                 border-radius: 4px;
                 min-width: {size}px;
                 max-width: {size}px;
@@ -163,7 +166,7 @@ class ColorIndicator(QPushButton):
                 padding: 0;
             }}
             QPushButton:hover {{
-                border-color: #55B2FF;
+                border-color: {PropertyPanelA2.ACCENT_HOVER};
             }}
         """)
         self.setText("")
@@ -227,8 +230,8 @@ class IntegratedTextPanel(QWidget):
         self.setObjectName("IntegratedTextPanel")
         self.setStyleSheet(self._panel_stylesheet())
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 8)  # 减少外边距
-        main_layout.setSpacing(6)  # 减少卡片间距
+        main_layout.setContentsMargins(*(PropertyPanelA2.PANEL_MARGIN,) * 4)
+        main_layout.setSpacing(PropertyPanelA2.CARD_GAP)
 
         # 1. 文字内容区：创建、编辑、绑定和候选文案入口合并展示
         self.create_text_content_card(main_layout)
@@ -247,136 +250,7 @@ class IntegratedTextPanel(QWidget):
 
     def _panel_stylesheet(self):
         """Photoshop 风格的深色属性面板统一样式。"""
-        return """
-            #IntegratedTextPanel {
-                background: #181818;
-                color: #F4F4F5;
-                font-size: 12px;
-            }
-            QLabel {
-                color: #F4F4F5;
-                background: transparent;
-            }
-            QFrame[role="section"] {
-                background-color: #202123;
-                border: 1px solid #303033;
-                border-radius: 7px;
-            }
-            QFrame[role="sectionHeader"] {
-                background-color: #2A2B2E;
-                border: none;
-                border-bottom: 1px solid #34363A;
-                border-top-left-radius: 7px;
-                border-top-right-radius: 7px;
-            }
-            QFrame[role="sectionBody"] {
-                background-color: transparent;
-                border: none;
-            }
-            QLabel[role="sectionTitle"] {
-                color: #FFFFFF;
-                font-size: 13px;
-                font-weight: 700;
-            }
-            QPushButton, QToolButton {
-                min-height: 28px;
-                border: 1px solid #3A3A3D;
-                border-radius: 4px;
-                background-color: #2A2A2A;
-                color: #F4F4F5;
-                padding: 4px 10px;
-            }
-            QPushButton:hover, QToolButton:hover {
-                background-color: #303030;
-                border-color: #55B2FF;
-            }
-            QPushButton:pressed, QToolButton:pressed {
-                background-color: #1F7EC8;
-                border-color: #2D95F0;
-            }
-            QPushButton:disabled, QToolButton:disabled {
-                color: #606064;
-                background-color: #20252B;
-                border-color: #252528;
-            }
-            QCheckBox {
-                color: #F4F4F5;
-                spacing: 6px;
-            }
-            QCheckBox::indicator {
-                width: 15px;
-                height: 15px;
-                border-radius: 3px;
-                border: 1px solid #58636F;
-                background: #2F2F2F;
-            }
-            QCheckBox::indicator:checked {
-                background: #2F9CF4;
-                border-color: #55B2FF;
-            }
-            QTextEdit, QLineEdit, QComboBox, QSpinBox {
-                background-color: #2F2F2F;
-                color: #E9EEF3;
-                border: 1px solid #3A3A3D;
-                border-radius: 4px;
-                selection-background-color: #0E76D8;
-                padding: 4px 6px;
-            }
-            QTextEdit:focus, QLineEdit:focus, QComboBox:focus, QSpinBox:focus {
-                border-color: #2F9CF4;
-            }
-            QSlider::groove:horizontal {
-                height: 4px;
-                background: #3A3A3D;
-                border-radius: 2px;
-            }
-            QSlider::sub-page:horizontal {
-                background: #2F9CF4;
-                border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-                background: #55B2FF;
-                width: 16px;
-                height: 16px;
-                margin: -6px 0;
-                border-radius: 8px;
-            }
-            QFrame[role="coreDivider"] {
-                background-color: #34383B;
-                border: none;
-            }
-            QFrame[role="subPanel"] {
-                background-color: #191A1C;
-                border: 1px solid #34383B;
-                border-radius: 6px;
-            }
-            QLabel[role="mutedLabel"] {
-                color: #8E95A3;
-                font-size: 11px;
-                font-weight: 700;
-            }
-            QLabel[role="summaryLabel"] {
-                color: #9AA2AF;
-                font-size: 11px;
-            }
-            QPushButton[segmentButton="true"] {
-                min-height: 28px;
-                padding: 3px 6px;
-                font-size: 12px;
-            }
-            QPushButton[segmentButton="true"]:checked {
-                background-color: #2F9CF4;
-                border-color: #55B2FF;
-                color: #FFFFFF;
-                font-weight: 700;
-            }
-            QPushButton[compactValue="true"] {
-                min-height: 28px;
-                background-color: #111315;
-                border-color: #35383C;
-                font-weight: 700;
-            }
-        """
+        return PropertyPanelA2.stylesheet("#IntegratedTextPanel")
 
     def _make_section_card(self, title_text, reset_handler=None):
         """创建 A v2 风格的模块卡片：标题栏带右侧摘要，正文保持紧凑。"""
@@ -388,9 +262,10 @@ class IntegratedTextPanel(QWidget):
 
         header = QFrame()
         header.setProperty("role", "sectionHeader")
+        header.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
         title_row = QHBoxLayout(header)
-        title_row.setContentsMargins(10, 7, 10, 7)
-        title_row.setSpacing(8)
+        title_row.setContentsMargins(PropertyPanelA2.BODY_MARGINS[0], 0, PropertyPanelA2.BODY_MARGINS[2], 0)
+        title_row.setSpacing(PropertyPanelA2.ROW_GAP)
 
         title = QLabel(title_text)
         title.setProperty("role", "sectionTitle")
@@ -402,6 +277,7 @@ class IntegratedTextPanel(QWidget):
         card.title_label = title
         card.summary_label = summary
         card.title_layout = title_row
+        card.header_frame = header
         title_row.addWidget(title)
         title_row.addWidget(summary, 1)
 
@@ -416,8 +292,10 @@ class IntegratedTextPanel(QWidget):
         body = QFrame()
         body.setProperty("role", "sectionBody")
         card_layout = QVBoxLayout(body)
-        card_layout.setContentsMargins(10, 8, 10, 8)
-        card_layout.setSpacing(6)
+        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
+        card.body_frame = body
+        card.body_layout = card_layout
         outer_layout.addWidget(header)
         outer_layout.addWidget(body)
         return card, card_layout
@@ -466,12 +344,12 @@ class IntegratedTextPanel(QWidget):
             }}
         """)
 
-    def _label(self, text, width=58):
+    def _label(self, text, width=PropertyPanelA2.LABEL_WIDTH):
         label = QLabel(text)
         label.setFixedWidth(width)
         label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        label.setStyleSheet("font-size: 12px; font-weight: 700; color: #F4F4F5;")
+        label.setProperty("role", "fieldLabel")
         return label
 
     def _muted_label(self, text):
@@ -481,7 +359,7 @@ class IntegratedTextPanel(QWidget):
 
     def _make_param_row(self, title, *widgets, stretch_last=True):
         row = QHBoxLayout()
-        row.setSpacing(6)
+        row.setSpacing(PropertyPanelA2.ROW_GAP)
         row.addWidget(self._label(title))
         for widget in widgets:
             if stretch_last and widget is widgets[-1]:
@@ -490,16 +368,16 @@ class IntegratedTextPanel(QWidget):
                 row.addWidget(widget)
         return row
 
-    def _make_spin(self, width=76):
+    def _make_spin(self, width=PropertyPanelA2.SPIN_WIDTH):
         spin = QSpinBox()
         spin.setFixedWidth(width)
-        spin.setFixedHeight(30)
+        spin.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         spin.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         return spin
 
     def _make_button(self, text, width=None):
         button = QPushButton(text)
-        button.setFixedHeight(30)
+        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         if width is not None:
             button.setFixedWidth(width)
         return button
@@ -507,7 +385,7 @@ class IntegratedTextPanel(QWidget):
     def _make_tool(self, text, width=42):
         button = QToolButton()
         button.setText(text)
-        button.setFixedHeight(30)
+        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         if width:
             button.setMinimumWidth(width)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -518,6 +396,7 @@ class IntegratedTextPanel(QWidget):
         button.setCheckable(True)
         button.setChecked(checked)
         button.setProperty("segmentButton", True)
+        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
@@ -541,14 +420,14 @@ class IntegratedTextPanel(QWidget):
         panel = QFrame()
         panel.setProperty("role", "subPanel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(8, 7, 8, 7)
-        layout.setSpacing(6)
+        layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        layout.setSpacing(PropertyPanelA2.ROW_GAP)
         return panel, layout
 
     def _make_compact_value_button(self, text):
         button = QPushButton(text)
         button.setProperty("compactValue", True)
-        button.setFixedHeight(30)
+        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
@@ -598,16 +477,19 @@ class IntegratedTextPanel(QWidget):
         """样式化开关复选框为圆形切换样式"""
         checkbox.setText("")
         checkbox.setCursor(Qt.PointingHandCursor)
-        checkbox.setFixedSize(52, 30)
+        switch_width, switch_height = PropertyPanelA2.SWITCH_SIZE
+        knob_size = switch_height - 6
+        knob_checked_left = switch_width - knob_size - 3
+        checkbox.setFixedSize(switch_width, switch_height)
         checkbox.setStyleSheet("""
             QCheckBox {
                 spacing: 0;
                 padding: 0;
             }
             QCheckBox::indicator {
-                width: 52px;
-                height: 30px;
-                border-radius: 15px;
+                width: %dpx;
+                height: %dpx;
+                border-radius: %dpx;
                 border: 1px solid #45484C;
                 background: #3A3C3F;
                 position: relative;
@@ -619,17 +501,17 @@ class IntegratedTextPanel(QWidget):
             QCheckBox::indicator:after {
                 content: '';
                 position: absolute;
-                width: 24px;
-                height: 24px;
-                border-radius: 12px;
+                width: %dpx;
+                height: %dpx;
+                border-radius: %dpx;
                 background: white;
                 left: 3px;
                 top: 2px;
             }
             QCheckBox::indicator:checked:after {
-                left: 25px;
+                left: %dpx;
             }
-        """)
+        """ % (switch_width, switch_height, switch_height // 2, knob_size, knob_size, knob_size // 2, knob_checked_left))
 
     def create_preview_card(self, parent_layout):
         """创建文字预览卡片"""
@@ -711,6 +593,7 @@ class IntegratedTextPanel(QWidget):
     def create_text_content_card(self, parent_layout):
         """创建可直接编辑的文字内容卡片。"""
         card, card_layout = self._make_section_card("文字内容")
+        self.content_card = card
         self.content_card_title = card.title_label
         self.content_summary_label = card.summary_label
 
@@ -734,8 +617,8 @@ class IntegratedTextPanel(QWidget):
 
         self.inline_text_edit = QTextEdit()
         self.inline_text_edit.setAcceptRichText(False)
-        self.inline_text_edit.setMinimumHeight(82)
-        self.inline_text_edit.setMaximumHeight(128)
+        self.inline_text_edit.setFixedHeight(PropertyPanelA2.TEXT_AREA_HEIGHT)
+        self.inline_text_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.inline_text_edit.setPlaceholderText("输入当前文案；开启绑定模式时，每行可作为一个候选文案")
         card_layout.addWidget(self.inline_text_edit)
 
@@ -759,7 +642,7 @@ class IntegratedTextPanel(QWidget):
         self.text_count_label.setStyleSheet("color: #8E8E93;")
 
         for button in (self.prev_text_btn, self.next_text_btn, self.random_text_btn):
-            button.setFixedHeight(30)
+            button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             text_actions.addWidget(button)
         text_actions.addWidget(self.binding_mode_check)
@@ -772,11 +655,12 @@ class IntegratedTextPanel(QWidget):
     def create_font_card(self, parent_layout):
         """创建字体卡片。"""
         card, card_layout = self._make_section_card("字体", self.reset_core_params)
+        self.font_card = card
         self.font_card_title = card.title_label
         self.font_summary_label = card.summary_label
         self.font_reset_btn = getattr(card, "reset_button", None)
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(8)
+        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
 
         self.font_combo = QComboBox()
         self.font_combo.setEditable(True)
@@ -784,7 +668,7 @@ class IntegratedTextPanel(QWidget):
         self.font_combo.setMaxVisibleItems(18)
         self.font_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.font_combo.setMinimumContentsLength(8)
-        self.font_combo.setFixedHeight(30)
+        self.font_combo.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         self.font_combo.setMinimumWidth(0)
         self.font_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         if self.font_combo.lineEdit():
@@ -808,7 +692,7 @@ class IntegratedTextPanel(QWidget):
         card_layout.addWidget(self._make_core_divider())
         card_layout.addWidget(self._muted_label("常用"))
         quick_buttons_row = QHBoxLayout()
-        quick_buttons_row.setSpacing(8)
+        quick_buttons_row.setSpacing(PropertyPanelA2.ROW_GAP)
         self.quick_font_button_group = QButtonGroup(self)
         self.quick_font_button_group.setExclusive(True)
         self.quick_font_buttons = []
@@ -835,26 +719,27 @@ class IntegratedTextPanel(QWidget):
     def create_typography_card(self, parent_layout):
         """创建排版卡片。"""
         card, card_layout = self._make_section_card("排版")
+        self.typography_card = card
         self.typography_card_title = card.title_label
         self.typography_summary_label = card.summary_label
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(8)
+        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
 
         self.font_size_spin = self._make_spin(76)
         self.font_size_spin.setRange(6, 200)
         self.font_size_spin.setValue(24)
         self.font_size_spin.setSuffix("px")
         self.bold_btn = ToggleButton("B")
-        self.bold_btn.setFixedSize(42, 30)
+        self.bold_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.italic_btn = ToggleButton("I")
-        self.italic_btn.setFixedSize(42, 30)
+        self.italic_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         card_layout.addLayout(self._make_param_row("大小", self.font_size_spin, self.bold_btn, self.italic_btn, stretch_last=False))
 
         self.align_group = AlignButtonGroup()
         for text, button in (("左", self.align_group.left_btn), ("中", self.align_group.center_btn), ("右", self.align_group.right_btn)):
             button.setText(text)
-            button.setFixedHeight(30)
-            button.setMinimumWidth(42)
+            button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+            button.setMinimumWidth(PropertyPanelA2.ICON_BUTTON_WIDTH)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.vertical_layout_check = QCheckBox("竖排")
         card_layout.addLayout(self._make_param_row("对齐", self.align_group, self.vertical_layout_check, stretch_last=False))
@@ -894,10 +779,11 @@ class IntegratedTextPanel(QWidget):
     def create_appearance_card(self, parent_layout):
         """创建外观卡片。"""
         card, card_layout = self._make_section_card("外观")
+        self.appearance_card = card
         self.appearance_card_title = card.title_label
         self.appearance_summary_label = card.summary_label
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(8)
+        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
 
         card_layout.addWidget(self._muted_label("文字填充"))
         text_fill_layout, self.text_fill_button_group, self.text_fill_mode_buttons = self._make_segment_row(
@@ -909,7 +795,7 @@ class IntegratedTextPanel(QWidget):
         card_layout.addLayout(text_fill_layout)
 
         self.text_color_controls, text_color_layout = self._make_subpanel()
-        self.text_color = ColorIndicator((0, 0, 0, 255), size=30)
+        self.text_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.text_color_button = self._make_compact_value_button("文字颜色")
         self.text_color_button.clicked.connect(self.text_color.click)
         text_color_layout.addLayout(self._make_param_row("颜色", self.text_color_button, self.text_color, stretch_last=False))
@@ -950,7 +836,7 @@ class IntegratedTextPanel(QWidget):
         self.stroke_toggle_panel, stroke_toggle_layout = self._make_subpanel()
         stroke_toggle_row = QHBoxLayout()
         stroke_toggle_row.setContentsMargins(0, 0, 0, 0)
-        stroke_toggle_row.setSpacing(8)
+        stroke_toggle_row.setSpacing(PropertyPanelA2.ROW_GAP)
         self.stroke_title_label = QLabel("启用描边")
         self.stroke_title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #F4F4F5;")
         self.stroke_enable_check = QCheckBox("")
@@ -962,7 +848,7 @@ class IntegratedTextPanel(QWidget):
         stroke_toggle_layout.addLayout(stroke_toggle_row)
         card_layout.addWidget(self.stroke_toggle_panel)
         self.stroke_controls, stroke_layout = self._make_subpanel()
-        self.stroke_color = ColorIndicator((0, 0, 0, 255), size=30)
+        self.stroke_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.stroke_color.setEnabled(False)
         self.stroke_color_button = self._make_compact_value_button("描边色")
         self.stroke_color_button.clicked.connect(self.stroke_color.click)
@@ -988,7 +874,7 @@ class IntegratedTextPanel(QWidget):
         self.bg_enable_check = QCheckBox("启用背景")
         self.bg_enable_check.hide()
         self.bg_enable_check.stateChanged.connect(self.on_background_enabled_changed)
-        self.bg_color = ColorIndicator((255, 255, 255, 255))
+        self.bg_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.bg_color.color_changed.connect(self.on_background_color_changed)
         self.bg_color_button = self._make_compact_value_button("背景颜色")
         self.bg_color_button.clicked.connect(self.bg_color.click)
@@ -1413,6 +1299,9 @@ class IntegratedTextPanel(QWidget):
         """创建高级设置区域 - 补充完整内容"""
         # 位置和尺寸组：折叠时保留关键摘要，展开后按职责拆成两个小面板。
         self.pos_group = CollapsibleGroupBox("位置和尺寸", collapsed=True)
+        self.pos_group.title_frame.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
+        self.pos_group.container_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        self.pos_group.container_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
         self.position_summary_label = QLabel()
         self.position_summary_label.setProperty("role", "summaryLabel")
         self.position_summary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1423,7 +1312,7 @@ class IntegratedTextPanel(QWidget):
 
         pos_layout = QVBoxLayout()
         pos_layout.setContentsMargins(0, 0, 0, 0)
-        pos_layout.setSpacing(6)
+        pos_layout.setSpacing(PropertyPanelA2.ROW_GAP)
 
         self.position_box, position_layout = self._make_subpanel()
         self.size_box, size_layout = self._make_subpanel()
@@ -1431,16 +1320,16 @@ class IntegratedTextPanel(QWidget):
         def make_spin(attr):
             spin = QSpinBox()
             spin.setRange(1, 9999) if attr in ["width", "height"] else spin.setRange(-9999, 9999)
-            spin.setFixedHeight(28)
+            spin.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
             spin.setMinimumWidth(74)
             spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             return spin
 
         def add_pair_row(layout, first, second):
             row = QHBoxLayout()
-            row.setSpacing(6)
+            row.setSpacing(PropertyPanelA2.ROW_GAP)
             for title, attr in (first, second):
-                label = self._label(title, width=22)
+                label = self._label(title, width=PropertyPanelA2.POSITION_LABEL_WIDTH)
                 spin = make_spin(attr)
                 setattr(self, f"{attr}_spin", spin)
                 row.addWidget(label)
