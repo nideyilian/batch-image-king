@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from app.models.document import Document
 from app.models.binding_manager import BindingGroup
+from app.models.text_layer import TextLayer
 from app.utils.batch_export_precomputer import get_batch_precomputer_v2
 
 
@@ -97,6 +98,60 @@ class BatchExportCountTest(unittest.TestCase):
             )
 
             self.assertEqual(Document._calculate_possible_combinations(document), 1001)
+
+    def test_text_binding_lines_count_as_possible_combinations(self):
+        text_layer = TextLayer()
+        text_layer.text_binding_enabled = True
+        text_layer.set_text_lines(["文案一", "文案二", "文案三", "文案四"])
+        document = SimpleNamespace(
+            layers=[text_layer],
+            export_settings={},
+        )
+
+        self.assertEqual(Document._calculate_possible_combinations(document), 4)
+
+    def test_avoid_duplicates_caps_text_exports_to_unique_text_candidates(self):
+        text_layer = TextLayer()
+        text_layer.name = "文案层"
+        text_layer.visible = True
+        text_layer.text_binding_enabled = True
+        text_layer.set_text_lines(["文案一", "文案二", "文案三", "文案四"])
+        document = SimpleNamespace(
+            layers=[text_layer],
+            export_settings={},
+            file_path="",
+            binding_manager=None,
+        )
+        analysis = {
+            "binding_enabled": False,
+            "binding_categories": [],
+            "layer_analysis": {
+                "visible_layers": [text_layer],
+                "bound_layers": [],
+                "unbound_layers": [text_layer],
+            },
+            "export_mode": "standard",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            precomputer = get_batch_precomputer_v2(document, analysis)
+            self.assertEqual(precomputer.analyze_document_with_context(), 4)
+
+            plan = precomputer.create_export_plan(
+                directory=directory,
+                count=5,
+                filename_template="image_{number:04d}",
+                file_format="png",
+                start_index=1,
+                avoid_duplicates=True,
+            )
+
+        self.assertEqual(plan.total_count, 4)
+        self.assertEqual(plan.unique_combinations, 4)
+        adjustment_reasons = getattr(plan, "adjustment_info", {}).get("reasons", [])
+        self.assertTrue(any("唯一组合不足" in reason for reason in adjustment_reasons))
+        diagnostic_reasons = (plan.precompute_diagnostics or {}).get("adjustment_reasons", [])
+        self.assertTrue(any("唯一组合不足" in reason for reason in diagnostic_reasons))
 
 
 if __name__ == "__main__":

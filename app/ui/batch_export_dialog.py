@@ -2021,6 +2021,13 @@ class BatchExportDialog(QDialog):
                     planned = adj.get('planned')
                     if requested and planned is not None and planned < requested:
                         message += f"（实际 {planned} / 请求 {requested}）"
+                    reasons = [
+                        str(reason).strip()
+                        for reason in (adj.get('reasons') or [])
+                        if str(reason).strip()
+                    ]
+                    if reasons:
+                        message += f"；原因：{'；'.join(reasons[:2])}"
             except Exception:
                 pass
 

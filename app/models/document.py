@@ -4624,12 +4624,26 @@ class Document(QObject):
 
                 # 检查是否是文字图层
                 from app.models.text_layer import TextLayer
-                if isinstance(layer, TextLayer):
-                    # 文字图层：计算可用文字数量
-                    if hasattr(layer, 'text_list') and layer.text_list:
-                        layer_combinations = max(1, len(layer.text_list))
-                    else:
-                        layer_combinations = 1
+                if isinstance(layer, TextLayer) or hasattr(layer, 'get_text_lines') or hasattr(layer, 'text_content'):
+                    candidates = []
+                    if hasattr(layer, 'get_text_lines') and callable(getattr(layer, 'get_text_lines', None)):
+                        try:
+                            candidates = [
+                                str(line)
+                                for line in (layer.get_text_lines() or [])
+                                if line is not None and str(line).strip()
+                            ]
+                        except Exception:
+                            candidates = []
+                    elif hasattr(layer, 'text_list') and layer.text_list:
+                        candidates = [str(line) for line in layer.text_list if line is not None and str(line).strip()]
+                    elif hasattr(layer, 'text_content'):
+                        content = getattr(layer, 'text_content', '')
+                        if bool(getattr(layer, 'text_binding_enabled', False)):
+                            candidates = [line.strip() for line in str(content).splitlines() if line.strip()]
+                        elif str(content).strip():
+                            candidates = [str(content)]
+                    layer_combinations = max(1, len(candidates))
                 elif hasattr(layer, '_is_folder') and layer._is_folder:
                     # 文件夹图层：计算文件夹中的图片数量
                     is_image_candidate_layer = True

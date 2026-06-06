@@ -2369,18 +2369,18 @@ class BatchExportPrecomputerV2:
             print(f"[V2] 图像唯一使用限制计算失败: {e}")
 
     def _apply_total_possible_constraints(self, ctx: Dict[str, Any]):
-        """理论唯一组合不足时不压缩导出数量，改为允许重复补足。"""
+        """理论唯一组合不足时压缩导出数量，保持避免重复语义。"""
         if not (ctx["avoid_duplicates"] and self._precompute_total_possible and self._precompute_total_possible > 0):
             return
 
         if ctx["target_count"] > self._precompute_total_possible:
             print(
                 f"[V2] 请求导出 {ctx['target_count']} 张，理论唯一组合只有 "
-                f"{self._precompute_total_possible}，将保留数量并允许重复组合补足"
+                f"{self._precompute_total_possible}，避免重复已启用，将导出数量调整为唯一组合数"
             )
-            ctx["avoid_duplicates"] = False
+            ctx["target_count"] = int(self._precompute_total_possible)
             ctx["adjustment_reasons"].append(
-                f"唯一组合不足：理论唯一组合数仅 {self._precompute_total_possible}，已允许重复以满足导出数量"
+                f"唯一组合不足：理论唯一组合数仅 {self._precompute_total_possible}，避免重复已启用，已停止重复补足"
             )
 
     def _empty_plan(self) -> 'PrecomputedExportPlan':
@@ -2966,22 +2966,12 @@ class BatchExportPrecomputerV2:
         ):
             shortage = int(ctx["target_count"] - len(combinations))
             print(
-                f"[V2] 去重组合不足，放宽去重补足剩余 {shortage} 张，"
-                f"确保随机导出数量符合用户设置"
+                f"[V2] 去重组合不足，剩余 {shortage} 张未补足，"
+                f"避免重复已启用，不使用重复组合补齐"
             )
             ctx["adjustment_reasons"].append(
-                f"去重组合不足：已允许重复补足剩余 {shortage} 张以满足导出数量"
+                f"去重组合不足：避免重复已启用，未使用重复组合补足剩余 {shortage} 张"
             )
-            relaxed_combinations = self._plan_combinations(
-                target_count=shortage,
-                avoid_duplicates=False,
-                traverse_mode=False,
-                cancel_callback=cancel_callback,
-                precompute_start=precompute_start,
-            )
-            for combination in relaxed_combinations:
-                combination.index = len(combinations)
-                combinations.append(combination)
 
         tasks = self._build_export_tasks(
             combinations=combinations,
@@ -3025,6 +3015,7 @@ class BatchExportPrecomputerV2:
             "requested_count": int(ctx["requested_count"]),
             "target_count": int(ctx["target_count"]),
             "planned_count": int(len(combinations)),
+            "adjustment_reasons": list(ctx["adjustment_reasons"]),
         })
         base_diag["shortage_analysis"] = self._build_shortage_analysis(
             diagnostics=base_diag,
