@@ -5,7 +5,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QSizePolicy
 
-from app.ui.integrated_text_panel import IntegratedTextPanel
+from app.ui.integrated_text_panel import A2Switch, IntegratedTextPanel
 from app.ui.property_panel_a2 import PropertyPanelA2
 
 
@@ -61,6 +61,15 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
             button.sizePolicy().horizontalPolicy() == QSizePolicy.Expanding
             for button in self.panel.quick_font_buttons
         ))
+        for button in (
+            self.panel.font_settings_btn,
+            self.panel.prev_text_btn,
+            self.panel.next_text_btn,
+            self.panel.random_text_btn,
+        ):
+            self.assertTrue(button.property("actionButton"))
+            self.assertEqual(button.minimumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+            self.assertEqual(button.maximumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
         self.assertEqual(self.panel.stroke_enable_check.text(), "")
         self.assertEqual(self.panel.stroke_title_label.text(), "启用描边")
         self.assertTrue(self.panel.background_controls.isHidden())
@@ -94,6 +103,54 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
             (self.panel.stroke_enable_check.minimumWidth(), self.panel.stroke_enable_check.minimumHeight()),
             PropertyPanelA2.SWITCH_SIZE,
         )
+
+    def test_typography_module_uses_a2_grid_and_segment_geometry(self):
+        self.assertEqual(self.panel.typography_size_row.spacing(), PropertyPanelA2.ROW_GAP)
+        self.assertEqual(self.panel.typography_align_row.spacing(), PropertyPanelA2.ROW_GAP)
+        self.assertEqual(self.panel.align_group.layout().spacing(), PropertyPanelA2.SEGMENT_GAP)
+
+        for button in (
+            self.panel.align_group.left_btn,
+            self.panel.align_group.center_btn,
+            self.panel.align_group.right_btn,
+        ):
+            self.assertTrue(button.property("segmentButton"))
+            self.assertEqual(button.minimumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+            self.assertEqual(button.maximumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+            self.assertEqual(button.minimumWidth(), PropertyPanelA2.ALIGN_BUTTON_MIN_WIDTH)
+            self.assertGreater(button.maximumWidth(), PropertyPanelA2.ALIGN_BUTTON_MIN_WIDTH)
+            self.assertEqual(button.sizePolicy().horizontalPolicy(), QSizePolicy.Expanding)
+
+        self.assertEqual(self.panel.vertical_layout_check.property("role"), "inlineCheck")
+        self.assertEqual(self.panel.vertical_layout_check.minimumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+        self.assertEqual(self.panel.vertical_layout_check.maximumHeight(), PropertyPanelA2.CONTROL_HEIGHT)
+
+        for row in (self.panel.spacing_params_row, self.panel.text_box_params_row):
+            self.assertEqual(row.property("role"), "parameterGrid")
+            self.assertEqual(row.layout().getContentsMargins(), (0, 0, 0, 0))
+            self.assertEqual(row.layout().horizontalSpacing(), PropertyPanelA2.ROW_GAP)
+            self.assertEqual(row.layout().verticalSpacing(), PropertyPanelA2.ROW_GAP)
+
+    def test_appearance_inner_panels_and_switch_follow_a2_spec(self):
+        self.assertEqual(self.panel.text_color_controls.property("role"), "subPanel")
+        self.assertEqual(self.panel.stroke_toggle_panel.property("role"), "subPanel")
+        self.assertEqual(self.panel.stroke_controls.property("role"), "subPanel")
+        self.assertEqual(self.panel.background_advanced_row.property("role"), "subPanel")
+
+        self.assertEqual(self.panel.stroke_toggle_panel.minimumHeight(), PropertyPanelA2.FEATURE_TOGGLE_HEIGHT)
+        self.assertEqual(self.panel.stroke_title_label.property("role"), "featureTitle")
+        self.assertIsInstance(self.panel.stroke_enable_check, A2Switch)
+        self.assertEqual(self.panel.stroke_enable_check.property("role"), "switch")
+        self.assertEqual(
+            (self.panel.stroke_enable_check.minimumWidth(), self.panel.stroke_enable_check.minimumHeight()),
+            PropertyPanelA2.SWITCH_SIZE,
+        )
+
+        for swatch in (self.panel.text_color, self.panel.stroke_color, self.panel.bg_color):
+            self.assertEqual(swatch.minimumWidth(), PropertyPanelA2.COLOR_SWATCH_SIZE)
+            self.assertEqual(swatch.maximumWidth(), PropertyPanelA2.COLOR_SWATCH_SIZE)
+            self.assertEqual(swatch.minimumHeight(), PropertyPanelA2.COLOR_SWATCH_SIZE)
+            self.assertEqual(swatch.maximumHeight(), PropertyPanelA2.COLOR_SWATCH_SIZE)
 
 
 if __name__ == "__main__":

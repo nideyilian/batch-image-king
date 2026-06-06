@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QToolButton, QButtonGroup, QSizePolicy, QCheckBox,
                                QTextEdit, QLineEdit, QComboBox, QScrollArea, QDialog, QCompleter,
                                QGridLayout)
-from PySide6.QtCore import Qt, Signal, QSize, QStringListModel
+from PySide6.QtCore import Qt, Signal, QSize, QStringListModel, QRectF
 from PySide6.QtGui import QColor, QFont, QPixmap, QPainter, QIcon
 
 import sys
@@ -25,36 +25,59 @@ from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.property_panel_a2 import PropertyPanelA2
 
 
+class A2Switch(QCheckBox):
+    """A v2 switch control used for high-level enable/disable rows."""
+
+    def __init__(self, parent=None):
+        super().__init__("", parent)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setProperty("role", "switch")
+        self.setFixedSize(*PropertyPanelA2.SWITCH_SIZE)
+        self.setFocusPolicy(Qt.StrongFocus)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        width, height = PropertyPanelA2.SWITCH_SIZE
+        margin = PropertyPanelA2.SWITCH_TRACK_MARGIN
+        knob_size = PropertyPanelA2.SWITCH_KNOB_SIZE
+        track_rect = QRectF(
+            margin,
+            margin + 1,
+            width - margin * 2,
+            height - margin * 2 - 2,
+        )
+
+        if self.isEnabled():
+            track_color = PropertyPanelA2.ACCENT if self.isChecked() else "#3A3C3F"
+            knob_color = "#FFFFFF"
+            border_color = PropertyPanelA2.ACCENT_HOVER if self.isChecked() else "#45484C"
+        else:
+            track_color = "#25272A"
+            knob_color = "#8E95A3"
+            border_color = "#2E3033"
+
+        painter.setPen(QColor(border_color))
+        painter.setBrush(QColor(track_color))
+        painter.drawRoundedRect(track_rect, track_rect.height() / 2, track_rect.height() / 2)
+
+        knob_y = (height - knob_size) / 2
+        knob_x = width - knob_size - margin - 2 if self.isChecked() else margin + 2
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(knob_color))
+        painter.drawEllipse(QRectF(knob_x, knob_y, knob_size, knob_size))
+
+
 class ToggleButton(QToolButton):
     """切换按钮 - 用于粗体、斜体等样式切换"""
     def __init__(self, text="", checkable=True):
         super().__init__()
         self.setText(text)
         self.setCheckable(checkable)
-        self.setAutoRaise(True)
+        self.setAutoRaise(False)
+        self.setProperty("actionButton", True)
         self.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
-        self.setStyleSheet(f"""
-            QToolButton {{
-                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
-                border-radius: 4px;
-                background-color: {PropertyPanelA2.CONTROL_BG_ALT};
-                color: {PropertyPanelA2.TEXT_PRIMARY};
-                font-weight: bold;
-                font-size: 12px;
-            }}
-            QToolButton:hover {{
-                background-color: {PropertyPanelA2.CONTROL_BG_HOVER};
-                border-color: {PropertyPanelA2.ACCENT_HOVER};
-            }}
-            QToolButton:checked {{
-                background-color: {PropertyPanelA2.ACCENT};
-                border-color: {PropertyPanelA2.ACCENT_HOVER};
-                color: #FFFFFF;
-            }}
-            QToolButton:pressed {{
-                background-color: {PropertyPanelA2.ACCENT_PRESSED};
-            }}
-        """)
 
 
 class AlignButtonGroup(QWidget):
@@ -68,7 +91,8 @@ class AlignButtonGroup(QWidget):
     def setup_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
+        layout.setSpacing(PropertyPanelA2.SEGMENT_GAP)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.button_group = QButtonGroup(self)
         self.button_group.setExclusive(True)
@@ -78,21 +102,18 @@ class AlignButtonGroup(QWidget):
         self.left_btn.setText("L")
         self.left_btn.setCheckable(True)
         self.left_btn.setChecked(True)
-        self.left_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.apply_button_style(self.left_btn)
 
         # 居中对齐
         self.center_btn = QToolButton()
         self.center_btn.setText("C")
         self.center_btn.setCheckable(True)
-        self.center_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.apply_button_style(self.center_btn)
 
         # 右对齐
         self.right_btn = QToolButton()
         self.right_btn.setText("R")
         self.right_btn.setCheckable(True)
-        self.right_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.apply_button_style(self.right_btn)
 
         self.button_group.addButton(self.left_btn, 0)
@@ -109,25 +130,10 @@ class AlignButtonGroup(QWidget):
         self.right_btn.clicked.connect(lambda: self.alignment_changed.emit(TextAlign.RIGHT))
 
     def apply_button_style(self, button):
-        button.setStyleSheet(f"""
-            QToolButton {{
-                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
-                border-radius: 4px;
-                background-color: {PropertyPanelA2.CONTROL_BG_ALT};
-                color: {PropertyPanelA2.TEXT_PRIMARY};
-                font-size: 12px;
-                font-weight: bold;
-            }}
-            QToolButton:hover {{
-                background-color: {PropertyPanelA2.CONTROL_BG_HOVER};
-                border-color: {PropertyPanelA2.ACCENT_HOVER};
-            }}
-            QToolButton:checked {{
-                background-color: {PropertyPanelA2.ACCENT};
-                border-color: {PropertyPanelA2.ACCENT_HOVER};
-                color: #FFFFFF;
-            }}
-        """)
+        button.setProperty("segmentButton", True)
+        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        button.setMinimumWidth(PropertyPanelA2.ALIGN_BUTTON_MIN_WIDTH)
+        button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
     def set_alignment(self, align):
         if align == TextAlign.LEFT:
@@ -154,21 +160,23 @@ class ColorIndicator(QPushButton):
     def update_color_display(self):
         r, g, b, a = self.current_color
         size = self._indicator_size
+        css_size = max(0, size - 2)
         self.setStyleSheet(f"""
             QPushButton {{
                 background-color: rgba({r}, {g}, {b}, {a});
                 border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
                 border-radius: 4px;
-                min-width: {size}px;
-                max-width: {size}px;
-                min-height: {size}px;
-                max-height: {size}px;
+                min-width: {css_size}px;
+                max-width: {css_size}px;
+                min-height: {css_size}px;
+                max-height: {css_size}px;
                 padding: 0;
             }}
             QPushButton:hover {{
                 border-color: {PropertyPanelA2.ACCENT_HOVER};
             }}
         """)
+        self.setFixedSize(size, size)
         self.setText("")
 
     def choose_color(self):
@@ -285,6 +293,8 @@ class IntegratedTextPanel(QWidget):
             reset_btn = QToolButton()
             reset_btn.setText("重置")
             reset_btn.setToolTip(f"重置{title_text}")
+            reset_btn.setProperty("actionButton", True)
+            reset_btn.setFixedSize(PropertyPanelA2.ACTION_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
             reset_btn.clicked.connect(reset_handler)
             card.reset_button = reset_btn
             title_row.addWidget(reset_btn)
@@ -377,15 +387,19 @@ class IntegratedTextPanel(QWidget):
 
     def _make_button(self, text, width=None):
         button = QPushButton(text)
+        button.setProperty("actionButton", True)
         button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        button.setMaximumHeight(PropertyPanelA2.CONTROL_HEIGHT)
         if width is not None:
             button.setFixedWidth(width)
         return button
 
-    def _make_tool(self, text, width=42):
+    def _make_tool(self, text, width=PropertyPanelA2.ACTION_BUTTON_WIDTH):
         button = QToolButton()
         button.setText(text)
+        button.setProperty("actionButton", True)
         button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        button.setMaximumHeight(PropertyPanelA2.CONTROL_HEIGHT)
         if width:
             button.setMinimumWidth(width)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -397,12 +411,13 @@ class IntegratedTextPanel(QWidget):
         button.setChecked(checked)
         button.setProperty("segmentButton", True)
         button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        button.setMaximumHeight(PropertyPanelA2.CONTROL_HEIGHT)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
     def _make_segment_row(self, specs, active_value, handler=None, property_name="mode"):
         layout = QHBoxLayout()
-        layout.setSpacing(5)
+        layout.setSpacing(PropertyPanelA2.SEGMENT_GAP)
         group = QButtonGroup(self)
         group.setExclusive(True)
         buttons = []
@@ -432,21 +447,22 @@ class IntegratedTextPanel(QWidget):
         return button
 
     def _make_parameter_grid(self, *pairs):
-        container = QWidget()
+        container = QFrame()
+        container.setProperty("role", "parameterGrid")
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         grid = QGridLayout(container)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(6)
-        grid.setVerticalSpacing(8)
+        grid.setHorizontalSpacing(PropertyPanelA2.ROW_GAP)
+        grid.setVerticalSpacing(PropertyPanelA2.ROW_GAP)
 
         for index, (title, control) in enumerate(pairs):
             row_index = index // 2
             base_col = (index % 2) * 3
-            title_label = self._label(title) if index % 2 == 0 else self._label(title, width=40)
+            title_label = self._label(title) if index % 2 == 0 else self._label(title, width=PropertyPanelA2.SECONDARY_LABEL_WIDTH)
             grid.addWidget(title_label, row_index, base_col)
             grid.addWidget(control, row_index, base_col + 1)
             if index % 2 == 0:
-                grid.setColumnMinimumWidth(base_col + 2, 18)
+                grid.setColumnMinimumWidth(base_col + 2, PropertyPanelA2.ROW_GAP)
             if index == 1:
                 container._responsive_second_label = title_label
                 container._responsive_second_control = control
@@ -477,41 +493,8 @@ class IntegratedTextPanel(QWidget):
         """样式化开关复选框为圆形切换样式"""
         checkbox.setText("")
         checkbox.setCursor(Qt.PointingHandCursor)
-        switch_width, switch_height = PropertyPanelA2.SWITCH_SIZE
-        knob_size = switch_height - 6
-        knob_checked_left = switch_width - knob_size - 3
-        checkbox.setFixedSize(switch_width, switch_height)
-        checkbox.setStyleSheet("""
-            QCheckBox {
-                spacing: 0;
-                padding: 0;
-            }
-            QCheckBox::indicator {
-                width: %dpx;
-                height: %dpx;
-                border-radius: %dpx;
-                border: 1px solid #45484C;
-                background: #3A3C3F;
-                position: relative;
-            }
-            QCheckBox::indicator:checked {
-                background: #2F9CF4;
-                border-color: #55B2FF;
-            }
-            QCheckBox::indicator:after {
-                content: '';
-                position: absolute;
-                width: %dpx;
-                height: %dpx;
-                border-radius: %dpx;
-                background: white;
-                left: 3px;
-                top: 2px;
-            }
-            QCheckBox::indicator:checked:after {
-                left: %dpx;
-            }
-        """ % (switch_width, switch_height, switch_height // 2, knob_size, knob_size, knob_size // 2, knob_checked_left))
+        checkbox.setProperty("role", "switch")
+        checkbox.setFixedSize(*PropertyPanelA2.SWITCH_SIZE)
 
     def create_preview_card(self, parent_layout):
         """创建文字预览卡片"""
@@ -612,6 +595,8 @@ class IntegratedTextPanel(QWidget):
         self.edit_btn = self.full_edit_text_btn
 
         self.binding_mode_check = QCheckBox("绑定")
+        self.binding_mode_check.setProperty("role", "inlineCheck")
+        self.binding_mode_check.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         self.binding_mode_check.setChecked(True)
         self.binding_mode_check.setToolTip("开启后每行作为独立文案用于绑定匹配；关闭后换行为真实换行")
 
@@ -623,23 +608,21 @@ class IntegratedTextPanel(QWidget):
         card_layout.addWidget(self.inline_text_edit)
 
         text_actions = QHBoxLayout()
-        text_actions.setSpacing(8)
+        text_actions.setSpacing(PropertyPanelA2.ROW_GAP)
 
         self.apply_text_btn = QPushButton("应用", self)
+        self.apply_text_btn.setProperty("actionButton", True)
         self.apply_text_btn.setToolTip("将输入框内容应用到当前文字图层")
         self.apply_text_btn.hide()
-        self.prev_text_btn = QToolButton()
-        self.prev_text_btn.setText("上一条")
+        self.prev_text_btn = self._make_tool("上一条")
         self.prev_text_btn.setToolTip("切换到上一条候选文案")
-        self.next_text_btn = QToolButton()
-        self.next_text_btn.setText("下一条")
+        self.next_text_btn = self._make_tool("下一条")
         self.next_text_btn.setToolTip("切换到下一条候选文案")
-        self.random_text_btn = QToolButton()
-        self.random_text_btn.setText("随机")
+        self.random_text_btn = self._make_tool("随机")
         self.random_text_btn.setToolTip("随机选择一条候选文案")
 
         self.text_count_label = QLabel("0 条")
-        self.text_count_label.setStyleSheet("color: #8E8E93;")
+        self.text_count_label.setProperty("role", "summaryLabel")
 
         for button in (self.prev_text_btn, self.next_text_btn, self.random_text_btn):
             button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
@@ -682,7 +665,7 @@ class IntegratedTextPanel(QWidget):
         if self.font_combo.lineEdit():
             self.font_combo.lineEdit().setCompleter(self.font_completer)
 
-        self.font_settings_btn = self._make_button("选择", 56)
+        self.font_settings_btn = self._make_button("选择", PropertyPanelA2.ACTION_BUTTON_WIDTH)
         self.font_settings_btn.setToolTip("打开高级字体选择器")
         self.font_more_btn = self._make_button("...", 32)
         self.font_more_btn.setToolTip("更多字体选项")
@@ -707,7 +690,7 @@ class IntegratedTextPanel(QWidget):
         card_layout.addLayout(quick_buttons_row)
 
         self.recent_fonts_layout = QHBoxLayout()
-        self.recent_fonts_layout.setSpacing(8)
+        self.recent_fonts_layout.setSpacing(PropertyPanelA2.ROW_GAP)
         self.recent_fonts_container = QWidget()
         self.recent_fonts_container.setLayout(self.recent_fonts_layout)
         self.recent_fonts_container.setVisible(False)
@@ -729,20 +712,39 @@ class IntegratedTextPanel(QWidget):
         self.font_size_spin.setRange(6, 200)
         self.font_size_spin.setValue(24)
         self.font_size_spin.setSuffix("px")
+        self.font_size_spin.setMinimumWidth(PropertyPanelA2.SPIN_WIDTH)
+        self.font_size_spin.setMaximumWidth(16777215)
+        self.font_size_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.bold_btn = ToggleButton("B")
         self.bold_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.italic_btn = ToggleButton("I")
         self.italic_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
-        card_layout.addLayout(self._make_param_row("大小", self.font_size_spin, self.bold_btn, self.italic_btn, stretch_last=False))
+        self.typography_size_row = self._make_param_row(
+            "大小",
+            self.font_size_spin,
+            self.bold_btn,
+            self.italic_btn,
+            stretch_last=False,
+        )
+        card_layout.addLayout(self.typography_size_row)
 
         self.align_group = AlignButtonGroup()
         for text, button in (("左", self.align_group.left_btn), ("中", self.align_group.center_btn), ("右", self.align_group.right_btn)):
             button.setText(text)
             button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
-            button.setMinimumWidth(PropertyPanelA2.ICON_BUTTON_WIDTH)
+            button.setMinimumWidth(PropertyPanelA2.ALIGN_BUTTON_MIN_WIDTH)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.vertical_layout_check = QCheckBox("竖排")
-        card_layout.addLayout(self._make_param_row("对齐", self.align_group, self.vertical_layout_check, stretch_last=False))
+        self.vertical_layout_check.setProperty("role", "inlineCheck")
+        self.vertical_layout_check.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        self.vertical_layout_check.setMinimumWidth(PropertyPanelA2.ACTION_BUTTON_WIDTH)
+        self.typography_align_row = self._make_param_row(
+            "对齐",
+            self.align_group,
+            self.vertical_layout_check,
+            stretch_last=False,
+        )
+        card_layout.addLayout(self.typography_align_row)
 
         card_layout.addWidget(self._make_core_divider())
 
@@ -834,13 +836,13 @@ class IntegratedTextPanel(QWidget):
         card_layout.addWidget(self._make_core_divider())
         card_layout.addWidget(self._muted_label("描边"))
         self.stroke_toggle_panel, stroke_toggle_layout = self._make_subpanel()
+        self.stroke_toggle_panel.setMinimumHeight(PropertyPanelA2.FEATURE_TOGGLE_HEIGHT)
         stroke_toggle_row = QHBoxLayout()
         stroke_toggle_row.setContentsMargins(0, 0, 0, 0)
         stroke_toggle_row.setSpacing(PropertyPanelA2.ROW_GAP)
         self.stroke_title_label = QLabel("启用描边")
-        self.stroke_title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #F4F4F5;")
-        self.stroke_enable_check = QCheckBox("")
-        self._style_switch_checkbox(self.stroke_enable_check)
+        self.stroke_title_label.setProperty("role", "featureTitle")
+        self.stroke_enable_check = A2Switch()
         self.stroke_enable_check.stateChanged.connect(self.on_stroke_enabled_changed)
         stroke_toggle_row.addWidget(self.stroke_title_label)
         stroke_toggle_row.addStretch()
@@ -1715,21 +1717,10 @@ class IntegratedTextPanel(QWidget):
             btn.setText(display_name)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setToolTip(f"切换到最近字体：{self._font_display_name(font_name)}")
-            btn.setFixedSize(56, 30)
-            btn.setStyleSheet("""
-                QToolButton {
-                    border: 1px solid #4F4F4F;
-                    border-radius: 8px;
-                    background-color: #2C2D2E;
-                    color: #F4F4F5;
-                    padding: 2px 4px;
-                    font-size: 11px;
-                }
-                QToolButton:hover {
-                    background-color: #3A3A3A;
-                    border-color: #606064;
-                }
-            """)
+            btn.setProperty("segmentButton", True)
+            btn.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+            btn.setMinimumWidth(PropertyPanelA2.FONT_BUTTON_MIN_WIDTH)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             btn.clicked.connect(lambda checked=False, fn=font_name: self._apply_font_selection(fn, add_to_recent=False))
             self.recent_fonts_layout.addWidget(btn)
 

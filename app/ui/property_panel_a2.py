@@ -14,6 +14,7 @@ class PropertyPanelA2:
     SUBPANEL_MARGINS = (8, 6, 8, 6)
     ROW_GAP = 6
     SECTION_GAP = 8
+    SEGMENT_GAP = 5
     CONTROL_HEIGHT = 30
     TEXT_AREA_HEIGHT = 96
     LABEL_WIDTH = 58
@@ -22,8 +23,20 @@ class PropertyPanelA2:
     SPIN_WIDTH = 76
     COLOR_SWATCH_SIZE = 30
     ICON_BUTTON_WIDTH = 42
+    ACTION_BUTTON_WIDTH = 56
+    ALIGN_BUTTON_MIN_WIDTH = 56
     FONT_BUTTON_MIN_WIDTH = 56
+    FEATURE_TOGGLE_HEIGHT = 48
     SWITCH_SIZE = (52, 30)
+    SWITCH_TRACK_MARGIN = 3
+    SWITCH_KNOB_SIZE = 22
+    BUTTON_RADIUS = 4
+    SUBPANEL_RADIUS = 6
+
+    SECTION_TITLE_FONT_SIZE = 13
+    FIELD_LABEL_FONT_SIZE = 12
+    SUMMARY_FONT_SIZE = 11
+    FEATURE_TITLE_FONT_SIZE = 15
 
     PANEL_BG = "#181818"
     CARD_BG = "#202123"
@@ -73,7 +86,11 @@ class PropertyPanelA2:
             {root_selector} QFrame[role="subPanel"] {{
                 background-color: {cls.CONTROL_BG};
                 border: 1px solid {cls.BORDER_SOFT};
-                border-radius: 6px;
+                border-radius: {cls.SUBPANEL_RADIUS}px;
+            }}
+            {root_selector} QFrame[role="parameterGrid"] {{
+                background-color: transparent;
+                border: none;
             }}
             {root_selector} QFrame[role="coreDivider"] {{
                 background-color: {cls.BORDER_SOFT};
@@ -81,30 +98,49 @@ class PropertyPanelA2:
             }}
             {root_selector} QLabel[role="sectionTitle"] {{
                 color: #FFFFFF;
-                font-size: 13px;
+                font-size: {cls.SECTION_TITLE_FONT_SIZE}px;
                 font-weight: 700;
             }}
             {root_selector} QLabel[role="summaryLabel"] {{
                 color: {cls.TEXT_MUTED};
-                font-size: 11px;
+                font-size: {cls.SUMMARY_FONT_SIZE}px;
             }}
             {root_selector} QLabel[role="fieldLabel"] {{
                 color: {cls.TEXT_PRIMARY};
-                font-size: 12px;
+                font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
                 font-weight: 700;
             }}
             {root_selector} QLabel[role="mutedLabel"] {{
                 color: {cls.TEXT_MUTED};
-                font-size: 11px;
+                font-size: {cls.SUMMARY_FONT_SIZE}px;
+                font-weight: 700;
+            }}
+            {root_selector} QLabel[role="featureTitle"] {{
+                color: {cls.TEXT_PRIMARY};
+                font-size: {cls.FEATURE_TITLE_FONT_SIZE}px;
                 font-weight: 700;
             }}
             {root_selector} QPushButton,
             {root_selector} QToolButton {{
                 min-height: {cls.CONTROL_HEIGHT}px;
+                max-height: {cls.CONTROL_HEIGHT}px;
                 border: 1px solid {cls.BORDER_CONTROL};
-                border-radius: 4px;
+                border-radius: {cls.BUTTON_RADIUS}px;
                 background-color: {cls.CONTROL_BG_ALT};
                 color: {cls.TEXT_PRIMARY};
+                font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
+                font-weight: 600;
+                padding: 3px 8px;
+            }}
+            {root_selector} QAbstractButton[actionButton="true"] {{
+                min-height: {cls.CONTROL_HEIGHT}px;
+                max-height: {cls.CONTROL_HEIGHT}px;
+                border: 1px solid {cls.BORDER_CONTROL};
+                border-radius: {cls.BUTTON_RADIUS}px;
+                background-color: {cls.CONTROL_BG_ALT};
+                color: {cls.TEXT_PRIMARY};
+                font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
+                font-weight: 600;
                 padding: 3px 8px;
             }}
             {root_selector} QPushButton:hover,
@@ -123,14 +159,17 @@ class PropertyPanelA2:
                 background-color: #20252B;
                 border-color: #252528;
             }}
-            {root_selector} QPushButton[segmentButton="true"] {{
+            {root_selector} QPushButton[segmentButton="true"],
+            {root_selector} QToolButton[segmentButton="true"] {{
                 min-height: {cls.CONTROL_HEIGHT}px;
                 max-height: {cls.CONTROL_HEIGHT}px;
                 padding: 3px 6px;
                 background-color: {cls.CONTROL_BG_ALT};
-                font-size: 12px;
+                font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
+                font-weight: 600;
             }}
-            {root_selector} QPushButton[segmentButton="true"]:checked {{
+            {root_selector} QPushButton[segmentButton="true"]:checked,
+            {root_selector} QToolButton[segmentButton="true"]:checked {{
                 background-color: {cls.ACCENT};
                 border-color: {cls.ACCENT_HOVER};
                 color: #FFFFFF;
@@ -143,14 +182,23 @@ class PropertyPanelA2:
                 border-color: {cls.BORDER_SOFT};
                 font-weight: 700;
             }}
-            {root_selector} QTextEdit,
             {root_selector} QLineEdit,
             {root_selector} QComboBox,
             {root_selector} QSpinBox {{
+                min-height: {cls.CONTROL_HEIGHT}px;
+                max-height: {cls.CONTROL_HEIGHT}px;
                 background-color: {cls.CONTROL_BG};
                 color: #E9EEF3;
                 border: 1px solid {cls.BORDER_CONTROL};
-                border-radius: 4px;
+                border-radius: {cls.BUTTON_RADIUS}px;
+                selection-background-color: #0E76D8;
+                padding: 3px 6px;
+            }}
+            {root_selector} QTextEdit {{
+                background-color: {cls.CONTROL_BG};
+                color: #E9EEF3;
+                border: 1px solid {cls.BORDER_CONTROL};
+                border-radius: {cls.BUTTON_RADIUS}px;
                 selection-background-color: #0E76D8;
                 padding: 3px 6px;
             }}
@@ -164,6 +212,19 @@ class PropertyPanelA2:
                 color: {cls.TEXT_PRIMARY};
                 spacing: 6px;
             }}
+            {root_selector} QCheckBox[role="inlineCheck"] {{
+                min-height: {cls.CONTROL_HEIGHT}px;
+                max-height: {cls.CONTROL_HEIGHT}px;
+                font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
+                font-weight: 600;
+            }}
+            {root_selector} QCheckBox[role="switch"] {{
+                min-width: {cls.SWITCH_SIZE[0]}px;
+                max-width: {cls.SWITCH_SIZE[0]}px;
+                min-height: {cls.SWITCH_SIZE[1]}px;
+                max-height: {cls.SWITCH_SIZE[1]}px;
+                background: transparent;
+            }}
             {root_selector} QCheckBox::indicator {{
                 width: 15px;
                 height: 15px;
@@ -174,6 +235,12 @@ class PropertyPanelA2:
             {root_selector} QCheckBox::indicator:checked {{
                 background: {cls.ACCENT};
                 border-color: {cls.ACCENT_HOVER};
+            }}
+            {root_selector} QCheckBox[role="switch"]::indicator {{
+                width: 0px;
+                height: 0px;
+                border: none;
+                background: transparent;
             }}
             {root_selector} QSlider::groove:horizontal {{
                 height: 4px;
