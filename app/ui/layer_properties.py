@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
                            QFileDialog, QGroupBox, QCheckBox, QComboBox,
                            QSlider, QMessageBox, QRadioButton, QButtonGroup,
-                           QColorDialog, QScrollArea, QFrame, QSizePolicy,
+                           QScrollArea, QFrame, QSizePolicy,
                            QMenu, QMainWindow, QDockWidget, QApplication)
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings
 from PySide6.QtGui import QColor
@@ -18,6 +18,7 @@ except ImportError:
 
 from app.ui.layer_transform_widget import LayerTransformWidget
 from app.ui.collapsible_group import CollapsibleGroupBox
+from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import is_layer_group
@@ -4107,7 +4108,7 @@ class LayerPropertiesPanel(QWidget):
         if not self.current_layer or self.current_layer.locked:
             return
         current = tuple(getattr(self.current_layer, 'stroke_color', (0, 0, 0, 255)))
-        color = QColorDialog.getColor(QColor(current[0], current[1], current[2], current[3]), self, "选择描边颜色")
+        color = get_color_a2(QColor(current[0], current[1], current[2], current[3]), self, "选择描边颜色")
         if not color.isValid():
             return
         rgba = (color.red(), color.green(), color.blue(), color.alpha())
@@ -4142,7 +4143,7 @@ class LayerPropertiesPanel(QWidget):
         if not self.current_layer or self.current_layer.locked:
             return
         current = tuple(getattr(self.current_layer, 'color_overlay_color', (255, 0, 0, 255)))
-        color = QColorDialog.getColor(QColor(current[0], current[1], current[2], current[3]), self, "选择填充颜色")
+        color = get_color_a2(QColor(current[0], current[1], current[2], current[3]), self, "选择填充颜色")
         if not color.isValid():
             return
         rgba = (color.red(), color.green(), color.blue(), color.alpha())
@@ -4188,7 +4189,7 @@ class LayerPropertiesPanel(QWidget):
         if len(colors) < 2:
             colors = [(0, 0, 0, 255), (255, 255, 255, 255)]
         current = tuple(colors[idx])
-        color = QColorDialog.getColor(QColor(current[0], current[1], current[2], current[3]), self, title)
+        color = get_color_a2(QColor(current[0], current[1], current[2], current[3]), self, title)
         if not color.isValid():
             return
         colors[idx] = (color.red(), color.green(), color.blue(), color.alpha())

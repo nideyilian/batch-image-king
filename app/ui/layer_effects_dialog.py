@@ -1,6 +1,8 @@
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QSpinBox, QCheckBox, QPushButton, QHBoxLayout, QLabel, QComboBox, QColorDialog, QTabWidget, QWidget, QSlider, QFrame
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QSpinBox, QCheckBox, QPushButton, QHBoxLayout, QLabel, QComboBox, QTabWidget, QWidget, QSlider, QFrame
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
+
+from app.ui.color_picker_dialog_a2 import get_color_a2
 
 class LayerEffectsDialog(QDialog):
     def __init__(self, document, parent=None):
@@ -193,7 +195,7 @@ class LayerEffectsDialog(QDialog):
 
     def _pick_color_generic(self, current_color, title):
         qcol = QColor.fromRgb(*current_color[:3], current_color[3])
-        sel = QColorDialog.getColor(qcol, self, title, QColorDialog.ShowAlphaChannel)
+        sel = get_color_a2(qcol, self, title)
         if sel.isValid():
             return (sel.red(), sel.green(), sel.blue(), sel.alpha())
         return None

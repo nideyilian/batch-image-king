@@ -20,7 +20,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
-from app.ui.enhanced_font_selector import EnhancedFontSelector
 from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.property_panel_a2 import PropertyPanelA2
 
@@ -183,12 +182,12 @@ class ColorIndicator(QPushButton):
         self.setText("")
 
     def choose_color(self):
-        from PySide6.QtWidgets import QColorDialog
+        from app.ui.color_picker_dialog_a2 import get_color_a2
         # 使用当前颜色的RGB值和透明度创建QColor对象
         current_r, current_g, current_b, current_a = self.current_color
         initial_color = QColor(current_r, current_g, current_b, current_a)
 
-        color = QColorDialog.getColor(
+        color = get_color_a2(
             initial_color,
             self,
             "选择颜色"
@@ -2138,27 +2137,14 @@ class IntegratedTextPanel(QWidget):
 
     def on_open_font_selector(self):
         """打开增强字体选择器对话框，支持分组/搜索/预览/收藏"""
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QDialogButtonBox
-        dlg = QDialog(self)
-        dlg.setWindowTitle("选择字体")
-        layout = QVBoxLayout(dlg)
-        selector = EnhancedFontSelector(dlg)
+        from app.ui.font_picker_dialog_a2 import FontPickerDialogA2
+        initial_font = self.text_layer.font_family if self.text_layer else self.font_combo.currentText()
+        preview_text = ""
         if self.text_layer:
-            selector.set_current_font(self.text_layer.font_family)
             preview_text = (getattr(self.text_layer, 'current_text', '') or '').strip()
-            if preview_text and hasattr(selector, 'preview_text_edit'):
-                selector.preview_text_edit.setText(preview_text)
-        layout.addWidget(selector)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        layout.addWidget(buttons)
-        selected_font = {"name": None}
-        def _on_font_change(name: str):
-            selected_font["name"] = name
-        selector.font_changed.connect(_on_font_change)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
+        dlg = FontPickerDialogA2(self, initial_font=initial_font, preview_text=preview_text)
         if dlg.exec():
-            name = selected_font["name"] or selector.current_font or self.font_combo.currentText()
+            name = dlg.selected_font() or self.font_combo.currentText()
             if name:
                 self._apply_font_selection(name)
 

@@ -7,11 +7,12 @@
 
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QTextEdit, QPushButton, QDialogButtonBox, QCheckBox,
-                               QMessageBox, QFrame, QSpinBox, QComboBox, QColorDialog)
+                               QMessageBox, QFrame, QSpinBox, QComboBox)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from app.models.text_layer import TextLayer, TextAlign
+from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.dark_theme import CursorDarkTheme
 
 
@@ -279,7 +280,7 @@ class AddTextLayerDialog(QDialog):
     def choose_text_color(self):
         """选择新文字图层默认颜色。"""
         r, g, b, a = self.text_color
-        color = QColorDialog.getColor(QColor(r, g, b, a), self, "选择文字颜色")
+        color = get_color_a2(QColor(r, g, b, a), self, "选择文字颜色")
         if color.isValid():
             self.text_color = (color.red(), color.green(), color.blue(), color.alpha())
             self.color_btn.setStyleSheet(
