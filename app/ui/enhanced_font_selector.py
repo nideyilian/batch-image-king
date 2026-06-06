@@ -269,12 +269,19 @@ class EnhancedFontSelector(QWidget):
 
     def update_recent_list(self):
         """更新最近字体列表"""
-        self.recent_fonts_list.clear()
-        for font in self.recent_fonts:
-            if font in self.all_fonts:
-                item = QListWidgetItem(self._font_display_name(font))
-                item.setData(Qt.UserRole, font)
-                self.recent_fonts_list.addItem(item)
+        was_syncing = self._syncing_selection
+        was_blocked = self.recent_fonts_list.blockSignals(True)
+        self._syncing_selection = True
+        try:
+            self.recent_fonts_list.clear()
+            for font in self.recent_fonts:
+                if font in self.all_fonts:
+                    item = QListWidgetItem(self._font_display_name(font))
+                    item.setData(Qt.UserRole, font)
+                    self.recent_fonts_list.addItem(item)
+        finally:
+            self.recent_fonts_list.blockSignals(was_blocked)
+            self._syncing_selection = was_syncing
 
     def update_tab_titles(self):
         """更新标签页标题"""
@@ -359,8 +366,13 @@ class EnhancedFontSelector(QWidget):
     def set_current_font(self, font_name):
         """设置当前字体"""
         self.current_font = font_name
-        self._push_recent_font(font_name)
-        self._select_font_in_lists(font_name)
+        was_syncing = self._syncing_selection
+        self._syncing_selection = True
+        try:
+            self._push_recent_font(font_name)
+            self._select_font_in_lists(font_name)
+        finally:
+            self._syncing_selection = was_syncing
         self.update_favorite_button()
         self.update_preview()
         self.font_changed.emit(font_name)
@@ -380,6 +392,7 @@ class EnhancedFontSelector(QWidget):
         """在所有分类列表中高亮当前字体，不影响搜索过滤条件。"""
         if not font_name:
             return
+        was_syncing = self._syncing_selection
         self._syncing_selection = True
         try:
             self._select_font_in_list(self.all_fonts_list, font_name)
@@ -388,7 +401,7 @@ class EnhancedFontSelector(QWidget):
             self._select_font_in_list(self.favorite_fonts_list, font_name)
             self._select_font_in_list(self.recent_fonts_list, font_name)
         finally:
-            self._syncing_selection = False
+            self._syncing_selection = was_syncing
 
     def update_favorite_button(self):
         """更新收藏按钮状态"""
