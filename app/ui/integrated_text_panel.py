@@ -622,11 +622,21 @@ class IntegratedTextPanel(QWidget):
         self.next_text_btn.setToolTip("切换到下一条候选文案")
         self.random_text_btn = self._make_tool("随机")
         self.random_text_btn.setToolTip("随机选择一条候选文案")
+        self.range_color_btn = self._make_tool("颜色")
+        self.range_color_btn.setToolTip("为当前文案中的选中文字设置颜色")
+        self.range_color_btn.setEnabled(False)
+        self.clear_range_color_btn = self._make_tool("清色")
+        self.clear_range_color_btn.setToolTip("清除当前文案中选中文字的局部颜色")
+        self.clear_range_color_btn.setEnabled(False)
 
         self.text_count_label = QLabel("0 条")
         self.text_count_label.setProperty("role", "summaryLabel")
 
         for button in (self.prev_text_btn, self.next_text_btn, self.random_text_btn):
+            button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            text_actions.addWidget(button)
+        for button in (self.range_color_btn, self.clear_range_color_btn):
             button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             text_actions.addWidget(button)
@@ -1619,6 +1629,9 @@ class IntegratedTextPanel(QWidget):
         self.reset_btn.clicked.connect(self.on_reset_style)
         self.binding_mode_check.stateChanged.connect(self.on_binding_mode_changed)
         self.apply_text_btn.clicked.connect(self.on_apply_inline_text)
+        self.inline_text_edit.selectionChanged.connect(self._sync_range_color_actions)
+        self.range_color_btn.clicked.connect(self.on_apply_range_text_color)
+        self.clear_range_color_btn.clicked.connect(self.on_clear_range_text_color)
         if hasattr(self, 'full_edit_text_btn'):
             self.full_edit_text_btn.clicked.connect(self.on_edit_text)
         self.prev_text_btn.clicked.connect(lambda: self.on_step_text(-1))
@@ -1866,7 +1879,10 @@ class IntegratedTextPanel(QWidget):
             self.reset_btn.setEnabled(False)
             self.inline_text_edit.clear()
             self.text_count_label.setText("0 条")
-            buttons = [self.apply_text_btn, self.prev_text_btn, self.next_text_btn, self.random_text_btn]
+            buttons = [
+                self.apply_text_btn, self.prev_text_btn, self.next_text_btn,
+                self.random_text_btn, self.range_color_btn, self.clear_range_color_btn
+            ]
             if hasattr(self, 'full_edit_text_btn'):
                 buttons.append(self.full_edit_text_btn)
             for btn in buttons:
@@ -1878,7 +1894,10 @@ class IntegratedTextPanel(QWidget):
         self.create_btn.setEnabled(True)
         self.edit_btn.setEnabled(True)
         self.reset_btn.setEnabled(True)
-        buttons = [self.apply_text_btn, self.prev_text_btn, self.next_text_btn, self.random_text_btn]
+        buttons = [
+            self.apply_text_btn, self.prev_text_btn, self.next_text_btn,
+            self.random_text_btn, self.range_color_btn, self.clear_range_color_btn
+        ]
         if hasattr(self, 'full_edit_text_btn'):
             buttons.append(self.full_edit_text_btn)
         for btn in buttons:
@@ -2033,6 +2052,7 @@ class IntegratedTextPanel(QWidget):
             self._sync_appearance_visibility()
             self._sync_panel_summaries()
             self._block_panel_controls(False)
+            self._sync_range_color_actions()
 
     # 事件处理
     def _is_checked(self, state):
@@ -2064,7 +2084,89 @@ class IntegratedTextPanel(QWidget):
         self.prev_text_btn.setEnabled(has_multiple)
         self.next_text_btn.setEnabled(has_multiple)
         self.random_text_btn.setEnabled(has_multiple)
+        self._sync_range_color_actions()
         self._sync_panel_summaries()
+
+    def _selected_inline_text_range(self):
+        if not self.text_layer or not hasattr(self, "inline_text_edit"):
+            return None
+
+        cursor = self.inline_text_edit.textCursor()
+        if not cursor.hasSelection():
+            return None
+
+        current_text = getattr(self.text_layer, "current_text", "") or ""
+        if not current_text:
+            return None
+
+        selection_start = min(cursor.position(), cursor.anchor())
+        selection_end = max(cursor.position(), cursor.anchor())
+        editor_text = self.inline_text_edit.toPlainText()
+
+        if editor_text == current_text:
+            if selection_start < selection_end <= len(current_text):
+                return selection_start, selection_end
+            return None
+
+        selected_text = cursor.selectedText().replace("\u2029", "\n")
+        if not selected_text:
+            return None
+
+        mapped_start = current_text.find(selected_text)
+        if mapped_start < 0:
+            return None
+        return mapped_start, mapped_start + len(selected_text)
+
+    def _sync_range_color_actions(self):
+        if not hasattr(self, "range_color_btn") or not hasattr(self, "clear_range_color_btn"):
+            return
+        enabled = self._selected_inline_text_range() is not None
+        self.range_color_btn.setEnabled(enabled)
+        self.clear_range_color_btn.setEnabled(enabled)
+
+    def _initial_selected_range_color(self, start):
+        if not self.text_layer or not hasattr(self.text_layer, "get_text_color_ranges"):
+            return getattr(self.text_layer, "text_color", (0, 0, 0, 255))
+        for item in self.text_layer.get_text_color_ranges():
+            if item["start"] <= start < item["end"]:
+                return tuple(item["color"])
+        return getattr(self.text_layer, "text_color", (0, 0, 0, 255))
+
+    def on_apply_range_text_color(self):
+        selected_range = self._selected_inline_text_range()
+        if not selected_range or not self.text_layer:
+            return
+
+        from app.ui.color_picker_dialog_a2 import get_color_a2
+
+        start, end = selected_range
+        initial = self._initial_selected_range_color(start)
+        color = get_color_a2(QColor(*initial), self, "选择选区文字颜色")
+        if color.isValid() and hasattr(self.text_layer, "set_text_color_range"):
+            changed = self.text_layer.set_text_color_range(
+                start,
+                end,
+                (color.red(), color.green(), color.blue(), color.alpha())
+            )
+            if changed:
+                ranges = self.text_layer.get_text_color_ranges()
+                self.property_changed.emit("text_color_ranges", ranges)
+                self.update_preview()
+        self._sync_range_color_actions()
+
+    def on_clear_range_text_color(self):
+        selected_range = self._selected_inline_text_range()
+        if not selected_range or not self.text_layer:
+            return
+
+        start, end = selected_range
+        if hasattr(self.text_layer, "clear_text_color_range"):
+            changed = self.text_layer.clear_text_color_range(start, end)
+            if changed:
+                ranges = self.text_layer.get_text_color_ranges()
+                self.property_changed.emit("text_color_ranges", ranges)
+                self.update_preview()
+        self._sync_range_color_actions()
 
     def _current_text_index(self):
         if not self.text_layer:
