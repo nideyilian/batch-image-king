@@ -1608,6 +1608,59 @@ class TextLayer(QObject):
         except Exception:
             return image
 
+    def _color_for_text_index(self, index):
+        for item in self._text_color_ranges:
+            if item["start"] <= index < item["end"]:
+                return tuple(item["color"])
+        return None
+
+    def _iter_line_color_segments(self, line: str, line_start_index: int):
+        if not line:
+            return
+
+        segment_start = 0
+        segment_color = self._color_for_text_index(line_start_index)
+        for offset in range(1, len(line)):
+            color = self._color_for_text_index(line_start_index + offset)
+            if color != segment_color:
+                yield segment_start, offset, segment_color
+                segment_start = offset
+                segment_color = color
+        yield segment_start, len(line), segment_color
+
+    def _draw_text_fill_piece(self, image: Image.Image, x: int, y: int, text: str, font, fill) -> Image.Image:
+        if not text:
+            return image
+        draw = ImageDraw.Draw(image)
+        result = self._draw_text_with_style(draw, x, y, text, font, fill)
+        if result:
+            image = Image.alpha_composite(image, result)
+        return image
+
+    def _draw_text_line_fill(self, image: Image.Image, x: int, y: int, line: str,
+                             line_start_index: int, font, gradient_image) -> Image.Image:
+        if not line:
+            return image
+
+        use_gradient = self._gradient_enabled and gradient_image is not None
+        if self._letter_spacing != 0:
+            current_x = x
+            temp_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+            for offset, ch in enumerate(line):
+                local_color = self._color_for_text_index(line_start_index + offset)
+                fill = local_color if local_color is not None else (gradient_image if use_gradient else self._text_color)
+                image = self._draw_text_fill_piece(image, current_x, y, ch, font, fill)
+                bbox = temp_draw.textbbox((0, 0), ch, font=font)
+                current_x += (bbox[2] - bbox[0]) + self._letter_spacing
+            return image
+
+        for start, end, local_color in self._iter_line_color_segments(line, line_start_index):
+            segment = line[start:end]
+            segment_x = x + self._get_text_width_with_spacing(line[:start], font)
+            fill = local_color if local_color is not None else (gradient_image if use_gradient else self._text_color)
+            image = self._draw_text_fill_piece(image, segment_x, y, segment, font, fill)
+        return image
+
     def _render_text_internal(self) -> Image.Image:
         """内部渲染实现（不写缓存）"""
         # 自动适配边框：在渲染前保证尺寸与当前文字一致
@@ -1681,6 +1734,7 @@ class TextLayer(QObject):
 
         # 使用调整后的位置进行最终渲染
         current_y = final_start_y
+        line_start_index = 0
         for i, line in enumerate(lines):
             if i >= len(line_widths):
                 break
@@ -1747,59 +1801,13 @@ class TextLayer(QObject):
                             stroke_fill=self._stroke_color
                         )
 
-            # 绘制主文字，考虑渐变和字体样式
-            if self._gradient_enabled and gradient_image:
-                if self._letter_spacing != 0:
-                    text_mask = self._create_text_mask_with_spacing(
-                        draw_x,
-                        draw_y,
-                        line,
-                        font,
-                        stroke_width=0,
-                        bold=self._font_style in (FontStyle.BOLD, FontStyle.BOLD_ITALIC)
-                    )
-                    gradient_result = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-                    gradient_result.paste(gradient_image, (0, 0), text_mask)
-                    image = Image.alpha_composite(image, gradient_result)
-                else:
-                    gradient_result = self._draw_text_with_style(draw, draw_x, draw_y, line, font, gradient_image)
-                    if gradient_result:
-                        image = Image.alpha_composite(image, gradient_result)
-            else:
-                if self._letter_spacing != 0:
-                    if self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
-                        text_mask = self._create_text_mask_with_spacing(
-                            draw_x,
-                            draw_y,
-                            line,
-                            font,
-                            stroke_width=0,
-                            bold=self._font_style == FontStyle.BOLD_ITALIC
-                        )
-                        colored = Image.new('RGBA', (self._width, self._height), self._text_color)
-                        color_result = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-                        color_result.paste(colored, (0, 0), text_mask)
-                        image = Image.alpha_composite(image, color_result)
-                    else:
-                        self._draw_text_with_letter_spacing(
-                            draw,
-                            draw_x,
-                            draw_y,
-                            line,
-                            font,
-                            self._text_color,
-                            stroke_width=0,
-                            stroke_fill=None,
-                            bold=self._font_style == FontStyle.BOLD
-                        )
-                else:
-                    color_result = self._draw_text_with_style(draw, draw_x, draw_y, line, font, self._text_color)
-                    if color_result:
-                        image = Image.alpha_composite(image, color_result)
+            image = self._draw_text_line_fill(image, draw_x, draw_y, line, line_start_index, font, gradient_image)
+            draw = ImageDraw.Draw(image)
 
             # 移动到下一行
             if i < len(line_heights) - 1 and line_heights:
                 current_y += line_heights[i] + int(max_line_height * (self._line_spacing - 1))
+            line_start_index += len(line) + 1
 
         # 应用透明度
         if self._opacity < 1.0:
@@ -1817,23 +1825,26 @@ class TextLayer(QObject):
         # 计算列宽和列高
         column_data = []
         stroke_for_measure = self._stroke_width if self._stroke_enabled else 0
+        text_index = 0
         for line in lines:
             chars = list(line) if line else [" "]
             char_sizes = []
-            for ch in chars:
+            for offset, ch in enumerate(chars):
                 bbox = temp_draw.textbbox((0, 0), ch, font=font, stroke_width=stroke_for_measure)
                 char_sizes.append((
                     max(0, bbox[2] - bbox[0]),
                     max(0, bbox[3] - bbox[1]),
                     int(-bbox[0]),
                     int(-bbox[1]),
-                    ch
+                    ch,
+                    text_index + offset
                 ))
-            col_width = max((w for w, _, _, _, _ in char_sizes), default=0)
-            base_gap = int(max((h for _, h, _, _, _ in char_sizes), default=0) * (self._line_spacing - 1))
+            col_width = max((w for w, _, _, _, _, _ in char_sizes), default=0)
+            base_gap = int(max((h for _, h, _, _, _, _ in char_sizes), default=0) * (self._line_spacing - 1))
             char_gap = base_gap + self._letter_spacing
-            col_height = sum(h for _, h, _, _, _ in char_sizes) + max(0, len(char_sizes) - 1) * char_gap
+            col_height = sum(h for _, h, _, _, _, _ in char_sizes) + max(0, len(char_sizes) - 1) * char_gap
             column_data.append((col_width, col_height, char_sizes, char_gap))
+            text_index += len(line) + 1
 
         total_width = 0
         if column_data:
@@ -1863,7 +1874,7 @@ class TextLayer(QObject):
         current_x = start_x
         for col_width, col_height, char_sizes, char_gap in column_data:
             current_y = start_y
-            for char_width, char_height, char_left_off, char_top_off, ch in char_sizes:
+            for char_width, char_height, char_left_off, char_top_off, ch, char_index in char_sizes:
                 char_x = current_x + max(0, (col_width - char_width) // 2) + char_left_off
                 char_y = current_y + char_top_off
 
@@ -1877,14 +1888,22 @@ class TextLayer(QObject):
                         stroke_fill=self._stroke_color
                     )
 
-                if self._gradient_enabled and gradient_image is not None:
+                local_color = self._color_for_text_index(char_index)
+                if local_color is not None:
+                    color_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, local_color)
+                    if color_result:
+                        image = Image.alpha_composite(image, color_result)
+                        draw = ImageDraw.Draw(image)
+                elif self._gradient_enabled and gradient_image is not None:
                     gradient_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, gradient_image)
                     if gradient_result:
                         image = Image.alpha_composite(image, gradient_result)
+                        draw = ImageDraw.Draw(image)
                 else:
                     color_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, self._text_color)
                     if color_result:
                         image = Image.alpha_composite(image, color_result)
+                        draw = ImageDraw.Draw(image)
                     else:
                         draw.text((char_x, char_y), ch, font=font, fill=self._text_color)
 

@@ -60,6 +60,28 @@ class TextLayerRangeColorTests(unittest.TestCase):
         self.assertEqual(restored.get_text_color_ranges(), expected)
         self.assertEqual(duplicate.get_text_color_ranges(), expected)
 
+    def test_render_uses_range_color_for_selected_text_only(self):
+        layer = TextLayer(width=260, height=90)
+        layer.auto_fit_text_box = False
+        layer.current_text = "AB"
+        layer.font_size = 48
+        layer.text_color = (0, 0, 0, 255)
+        layer.set_text_color_range(1, 2, (255, 0, 0, 255))
+
+        image = layer.render_text()
+        pixels = [pixel for pixel in image.getdata() if pixel[3] > 64]
+        red_pixels = [
+            pixel for pixel in pixels
+            if pixel[0] > 180 and pixel[1] < 80 and pixel[2] < 80
+        ]
+        dark_pixels = [
+            pixel for pixel in pixels
+            if pixel[0] < 80 and pixel[1] < 80 and pixel[2] < 80
+        ]
+
+        self.assertGreater(len(red_pixels), 10)
+        self.assertGreater(len(dark_pixels), 10)
+
 
 if __name__ == "__main__":
     unittest.main()
