@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         self._batch_export_dialogs_by_doc = {}
         # 每个文档一个多标签导出窗口（按发起文档隔离）
         self._multi_tab_export_dialogs_by_doc = {}
+        self._ai_asset_studio_dialog = None
         # 每个文档的运行状态文本（用于标签页状态展示）
         self._document_runtime_status_by_id = {}
         
@@ -210,6 +211,9 @@ class MainWindow(QMainWindow):
         self.add_text_layer_action = QAction("添加文字图层", self)
         self.add_text_layer_action.setShortcut("Ctrl+T")
         self.add_text_layer_action.triggered.connect(self.add_text_layer)
+
+        self.ai_asset_studio_action = QAction("AI素材", self)
+        self.ai_asset_studio_action.triggered.connect(self.open_ai_asset_studio)
         
         self.delete_layer_action = QAction("删除图层", self)
         self.delete_layer_action.setShortcut("Delete")
@@ -348,6 +352,7 @@ class MainWindow(QMainWindow):
         layer_menu = self.menubar.addMenu("图层")
         layer_menu.addAction(self.add_layer_action)
         layer_menu.addAction(self.add_text_layer_action)
+        layer_menu.addAction(self.ai_asset_studio_action)
         layer_menu.addAction(self.delete_layer_action)
         layer_menu.addSeparator()
         layer_menu.addAction(self.select_all_layers_action)
@@ -385,6 +390,7 @@ class MainWindow(QMainWindow):
         # self.main_toolbar.addSeparator()
         self.main_toolbar.addAction(self.add_layer_action)
         self.main_toolbar.addAction(self.add_text_layer_action)
+        self.main_toolbar.addAction(self.ai_asset_studio_action)
         self.main_toolbar.addAction(self.delete_layer_action)
         self.main_toolbar.addSeparator()
         # 移除复制粘贴图层按钮 - 用户可通过快捷键或右键菜单使用
@@ -1194,6 +1200,26 @@ class MainWindow(QMainWindow):
     def add_text_layer(self):
         """添加新文字图层 - 委托给LayerController"""
         return self.layer_controller.add_text_layer()
+
+    def open_ai_asset_studio(self):
+        """Open the AI asset generation dialog."""
+        if not self.document:
+            QMessageBox.warning(self, "无法打开", "请先新建或打开一个文档。")
+            return
+
+        dialog = self._ai_asset_studio_dialog
+        if dialog is None:
+            from app.ui.ai_asset_studio_dialog import AIAssetStudioDialog
+
+            dialog = AIAssetStudioDialog(self.document, self)
+            dialog.destroyed.connect(lambda: setattr(self, "_ai_asset_studio_dialog", None))
+            self._ai_asset_studio_dialog = dialog
+        else:
+            dialog.document = self.document
+
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
     
     def delete_layer(self):
         """删除选中的图层 - 委托给LayerController"""
