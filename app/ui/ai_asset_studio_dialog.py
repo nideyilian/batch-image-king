@@ -71,10 +71,13 @@ class AIAssetStudioDialog(QDialog):
         api_group = QGroupBox("API设置")
         api_layout = QFormLayout(api_group)
         self.base_url_edit = QLineEdit()
+        self.base_url_edit.setPlaceholderText("例如：https://api.example.com")
         self.endpoint_edit = QLineEdit()
+        self.endpoint_edit.setPlaceholderText("例如：/v1/images/generations")
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         self.model_edit = QLineEdit()
+        self.model_edit.setPlaceholderText("例如：gpt-image-1 或 kling-v1")
         self.model_field_combo = QComboBox()
         self.model_field_combo.addItems(["model", "model_name"])
         api_layout.addRow("Base URL:", self.base_url_edit)
@@ -133,7 +136,7 @@ class AIAssetStudioDialog(QDialog):
 
     def _load_settings(self):
         settings = self._settings()
-        self.base_url_edit.setText(str(settings.value("base_url", "https://yunwu.ai") or ""))
+        self.base_url_edit.setText(str(settings.value("base_url", "") or ""))
         self.endpoint_edit.setText(str(settings.value("endpoint", "/v1/images/generations") or ""))
         self.api_key_edit.setText(str(settings.value("api_key", "") or ""))
         self.model_edit.setText(str(settings.value("model", "gpt-image-1") or ""))
