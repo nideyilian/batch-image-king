@@ -3,8 +3,11 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import QPoint, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QSizePolicy
 
+from app.models.text_layer import TextLayer
 from app.ui.integrated_text_panel import A2Switch, IntegratedTextPanel
 from app.ui.property_panel_a2 import PropertyPanelA2
 
@@ -151,6 +154,21 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
             self.assertEqual(swatch.maximumWidth(), PropertyPanelA2.COLOR_SWATCH_SIZE)
             self.assertEqual(swatch.minimumHeight(), PropertyPanelA2.COLOR_SWATCH_SIZE)
             self.assertEqual(swatch.maximumHeight(), PropertyPanelA2.COLOR_SWATCH_SIZE)
+
+    def test_stroke_switch_click_area_enables_stroke(self):
+        layer = TextLayer()
+        self.panel.set_text_layer(layer)
+        switch = self.panel.stroke_enable_check
+        center = QPoint(switch.width() // 2, switch.height() // 2)
+
+        self.assertTrue(switch.hitButton(center))
+        QTest.mouseClick(switch, Qt.LeftButton, pos=center)
+        QApplication.processEvents()
+
+        self.assertTrue(switch.isChecked())
+        self.assertTrue(layer.stroke_enabled)
+        self.assertTrue(self.panel.stroke_width_spin.isEnabled())
+        self.assertTrue(self.panel.stroke_color_button.isEnabled())
 
 
 if __name__ == "__main__":

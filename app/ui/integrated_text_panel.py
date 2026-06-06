@@ -35,6 +35,9 @@ class A2Switch(QCheckBox):
         self.setFixedSize(*PropertyPanelA2.SWITCH_SIZE)
         self.setFocusPolicy(Qt.StrongFocus)
 
+    def hitButton(self, pos):
+        return self.rect().contains(pos)
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
