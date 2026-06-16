@@ -212,7 +212,7 @@ class MainWindow(QMainWindow):
         self.add_text_layer_action.setShortcut("Ctrl+T")
         self.add_text_layer_action.triggered.connect(self.add_text_layer)
 
-        self.ai_asset_studio_action = QAction("AI素材", self)
+        self.ai_asset_studio_action = QAction("AI接口设置", self)
         self.ai_asset_studio_action.triggered.connect(self.open_ai_asset_studio)
         
         self.delete_layer_action = QAction("删除图层", self)
@@ -1203,19 +1203,13 @@ class MainWindow(QMainWindow):
 
     def open_ai_asset_studio(self):
         """Open the AI asset generation dialog."""
-        if not self.document:
-            QMessageBox.warning(self, "无法打开", "请先新建或打开一个文档。")
-            return
-
         dialog = self._ai_asset_studio_dialog
         if dialog is None:
             from app.ui.ai_asset_studio_dialog import AIAssetStudioDialog
 
-            dialog = AIAssetStudioDialog(self.document, self)
+            dialog = AIAssetStudioDialog(self)
             dialog.destroyed.connect(lambda: setattr(self, "_ai_asset_studio_dialog", None))
             self._ai_asset_studio_dialog = dialog
-        else:
-            dialog.document = self.document
 
         dialog.show()
         dialog.raise_()

@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a first-version AI asset studio that generates images through a configurable API, saves local assets, optionally performs lightweight cutout/segmentation, and imports output folders as image layers.
+**Goal:** Add a first-version layer-level AI image generation flow that uses global API settings, saves local assets, optionally performs lightweight cutout/segmentation, and writes the output folder back to the selected image layer.
 
-**Architecture:** Keep AI generation outside the existing export pipeline. Add a pure service for API response parsing and local image processing, then add a PySide6 dialog that runs service work in a background `QRunnable` and calls `Document.add_layer()` for import.
+**Architecture:** Keep AI generation outside the existing export pipeline. Add a pure service for API response parsing and local image processing, use the toolbar dialog only for shared API settings, and run generation from each image layer's property panel so the result updates that layer's `image_source`.
 
 **Tech Stack:** Python stdlib `urllib`, Pillow, NumPy, OpenCV, PySide6, `unittest`.
 
@@ -13,8 +13,9 @@
 ### File Structure
 
 - Create `app/services/ai_asset_service.py`: API request/response parsing, image downloading, asset folder creation, cutout, segmentation, metadata.
-- Create `app/ui/ai_asset_studio_dialog.py`: non-modal PySide6 dialog, background worker, result list, import action.
-- Modify `app/main_window.py`: add toolbar/menu action and per-window dialog holder.
+- Create `app/ui/ai_asset_studio_dialog.py`: non-modal PySide6 dialog for global API settings only.
+- Modify `app/ui/layer_properties.py`: add the per-layer `AI生图` module and background generation worker.
+- Modify `app/main_window.py`: add toolbar/menu action for global API settings.
 - Create `tests/test_ai_asset_service.py`: pure service tests that do not require PySide6 or network.
 
 ### Task 1: Service Tests

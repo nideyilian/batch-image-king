@@ -3,8 +3,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QFileDialog, QGroupBox, QCheckBox, QComboBox,
                            QSlider, QMessageBox, QRadioButton, QButtonGroup,
                            QScrollArea, QFrame, QSizePolicy,
-                           QMenu, QMainWindow, QDockWidget, QApplication)
-from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings
+                           QMenu, QMainWindow, QDockWidget, QApplication, QTextEdit)
+from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import QColor
 import os
 import time
@@ -22,6 +22,23 @@ from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import is_layer_group
+from app.services.ai_asset_service import AIAssetRequest, AIAssetResult, AIAssetService
+
+
+class _AIAssetWorkerSignals(QObject):
+    finished = Signal(object)
+
+
+class _AIAssetLayerTask(QRunnable):
+    def __init__(self, service, request):
+        super().__init__()
+        self.service = service
+        self.request = request
+        self.signals = _AIAssetWorkerSignals()
+
+    @Slot()
+    def run(self):
+        self.signals.finished.emit(self.service.generate_assets(self.request))
 
 class LayerPropertiesPanel(QWidget):
     """图层属性面板"""
@@ -54,6 +71,7 @@ class LayerPropertiesPanel(QWidget):
         self._module_order = []
         self._module_docks = {}
         self._restoring_module_layout = False
+        self._ai_generation_task = None
 
         self.setup_ui()
 
@@ -897,6 +915,44 @@ class LayerPropertiesPanel(QWidget):
         self.source_group.add_content_layout(source_layout)
         self.scroll_layout.addWidget(self.source_group)
         self._register_module_group("source", "图像源设置", self.source_group)
+
+        self.ai_generation_group = CollapsibleGroupBox("AI生图", collapsed=True)
+        ai_layout = QFormLayout()
+
+        self.ai_prompt_edit = QTextEdit()
+        self.ai_prompt_edit.setAcceptRichText(False)
+        self.ai_prompt_edit.setFixedHeight(76)
+        self.ai_negative_prompt_edit = QTextEdit()
+        self.ai_negative_prompt_edit.setAcceptRichText(False)
+        self.ai_negative_prompt_edit.setFixedHeight(48)
+        self.ai_model_edit = QLineEdit()
+        self.ai_model_edit.setPlaceholderText("留空使用全局默认模型")
+        self.ai_count_spin = QSpinBox()
+        self.ai_count_spin.setRange(1, 20)
+        self.ai_count_spin.setValue(1)
+        self.ai_size_combo = QComboBox()
+        self.ai_size_combo.addItems(["1024x1024", "768x1024", "1024x768", "512x512"])
+        self.ai_mode_combo = QComboBox()
+        self.ai_mode_combo.addItem("仅生成", "raw")
+        self.ai_mode_combo.addItem("生成后基础抠图", "cutout")
+        self.ai_mode_combo.addItem("生成后基础抠图并自动分割", "segments")
+        self.ai_generate_btn = QPushButton("生成到当前图层")
+        self.ai_generate_btn.clicked.connect(self.start_ai_generation_for_current_layer)
+        self.ai_status_label = QLabel("使用工具栏的 AI接口设置 作为全局 API 参数")
+        self.ai_status_label.setStyleSheet("color: #8E8E93; font-size: 8pt;")
+
+        ai_layout.addRow("提示词:", self.ai_prompt_edit)
+        ai_layout.addRow("反向提示词:", self.ai_negative_prompt_edit)
+        ai_layout.addRow("模型:", self.ai_model_edit)
+        ai_layout.addRow("数量:", self.ai_count_spin)
+        ai_layout.addRow("尺寸:", self.ai_size_combo)
+        ai_layout.addRow("处理:", self.ai_mode_combo)
+        ai_layout.addRow("", self.ai_generate_btn)
+        ai_layout.addRow("", self.ai_status_label)
+
+        self.ai_generation_group.add_content_layout(ai_layout)
+        self.scroll_layout.addWidget(self.ai_generation_group)
+        self._register_module_group("ai_generation", "AI生图", self.ai_generation_group)
 
         # 3. 高级设置组 (默认收起)
         self.advanced_group = CollapsibleGroupBox("高级设置", collapsed=True)
@@ -2512,6 +2568,110 @@ class LayerPropertiesPanel(QWidget):
 
         # 保存更改后的状态
         self.document.save_state("切换图层锁定状态")
+
+    def _ai_settings(self):
+        return QSettings("批图王", "AIAssetStudio")
+
+    def build_ai_asset_request_for_current_layer(self):
+        settings = self._ai_settings()
+        layer_name = getattr(self.current_layer, "name", "ai_assets") or "ai_assets"
+        model = self.ai_model_edit.text().strip() or str(settings.value("default_model", "") or "").strip()
+        return AIAssetRequest(
+            base_url=str(settings.value("base_url", "") or "").strip(),
+            endpoint=str(settings.value("endpoint", "") or "").strip(),
+            api_key=str(settings.value("api_key", "") or ""),
+            model=model,
+            model_field=str(settings.value("model_field", "model") or "model"),
+            prompt=self.ai_prompt_edit.toPlainText().strip(),
+            negative_prompt=self.ai_negative_prompt_edit.toPlainText().strip(),
+            count=self.ai_count_spin.value(),
+            size=self.ai_size_combo.currentText(),
+            group_name=layer_name,
+            process_mode=str(self.ai_mode_combo.currentData() or "raw"),
+        )
+
+    def start_ai_generation_for_current_layer(self):
+        if not self.current_layer:
+            QMessageBox.warning(self, "无法生成", "请先选择一个图片图层。")
+            return
+
+        request = self.build_ai_asset_request_for_current_layer()
+        if not request.base_url and not request.endpoint.startswith(("http://", "https://")):
+            QMessageBox.warning(self, "参数缺失", "请先在工具栏的 AI接口设置 中填写 Base URL。")
+            return
+        if not request.endpoint:
+            QMessageBox.warning(self, "参数缺失", "请先在工具栏的 AI接口设置 中填写 Endpoint。")
+            return
+        if not request.model:
+            QMessageBox.warning(self, "参数缺失", "请填写当前图层模型，或在 AI接口设置 中填写默认模型。")
+            return
+        if not request.prompt:
+            QMessageBox.warning(self, "参数缺失", "请填写当前图层的 AI 生图提示词。")
+            return
+
+        self.ai_generate_btn.setEnabled(False)
+        self.ai_status_label.setText("正在生成...")
+        task = _AIAssetLayerTask(AIAssetService(), request)
+        task.signals.finished.connect(self._on_ai_generation_finished)
+        self._ai_generation_task = task
+        QThreadPool.globalInstance().start(task)
+
+    @Slot(object)
+    def _on_ai_generation_finished(self, result):
+        self.ai_generate_btn.setEnabled(True)
+        self._ai_generation_task = None
+        if not isinstance(result, AIAssetResult) or not result.raw_paths:
+            errors = getattr(result, "errors", None) or ["生成失败"]
+            self.ai_status_label.setText(str(errors[0]))
+            return
+
+        output_dir = self._resolve_ai_output_dir(result)
+        if not output_dir:
+            self.ai_status_label.setText("生成完成，但没有可用输出目录")
+            return
+
+        self.apply_ai_output_to_current_layer(output_dir)
+        self.ai_status_label.setText(f"已生成并写入图层: {output_dir}")
+
+    @staticmethod
+    def _resolve_ai_output_dir(result):
+        paths = list(getattr(result, "output_paths", None) or getattr(result, "raw_paths", None) or [])
+        if not paths:
+            return ""
+        first = paths[0]
+        if os.path.isfile(first) or os.path.splitext(first)[1]:
+            return os.path.dirname(first)
+        return first
+
+    def apply_ai_output_to_current_layer(self, output_dir):
+        if not self.current_layer:
+            return
+        if self.document:
+            self.document.save_state("AI生图更新图层前")
+
+        self.current_layer.image_source = output_dir
+        self.current_layer.is_folder = True
+        if hasattr(self.current_layer, "current_image_path"):
+            self.current_layer.current_image_path = None
+        for attr in ("_cached_image", "_cached_source_image", "_cached_image_path", "_cached_source_path"):
+            if hasattr(self.current_layer, attr):
+                setattr(self.current_layer, attr, None)
+
+        if hasattr(self, "folder_radio"):
+            self.folder_radio.setChecked(True)
+        if hasattr(self, "source_path_edit"):
+            self.source_path_edit.setText(output_dir)
+        if hasattr(self, "current_image_label"):
+            self.current_image_label.setText("当前图像: 无")
+
+        if self.document:
+            if hasattr(self.document, "_invalidate_render_cache"):
+                self.document._invalidate_render_cache()
+            if hasattr(self.document, "layer_changed"):
+                self.document.layer_changed.emit()
+            if hasattr(self.document, "document_changed"):
+                self.document.document_changed.emit()
+            self.document.save_state("AI生图更新图层")
 
     def browse_image(self):
         """浏览并选择图像文件"""
