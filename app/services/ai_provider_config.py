@@ -32,11 +32,17 @@ class AIProviderProfile:
     auth_mode: str = "bearer"  # bearer | x-api-key | none
     model_field: str = "model"
     models: List[str] = field(default_factory=list)
+    selected_model: str = ""
 
     def __post_init__(self):
         self.profile_id = str(self.profile_id or uuid.uuid4().hex)
         self.name = str(self.name or "未命名接口").strip()
         self.models = _dedupe_models(self.models)
+        self.selected_model = str(self.selected_model or "").strip()
+        if self.selected_model and self.selected_model not in self.models:
+            self.models.append(self.selected_model)
+        if not self.selected_model and self.models:
+            self.selected_model = self.models[0]
         if self.auth_mode not in {"bearer", "x-api-key", "none"}:
             self.auth_mode = "bearer"
         if self.model_field not in {"model", "model_name"}:
@@ -53,6 +59,7 @@ class AIProviderProfile:
             "auth_mode": self.auth_mode,
             "model_field": self.model_field,
             "models": list(self.models),
+            "selected_model": self.selected_model,
         }
 
     @classmethod
@@ -68,6 +75,7 @@ class AIProviderProfile:
             auth_mode=str(data.get("auth_mode") or "bearer"),
             model_field=str(data.get("model_field") or "model"),
             models=list(data.get("models") or []),
+            selected_model=str(data.get("selected_model") or ""),
         )
 
 
@@ -120,4 +128,5 @@ class AIProviderStore:
             api_key=api_key,
             model_field=str(self.settings.value("model_field", "model") or "model"),
             models=[default_model] if default_model else [],
+            selected_model=default_model,
         )

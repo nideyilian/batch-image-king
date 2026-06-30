@@ -34,6 +34,7 @@ class LayerPropertiesAIGenerationTest(unittest.TestCase):
             auth_mode="x-api-key",
             model_field="model_name",
             models=["gpt-image-1", "kling-v1"],
+            selected_model="kling-v1",
         )
         AIProviderStore(settings).save_profiles([profile], active_profile_id=profile.profile_id)
         self.panel = LayerPropertiesPanel(None)
@@ -49,12 +50,6 @@ class LayerPropertiesAIGenerationTest(unittest.TestCase):
         self.assertIn("ai_generation", self.panel._module_groups)
         self.assertTrue(hasattr(self.panel, "ai_prompt_edit"))
 
-        self.panel.refresh_ai_provider_choices()
-        self.panel.ai_provider_combo.setCurrentIndex(
-            self.panel.ai_provider_combo.findData("provider-a")
-        )
-        self.panel.refresh_ai_model_choices()
-        self.panel.ai_model_combo.setCurrentText("kling-v1")
         self.panel.ai_prompt_edit.setPlainText("make product render")
         self.panel.ai_negative_prompt_edit.setPlainText("blurry")
         self.panel.ai_count_spin.setValue(2)
@@ -74,6 +69,9 @@ class LayerPropertiesAIGenerationTest(unittest.TestCase):
         self.assertEqual(request.count, 2)
         self.assertEqual(request.group_name, "Product Layer")
         self.assertEqual(request.process_mode, "segments")
+        self.assertFalse(hasattr(self.panel, "ai_provider_combo"))
+        self.assertFalse(hasattr(self.panel, "ai_model_combo"))
+        self.assertTrue(hasattr(self.panel, "ai_progress_bar"))
 
 
 if __name__ == "__main__":

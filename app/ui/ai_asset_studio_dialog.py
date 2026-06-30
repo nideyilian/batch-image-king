@@ -108,7 +108,17 @@ class AIAssetStudioDialog(QDialog):
 
         models_group = QGroupBox("可用模型")
         models_layout = QVBoxLayout(models_group)
+        active_model_row = QHBoxLayout()
+        self.active_model_combo = QComboBox()
+        self.active_model_combo.setEditable(True)
+        self.active_model_combo.setInsertPolicy(QComboBox.NoInsert)
+        active_model_row.addWidget(QLabel("当前模型:"))
+        active_model_row.addWidget(self.active_model_combo, 1)
+        models_layout.addLayout(active_model_row)
         self.models_list = QListWidget()
+        self.models_list.itemDoubleClicked.connect(
+            lambda item: self.active_model_combo.setCurrentText(item.text())
+        )
         models_layout.addWidget(self.models_list)
 
         custom_row = QHBoxLayout()
@@ -189,6 +199,7 @@ class AIAssetStudioDialog(QDialog):
             self.auth_mode_combo,
             self.model_field_combo,
             self.models_list,
+            self.active_model_combo,
             self.custom_model_edit,
             self.add_model_btn,
             self.remove_model_btn,
@@ -201,6 +212,7 @@ class AIAssetStudioDialog(QDialog):
             self._clear_fields()
             return
 
+        self.store.save_profiles(self.profiles, profile.profile_id)
         self.profile_name_edit.setText(profile.name)
         self.base_url_edit.setText(profile.base_url)
         self.generation_endpoint_edit.setText(profile.generation_endpoint)
@@ -210,7 +222,7 @@ class AIAssetStudioDialog(QDialog):
         self.auth_mode_combo.setCurrentIndex(max(0, auth_index))
         model_field_index = self.model_field_combo.findText(profile.model_field)
         self.model_field_combo.setCurrentIndex(max(0, model_field_index))
-        self._set_models(profile.models)
+        self._set_models(profile.models, profile.selected_model)
 
     def _clear_fields(self):
         for edit in (
@@ -223,12 +235,22 @@ class AIAssetStudioDialog(QDialog):
         ):
             edit.clear()
         self.models_list.clear()
+        self.active_model_combo.clear()
         self.fetch_status_label.clear()
 
-    def _set_models(self, models):
+    def _set_models(self, models, selected_model: str = ""):
+        previous = selected_model or self.active_model_combo.currentText().strip()
         self.models_list.clear()
+        self.active_model_combo.blockSignals(True)
+        self.active_model_combo.clear()
         for model in models:
             self.models_list.addItem(model)
+            self.active_model_combo.addItem(model)
+        if previous:
+            self.active_model_combo.setCurrentText(previous)
+        elif models:
+            self.active_model_combo.setCurrentIndex(0)
+        self.active_model_combo.blockSignals(False)
 
     def _models_from_list(self):
         return [self.models_list.item(index).text() for index in range(self.models_list.count())]
@@ -242,6 +264,9 @@ class AIAssetStudioDialog(QDialog):
         profile.auth_mode = str(self.auth_mode_combo.currentData() or "bearer")
         profile.model_field = self.model_field_combo.currentText()
         profile.models = list(dict.fromkeys(self._models_from_list()))
+        profile.selected_model = self.active_model_combo.currentText().strip()
+        if profile.selected_model and profile.selected_model not in profile.models:
+            profile.models.append(profile.selected_model)
 
     def save_current_profile(self):
         profile = self.current_profile()
@@ -258,12 +283,19 @@ class AIAssetStudioDialog(QDialog):
         existing = set(self._models_from_list())
         if value not in existing:
             self.models_list.addItem(value)
+            self.active_model_combo.addItem(value)
+        if not self.active_model_combo.currentText().strip():
+            self.active_model_combo.setCurrentText(value)
         self.custom_model_edit.clear()
 
     def remove_selected_model(self):
         row = self.models_list.currentRow()
         if row >= 0:
-            self.models_list.takeItem(row)
+            removed = self.models_list.takeItem(row)
+            if removed:
+                combo_index = self.active_model_combo.findText(removed.text())
+                if combo_index >= 0:
+                    self.active_model_combo.removeItem(combo_index)
 
     def fetch_models(self):
         profile = self.current_profile()

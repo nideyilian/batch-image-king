@@ -16,6 +16,7 @@ class AIProviderConfigTests(unittest.TestCase):
             auth_mode="bearer",
             model_field="model_name",
             models=["gpt-image-1", "kling-v1", "gpt-image-1"],
+            selected_model="kling-v1",
         )
 
         restored = AIProviderProfile.from_dict(profile.to_dict())
@@ -26,6 +27,7 @@ class AIProviderConfigTests(unittest.TestCase):
         self.assertEqual(restored.auth_mode, "bearer")
         self.assertEqual(restored.model_field, "model_name")
         self.assertEqual(restored.models, ["gpt-image-1", "kling-v1"])
+        self.assertEqual(restored.selected_model, "kling-v1")
 
     def test_extract_model_ids_supports_common_api_response_shapes(self):
         response = {

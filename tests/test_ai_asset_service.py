@@ -4,7 +4,7 @@ import unittest
 
 from PIL import Image, ImageDraw
 
-from app.services.ai_asset_service import AIAssetService
+from app.services.ai_asset_service import AIAssetService, localize_ai_error
 
 
 class AIAssetServiceTests(unittest.TestCase):
@@ -67,6 +67,12 @@ class AIAssetServiceTests(unittest.TestCase):
                     self.assertEqual(segment.mode, "RGBA")
                     self.assertLess(segment.width, 60)
                     self.assertLess(segment.height, 60)
+
+    def test_localize_timeout_error_uses_chinese_message(self):
+        self.assertEqual(
+            localize_ai_error("The read operation timed out"),
+            "请求超时，请检查网络或接口设置后重试。",
+        )
 
 
 if __name__ == "__main__":

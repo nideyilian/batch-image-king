@@ -16,6 +16,24 @@ import numpy as np
 from PIL import Image
 
 
+def localize_ai_error(message: str) -> str:
+    text = str(message or "").strip()
+    lowered = text.lower()
+    if "timed out" in lowered or "timeout" in lowered:
+        return "请求超时，请检查网络或接口设置后重试。"
+    if "401" in lowered or "unauthorized" in lowered:
+        return "认证失败，请检查 API Key 和认证方式。"
+    if "403" in lowered or "forbidden" in lowered:
+        return "接口拒绝访问，请检查账号权限或模型权限。"
+    if "429" in lowered or "rate limit" in lowered:
+        return "请求过于频繁，请稍后重试。"
+    if "connection refused" in lowered or "failed to establish" in lowered:
+        return "无法连接接口，请检查 Base URL 和网络。"
+    if "did not contain image" in lowered:
+        return "接口返回成功，但没有找到可用图片。"
+    return f"生成失败：{text}" if text else "生成失败，请检查接口设置后重试。"
+
+
 @dataclass(frozen=True)
 class ImageSource:
     kind: str  # url | base64

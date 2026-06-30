@@ -3,7 +3,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QFileDialog, QGroupBox, QCheckBox, QComboBox,
                            QSlider, QMessageBox, QRadioButton, QButtonGroup,
                            QScrollArea, QFrame, QSizePolicy,
-                           QMenu, QMainWindow, QDockWidget, QApplication, QTextEdit)
+                           QMenu, QMainWindow, QDockWidget, QApplication, QTextEdit,
+                           QProgressBar)
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import QColor
 import os
@@ -22,7 +23,12 @@ from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import is_layer_group
-from app.services.ai_asset_service import AIAssetRequest, AIAssetResult, AIAssetService
+from app.services.ai_asset_service import (
+    AIAssetRequest,
+    AIAssetResult,
+    AIAssetService,
+    localize_ai_error,
+)
 from app.services.ai_provider_config import AIProviderStore
 
 
@@ -923,16 +929,19 @@ class LayerPropertiesPanel(QWidget):
         self.ai_prompt_edit = QTextEdit()
         self.ai_prompt_edit.setAcceptRichText(False)
         self.ai_prompt_edit.setFixedHeight(76)
+        self.ai_prompt_edit.setPlaceholderText("输入当前图层的生图提示词")
+        self.ai_prompt_edit.setStyleSheet(
+            "QTextEdit { background: #111214; border: 1px solid #3A3B3E; "
+            "border-radius: 4px; padding: 6px; }"
+        )
         self.ai_negative_prompt_edit = QTextEdit()
         self.ai_negative_prompt_edit.setAcceptRichText(False)
         self.ai_negative_prompt_edit.setFixedHeight(48)
-        self.ai_provider_combo = QComboBox()
-        self.ai_provider_combo.currentIndexChanged.connect(self.refresh_ai_model_choices)
-        self.ai_model_combo = QComboBox()
-        self.ai_model_combo.setEditable(True)
-        self.ai_model_combo.setInsertPolicy(QComboBox.NoInsert)
-        self.ai_refresh_btn = QPushButton("刷新接口/模型")
-        self.ai_refresh_btn.clicked.connect(self.refresh_ai_provider_choices)
+        self.ai_negative_prompt_edit.setPlaceholderText("可选：输入不希望出现的内容")
+        self.ai_negative_prompt_edit.setStyleSheet(
+            "QTextEdit { background: #111214; border: 1px solid #3A3B3E; "
+            "border-radius: 4px; padding: 6px; }"
+        )
         self.ai_count_spin = QSpinBox()
         self.ai_count_spin.setRange(1, 20)
         self.ai_count_spin.setValue(1)
@@ -944,24 +953,30 @@ class LayerPropertiesPanel(QWidget):
         self.ai_mode_combo.addItem("生成后基础抠图并自动分割", "segments")
         self.ai_generate_btn = QPushButton("生成到当前图层")
         self.ai_generate_btn.clicked.connect(self.start_ai_generation_for_current_layer)
+        self.ai_progress_bar = QProgressBar()
+        self.ai_progress_bar.setRange(0, 100)
+        self.ai_progress_bar.setValue(0)
+        self.ai_progress_bar.setFormat("等待生成")
+        self.ai_progress_bar.setStyleSheet(
+            "QProgressBar { background: #111214; border: 1px solid #3A3B3E; "
+            "border-radius: 3px; color: #D7D7D9; text-align: center; min-height: 18px; } "
+            "QProgressBar::chunk { background: #3B82F6; border-radius: 2px; }"
+        )
         self.ai_status_label = QLabel("使用工具栏的 AI接口设置 作为全局 API 参数")
         self.ai_status_label.setStyleSheet("color: #8E8E93; font-size: 8pt;")
 
         ai_layout.addRow("提示词:", self.ai_prompt_edit)
         ai_layout.addRow("反向提示词:", self.ai_negative_prompt_edit)
-        ai_layout.addRow("接口:", self.ai_provider_combo)
-        ai_layout.addRow("模型:", self.ai_model_combo)
-        ai_layout.addRow("", self.ai_refresh_btn)
         ai_layout.addRow("数量:", self.ai_count_spin)
         ai_layout.addRow("尺寸:", self.ai_size_combo)
         ai_layout.addRow("处理:", self.ai_mode_combo)
         ai_layout.addRow("", self.ai_generate_btn)
+        ai_layout.addRow("进度:", self.ai_progress_bar)
         ai_layout.addRow("", self.ai_status_label)
 
         self.ai_generation_group.add_content_layout(ai_layout)
         self.scroll_layout.addWidget(self.ai_generation_group)
         self._register_module_group("ai_generation", "AI生图", self.ai_generation_group)
-        self.refresh_ai_provider_choices()
 
         # 3. 高级设置组 (默认收起)
         self.advanced_group = CollapsibleGroupBox("高级设置", collapsed=True)
@@ -2584,47 +2599,18 @@ class LayerPropertiesPanel(QWidget):
     def _ai_provider_store(self):
         return AIProviderStore(self._ai_settings())
 
-    def refresh_ai_provider_choices(self):
-        store = self._ai_provider_store()
-        profiles = store.load_profiles()
-        current_id = self.ai_provider_combo.currentData() or store.active_profile_id()
-        self.ai_provider_combo.blockSignals(True)
-        self.ai_provider_combo.clear()
-        for profile in profiles:
-            self.ai_provider_combo.addItem(profile.name, profile.profile_id)
-        index = self.ai_provider_combo.findData(current_id)
-        self.ai_provider_combo.setCurrentIndex(index if index >= 0 else (0 if profiles else -1))
-        self.ai_provider_combo.blockSignals(False)
-        self.refresh_ai_model_choices()
-
-    def _selected_ai_profile(self):
-        profile_id = self.ai_provider_combo.currentData()
-        profiles = self._ai_provider_store().load_profiles()
-        return next((profile for profile in profiles if profile.profile_id == profile_id), None)
-
-    def refresh_ai_model_choices(self):
-        current_model = self.ai_model_combo.currentText().strip()
-        profile = self._selected_ai_profile()
-        models = list(profile.models) if profile else []
-        self.ai_model_combo.blockSignals(True)
-        self.ai_model_combo.clear()
-        self.ai_model_combo.addItems(models)
-        if current_model and (not models or current_model in models):
-            self.ai_model_combo.setCurrentText(current_model)
-        elif models:
-            self.ai_model_combo.setCurrentIndex(0)
-        self.ai_model_combo.blockSignals(False)
-
     def build_ai_asset_request_for_current_layer(self):
-        profile = self._selected_ai_profile()
+        profile = self._ai_provider_store().active_profile()
         if profile is None:
             raise ValueError("未配置 AI 接口")
+        if not profile.selected_model:
+            raise ValueError("请先在 AI接口设置 中选择当前模型")
         layer_name = getattr(self.current_layer, "name", "ai_assets") or "ai_assets"
         return AIAssetRequest(
             base_url=profile.base_url,
             endpoint=profile.generation_endpoint,
             api_key=profile.api_key,
-            model=self.ai_model_combo.currentText().strip(),
+            model=profile.selected_model,
             model_field=profile.model_field,
             auth_mode=profile.auth_mode,
             prompt=self.ai_prompt_edit.toPlainText().strip(),
@@ -2659,7 +2645,9 @@ class LayerPropertiesPanel(QWidget):
             return
 
         self.ai_generate_btn.setEnabled(False)
-        self.ai_status_label.setText("正在生成...")
+        self.ai_progress_bar.setRange(0, 0)
+        self.ai_progress_bar.setFormat("正在生成，请稍候...")
+        self.ai_status_label.setText("正在提交生图请求...")
         task = _AIAssetLayerTask(AIAssetService(), request)
         task.signals.finished.connect(self._on_ai_generation_finished)
         self._ai_generation_task = task
@@ -2671,15 +2659,25 @@ class LayerPropertiesPanel(QWidget):
         self._ai_generation_task = None
         if not isinstance(result, AIAssetResult) or not result.raw_paths:
             errors = getattr(result, "errors", None) or ["生成失败"]
-            self.ai_status_label.setText(str(errors[0]))
+            message = localize_ai_error(errors[0])
+            self.ai_progress_bar.setRange(0, 100)
+            self.ai_progress_bar.setValue(0)
+            self.ai_progress_bar.setFormat("生成失败")
+            self.ai_status_label.setText(message)
             return
 
         output_dir = self._resolve_ai_output_dir(result)
         if not output_dir:
+            self.ai_progress_bar.setRange(0, 100)
+            self.ai_progress_bar.setValue(0)
+            self.ai_progress_bar.setFormat("生成失败")
             self.ai_status_label.setText("生成完成，但没有可用输出目录")
             return
 
         self.apply_ai_output_to_current_layer(output_dir)
+        self.ai_progress_bar.setRange(0, 100)
+        self.ai_progress_bar.setValue(100)
+        self.ai_progress_bar.setFormat("生成完成")
         self.ai_status_label.setText(f"已生成并写入图层: {output_dir}")
 
     @staticmethod

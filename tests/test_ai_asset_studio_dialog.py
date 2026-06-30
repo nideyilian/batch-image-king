@@ -37,6 +37,7 @@ class AIAssetStudioDialogTests(unittest.TestCase):
             dialog.auth_mode_combo.setCurrentIndex(dialog.auth_mode_combo.findData("x-api-key"))
             dialog.model_field_combo.setCurrentText("model_name")
             dialog.add_custom_model("manual-image-v1")
+            dialog.active_model_combo.setCurrentText("manual-image-v1")
             dialog.save_current_profile()
 
             store = AIProviderStore(QSettings("批图王", "AIAssetStudio"))
@@ -51,6 +52,7 @@ class AIAssetStudioDialogTests(unittest.TestCase):
             self.assertEqual(profile.auth_mode, "x-api-key")
             self.assertEqual(profile.model_field, "model_name")
             self.assertEqual(profile.models, ["manual-image-v1"])
+            self.assertEqual(profile.selected_model, "manual-image-v1")
             self.assertFalse(hasattr(dialog, "prompt_edit"))
             self.assertFalse(hasattr(dialog, "generate_button"))
         finally:
