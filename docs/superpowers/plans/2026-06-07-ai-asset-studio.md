@@ -13,7 +13,8 @@
 ### File Structure
 
 - Create `app/services/ai_asset_service.py`: API request/response parsing, image downloading, asset folder creation, cutout, segmentation, metadata.
-- Create `app/ui/ai_asset_studio_dialog.py`: non-modal PySide6 dialog for global API settings only.
+- Create `app/services/ai_provider_config.py`: persistent multi-interface profiles with endpoints, authentication mode, model field, and model IDs.
+- Create `app/ui/ai_asset_studio_dialog.py`: non-modal PySide6 dialog for managing interface profiles, manually adding models, and fetching model lists.
 - Modify `app/ui/layer_properties.py`: add the per-layer `AI生图` module and background generation worker.
 - Modify `app/main_window.py`: add toolbar/menu action for global API settings.
 - Create `tests/test_ai_asset_service.py`: pure service tests that do not require PySide6 or network.

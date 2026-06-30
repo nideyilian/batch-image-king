@@ -35,6 +35,7 @@ class AIAssetRequest:
     group_name: str = "ai_assets"
     process_mode: str = "raw"  # raw | cutout | segments
     model_field: str = "model"  # model | model_name
+    auth_mode: str = "bearer"  # bearer | x-api-key | none
     timeout: int = 120
 
 
@@ -127,6 +128,56 @@ class AIAssetService:
                 deduped.append(source)
         return deduped
 
+    @staticmethod
+    def extract_model_ids(response: Any) -> List[str]:
+        models: List[str] = []
+
+        def walk(value: Any, parent_key: str = "") -> None:
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    lowered = str(key).lower()
+                    if lowered in {"id", "name", "model", "model_id"} and isinstance(child, str):
+                        text = child.strip()
+                        if text:
+                            models.append(text)
+                    elif isinstance(child, (dict, list, tuple)):
+                        walk(child, lowered)
+            elif isinstance(value, (list, tuple)):
+                for child in value:
+                    if isinstance(child, str) and parent_key in {"models", "data", "items"}:
+                        text = child.strip()
+                        if text:
+                            models.append(text)
+                    else:
+                        walk(child, parent_key)
+
+        walk(response)
+        result: List[str] = []
+        seen = set()
+        for model in models:
+            if model not in seen:
+                seen.add(model)
+                result.append(model)
+        return result
+
+    def fetch_models(
+        self,
+        base_url: str,
+        endpoint: str = "/v1/models",
+        api_key: str = "",
+        auth_mode: str = "bearer",
+        timeout: int = 30,
+    ) -> List[str]:
+        url = self._join_url(base_url, endpoint)
+        request = urllib.request.Request(
+            url,
+            headers=self._request_headers(api_key, auth_mode, include_content_type=False),
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=max(1, int(timeout or 30))) as response:
+            body = response.read()
+        return self.extract_model_ids(json.loads(body.decode("utf-8-sig")))
+
     def generate_assets(self, request: AIAssetRequest) -> AIAssetResult:
         workspace = self.create_asset_workspace(request.group_name)
         raw_paths: List[str] = []
@@ -187,9 +238,7 @@ class AIAssetService:
     def _post_generation_request(self, request: AIAssetRequest) -> Any:
         url = self._join_url(request.base_url, request.endpoint)
         payload = self._build_payload(request)
-        headers = {"Content-Type": "application/json"}
-        if request.api_key:
-            headers["Authorization"] = f"Bearer {request.api_key}"
+        headers = self._request_headers(request.api_key, request.auth_mode, include_content_type=True)
         http_request = urllib.request.Request(
             url,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -203,6 +252,17 @@ class AIAssetService:
             encoded = base64.b64encode(body).decode("ascii")
             return {"data": [{"b64_json": encoded}]}
         return json.loads(body.decode("utf-8-sig"))
+
+    @staticmethod
+    def _request_headers(api_key: str, auth_mode: str, include_content_type: bool = True) -> Dict[str, str]:
+        headers: Dict[str, str] = {}
+        if include_content_type:
+            headers["Content-Type"] = "application/json"
+        if api_key and auth_mode == "x-api-key":
+            headers["x-api-key"] = api_key
+        elif api_key and auth_mode != "none":
+            headers["Authorization"] = f"Bearer {api_key}"
+        return headers
 
     @staticmethod
     def _build_payload(request: AIAssetRequest) -> Dict[str, Any]:

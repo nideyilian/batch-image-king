@@ -23,6 +23,7 @@ from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewSh
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import is_layer_group
 from app.services.ai_asset_service import AIAssetRequest, AIAssetResult, AIAssetService
+from app.services.ai_provider_config import AIProviderStore
 
 
 class _AIAssetWorkerSignals(QObject):
@@ -925,8 +926,13 @@ class LayerPropertiesPanel(QWidget):
         self.ai_negative_prompt_edit = QTextEdit()
         self.ai_negative_prompt_edit.setAcceptRichText(False)
         self.ai_negative_prompt_edit.setFixedHeight(48)
-        self.ai_model_edit = QLineEdit()
-        self.ai_model_edit.setPlaceholderText("留空使用全局默认模型")
+        self.ai_provider_combo = QComboBox()
+        self.ai_provider_combo.currentIndexChanged.connect(self.refresh_ai_model_choices)
+        self.ai_model_combo = QComboBox()
+        self.ai_model_combo.setEditable(True)
+        self.ai_model_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.ai_refresh_btn = QPushButton("刷新接口/模型")
+        self.ai_refresh_btn.clicked.connect(self.refresh_ai_provider_choices)
         self.ai_count_spin = QSpinBox()
         self.ai_count_spin.setRange(1, 20)
         self.ai_count_spin.setValue(1)
@@ -943,7 +949,9 @@ class LayerPropertiesPanel(QWidget):
 
         ai_layout.addRow("提示词:", self.ai_prompt_edit)
         ai_layout.addRow("反向提示词:", self.ai_negative_prompt_edit)
-        ai_layout.addRow("模型:", self.ai_model_edit)
+        ai_layout.addRow("接口:", self.ai_provider_combo)
+        ai_layout.addRow("模型:", self.ai_model_combo)
+        ai_layout.addRow("", self.ai_refresh_btn)
         ai_layout.addRow("数量:", self.ai_count_spin)
         ai_layout.addRow("尺寸:", self.ai_size_combo)
         ai_layout.addRow("处理:", self.ai_mode_combo)
@@ -953,6 +961,7 @@ class LayerPropertiesPanel(QWidget):
         self.ai_generation_group.add_content_layout(ai_layout)
         self.scroll_layout.addWidget(self.ai_generation_group)
         self._register_module_group("ai_generation", "AI生图", self.ai_generation_group)
+        self.refresh_ai_provider_choices()
 
         # 3. 高级设置组 (默认收起)
         self.advanced_group = CollapsibleGroupBox("高级设置", collapsed=True)
@@ -2572,16 +2581,52 @@ class LayerPropertiesPanel(QWidget):
     def _ai_settings(self):
         return QSettings("批图王", "AIAssetStudio")
 
+    def _ai_provider_store(self):
+        return AIProviderStore(self._ai_settings())
+
+    def refresh_ai_provider_choices(self):
+        store = self._ai_provider_store()
+        profiles = store.load_profiles()
+        current_id = self.ai_provider_combo.currentData() or store.active_profile_id()
+        self.ai_provider_combo.blockSignals(True)
+        self.ai_provider_combo.clear()
+        for profile in profiles:
+            self.ai_provider_combo.addItem(profile.name, profile.profile_id)
+        index = self.ai_provider_combo.findData(current_id)
+        self.ai_provider_combo.setCurrentIndex(index if index >= 0 else (0 if profiles else -1))
+        self.ai_provider_combo.blockSignals(False)
+        self.refresh_ai_model_choices()
+
+    def _selected_ai_profile(self):
+        profile_id = self.ai_provider_combo.currentData()
+        profiles = self._ai_provider_store().load_profiles()
+        return next((profile for profile in profiles if profile.profile_id == profile_id), None)
+
+    def refresh_ai_model_choices(self):
+        current_model = self.ai_model_combo.currentText().strip()
+        profile = self._selected_ai_profile()
+        models = list(profile.models) if profile else []
+        self.ai_model_combo.blockSignals(True)
+        self.ai_model_combo.clear()
+        self.ai_model_combo.addItems(models)
+        if current_model and (not models or current_model in models):
+            self.ai_model_combo.setCurrentText(current_model)
+        elif models:
+            self.ai_model_combo.setCurrentIndex(0)
+        self.ai_model_combo.blockSignals(False)
+
     def build_ai_asset_request_for_current_layer(self):
-        settings = self._ai_settings()
+        profile = self._selected_ai_profile()
+        if profile is None:
+            raise ValueError("未配置 AI 接口")
         layer_name = getattr(self.current_layer, "name", "ai_assets") or "ai_assets"
-        model = self.ai_model_edit.text().strip() or str(settings.value("default_model", "") or "").strip()
         return AIAssetRequest(
-            base_url=str(settings.value("base_url", "") or "").strip(),
-            endpoint=str(settings.value("endpoint", "") or "").strip(),
-            api_key=str(settings.value("api_key", "") or ""),
-            model=model,
-            model_field=str(settings.value("model_field", "model") or "model"),
+            base_url=profile.base_url,
+            endpoint=profile.generation_endpoint,
+            api_key=profile.api_key,
+            model=self.ai_model_combo.currentText().strip(),
+            model_field=profile.model_field,
+            auth_mode=profile.auth_mode,
             prompt=self.ai_prompt_edit.toPlainText().strip(),
             negative_prompt=self.ai_negative_prompt_edit.toPlainText().strip(),
             count=self.ai_count_spin.value(),
@@ -2595,15 +2640,19 @@ class LayerPropertiesPanel(QWidget):
             QMessageBox.warning(self, "无法生成", "请先选择一个图片图层。")
             return
 
-        request = self.build_ai_asset_request_for_current_layer()
+        try:
+            request = self.build_ai_asset_request_for_current_layer()
+        except ValueError as exc:
+            QMessageBox.warning(self, "参数缺失", str(exc))
+            return
         if not request.base_url and not request.endpoint.startswith(("http://", "https://")):
-            QMessageBox.warning(self, "参数缺失", "请先在工具栏的 AI接口设置 中填写 Base URL。")
+            QMessageBox.warning(self, "参数缺失", "请在当前接口配置中填写 Base URL。")
             return
         if not request.endpoint:
-            QMessageBox.warning(self, "参数缺失", "请先在工具栏的 AI接口设置 中填写 Endpoint。")
+            QMessageBox.warning(self, "参数缺失", "请在当前接口配置中填写生图 Endpoint。")
             return
         if not request.model:
-            QMessageBox.warning(self, "参数缺失", "请填写当前图层模型，或在 AI接口设置 中填写默认模型。")
+            QMessageBox.warning(self, "参数缺失", "请选择或输入一个模型 ID。")
             return
         if not request.prompt:
             QMessageBox.warning(self, "参数缺失", "请填写当前图层的 AI 生图提示词。")
