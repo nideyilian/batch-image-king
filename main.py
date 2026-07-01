@@ -13,6 +13,8 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--export-worker":
     from app.workers.export_worker import main as export_worker_main
     sys.exit(export_worker_main(sys.argv[2:]))
 
+from app.utils.crash_session import begin_crash_session, mark_clean_exit
+
 def _safe_print(message):
     """安全打印，避免在GBK控制台因emoji导致启动中断"""
     try:
@@ -29,7 +31,7 @@ print("="*80)
 _safe_print("🔍 [代码版本验证] 新版本已加载！时间戳：2024-11-07-16:50")
 print("="*80)
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from app.main_window import MainWindow
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.image_quality import ImageQualityManager
@@ -120,6 +122,36 @@ def setup_logging() -> logging.Logger:
 
     return Logger.get_logger()
 
+
+def logger_file_path(logger: logging.Logger) -> str:
+    for handler in getattr(logger, "handlers", []):
+        if isinstance(handler, logging.FileHandler):
+            return str(getattr(handler, "baseFilename", "") or "")
+    return ""
+
+
+def show_previous_crash_notice(parent, notice) -> None:
+    dialog = QMessageBox(parent)
+    dialog.setIcon(QMessageBox.Warning)
+    dialog.setWindowTitle("检测到上次异常退出")
+    dialog.setText(str(notice.message))
+    dialog.setDetailedText(str(notice.details))
+    dialog.addButton("知道了", QMessageBox.AcceptRole)
+    dialog.exec()
+
+
+def finish_crash_session(session_id: str, exit_code: int, logger: logging.Logger) -> int:
+    if session_id:
+        try:
+            mark_clean_exit(session_id)
+        except Exception as exc:
+            try:
+                logger.warning(f"无法记录程序正常退出状态: {exc}")
+            except Exception:
+                pass
+    return int(exit_code)
+
+
 def show_dependency_status():
     """显示简洁的依赖状态信息"""
     dependencies = []
@@ -201,15 +233,26 @@ def main() -> int:
     # 记录启动开始时间
     start_time = time.time()
 
+    crash_session_id = ""
+    previous_crash_notice = None
+
     # 设置日志
     logger = setup_logging()
     logger.info("程序启动")
+    crash_log_path = ""
     try:
         from app.utils.crash_reporter import install_crash_reporter
         crash_log_path = install_crash_reporter(logger=logger)
         logger.info(f"Crash diagnostics enabled: {crash_log_path}")
     except Exception as crash_reporter_error:
         logger.warning(f"Crash diagnostics unavailable: {crash_reporter_error}")
+    try:
+        crash_session_id, previous_crash_notice = begin_crash_session(
+            crash_log_path=crash_log_path,
+            app_log_path=logger_file_path(logger),
+        )
+    except Exception as crash_session_error:
+        logger.warning(f"Crash session unavailable: {crash_session_error}")
 
     # 显示简洁的依赖检查信息
     show_dependency_status()
@@ -274,6 +317,11 @@ def main() -> int:
         # 创建并显示主窗口
         window = MainWindow()
         window.show()
+        if previous_crash_notice is not None:
+            QTimer.singleShot(
+                300,
+                lambda notice=previous_crash_notice: show_previous_crash_notice(window, notice),
+            )
         
         # 恢复程序退出策略（当最后一个窗口关闭时退出）
         app.setQuitOnLastWindowClosed(True)
@@ -363,7 +411,7 @@ def main() -> int:
             logger.warning(f"资源清理时出现异常: {cleanup_error}")
         
         logger.info(f"程序正常退出，退出码: {exit_code}")
-        return exit_code
+        return finish_crash_session(crash_session_id, exit_code, logger)
         
     except (ImportError, ModuleNotFoundError) as e:
         logger.error(f"程序初始化失败 - 缺少必要模块: {str(e)}", exc_info=True)
@@ -378,13 +426,13 @@ def main() -> int:
             msg.exec()
         except:
             pass
-        return 2
+        return finish_crash_session(crash_session_id, 2, logger)
     except (OSError, PermissionError) as e:
         logger.error(f"程序初始化失败 - 系统权限或文件访问错误: {str(e)}", exc_info=True)
-        return 3
+        return finish_crash_session(crash_session_id, 3, logger)
     except Exception as e:
         logger.error(f"程序初始化失败 - 未知错误: {str(e)}", exc_info=True)
-        return 1
+        return finish_crash_session(crash_session_id, 1, logger)
 
 if __name__ == "__main__":
     sys.exit(main())
