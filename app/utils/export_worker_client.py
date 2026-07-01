@@ -36,9 +36,10 @@ def should_use_export_worker(document, count: int) -> bool:
         return False
 
     try:
-        threshold = int(settings.get("export_worker_min_count", 500) or 500)
+        configured_threshold = int(settings.get("export_worker_min_count", 200) or 200)
+        threshold = max(1, min(configured_threshold, 200))
     except Exception:
-        threshold = 500
+        threshold = 200
 
     try:
         visible_layers = len([layer for layer in getattr(document, "layers", []) if getattr(layer, "visible", True)])

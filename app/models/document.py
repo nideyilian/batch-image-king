@@ -1415,7 +1415,7 @@ class Document(QObject):
             'batch_preload_memory_mb': 384,
             # 大批量导出隔离：主进程只负责 UI，导出放到独立 Worker 进程
             'export_external_worker_enabled': True,
-            'export_worker_min_count': 500,
+            'export_worker_min_count': 200,
             'export_worker_resume_enabled': True,
             # 批量导出安全保护：防止过多任务导致卡死/闪退
             'export_safety_enabled': True,
