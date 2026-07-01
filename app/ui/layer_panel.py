@@ -636,12 +636,12 @@ class LayerPanel(QWidget):
         self._binding_debug_last_text = ""
 
         # 添加防抖和更新控制
-        self._update_timer = QTimer()
+        self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(True)
         self._update_timer.timeout.connect(self._perform_update)
         self._update_pending = False
         self._updating = False  # 更新锁，防止级联更新
-        self._binding_debug_timer = QTimer()
+        self._binding_debug_timer = QTimer(self)
         self._binding_debug_timer.setInterval(800)
         self._binding_debug_timer.timeout.connect(self._refresh_binding_debug_panel)
 
@@ -2176,6 +2176,8 @@ class LayerPanel(QWidget):
     def set_document(self, document):
         """设置面板关联的文档并刷新显示"""
         print(f"[图层面板] 设置文档: {'null' if document is None else '有效文档'}")
+        self._update_timer.stop()
+        self._update_pending = False
 
         # 如果有旧文档，断开连接
         if self.document:
@@ -2242,41 +2244,6 @@ class LayerPanel(QWidget):
                 self._binding_debug_last_text = ""
                 if hasattr(self, 'binding_debug_text') and self.binding_debug_text:
                     self.binding_debug_text.clear()
-        """设置面板关联的文档"""
-        # 如果有旧文档，断开连接
-        if self.document:
-            try:
-                self.document.layer_changed.disconnect(self._schedule_update)
-                self.document.document_changed.disconnect(self.update_layers_and_binding_status)
-                if hasattr(self.document, 'layers_changed'):
-                    self.document.layers_changed.disconnect(self.refresh_binding_status)
-                if hasattr(self.document, 'layer_selected'):
-                    self.document.layer_selected.disconnect(self.on_layer_selected_from_document)
-                if hasattr(self.document, 'layers_selection_changed'):
-                    self.document.layers_selection_changed.disconnect(self.on_layers_selection_changed_from_document)
-            except Exception as e:
-                print(f"断开旧文档信号连接时出错: {e}")
-
-        # 设置新文档
-        self.document = document
-
-        # 如果新文档不为空，连接信号
-        if self.document:
-            self.document.layer_changed.connect(self._schedule_update)
-            # 使用统一的更新方法，避免重复连接
-            self.document.document_changed.connect(self.update_layers_and_binding_status)
-            # 连接layers_changed信号到绑定状态刷新
-            if hasattr(self.document, 'layers_changed'):
-                self.document.layers_changed.connect(self.refresh_binding_status)
-            # 连接layer_selected信号来更新选中状态
-            if hasattr(self.document, 'layer_selected'):
-                self.document.layer_selected.connect(self.on_layer_selected_from_document)
-            if hasattr(self.document, 'layers_selection_changed'):
-                self.document.layers_selection_changed.connect(self.on_layers_selection_changed_from_document)
-            self._schedule_update()
-        else:
-            # 清空列表
-            self.layer_list.clear()
 
     def update_layers_and_binding_status(self):
         """统一更新图层列表和绑定状态"""

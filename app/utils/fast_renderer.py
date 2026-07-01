@@ -10,6 +10,7 @@ import threading
 import os
 import builtins
 from collections import OrderedDict, deque
+from functools import wraps
 from typing import Optional, Dict, Any, Tuple
 import math
 from PIL import Image
@@ -34,6 +35,15 @@ _AUTO_ROTATE_MIN_DEG = 4.0
 def print(*args, **kwargs):
     if _FAST_RENDERER_DEBUG:
         builtins.print(*args, **kwargs)
+
+
+def _serialized_preview(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._preview_render_lock:
+            return method(self, *args, **kwargs)
+    return wrapper
+
 
 # 导入新的智能缓存系统
 from .intelligent_render_cache import get_intelligent_cache
@@ -207,6 +217,7 @@ class FastRenderer:
     }
     
     def __init__(self):
+        self._preview_render_lock = threading.RLock()
         # 使用新的智能缓存系统
         self.intelligent_cache = get_intelligent_cache()
         # 集成智能内存管理系统
@@ -452,6 +463,7 @@ class FastRenderer:
         except Exception:
             return False
     
+    @_serialized_preview
     def render_preview(self, document, force_refresh: bool = False, interactive_low_quality: bool = False) -> Optional[Image.Image]:
         """预览渲染 - 优化版本，使用智能缓存和内存管理"""
         quality_level = 'preview_interactive' if interactive_low_quality else 'preview'
@@ -538,6 +550,7 @@ class FastRenderer:
             # 回退到标准渲染
             return document.render_composition()
 
+    @_serialized_preview
     def render_preview_incremental(
         self,
         document,
@@ -608,6 +621,7 @@ class FastRenderer:
             print(f"[快速渲染] 增量预览失败，回退普通预览: {e}")
             return self.render_preview(force_refresh=force_refresh, document=document, interactive_low_quality=interactive_low_quality)
     
+    @_serialized_preview
     def render_preview_live(
         self,
         document,
