@@ -35,6 +35,26 @@ def print(*args, **kwargs):
     if any(keyword in message for keyword in _BATCH_EXPORT_ALWAYS_LOG_KEYWORDS):
         builtins.print(*args, **kwargs)
 
+
+def _should_retry_with_default_runtime(
+    *,
+    success: bool,
+    runtime_tuning: dict,
+    completed_count: int,
+    canceled: bool,
+) -> bool:
+    return (
+        not success
+        and bool(runtime_tuning.get("enabled", False))
+        and (
+            runtime_tuning.get("derived_workers") is not None
+            or runtime_tuning.get("derived_io_profile")
+        )
+        and int(completed_count or 0) == 0
+        and not canceled
+    )
+
+
 try:
     from .batch_export_precomputer import PrecomputedExportPlan, ExportTask
     from .export_metrics import build_export_report
@@ -216,6 +236,7 @@ class OptimizedBatchExecutor:
             'io_time': 0.0,
             'completed_count': 0,
             'failed_count': 0,
+            'callback_error_count': 0,
             'scheduler_adjustments': 0,
             'queue_backpressure_events': 0,
             'safety_throttle_events': 0,
@@ -818,7 +839,36 @@ class OptimizedBatchExecutor:
             # 保底回退：若实例化失败，继续使用全局渲染器
             from app.utils.fast_renderer import get_global_fast_renderer
             return self._register_worker_renderer(get_global_fast_renderer())
-    
+
+    def _record_completed_task(self, completed_count: int, task) -> None:
+        with self._lock:
+            self.stats['completed_count'] = max(
+                int(self.stats.get('completed_count', 0) or 0),
+                int(completed_count),
+            )
+        if not self.file_completed_callback:
+            return
+        try:
+            self.file_completed_callback(f": {task.filename}")
+        except Exception as exc:
+            with self._lock:
+                self.stats['callback_error_count'] = (
+                    int(self.stats.get('callback_error_count', 0) or 0) + 1
+                )
+            print(f"[批处理] 进度通知失败，导出继续: {exc}")
+
+    def _notify_progress(self, current_progress: int) -> None:
+        if not self.progress_callback:
+            return
+        try:
+            self.progress_callback(current_progress)
+        except Exception as exc:
+            with self._lock:
+                self.stats['callback_error_count'] = (
+                    int(self.stats.get('callback_error_count', 0) or 0) + 1
+                )
+            print(f"[批处理] 进度通知失败，导出继续: {exc}")
+
     def execute_plan(self, plan: PrecomputedExportPlan, 
                     progress_callback: Optional[Callable[[int], None]] = None,
                     file_completed_callback: Optional[Callable[[str], None]] = None,
@@ -1519,8 +1569,7 @@ class OptimizedBatchExecutor:
                             if success:
                                 completed_count += 1
                                 consecutive_failures = 0
-                                if self.file_completed_callback:
-                                    self.file_completed_callback(f": {task.filename}")
+                                self._record_completed_task(completed_count, task)
                             else:
                                 failed_count += 1
                                 consecutive_failures += 1
@@ -1537,8 +1586,8 @@ class OptimizedBatchExecutor:
 
                     with self._lock:
                         self.current_progress = completed_count + failed_count
-                        if self.progress_callback:
-                            self.progress_callback(self.current_progress)
+                        current_progress = self.current_progress
+                    self._notify_progress(current_progress)
                     if self._export_safety_enabled:
                         processed = completed_count + failed_count
                         failure_rate = (failed_count / processed) if processed > 0 else 0.0
@@ -3268,12 +3317,11 @@ class OptimizedBatchExportManager:
             fallback_succeeded = False
             try:
                 first_completed = int(getattr(executor, 'stats', {}).get('completed_count', 0) or 0)
-                can_retry = (
-                    (not success)
-                    and bool(runtime_tuning.get("enabled", False))
-                    and (runtime_tuning.get("derived_workers") is not None or runtime_tuning.get("derived_io_profile"))
-                    and first_completed == 0
-                    and not bool(cancel_callback and cancel_callback())
+                can_retry = _should_retry_with_default_runtime(
+                    success=bool(success),
+                    runtime_tuning=runtime_tuning,
+                    completed_count=first_completed,
+                    canceled=bool(cancel_callback and cancel_callback()),
                 )
                 if can_retry:
                     fallback_attempted = True

@@ -11,11 +11,30 @@ from threading import Lock
 from typing import Optional
 
 
+def _replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    max_attempts: int = 8,
+    delay_seconds: float = 0.05,
+) -> None:
+    attempts = max(1, int(max_attempts))
+    for attempt in range(attempts):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt + 1 >= attempts:
+                raise
+            time.sleep(max(0.0, float(delay_seconds)))
+
+
 class ManifestWriter:
     def __init__(self, path: str, request: dict):
         self.path = path
         self.request = dict(request)
         self.lock = Lock()
+        self.last_write_error = ""
         self.payload = {
             "version": 1,
             "status": "starting",
@@ -107,13 +126,20 @@ class ManifestWriter:
                 self.payload["export_report"] = _json_safe(report)
             self._write_locked()
 
-    def _write_locked(self) -> None:
-        target = Path(self.path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temp = target.with_suffix(target.suffix + ".tmp")
-        with open(temp, "w", encoding="utf-8") as f:
-            json.dump(self.payload, f, ensure_ascii=False, indent=2, default=str)
-        os.replace(temp, target)
+    def _write_locked(self) -> bool:
+        try:
+            target = Path(self.path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temp = target.with_suffix(target.suffix + ".tmp")
+            with open(temp, "w", encoding="utf-8") as f:
+                json.dump(self.payload, f, ensure_ascii=False, indent=2, default=str)
+            _replace_with_retry(temp, target)
+            self.last_write_error = ""
+            return True
+        except Exception as exc:
+            self.last_write_error = str(exc)
+            print(f"manifest write failed, export continues: {exc}", file=sys.stderr)
+            return False
 
 
 def main(argv=None) -> int:
@@ -131,6 +157,8 @@ def main(argv=None) -> int:
 
     manifest = ManifestWriter(str(request.get("manifest_path") or ""), request)
     try:
+        requested_count = int(request.get("count", 0) or 0)
+        resume_completed = manifest.load_resume_state()
         manifest.update(status="loading", stage="加载文档快照")
         document = _load_document(str(request.get("document_snapshot") or ""))
         settings = getattr(document, "export_settings", {}) or {}
@@ -138,8 +166,6 @@ def main(argv=None) -> int:
         settings.setdefault("export_backend", "auto")
         document.export_settings = settings
 
-        requested_count = int(request.get("count", 0) or 0)
-        resume_completed = manifest.load_resume_state()
         remaining_count = max(0, requested_count - resume_completed)
         start_index = int(request.get("start_index", 1) or 1) + resume_completed
 
