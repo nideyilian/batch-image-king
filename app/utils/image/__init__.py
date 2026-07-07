@@ -12,4 +12,3 @@ from ..fast_renderer import *
 from ..super_antialiasing import *
 from ..enhanced_corner_renderer import *
 from ..unified_alpha_compositor import *
-from ..advanced_duplicate_detector import *
