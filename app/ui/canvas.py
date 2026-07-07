@@ -227,3 +227,38 @@ class CanvasWidget(QWidget, CanvasWidgetCanvasView, CanvasWidgetCanvasRender, Ca
         p = self.palette()
         p.setColor(self.backgroundRole(), QColor(CursorDarkTheme.BACKGROUND_CANVAS))
         self.setPalette(p)
+
+    # ------------------------------------------------------------------
+    # Qt 事件方法转发
+    #
+    # 这些方法的实现分散在多个 mixin（CanvasWidgetCanvasRender /
+    # CanvasWidgetCanvasView / CanvasWidgetCanvasEvents）中，但它们与
+    # QWidget / QObject 自带的同名空方法冲突。由于 MRO 中 QWidget 排在
+    # 各 mixin 之前，若不在本类显式定义，QWidget 的空实现会遮蔽 mixin
+    # 的真实实现，导致画布无法渲染（paintEvent）且鼠标/滚轮/键盘交互
+    # 全部失效。这里统一转发到对应的 mixin 实现。
+    # -----------------------------------------------------------------
+
+    def paintEvent(self, event):
+        CanvasWidgetCanvasRender.paintEvent(self, event)
+
+    def wheelEvent(self, event):
+        CanvasWidgetCanvasView.wheelEvent(self, event)
+
+    def mousePressEvent(self, event):
+        CanvasWidgetCanvasEvents.mousePressEvent(self, event)
+
+    def mouseMoveEvent(self, event):
+        CanvasWidgetCanvasEvents.mouseMoveEvent(self, event)
+
+    def mouseReleaseEvent(self, event):
+        CanvasWidgetCanvasEvents.mouseReleaseEvent(self, event)
+
+    def mouseDoubleClickEvent(self, event):
+        CanvasWidgetCanvasEvents.mouseDoubleClickEvent(self, event)
+
+    def keyPressEvent(self, event):
+        CanvasWidgetCanvasEvents.keyPressEvent(self, event)
+
+    def keyReleaseEvent(self, event):
+        CanvasWidgetCanvasEvents.keyReleaseEvent(self, event)
