@@ -4,6 +4,21 @@ GPU加速渲染器
 完全兼容现有的PIL渲染管线
 """
 
+
+import os as _os
+_BTPW_VERBOSE = _os.environ.get("BTPW_VERBOSE_LOG", "0").strip().lower() in ("1", "true", "yes", "on")
+_ALWAYS_PRINT_KW = ("[ERROR]", "[CRITICAL]", "[严重错误]", "错误", "失败", "Exception", "Traceback", "[WARNING]")
+def print(*args, **kwargs):
+    if _BTPW_VERBOSE:
+        __builtins__["print"](*args, **kwargs)
+        return
+    try:
+        msg = " ".join(str(a) for a in args)
+    except Exception:
+        msg = ""
+    if any(kw in msg for kw in _ALWAYS_PRINT_KW):
+        __builtins__["print"](*args, **kwargs)
+
 import os
 import sys
 import time

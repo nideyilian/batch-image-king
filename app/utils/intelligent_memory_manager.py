@@ -3,6 +3,21 @@
 自动监控内存使用，实施智能清理策略，优化图像处理性能
 """
 
+
+import os as _os
+_BTPW_VERBOSE = _os.environ.get("BTPW_VERBOSE_LOG", "0").strip().lower() in ("1", "true", "yes", "on")
+_ALWAYS_PRINT_KW = ("[ERROR]", "[CRITICAL]", "[严重错误]", "错误", "失败", "Exception", "Traceback", "[WARNING]")
+def print(*args, **kwargs):
+    if _BTPW_VERBOSE:
+        __builtins__["print"](*args, **kwargs)
+        return
+    try:
+        msg = " ".join(str(a) for a in args)
+    except Exception:
+        msg = ""
+    if any(kw in msg for kw in _ALWAYS_PRINT_KW):
+        __builtins__["print"](*args, **kwargs)
+
 import gc
 import os
 import time
