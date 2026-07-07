@@ -206,7 +206,7 @@ class CanvasWidgetCanvasEvents(object):
                 except Exception as e:
                     print(f"双击编辑文字图层时出错: {e}")
 
-        super().mouseDoubleClickEvent(event)
+        QWidget.mouseDoubleClickEvent(self, event)
 
     def mouseMoveEvent(self, event):
         """鼠标移动事件处理"""
@@ -756,7 +756,7 @@ class CanvasWidgetCanvasEvents(object):
                 event.accept()
                 return
 
-        super().keyPressEvent(event)
+        QWidget.keyPressEvent(self, event)
 
     def keyReleaseEvent(self, event):
         """键盘松开事件处理"""
@@ -770,7 +770,7 @@ class CanvasWidgetCanvasEvents(object):
                 event.accept()
                 return
 
-        super().keyReleaseEvent(event)
+        QWidget.keyReleaseEvent(self, event)
 
     def sizeHint(self):
         """返回控件的建议大小"""
