@@ -774,7 +774,3 @@ class FastRendererComposite(object):
             'last_render_times': self._last_render_time.copy()
         }
 
-
-# 全局快速渲染器实例
-_global_fast_renderer = None
-

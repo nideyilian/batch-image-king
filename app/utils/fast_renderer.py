@@ -294,6 +294,9 @@ class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, 
 # 以下方法实现位于各个 mixin 模块中，通过多重继承组合进来。
 # 主类仅保留类级属性与 __init__。
 
+# 全局快速渲染器单例（模块级持有，避免 mixin 拆分后模块作用域错位导致 NameError）
+_global_fast_renderer = None
+
 def get_global_fast_renderer() -> FastRenderer:
     """获取全局快速渲染器"""
     global _global_fast_renderer
