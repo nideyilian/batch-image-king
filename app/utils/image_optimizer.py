@@ -128,62 +128,78 @@ class ImageOptimizer:
             print(f"智能图像加载失败 {image_path}: {e}")
             return None
     
-    def _apply_fit_mode(self, image: Image.Image, target_size: Tuple[int, int], 
+    def _apply_fit_mode(self, image: Image.Image, target_size: Tuple[int, int],
                        fit_mode: int) -> Image.Image:
         """应用适配模式"""
         target_width, target_height = target_size
-        
+
         if fit_mode == 0:  # 智能裁剪
             return self._smart_crop(image, target_size)
         elif fit_mode == 1:  # 智能缩放不裁剪
             return self._smart_fit(image, target_size)
+        elif fit_mode == 2:  # 智能适配不缩放
+            # 🔧 关键修复：保持原图尺寸返回，避免拉伸变形。
+            # 渲染管线会按图层尺寸创建画布并将原图居中放置。
+            return image.copy() if hasattr(image, 'copy') else image
         else:  # 拉伸
             return image.resize(target_size, Image.LANCZOS)
     
     def _smart_crop(self, image: Image.Image, target_size: Tuple[int, int]) -> Image.Image:
         """智能裁剪（等比缩放后裁剪）"""
         target_width, target_height = target_size
-        
-        # 计算缩放比例
-        scale_x = target_width / image.width
-        scale_y = target_height / image.height
-        scale = max(scale_x, scale_y)  # 使用较大的比例确保填满
-        
-        # 缩放图像
-        new_width = int(image.width * scale)
-        new_height = int(image.height * scale)
+        image_width, image_height = image.size
+
+        # 计算缩放比例（统一比例保证等比）
+        scale_x = target_width / image_width
+        scale_y = target_height / image_height
+        # 关键：主方向边长直接钉到目标尺寸，另一条边用源图比例反推，
+        # 保证 new_width/new_height == image_width/image_height，
+        # 避免 int() 对宽高分别取整造成的细微各向异性拉伸。
+        if scale_x >= scale_y:
+            new_width = target_width
+            new_height = max(1, int(round(new_width * image_height / image_width)))
+        else:
+            new_height = target_height
+            new_width = max(1, int(round(new_height * image_width / image_height)))
+
         scaled_image = image.resize((new_width, new_height), Image.LANCZOS)
-        
+
         # 居中裁剪
         left = (new_width - target_width) // 2
         top = (new_height - target_height) // 2
         right = left + target_width
         bottom = top + target_height
-        
+
         return scaled_image.crop((left, top, right, bottom))
     
     def _smart_fit(self, image: Image.Image, target_size: Tuple[int, int]) -> Image.Image:
         """智能缩放不裁剪"""
         target_width, target_height = target_size
-        
-        # 计算缩放比例
-        scale_x = target_width / image.width
-        scale_y = target_height / image.height
-        scale = min(scale_x, scale_y)  # 使用较小的比例确保完全显示
-        
-        # 缩放图像
-        new_width = int(image.width * scale)
-        new_height = int(image.height * scale)
+        image_width, image_height = image.size
+
+        # 计算缩放比例（统一比例保证等比）
+        scale_x = target_width / image_width
+        scale_y = target_height / image_height
+        # 关键：限制方向边长直接钉到目标尺寸，另一条边用源图比例反推，
+        # 保证 new_width/new_height == image_width/image_height，
+        # 避免 int() 对宽高分别取整造成的细微各向异性拉伸。
+        if scale_x <= scale_y:
+            new_width = target_width
+            new_height = max(1, int(round(new_width * image_height / image_width)))
+        else:
+            new_height = target_height
+            new_width = max(1, int(round(new_height * image_width / image_height)))
+
         scaled_image = image.resize((new_width, new_height), Image.LANCZOS)
-        
+
         # 创建目标尺寸的透明背景
         result = Image.new('RGBA', target_size, (0, 0, 0, 0))
-        
+
         # 居中粘贴
         x = (target_width - new_width) // 2
         y = (target_height - new_height) // 2
         result.paste(scaled_image, (x, y), scaled_image)
-        
+
         return result
     
     def get_thumbnail(self, image_path: str, size: Tuple[int, int] = (128, 128)) -> Optional[Image.Image]:
