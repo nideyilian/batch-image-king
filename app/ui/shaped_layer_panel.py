@@ -8,7 +8,7 @@ from PySide6.QtGui import QPixmap, QPainter, QPen, QColor
 try:
     from app.models.shaped_layer_new import ShapedLayer, ShapeType
 except ImportError:
-    from app.models.shaped_layer import ShapedLayer, ShapeType
+    from app.models.shaped_layer_new import ShapedLayer, ShapeType
 
 
 class ShapedLayerPanel(QWidget):
@@ -466,7 +466,7 @@ def test_shaped_layer_panel():
     window.resize(400, 600)
 
     # 创建测试图层
-    from app.models.shaped_layer import ShapedLayer, ShapeType
+    from app.models.shaped_layer_new import ShapedLayer, ShapeType
     test_layer = ShapedLayer("测试异形图层", shape_type=ShapeType.HEXAGON)
 
     # 创建面板

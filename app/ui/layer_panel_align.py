@@ -38,7 +38,7 @@ def print(*args, **kwargs):
 try:
     from app.models.shaped_layer_new import ShapedLayer
 except ImportError:
-    from app.models.shaped_layer import ShapedLayer
+    from app.models.shaped_layer_new import ShapedLayer
 
 from app.ui.icon_manager import IconManager, create_random_button, create_lock_button, create_visibility_button
 from app.ui.visual_hierarchy import VisualHierarchy

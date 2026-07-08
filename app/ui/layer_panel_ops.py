@@ -35,7 +35,7 @@ def print(*args, **kwargs):
 try:
     from app.models.shaped_layer_new import ShapedLayer
 except ImportError:
-    from app.models.shaped_layer import ShapedLayer
+    from app.models.shaped_layer_new import ShapedLayer
 
 from app.ui.icon_manager import IconManager, create_random_button, create_lock_button, create_visibility_button
 from app.ui.visual_hierarchy import VisualHierarchy
@@ -169,7 +169,7 @@ class LayerPanelOps(object):
         try:
             from app.models.shaped_layer_new import ShapedLayer
         except ImportError:
-            from app.models.shaped_layer import ShapedLayer
+            from app.models.shaped_layer_new import ShapedLayer
         if isinstance(layer, ShapedLayer):
             shaped_action = menu.addAction("编辑异形图层...")
 
@@ -342,7 +342,7 @@ class LayerPanelOps(object):
         try:
             from app.models.shaped_layer_new import ShapedLayer
         except ImportError:
-            from app.models.shaped_layer import ShapedLayer
+            from app.models.shaped_layer_new import ShapedLayer
 
         layer = self.document.layers[layer_index]
         if not isinstance(layer, ShapedLayer):

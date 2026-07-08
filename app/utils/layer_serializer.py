@@ -380,7 +380,7 @@ class LayerSerializer:
         
         # 处理异形图层属性
         if 'shape_type' in data:
-            from app.models.shaped_layer import ShapeType
+            from app.models.shaped_layer_new import ShapeType
             shape_type_value = data['shape_type']
             if isinstance(shape_type_value, str):
                 try:

@@ -244,7 +244,7 @@ class LayerPropertiesRefresh(object):
             from app.models.shaped_layer_new import ShapedLayer as NewShapedLayer
             ShapedLayerType = NewShapedLayer
         except ImportError:
-            from app.models.shaped_layer import ShapedLayer
+            from app.models.shaped_layer_new import ShapedLayer
             ShapedLayerType = ShapedLayer
         is_multi = self._is_multi_layer_edit()
         is_text_layer = isinstance(self.current_layer, TextLayer)

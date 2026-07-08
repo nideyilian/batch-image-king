@@ -10,11 +10,8 @@ import logging
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 from PySide6.QtCore import QObject, Signal
 
-from app.models.layer import Layer
-try:
-    from app.models.shaped_layer_new import ShapedLayer, ShapeType
-except ImportError:
-    from app.models.shaped_layer import ShapedLayer, ShapeType
+from app.models.layer_new import Layer
+from app.models.shaped_layer_new import ShapedLayer, ShapeType
 from app.ui.add_text_layer_dialog_simple import AddTextLayerDialog
 from app.ui.add_shaped_layer_dialog import AddShapedLayerDialog
 from app.utils.layer_tree import (

@@ -7,7 +7,7 @@ from PySide6.QtGui import QPixmap
 try:
     from app.models.shaped_layer_new import ShapedLayer, ShapeType
 except ImportError:
-    from app.models.shaped_layer import ShapedLayer, ShapeType
+    from app.models.shaped_layer_new import ShapedLayer, ShapeType
 from app.ui.shaped_layer_panel import ShapePreviewWidget
 
 

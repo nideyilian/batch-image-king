@@ -464,7 +464,7 @@ class CanvasWidgetCanvasHit(object):
             try:
                 from app.models.layer_properties import ShapeType
             except ImportError:
-                from app.models.shaped_layer import ShapeType
+                from app.models.shaped_layer_new import ShapeType
             shape_type = layer.shape_type
             # 将ShapeType映射到对应的绘制逻辑
             if shape_type == ShapeType.RECTANGLE:
