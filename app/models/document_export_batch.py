@@ -52,6 +52,11 @@ class DocumentExportBatch:
 
         # 📊 诊断日志：导出参数
         self._last_export_report = None
+        # 关键修复：必须同时清掉陈旧 perf_stats，否则 worker 路径
+        # 完成后 UI 会引用上一次小批量跑出的 exported_count,导致
+        # "50/50 (100.0%)" 这种残留显示。worker 路径不写这两个字段。
+        self._last_export_perf_stats = None
+        self._last_export_error = ""
         self._is_batch_export_running = True
 
         def _is_export_canceled():

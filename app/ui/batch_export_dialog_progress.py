@@ -711,10 +711,19 @@ class BatchExportDialogProgressMixin:
                 perf = getattr(self.document, '_last_export_perf_stats', None) or {}
                 if isinstance(perf, dict):
                     exported_count = int(perf.get('exported_count', 0) or 0)
+                    # 关键修复：分母必须用用户实际请求的总数（_export_total_count），
+                    # 不能用 exported_count（否则当 perf_stats 是陈旧/None 时会变成
+                    # "50/50 (100.0%)" 的残留显示）。
+                    total_count = int(self._export_total_count or 0)
+                    if total_count <= 0:
+                        total_count = max(1, exported_count)
+                    if exported_count <= 0:
+                        # 兼容：worker 路径未回填时，至少显示进度条当前值
+                        exported_count = int(self.progress_bar.value() or 0)
                     total_time = float(perf.get('total_time', 0.0) or 0.0)
-                    self.progress_bar.setValue(max(0, exported_count or self.progress_bar.value()))
+                    self.progress_bar.setValue(max(0, min(total_count, exported_count or self.progress_bar.value())))
                     self.progress_status_label.setText(
-                        f"导出完成... {exported_count}/{max(1, exported_count)} (100.0%)  |  "
+                        f"导出完成... {exported_count}/{total_count} (100.0%)  |  "
                         f"总耗时 {self._format_duration(total_time)}  |  "
                         f"预计算/渲染/写盘耗时请查看下方诊断面板"
                     )

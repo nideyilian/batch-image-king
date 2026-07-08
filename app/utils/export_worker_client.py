@@ -177,6 +177,10 @@ def export_with_worker(
 
         success = return_code == 0 and bool((manifest or {}).get("success", False))
         if success:
+            # 关键修复：worker 路径此前不写 _last_export_report / _last_export_perf_stats，
+            # 导致 UI 完成时引用陈旧 perf_stats（甚至 None），出现"50/50"残留。
+            # 在清理临时文件前，把 manifest 里的 report 与完成数回填到 document。
+            _apply_worker_report_to_document(document, manifest, requested_count=int((manifest or {}).get("progress", {}).get("total", 0) or 0))
             _cleanup_workdir_on_success(work_dir, manifest_path)
             return WorkerExportResult(True, True, False, "", manifest_path)
 
@@ -276,6 +280,86 @@ def _touch(path: str) -> None:
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text("cancel", encoding="utf-8")
+    except Exception:
+        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        pass
+
+
+def _apply_worker_report_to_document(document, manifest: dict, requested_count: int) -> None:
+    """把 worker 子进程 manifest 里的 report 与完成数回填到 document。
+
+    修复"UI 显示 50/50 但实际 500 张"的根因:worker 路径此前不写
+    _last_export_report / _last_export_perf_stats,UI 在 export_completed
+    时引用陈旧数据(甚至 None),出现残留或缺失。这里从 manifest 重建
+    关键字段,保证诊断面板与完成文案正确。
+    """
+    if document is None or not isinstance(manifest, dict):
+        return
+    try:
+        # 1) 报告原样回填
+        report = manifest.get("export_report")
+        if isinstance(report, dict):
+            try:
+                document._last_export_report = report
+            except Exception:
+                logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                pass
+        # 2) perf_stats 优先用 report 里的 summary,否则用 manifest 的 progress
+        progress = manifest.get("progress") if isinstance(manifest, dict) else {}
+        progress = progress if isinstance(progress, dict) else {}
+        summary = report.get("summary", {}) if isinstance(report, dict) else {}
+        summary = summary if isinstance(summary, dict) else {}
+        context = report.get("context", {}) if isinstance(report, dict) else {}
+        context = context if isinstance(context, dict) else {}
+        extra = report.get("extra", {}) if isinstance(report, dict) else {}
+        extra = extra if isinstance(extra, dict) else {}
+
+        completed = int(summary.get("exported_count") or progress.get("current") or 0)
+        total = int(summary.get("requested_count") or requested_count or progress.get("total") or 0)
+        success_flag = bool(summary.get("success", manifest.get("success", True)))
+        pre_t = float(summary.get("precompute_time", 0.0) or 0.0)
+        rnd_t = float(summary.get("render_time", 0.0) or 0.0)
+        io_t = float(summary.get("io_time", 0.0) or 0.0)
+        tot_t = float(summary.get("total_time", 0.0) or 0.0)
+        if tot_t <= 0:
+            started = manifest.get("started_at")
+            updated = manifest.get("updated_at") or manifest.get("finished_at")
+            if isinstance(started, (int, float)) and isinstance(updated, (int, float)) and updated > started:
+                tot_t = float(updated - started)
+        thr = float(summary.get("throughput", 0.0) or 0.0)
+        if thr <= 0.0 and tot_t > 0 and completed > 0:
+            thr = completed / tot_t
+
+        # 既有 perf_stats(若有)做底,新数字覆盖关键字段,避免一次性清空
+        # 引起其他显示问题
+        try:
+            base = dict(getattr(document, "_last_export_perf_stats", None) or {})
+        except Exception:
+            base = {}
+        base.update({
+            "exported_count": int(max(0, completed)),
+            "requested_count": int(max(0, total)),
+            "success": bool(success_flag),
+            "precompute_time": float(pre_t),
+            "render_time": float(rnd_t),
+            "io_time": float(io_t),
+            "total_time": float(tot_t),
+            "throughput": float(thr),
+            "file_format": str(context.get("file_format", "") or ""),
+            "written_bytes": int(extra.get("written_bytes", 0) or 0),
+        })
+        try:
+            document._last_export_perf_stats = base
+        except Exception:
+            logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+            pass
+        # 3) 清掉 _last_export_error,避免上一轮的失败文案残留
+        try:
+            if success_flag:
+                document._last_export_error = ""
+        except Exception:
+            logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+            pass
     except Exception:
         logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
         pass
