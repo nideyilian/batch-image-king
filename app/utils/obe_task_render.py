@@ -807,7 +807,11 @@ class OptimizedBatchExecutorTaskRender(object):
                                 combo_text_doc_indices.add(doc_idx)
 
                     if hasattr(target_document, 'layers'):
-                        if hasattr(target_document, 'binding_manager') and target_document.binding_manager and getattr(target_document.binding_manager, 'global_enabled', False):
+                        # 关键：只有在绑定功能启用且确实存在绑定组时才做绑定分析。
+                        # 绑定组有无是文档数据（binding_manager.binding_groups）里现成可知的，
+                        # 没有绑定组就不应进入 _get_binding_common_categories 反复"分析"。
+                        bm = getattr(target_document, 'binding_manager', None)
+                        if bm and getattr(bm, 'global_enabled', False) and getattr(bm, 'binding_groups', None):
                             categories = []
                             try:
                                 categories = target_document._get_binding_common_categories() or []
