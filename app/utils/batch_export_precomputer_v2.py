@@ -117,7 +117,7 @@ class BatchExportPrecomputerV2:
         兼容两种语义：
         - document.layers 的真实索引（新逻辑）
         - visible_layers 的相对索引（历史逻辑）
-        在存在隐藏层时优先避免把“可见层索引”误当成文档索引。
+        在存在隐藏层时优先避免把"可见层索引"误当成文档索引。
         """
         try:
             idx = int(state_layer_idx)
@@ -132,7 +132,7 @@ class BatchExportPrecomputerV2:
         visible_doc_set = set([int(v) for v in visible_doc_indices if isinstance(v, int)])
         has_hidden_layers = bool(doc_layers) and (len(doc_layers) != visible_count)
 
-        # 1) 当存在隐藏层且 idx 明显不是可见文档索引时，按“可见层索引”解析
+        # 1) 当存在隐藏层且 idx 明显不是可见文档索引时，按"可见层索引"解析
         if has_hidden_layers and 0 <= idx < visible_count and idx not in visible_doc_set:
             try:
                 mapped_doc_idx = self._to_doc_layer_idx(idx)
@@ -142,7 +142,7 @@ class BatchExportPrecomputerV2:
                 logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                 pass
 
-        # 2) 按“文档真实索引”解析（新逻辑主路径）
+        # 2) 按"文档真实索引"解析（新逻辑主路径）
         try:
             if 0 <= idx < len(doc_layers):
                 # 存在隐藏层时，仅接受可见图层索引，避免命中隐藏层
@@ -1064,7 +1064,7 @@ class BatchExportPrecomputerV2:
     ) -> int:
         """
         估算预计算基础尝试预算。
-        目标：在保持去重效果的同时，减少“大池+多层”场景的无效尝试开销。
+        目标：在保持去重效果的同时，减少"大池+多层"场景的无效尝试开销。
         """
         target = max(1, int(count or 0))
         pools = layer_pools if isinstance(layer_pools, dict) else (self.layer_image_pools or {})
@@ -1096,7 +1096,7 @@ class BatchExportPrecomputerV2:
         return int(max(low, min(high, max(1, base))))
 
     def _build_shortage_analysis(self, diagnostics: Dict[str, Any], target_count: int, planned_count: int) -> Dict[str, Any]:
-        """构建统一短缺分析，定位“为什么没凑满”。"""
+        """构建统一短缺分析，定位"为什么没凑满"。"""
         target = int(max(0, target_count))
         planned = int(max(0, planned_count))
         shortage = max(0, target - planned)
@@ -2240,7 +2240,7 @@ class BatchExportPrecomputerV2:
         
         #  
         optimized_pools = global_avoid_manager.optimize_image_pools(self.layer_image_pools, cancel_callback=cancel_callback)
-        # 会话级均衡状态：压制“组合唯一但视觉上重复刷同一张”
+        # 会话级均衡状态：压制"组合唯一但视觉上重复刷同一张"
         layer_session_usage: Dict[int, Dict[str, int]] = {
             int(layer_idx): {} for layer_idx, pool in optimized_pools.items() if pool
         }
@@ -2278,8 +2278,8 @@ class BatchExportPrecomputerV2:
                         break
                 total_possible_estimate = int(total_possible)
 
-                # C步：确定性枚举仅用于“组合空间与目标数量接近”的场景。
-                # 当组合空间远大于导出数量时，枚举会让高位图层变化过慢，视觉上出现“某些素材被过度重复”。
+                # C步：确定性枚举仅用于"组合空间与目标数量接近"的场景。
+                # 当组合空间远大于导出数量时，枚举会让高位图层变化过慢，视觉上出现"某些素材被过度重复"。
                 deterministic_space_ratio = float(total_possible) / float(max(1, count))
                 deterministic_allowed = False
                 if deterministic_allowed:
@@ -2347,7 +2347,7 @@ class BatchExportPrecomputerV2:
                             layer_parameters=layer_parameters,
                         )
                         combinations.append(combination)
-                        # 即使走确定性枚举，也持续记录全局使用计数，保证后续批次仍有“少用优先”约束
+                        # 即使走确定性枚举，也持续记录全局使用计数，保证后续批次仍有"少用优先"约束
                         try:
                             global_avoid_manager.record_combination_usage(list(layer_states.values()))
                         except Exception:
@@ -2510,7 +2510,7 @@ class BatchExportPrecomputerV2:
             
             # 记录到全局避重历史
             global_avoid_manager.record_combination_usage(list(layer_states.values()))
-            # 会话内均衡计数：让后续组合自动避开“近期高频素材”
+            # 会话内均衡计数：让后续组合自动避开"近期高频素材"
             for doc_layer_idx, selected_path in layer_states.items():
                 layer_key = int(doc_layer_idx)
                 usage_map = layer_session_usage.setdefault(layer_key, {})
@@ -2586,7 +2586,7 @@ class BatchExportPrecomputerV2:
             # 大池性能优化：仅评估采样子集，避免每次全池打分导致预计算过慢
             if len(candidate_pool) > 160:
                 sampled = random.sample(candidate_pool, 160)
-                # 保留少量“本批次最少使用”候选，确保均衡效果不丢
+                # 保留少量"本批次最少使用"候选，确保均衡效果不丢
                 usage_pairs = sorted(
                     [(p, int(session_usage.get(p, 0))) for p in candidate_pool],
                     key=lambda x: (x[1], str(x[0]))
@@ -2594,7 +2594,7 @@ class BatchExportPrecomputerV2:
                 low_usage_keep = [p for p, _ in usage_pairs[:24]]
                 merged = list(dict.fromkeys(sampled + low_usage_keep))
                 candidate_pool = merged
-            # 均匀分布硬约束：尽量把每张图使用次数压在“平均值+缓冲”以内
+            # 均匀分布硬约束：尽量把每张图使用次数压在"平均值+缓冲"以内
             total_selected = int(sum([int(v) for v in (session_usage or {}).values()]) or 0)
             expected_avg = float(total_selected + 1) / float(max(1, len(candidate_pool)))
             max_allowed_usage = int(math.ceil(expected_avg)) + 1
@@ -2790,139 +2790,153 @@ class BatchExportPrecomputerV2:
             else:
                 print(f"[🔍 预计算详细日志] 绑定组 '{group.name}' 已有分类: {list(group.file_categories.keys())}")
             
-            if category in group.file_categories:
-                print(f"[🔍 预计算详细日志] ✅ 分类 '{category}' 在绑定组 '{group.name}' 中找到")
-                # 直接调用原始组的get_matched_files，传递避重参数
-                matched_files = group.get_matched_files(category, avoid_duplicates=avoid_duplicates)
-                print(f"[🔍 预计算详细日志] get_matched_files 返回了 {len(matched_files)} 个图层文件")
-                
-                # 计算并建立“组内索引 -> 可见文档图层索引”映射
-                # 优先对象身份，其次绑定关系，最后名称回退，避免同名图层误配
-                group_idx_to_doc_idx = {}
-                used_doc_ids = set()
-                for group_idx, group_layer in enumerate(group.layers):
-                    matched_doc_idx = None
+            # 🔧 关键修复：按绑定组自身可用分类选择，不强制使用公共分类。
+            # 预览模式里每个绑定组独立随机选择分类；批量导出时若公共分类不存在于
+            # 当前组，则回退到该组自己的可用分类，确保绑定继续生效。
+            group_category = category
+            if group_category not in group.file_categories:
+                available_categories = group.get_available_categories()
+                if available_categories:
+                    # 使用组合索引做确定性选择，保证结果可复现且多样
+                    group_category = available_categories[combination_index % len(available_categories)]
+                    print(f"[🔍 预计算详细日志] 分类 '{category}' 在绑定组 '{group.name}' 中不可用，回退到组内分类 '{group_category}'")
+                else:
+                    print(f"[🔍 预计算详细日志] 绑定组 '{group.name}' 没有任何可用分类，跳过")
+                    continue
 
-                    # 1) 对象身份匹配（最精确）
+            print(f"[🔍 预计算详细日志] ✅ 使用分类 '{group_category}' 处理绑定组 '{group.name}'")
+            # 直接调用原始组的get_matched_files，传递避重参数
+            matched_files = group.get_matched_files(group_category, avoid_duplicates=avoid_duplicates)
+            print(f"[🔍 预计算详细日志] get_matched_files 返回了 {len(matched_files)} 个图层文件")
+
+            
+            # 计算并建立"组内索引 -> 可见文档图层索引"映射
+            # 优先对象身份，其次绑定关系，最后名称回退，避免同名图层误配
+            group_idx_to_doc_idx = {}
+            used_doc_ids = set()
+            for group_idx, group_layer in enumerate(group.layers):
+                matched_doc_idx = None
+
+                # 1) 对象身份匹配（最精确）
+                for visible_idx, doc_layer in enumerate(self.visible_layers):
+                    if doc_layer is group_layer and id(doc_layer) not in used_doc_ids:
+                        matched_doc_idx = self._to_doc_layer_idx(visible_idx)
+                        break
+
+                # 2) 绑定关系 + 名称匹配
+                if matched_doc_idx is None:
                     for visible_idx, doc_layer in enumerate(self.visible_layers):
-                        if doc_layer is group_layer and id(doc_layer) not in used_doc_ids:
+                        if id(doc_layer) in used_doc_ids:
+                            continue
+                        if (binding_manager.layer_to_group.get(id(doc_layer)) == group_id and
+                            getattr(doc_layer, 'name', None) == getattr(group_layer, 'name', None)):
                             matched_doc_idx = self._to_doc_layer_idx(visible_idx)
                             break
 
-                    # 2) 绑定关系 + 名称匹配
-                    if matched_doc_idx is None:
-                        for visible_idx, doc_layer in enumerate(self.visible_layers):
-                            if id(doc_layer) in used_doc_ids:
-                                continue
-                            if (binding_manager.layer_to_group.get(id(doc_layer)) == group_id and
-                                getattr(doc_layer, 'name', None) == getattr(group_layer, 'name', None)):
-                                matched_doc_idx = self._to_doc_layer_idx(visible_idx)
-                                break
-
-                    # 3) 名称回退（兼容旧数据）
-                    if matched_doc_idx is None:
-                        for visible_idx, doc_layer in enumerate(self.visible_layers):
-                            if id(doc_layer) in used_doc_ids:
-                                continue
-                            if getattr(doc_layer, 'name', None) == getattr(group_layer, 'name', None):
-                                matched_doc_idx = self._to_doc_layer_idx(visible_idx)
-                                break
-
-                    if matched_doc_idx is not None:
-                        group_idx_to_doc_idx[group_idx] = matched_doc_idx
-                        try:
-                            if hasattr(self.document, 'layers') and 0 <= matched_doc_idx < len(self.document.layers):
-                                used_doc_ids.add(id(self.document.layers[matched_doc_idx]))
-                        except Exception:
-                            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
-                            pass
-
-                expected_count = len(group_idx_to_doc_idx)
-
-                # 覆盖不完整时尝试补全缺失图层
-                if len(matched_files) != expected_count:
-                    print(f"[🔍 预计算详细日志] ⚠️ 覆盖不完整，尝试补全缺失图层 (覆盖 {len(matched_files)}/{expected_count})")
-                    completed = dict(matched_files)
-                    for gi in range(len(group.layers)):
-                        if gi not in group_idx_to_doc_idx:
+                # 3) 名称回退（兼容旧数据）
+                if matched_doc_idx is None:
+                    for visible_idx, doc_layer in enumerate(self.visible_layers):
+                        if id(doc_layer) in used_doc_ids:
                             continue
-                        if gi in completed:
-                            continue
-                        layer_obj = group.layers[gi]
-                        doc_idx = group_idx_to_doc_idx[gi]
-                        try:
-                            if hasattr(layer_obj, 'get_text_lines') and callable(getattr(layer_obj, 'get_text_lines', None)):
+                        if getattr(doc_layer, 'name', None) == getattr(group_layer, 'name', None):
+                            matched_doc_idx = self._to_doc_layer_idx(visible_idx)
+                            break
+
+                if matched_doc_idx is not None:
+                    group_idx_to_doc_idx[group_idx] = matched_doc_idx
+                    try:
+                        if hasattr(self.document, 'layers') and 0 <= matched_doc_idx < len(self.document.layers):
+                            used_doc_ids.add(id(self.document.layers[matched_doc_idx]))
+                    except Exception:
+                        logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
+                        pass
+
+            expected_count = len(group_idx_to_doc_idx)
+
+            # 覆盖不完整时尝试补全缺失图层
+            if len(matched_files) != expected_count:
+                print(f"[🔍 预计算详细日志] ⚠️ 覆盖不完整，尝试补全缺失图层 (覆盖 {len(matched_files)}/{expected_count})")
+                completed = dict(matched_files)
+                for gi in range(len(group.layers)):
+                    if gi not in group_idx_to_doc_idx:
+                        continue
+                    if gi in completed:
+                        continue
+                    layer_obj = group.layers[gi]
+                    doc_idx = group_idx_to_doc_idx[gi]
+                    try:
+                        if hasattr(layer_obj, 'get_text_lines') and callable(getattr(layer_obj, 'get_text_lines', None)):
+                            lines = []
+                            try:
+                                lines = [l for l in layer_obj.get_text_lines() if str(l).strip()]
+                            except Exception:
                                 lines = []
+                            chosen = None
+                            for l in lines:
+                                if str(group_category) in str(l):
+                                    chosen = str(l).strip()
+                                    break
+                            if not chosen:
+                                curr = getattr(layer_obj, 'current_text', '')
+                                if curr and str(group_category) in str(curr):
+                                    chosen = str(curr).strip()
+                            if chosen:
+                                completed[gi] = self._build_text_virtual_path(layer_obj.name, chosen)
+                            else:
+                                pass
+                        else:
+                            base_pool = []
+                            src = getattr(layer_obj, 'image_source', None)
+                            if src and os.path.isdir(src):
                                 try:
-                                    lines = [l for l in layer_obj.get_text_lines() if str(l).strip()]
+                                    base_pool = self._get_folder_images_cached(src, category=str(group_category))
                                 except Exception:
-                                    lines = []
-                                chosen = None
-                                for l in lines:
-                                    if str(category) in str(l):
-                                        chosen = str(l).strip()
-                                        break
-                                if not chosen:
-                                    curr = getattr(layer_obj, 'current_text', '')
-                                    if curr and str(category) in str(curr):
-                                        chosen = str(curr).strip()
-                                if chosen:
-                                    completed[gi] = self._build_text_virtual_path(layer_obj.name, chosen)
-                                else:
-                                    pass
-                            else:
-                                base_pool = []
-                                src = getattr(layer_obj, 'image_source', None)
-                                if src and os.path.isdir(src):
-                                    try:
-                                        base_pool = self._get_folder_images_cached(src, category=str(category))
-                                    except Exception:
-                                        base_pool = []
-                                if base_pool:
-                                    sel = base_pool[(combination_index * 7919 + gi * 9973) % len(base_pool)]
-                                    completed[gi] = sel
-                        except Exception:
-                            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
-                            pass
-                    if len(completed) != expected_count:
-                        print(f"[🔍 预计算详细日志] ⚠️ 补全失败，跳过绑定组 '{group.name}' (覆盖 {len(completed)}/{expected_count})")
-                        continue
-                    matched_files = completed
-
-                if not matched_files:
-                    if combination_index < 5:
-                        print(f"[Precompute V2] Warning: No matched files for group {group_id} in category '{category}'")
+                                    base_pool = []
+                            if base_pool:
+                                sel = base_pool[(combination_index * 7919 + gi * 9973) % len(base_pool)]
+                                completed[gi] = sel
+                    except Exception:
+                        logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
+                        pass
+                if len(completed) != expected_count:
+                    print(f"[🔍 预计算详细日志] ⚠️ 补全失败，跳过绑定组 '{group.name}' (覆盖 {len(completed)}/{expected_count})")
                     continue
-                
-                # Map group layer indices to document layer indices
-                for group_layer_idx, file_path in matched_files.items():
-                    doc_layer_idx = group_idx_to_doc_idx.get(group_layer_idx)
-                    if doc_layer_idx is None:
-                        continue
-                    if not hasattr(self.document, 'layers') or not (0 <= doc_layer_idx < len(self.document.layers)):
-                        continue
-                    doc_layer = self.document.layers[doc_layer_idx]
-                    layer_states[doc_layer_idx] = file_path
-                    # 🔧 详细日志：前30次都显示
-                    if combination_index < 30 or combination_index % 10 == 0:
-                        print(f"[预计算V2] 组合#{combination_index+1} 图层{doc_layer_idx} '{doc_layer.name}' <- {os.path.basename(file_path)}")
+                matched_files = completed
 
-                # 写入绑定调试追踪（导出预计算链路）
-                try:
-                    if hasattr(binding_manager, 'append_debug_trace'):
-                        trace_rows = []
-                        for group_layer_idx, file_path in matched_files.items():
-                            doc_layer_idx = group_idx_to_doc_idx.get(group_layer_idx)
-                            if (doc_layer_idx is not None and hasattr(self.document, 'layers')
-                                    and doc_layer_idx < len(self.document.layers)):
-                                layer_name = getattr(self.document.layers[doc_layer_idx], 'name', f'layer_{doc_layer_idx}')
-                            else:
-                                layer_name = f'group_layer_{group_layer_idx}'
-                            trace_rows.append((layer_name, file_path))
-                        binding_manager.append_debug_trace("export_precompute", group.name, category, trace_rows)
-                except Exception:
-                    logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
-                    pass
+            if not matched_files:
+                if combination_index < 5:
+                    print(f"[Precompute V2] Warning: No matched files for group {group_id} in category '{group_category}'")
+                continue
+            
+            # Map group layer indices to document layer indices
+            for group_layer_idx, file_path in matched_files.items():
+                doc_layer_idx = group_idx_to_doc_idx.get(group_layer_idx)
+                if doc_layer_idx is None:
+                    continue
+                if not hasattr(self.document, 'layers') or not (0 <= doc_layer_idx < len(self.document.layers)):
+                    continue
+                doc_layer = self.document.layers[doc_layer_idx]
+                layer_states[doc_layer_idx] = file_path
+                # 🔧 详细日志：前30次都显示
+                if combination_index < 30 or combination_index % 10 == 0:
+                    print(f"[预计算V2] 组合#{combination_index+1} 图层{doc_layer_idx} '{doc_layer.name}' <- {os.path.basename(file_path)}")
+
+            # 写入绑定调试追踪（导出预计算链路）
+            try:
+                if hasattr(binding_manager, 'append_debug_trace'):
+                    trace_rows = []
+                    for group_layer_idx, file_path in matched_files.items():
+                        doc_layer_idx = group_idx_to_doc_idx.get(group_layer_idx)
+                        if (doc_layer_idx is not None and hasattr(self.document, 'layers')
+                                and doc_layer_idx < len(self.document.layers)):
+                            layer_name = getattr(self.document.layers[doc_layer_idx], 'name', f'layer_{doc_layer_idx}')
+                        else:
+                            layer_name = f'group_layer_{group_layer_idx}'
+                        trace_rows.append((layer_name, file_path))
+                    binding_manager.append_debug_trace("export_precompute", group.name, group_category, trace_rows)
+            except Exception:
+                logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
+                pass
         
         return layer_states
     

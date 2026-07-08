@@ -150,6 +150,7 @@ class DocumentExportAnalysis:
         print(f"[绑定分析] ✅ 发现 {len(self.binding_manager.binding_groups)} 个绑定组")
 
         common_categories = None
+        all_group_categories = set()
         processed_groups = 0
 
         # 检查所有绑定组
@@ -235,6 +236,7 @@ class DocumentExportAnalysis:
                 continue
 
             group_categories_set = set(group_categories)
+            all_group_categories.update(group_categories_set)
 
             if common_categories is None:
                 common_categories = group_categories_set
@@ -253,7 +255,14 @@ class DocumentExportAnalysis:
             print("[绑定分析] ❌ 没有找到任何公共分类")
             return []
 
+        # 🔧 关键修复：公共分类取交集，但如果交集为空，则回退到并集，
+        # 避免多个绑定组分类不完全相同时批量导出直接进入标准模式导致绑定失效。
+        # 批量导出预计算阶段会在每个绑定组内部按可用分类再匹配，确保预览和导出的行为一致。
+        if not common_categories:
+            common_categories = all_group_categories
+            print(f"[绑定分析] ⚠️ 交集为空，回退到并集分类: {sorted(list(common_categories))}")
+
         result = sorted(list(common_categories))
-        print(f"[绑定分析] ✅ 找到 {len(result)} 个公共分类: {result}")
+        print(f"[绑定分析] ✅ 找到 {len(result)} 个可用分类: {result}")
 
         return result
