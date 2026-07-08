@@ -181,6 +181,11 @@ def main(argv=None) -> int:
 
         document_analysis = document._analyze_document_for_export()
 
+        # 仅用于测试的故障注入:子进程主动抛错,验证主进程失败时保留临时文件。
+        # 默认未启用,生产用户不会触发;测试可设 BTPW_EXPORT_WORKER_TEST_FAIL=1。
+        if os.environ.get("BTPW_EXPORT_WORKER_TEST_FAIL", "0") == "1":
+            raise RuntimeError("test_injected_failure: BTPW_EXPORT_WORKER_TEST_FAIL=1")
+
         from app.utils.optimized_batch_executor import export_batch_with_precomputation_v2
 
         def is_canceled() -> bool:

@@ -177,6 +177,7 @@ def export_with_worker(
 
         success = return_code == 0 and bool((manifest or {}).get("success", False))
         if success:
+            _cleanup_workdir_on_success(work_dir, manifest_path)
             return WorkerExportResult(True, True, False, "", manifest_path)
 
         error = str((manifest or {}).get("error") or f"独立导出进程失败，退出码: {return_code}")
@@ -275,6 +276,48 @@ def _touch(path: str) -> None:
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text("cancel", encoding="utf-8")
+    except Exception:
+        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        pass
+
+
+def _cleanup_workdir_on_success(work_dir: Path, manifest_path: str) -> None:
+    """导出成功时清理临时文件。
+
+    失败/取消路径不会调用本函数,worker_stderr.log 等保留以便排查。
+    通过环境变量 BTPW_EXPORT_KEEP_WORKDIR=1 可强制保留,便于复现/调试。
+    """
+    if os.environ.get("BTPW_EXPORT_KEEP_WORKDIR", "0") == "1":
+        return
+    try:
+        target = Path(manifest_path) if manifest_path else None
+        if target is not None:
+            # 配套的 .tmp 临时文件
+            for sibling in (target, target.with_suffix(target.suffix + ".tmp")):
+                try:
+                    if sibling.exists():
+                        sibling.unlink()
+                except Exception:
+                    logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        if work_dir is not None:
+            wd = Path(work_dir)
+            if wd.exists() and wd.is_dir():
+                # 目录里可能仍残留子进程未及时关闭的句柄,Windows 下需忽略权限错误
+                for entry in wd.iterdir():
+                    try:
+                        if entry.is_file() or entry.is_symlink():
+                            entry.unlink()
+                        elif entry.is_dir():
+                            import shutil
+                            shutil.rmtree(entry, ignore_errors=True)
+                    except Exception:
+                        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                try:
+                    wd.rmdir()
+                except Exception:
+                    # 仍残留条目,放弃删除目录本身,不影响主流程
+                    logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                    pass
     except Exception:
         logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
         pass
