@@ -246,10 +246,12 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
 
     def save_state(self, action_name):
         """保存当前状态到历史记录"""
+        # 使用各图层自己的 serialize()（普通/文字/异形图层均已实现），
+        # 避免使用不存在的 to_dict 导致图层被序列化为 None，撤销后图层全部丢失。
         state = {
             'canvas_width': self.canvas_width,
             'canvas_height': self.canvas_height,
-            'layers': [layer.to_dict() if hasattr(layer, 'to_dict') else None for layer in self.layers],
+            'layers': [layer.serialize() for layer in self.layers],
             'selected_layer_index': self.selected_layer_index,
             'selected_layer_indices': list(self.selected_layer_indices),
         }
@@ -290,13 +292,18 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
 
         # 恢复图层
         from app.models.layer_new import Layer as NewLayer
+        import logging
+        logger = logging.getLogger(__name__)
         restored = []
-        for layer_data in state.get('layers', []):
+        for idx, layer_data in enumerate(state.get('layers', [])):
             if layer_data is None:
+                # 图层数据为空（例如旧快照或序列化失败）：跳过但记录，避免静默全删
+                logger.warning("撤销/重做恢复时第 %d 个图层数据为空，已跳过", idx)
                 continue
             try:
                 layer = NewLayer.from_dict(layer_data)
-            except Exception:
+            except Exception as e:
+                logger.warning("撤销/重做恢复时第 %d 个图层反序列化失败，已跳过: %s", idx, e)
                 continue
             restored.append(layer)
         self.layers = restored

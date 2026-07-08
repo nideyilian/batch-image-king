@@ -2404,6 +2404,27 @@ class Layer(QObject):
         })
         
         return data
+
+    # 兼容别名：历史记录(document.save_state/_restore_state)使用 to_dict/from_dict
+    def to_dict(self):
+        """序列化图层的别名，供文档历史记录使用"""
+        return self.serialize()
+
+    @classmethod
+    def from_dict(cls, data, parent=None):
+        """反序列化图层的别名，供文档历史记录使用。
+        根据图层类型标记选择具体子类，保证 TextLayer/ShapedLayer 撤销后类型不退化。"""
+        layer_type = data.get('layer_type') or data.get('type')
+        target_cls = cls
+        if layer_type == 'TextLayer' or layer_type == 'text':
+            from app.models.text_layer import TextLayer
+            target_cls = TextLayer
+        elif layer_type == 'ShapedLayer':
+            from app.models.shaped_layer_new import ShapedLayer
+            target_cls = ShapedLayer
+        if not hasattr(target_cls, 'deserialize'):
+            target_cls = cls
+        return target_cls.deserialize(data, parent=parent)
     
     def duplicate(self, parent=None):
         """复制图层，创建一个完全相同的新实例"""
