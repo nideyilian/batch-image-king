@@ -13,6 +13,7 @@ import json
 import math
 from typing import List, Dict, Tuple, Any, Optional, Callable
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.utils.print_utils import safe_print as _safe_print
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
