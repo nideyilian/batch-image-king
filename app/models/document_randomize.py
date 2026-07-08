@@ -97,10 +97,13 @@ class DocumentRandomize:
                 layer.generate_random_transform_params()
 
         # 使渲染缓存失效，确保预览窗口显示最新的随机变化
-        self._invalidate_render_cache()
-
-        # 标记需要强制刷新缓存
+        # 🔧 优化：随机化只标记需要刷新，不再粗粒度清除图层 surface 缓存。
+        # 图层 surface 缓存的 key 已包含图片路径与变换参数，换图/变换的图层
+        # 会自动 miss 重新解码，未变化的图层直接命中缓存，避免全量重解码导致数秒延迟。
         self._needs_cache_refresh = True
+
+        # 快速首帧：随机化后先以低质量即时出图（点击立即刷新），再由后台补全全质量
+        self._quick_first_frame = True
 
         # 强制发送文档变化信号，确保UI更新
         self.document_changed.emit()

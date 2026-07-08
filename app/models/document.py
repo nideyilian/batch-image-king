@@ -126,6 +126,8 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
 
         # 缓存刷新标记
         self._needs_cache_refresh = False
+        # 快速首帧标记：随机化等整体变更后先低质量即时出图，后台补全全质量
+        self._quick_first_frame = False
 
         # 最近一次变更上下文（用于UI增量刷新）
         self._last_change_context = None

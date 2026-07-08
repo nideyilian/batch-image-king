@@ -172,6 +172,15 @@ class CanvasWidgetCanvasRender(object):
                 or self._panel_interaction_active
             )
         )
+        # 随机化/整体失效场景：首帧先用低质量即时出图，点击立即刷新
+        quick_first_frame = bool(
+            getattr(self.document, '_quick_first_frame', False)
+            and not self._interactive_low_quality_active
+            and not self._force_high_quality_refresh
+        )
+        if quick_first_frame and not interactive_low_quality:
+            interactive_low_quality = True
+            self._pending_quick_frame_completion = True
         active_layer_index = self._get_interaction_active_layer_index()
         request_key = (
             int(self._composition_invalidation_generation),
@@ -366,6 +375,26 @@ class CanvasWidgetCanvasRender(object):
                 self._composition_cache_valid = not restart
                 self._invalidate_scaled_pixmap_cache()
                 self.update()
+
+        # 快速首帧回填完成：清除标记，并触发一次全质量补全渲染
+        if getattr(self, '_pending_quick_frame_completion', False) and image is not None:
+            self._pending_quick_frame_completion = False
+            if getattr(self.document, '_quick_first_frame', False):
+                try:
+                    self.document._quick_first_frame = False
+                except Exception:
+                    pass
+            # 重新启动一次全质量渲染（不低质量），覆盖快速首帧
+            if not restart:
+                force_refresh = True
+                active_layer_index = self._get_interaction_active_layer_index()
+                request_key = (
+                    int(self._composition_invalidation_generation),
+                    True,
+                    False,
+                    int(active_layer_index),
+                )
+                self._start_async_composition_render(force_refresh, False, active_layer_index, request_key)
 
         if restart:
             if restart_args:

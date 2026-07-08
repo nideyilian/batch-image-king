@@ -190,6 +190,7 @@ class CanvasWidget(QWidget, CanvasWidgetCanvasView, CanvasWidgetCanvasRender, Ca
         self._async_render_timer = QTimer(self)
         self._async_render_timer.setInterval(16)
         self._async_render_timer.timeout.connect(self._poll_async_render_result)
+        self._pending_quick_frame_completion = False
         self._composition_invalidation_generation = 0
         # 按当前缩放尺寸缓存缩放后的QPixmap，减少平移阶段重复缩放
         self._scaled_composition_cache_key = None
