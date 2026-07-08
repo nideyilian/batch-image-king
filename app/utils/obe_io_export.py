@@ -18,7 +18,11 @@ import io
 import math
 import logging
 
+from app.utils.text_layer_virtual_path import is_text_layer_virtual_path
+
 logger = logging.getLogger(__name__)
+
+
 class OptimizedBatchExecutorIoExport(object):
     def _preload_images_for_plan(self, plan: 'PrecomputedExportPlan', cancel_callback: Optional[Callable[[], bool]] = None):
         """"""

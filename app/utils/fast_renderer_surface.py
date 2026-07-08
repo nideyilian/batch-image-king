@@ -1310,9 +1310,9 @@ class FastRendererSurface(object):
                     if export_image is not None:
                         setattr(layer, "_render_offset_x", int(export_entry.get("offset_x", 0)))
                         setattr(layer, "_render_offset_y", int(export_entry.get("offset_y", 0)))
-                        FastRenderer._inc_batch_metric("export_layer_cache_hits")
+                        self._inc_batch_metric("export_layer_cache_hits")
                         return export_image.copy()
-            FastRenderer._inc_batch_metric("export_layer_cache_misses")
+            self._inc_batch_metric("export_layer_cache_misses")
 
         with self._layer_surface_lock:
             entry = self._layer_surface_cache.get(entry_key)
@@ -1323,10 +1323,10 @@ class FastRendererSurface(object):
                     setattr(layer, "_render_offset_x", int(entry.get("offset_x", 0)))
                     setattr(layer, "_render_offset_y", int(entry.get("offset_y", 0)))
                     if is_batch_session:
-                        FastRenderer._inc_batch_metric("layer_surface_cache_hits")
+                        self._inc_batch_metric("layer_surface_cache_hits")
                     return image.copy()
         if is_batch_session:
-            FastRenderer._inc_batch_metric("layer_surface_cache_misses")
+            self._inc_batch_metric("layer_surface_cache_misses")
 
         layer_image = self._get_layer_image(layer, document, was_just_loaded)
         if layer_image is None:
@@ -1334,7 +1334,7 @@ class FastRendererSurface(object):
 
         if hasattr(layer, 'apply_effects') and callable(layer.apply_effects):
             if is_batch_session:
-                FastRenderer._inc_batch_metric("apply_effects_calls")
+                self._inc_batch_metric("apply_effects_calls")
             layer_image = layer.apply_effects(layer_image)
             if layer_image is None:
                 return None
