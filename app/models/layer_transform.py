@@ -109,9 +109,13 @@ class LayerTransform(object):
                         
                         print(f"旋转后智能缩放: {result.width}x{result.height} -> {new_width}x{new_height}, 居中于 ({paste_x}, {paste_y})")
                     else:
-                        # 对于其他模式，直接调整尺寸
-                        result = self._resize_with_premultiplied_alpha(result, (self._width, self._height))
-                        print(f"旋转后调整尺寸: {self._width}x{self._height}")
+                        # 关键修复：fit_mode==2 (智能适配不缩放) 在旋转后也要保留原图比例，
+                        # 不能被强制 resize 到图层尺寸，否则等比素材被拉宽/拉高。
+                        if int(getattr(self, '_fit_mode', 0)) == 2:
+                            print(f"旋转后保持原图尺寸: {result.width}x{result.height}")
+                        else:
+                            result = self._resize_with_premultiplied_alpha(result, (self._width, self._height))
+                            print(f"旋转后调整尺寸: {self._width}x{self._height}")
             else:
                 # 对于非90度倍数的旋转，也扩展画布以避免裁剪
                 result = HighQualityResampler.rotate_high_quality(

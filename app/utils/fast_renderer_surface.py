@@ -613,11 +613,28 @@ class FastRendererSurface(object):
             _emit_size_match_trace(f"任务={export_trace_task} 图层匹配无有效关系")
             return overrides
 
-        layer_by_name = {}
-        for layer in visible_layers:
-            name = str(getattr(layer, 'name', '')).strip()
-            if name and name not in layer_by_name:
-                layer_by_name[name] = layer
+        ctx = self._get_size_match_task_context(document, visible_layers, active_relations)
+        layer_by_name = ctx['layer_by_name']
+        source_infos = ctx['source_infos']
+        relations_hash = ctx['relations_hash']
+
+        # 整份 override 会话缓存：源图层（图像与位置）固定时跨图复用，避免重复几何计算
+        session_parts = []
+        has_random_source = False
+        for _src_layer, _surf_key, _pos_key, _is_rand in source_infos:
+            session_parts.append((_surf_key, _pos_key))
+            if _is_rand:
+                has_random_source = True
+        session_key = (id(document), tuple(session_parts), relations_hash, bool(was_just_loaded))
+        if not has_random_source:
+            with self._size_match_override_session_lock:
+                _cached_overrides = self._size_match_override_session_cache.get(session_key)
+                if _cached_overrides is not None:
+                    self._size_match_override_session_cache.move_to_end(session_key)
+                    _emit_size_match_trace(
+                        f"任务={export_trace_task} 命中整份大小匹配会话缓存，跳过重复计算"
+                    )
+                    return dict(_cached_overrides)
 
         for relation in active_relations:
             source_name = str(relation.get('source_layer_name', '')).strip()
@@ -799,7 +816,180 @@ class FastRendererSurface(object):
                     f"旋转={rotation}"
                 )
 
+        if not has_random_source:
+            with self._size_match_override_session_lock:
+                self._size_match_override_session_cache[session_key] = dict(overrides)
+                self._size_match_override_session_cache.move_to_end(session_key)
+                while len(self._size_match_override_session_cache) > self._max_size_match_override_session_entries:
+                    self._size_match_override_session_cache.popitem(last=False)
         return overrides
+
+    def _hash_size_match_relations(self, active_relations):
+        """生成关系配置的稳定可哈希指纹，用于大小匹配缓存键。"""
+        try:
+            parts = []
+            for r in active_relations:
+                tns = r.get('target_layer_names') or []
+                if not isinstance(tns, list):
+                    tns = []
+                parts.append((
+                    str(r.get('source_layer_name', '')),
+                    tuple(str(t) for t in tns),
+                    bool(r.get('enabled', True)),
+                    int(r.get('padding', 1)),
+                    bool(r.get('one_to_many', False)),
+                    bool(r.get('auto_rotate', False)),
+                ))
+            parts.sort(key=lambda x: x[0])
+            return tuple(parts)
+        except Exception:
+            return ('fallback', id(active_relations))
+
+    def _get_size_match_task_context(self, document, visible_layers, active_relations):
+        """预解析大小匹配公共参数：图层名字典与源图层 surface/position 键。
+
+        这些只依赖文档图层集合与关系配置，与批量导出的随机状态无关，
+        故在会话级缓存，避免每张导出图都重复遍历图层与计算键。
+        """
+        layers_identity = tuple(id(l) for l in visible_layers)
+        relations_hash = self._hash_size_match_relations(active_relations)
+        ctx_key = (id(document), layers_identity, relations_hash)
+        with self._size_match_task_ctx_lock:
+            cached = self._size_match_task_ctx_cache.get(ctx_key)
+            if cached is not None:
+                self._size_match_task_ctx_cache.move_to_end(ctx_key)
+                return cached
+
+        layer_by_name = {}
+        for layer in visible_layers:
+            name = str(getattr(layer, 'name', '')).strip()
+            if name and name not in layer_by_name:
+                layer_by_name[name] = layer
+
+        source_infos = []
+        for relation in active_relations:
+            source_name = str(relation.get('source_layer_name', '')).strip()
+            source_layer = layer_by_name.get(source_name)
+            if source_layer is None or hasattr(source_layer, 'get_text_lines'):
+                continue
+            try:
+                surf_key = self._build_layer_surface_key(source_layer, document, False)
+            except Exception:
+                surf_key = "fb_surf_%d" % id(source_layer)
+            try:
+                pos_key = self._build_layer_positions_key(source_layer, document)
+            except Exception:
+                pos_key = "fb_pos_%d" % id(source_layer)
+            is_rand = bool(getattr(source_layer, 'is_folder', False))
+            source_infos.append((source_layer, surf_key, pos_key, is_rand))
+
+        ctx = {
+            'layer_by_name': layer_by_name,
+            'source_infos': source_infos,
+            'relations_hash': relations_hash,
+        }
+        with self._size_match_task_ctx_lock:
+            self._size_match_task_ctx_cache[ctx_key] = ctx
+            self._size_match_task_ctx_cache.move_to_end(ctx_key)
+            while len(self._size_match_task_ctx_cache) > self._max_size_match_task_ctx_entries:
+                self._size_match_task_ctx_cache.popitem(last=False)
+        return ctx
+
+    def _get_visible_layers_cached(self, document, skip_layer_index):
+        """获取可见图层列表（会话级缓存）。
+
+        原始实现在每张图渲染时都遍历全部图层并调用 is_effectively_visible，
+        而该函数内部会重复构建 group_map(nodes)，导致 O(N^2) 开销。
+        这里按 (文档id, skip_layer_index) 缓存列表，并用轻量指纹检测失效：
+        图层集合/可见性/组归属/组可见性任一变化即重建。
+
+        注意：必须保留与原预览代码一致的异常兜底——is_effectively_visible 或
+        import 一旦抛异常，退化为简单 visible 判断，绝不能让异常向上传播导致
+        整批导出在第一张图就崩溃。
+        """
+        try:
+            from app.utils.layer_tree import (
+                is_layer_group,
+                is_effectively_visible,
+                group_map,
+            )
+        except Exception:
+            # 与原逻辑一致的兜底：import 失败时退化为简单 visible 判断
+            try:
+                all_layers = list(document.layers)
+            except Exception:
+                all_layers = []
+            visible_layers = []
+            for idx, layer in enumerate(all_layers):
+                if idx == skip_layer_index:
+                    continue
+                if layer is not None and getattr(layer, 'visible', True):
+                    visible_layers.append(layer)
+            return visible_layers
+
+        doc_id = id(document)
+        cache_key = (doc_id, int(skip_layer_index))
+        try:
+            all_layers = list(document.layers)
+        except Exception:
+            all_layers = []
+
+        # 父组可见性也会改变 is_effectively_visible 的结果，纳入指纹避免陈旧缓存
+        group_visible = {}
+        try:
+            gm = group_map(all_layers)
+            for _g in gm.values():
+                group_visible[id(_g)] = bool(getattr(_g, 'visible', True))
+        except Exception:
+            group_visible = {}
+            gm = {}
+
+        def _parent_gid(layer):
+            return str(getattr(layer, 'parent_group_id',
+                               getattr(layer, '_parent_group_id', '')) or '')
+
+        fingerprint = []
+        for idx, layer in enumerate(all_layers):
+            gid = _parent_gid(layer)
+            gv = group_visible.get(id(gm[gid]), True) if (gid and gid in gm) else True
+            fingerprint.append((
+                idx,
+                id(layer),
+                bool(getattr(layer, 'visible', True)),
+                bool(is_layer_group(layer)),
+                gid,
+                bool(gv),
+            ))
+        fingerprint = tuple(fingerprint)
+
+        with self._visible_layers_session_lock:
+            cached = self._visible_layers_session_cache.get(cache_key)
+            if cached is not None and cached[0] == fingerprint:
+                self._visible_layers_session_cache.move_to_end(cache_key)
+                return list(cached[1])
+
+        try:
+            visible_layers = []
+            for idx, layer in enumerate(all_layers):
+                if idx == skip_layer_index or layer is None or is_layer_group(layer):
+                    continue
+                if is_effectively_visible(layer, all_layers):
+                    visible_layers.append(layer)
+        except Exception:
+            # 与原逻辑一致的兜底：is_effectively_visible 异常时退化为简单 visible 判断
+            visible_layers = []
+            for idx, layer in enumerate(all_layers):
+                if idx == skip_layer_index:
+                    continue
+                if layer is not None and getattr(layer, 'visible', True):
+                    visible_layers.append(layer)
+
+        with self._visible_layers_session_lock:
+            self._visible_layers_session_cache[cache_key] = (fingerprint, list(visible_layers))
+            self._visible_layers_session_cache.move_to_end(cache_key)
+            while len(self._visible_layers_session_cache) > self._max_visible_layers_session_entries:
+                self._visible_layers_session_cache.popitem(last=False)
+        return visible_layers
 
     def _detect_inner_holes(self, image: Image.Image, alpha_threshold: int = 6):
         """检测所有内孔并返回边界、面积与角度信息。"""
@@ -1401,6 +1591,10 @@ class FastRendererSurface(object):
             self._size_match_holes_cache.clear()
         with self._size_override_surface_lock:
             self._size_override_surface_cache.clear()
+        with self._size_match_override_session_lock:
+            self._size_match_override_session_cache.clear()
+        with self._size_match_task_ctx_lock:
+            self._size_match_task_ctx_cache.clear()
 
     def _invalidate_interactive_base_for_document(self, document):
         """清理指定文档的交互底图缓存"""
@@ -1423,7 +1617,8 @@ class FastRendererSurface(object):
 
     def _invalidate_size_match_caches_for_document(self, document):
         """仅清理指定文档的大小匹配缓存。"""
-        doc_prefix = f"{id(document)}:"
+        doc_id = id(document)
+        doc_prefix = f"{doc_id}:"
         with self._size_match_holes_lock:
             keys_to_remove = [k for k in self._size_match_holes_cache.keys() if str(k).startswith(doc_prefix)]
             for k in keys_to_remove:
@@ -1432,6 +1627,15 @@ class FastRendererSurface(object):
             keys_to_remove = [k for k in self._size_override_surface_cache.keys() if str(k).startswith(doc_prefix)]
             for k in keys_to_remove:
                 self._size_override_surface_cache.pop(k, None)
+        # 整份 override 会话缓存与公共参数缓存（key 首元素均为文档 id）
+        with self._size_match_override_session_lock:
+            keys_to_remove = [k for k in self._size_match_override_session_cache.keys() if k[0] == doc_id]
+            for k in keys_to_remove:
+                self._size_match_override_session_cache.pop(k, None)
+        with self._size_match_task_ctx_lock:
+            keys_to_remove = [k for k in self._size_match_task_ctx_cache.keys() if k[0] == doc_id]
+            for k in keys_to_remove:
+                self._size_match_task_ctx_cache.pop(k, None)
 
     def _clear_batch_session_caches(self):
         """清空批量导出会话缓存。"""
@@ -1453,6 +1657,14 @@ class FastRendererSurface(object):
                 self._export_layer_surface_entry_bytes,
                 "_export_layer_surface_bytes",
             )
+        # 大小匹配会话缓存（公共参数 + 整份 override）随批量会话结束清空
+        with self._size_match_override_session_lock:
+            self._size_match_override_session_cache.clear()
+        with self._size_match_task_ctx_lock:
+            self._size_match_task_ctx_cache.clear()
+        # 可见图层列表会话缓存随批量会话结束清空
+        with self._visible_layers_session_lock:
+            self._visible_layers_session_cache.clear()
 
     def _invalidate_batch_session_caches_for_document(self, document):
         """清理指定文档的批量导出会话缓存。"""
@@ -1597,7 +1809,9 @@ class FastRendererSurface(object):
             image = cached.copy()
             target_w = max(1, int(getattr(layer, "width", image.width) or image.width))
             target_h = max(1, int(getattr(layer, "height", image.height) or image.height))
-            if image.size != (target_w, target_h):
+            # 关键修复：fit_mode==2 (智能适配不缩放) 的图层在拖动/缩放预览期间
+            # 保留原图比例，绝不能在此被强制 resize 到图层尺寸。
+            if image.size != (target_w, target_h) and int(getattr(layer, 'fit_mode', 0)) != 2:
                 if image.mode == 'RGBA':
                     from app.utils.rgba_resampler import resize_rgba_premultiplied
                     image = resize_rgba_premultiplied(image, (target_w, target_h), Image.Resampling.BILINEAR)

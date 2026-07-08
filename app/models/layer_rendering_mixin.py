@@ -190,7 +190,12 @@ class LayerRenderingMixin:
                     final_result = self._apply_outer_stroke(final_result)
 
             # 非矢量管线才强制收敛到图层尺寸；矢量管线允许外扩（居中/外描边）
-            if (not use_vector_pipeline) and (final_result.width != self.width or final_result.height != self.height):
+            # 关键修复：fit_mode==2 (智能适配不缩放) 的图层保留原图比例，绝对不能在此
+            # 强制 resize 到 self.width/self.height，否则会把等比素材拉成图层宽高比。
+            # fit_mode==0/1 在 _process_image 已经处理过尺寸，理论上尺寸与图层一致；
+            # fit_mode==3 (else 拉伸) 是用户显式选择拉伸，按既有行为处理。
+            if (not use_vector_pipeline) and (int(getattr(self, 'fit_mode', 0)) != 2) \
+                    and (final_result.width != self.width or final_result.height != self.height):
                 final_result = self._resize_rgba_premultiplied(final_result, (self.width, self.height), Resampling.LANCZOS)
 
             # 边缘优化：在最终合成前进行一次透明边缘颜色出血，避免白/黑晕
