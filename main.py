@@ -332,7 +332,9 @@ def main() -> int:
         print(f"启动完成，总耗时: {startup_duration:.2f} 秒")
 
         if os.environ.get('TEST_SHAPED_LAYER') == '1':
-            from PySide6.QtCore import QTimer
+            # 🔧 注意：不要在此处再次 `from PySide6.QtCore import QTimer`，
+            # 否则 Python 会把 QTimer 视作 main() 的局部变量，导致函数顶部
+            # `QTimer.singleShot(300, ...)`（异常提示）因未绑定而抛 UnboundLocalError。
             def run_shape_layer_tests():
                 try:
                     from app.models.document import Document
@@ -380,7 +382,7 @@ def main() -> int:
 
         # 延迟执行完整的系统检查（仅在非优化模式下）
         if not STARTUP_OPTIMIZER_AVAILABLE:
-            from PySide6.QtCore import QTimer
+            # QTimer 已在模块顶部导入，避免在此处再次 import 把 QTimer 变成 main() 的局部变量
             def delayed_full_check():
                 logger.info("执行完整系统依赖检查...")
                 check_system_dependencies_full()
