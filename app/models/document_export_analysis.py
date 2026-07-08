@@ -95,7 +95,7 @@ class DocumentExportAnalysis:
 
             # 获取绑定分类
             if bound_layers:
-                binding_categories = self._get_binding_common_categories()
+                binding_categories = self._get_binding_common_categories_cached()
                 analysis_result['binding_categories'] = binding_categories
 
                 if binding_categories:
@@ -266,3 +266,51 @@ class DocumentExportAnalysis:
         print(f"[绑定分析] ✅ 找到 {len(result)} 个可用分类: {result}")
 
         return result
+
+    def _compute_binding_signature(self):
+        """计算绑定结构的轻量签名（不扫描文件夹，开销极小）。
+
+        签名覆盖任何会改变 ``_get_binding_common_categories`` 结果的因素：
+        - 绑定功能是否启用；
+        - 绑定组集合（按 ID 排序）；
+        - 每个绑定组内可见成员图层及其 image_source。
+        一旦这些结构发生变化，签名即不匹配，缓存自动失效并重新分析。
+        注意：仅修改文件夹内图片内容（不改动图层 image_source 路径）不会触发失效，
+        属于批量导出期间不会发生的情况，因此可接受。
+        """
+        bm = getattr(self, 'binding_manager', None)
+        if not bm:
+            return None
+        parts = [bool(getattr(bm, 'global_enabled', False))]
+        groups = getattr(bm, 'binding_groups', None) or {}
+        parts.append(tuple(sorted(groups.keys())))
+        for gid in sorted(groups.keys()):
+            group = groups[gid]
+            member_parts = []
+            for gl in getattr(group, 'layers', []):
+                name = getattr(gl, 'name', None)
+                for doc_layer in self.layers:
+                    if doc_layer.name == name:
+                        member_parts.append(
+                            (name, bool(doc_layer.visible), getattr(doc_layer, 'image_source', None))
+                        )
+                        break
+            parts.append(tuple(member_parts))
+        return tuple(parts)
+
+    def _get_binding_common_categories_cached(self) -> List[str]:
+        """带按文档缓存的绑定分类获取。
+
+        批量导出时 `_get_binding_common_categories` 依赖扫描文件夹、重建文件分类，
+        开销不小，但其结果在一次导出会话内是固定的（绑定结构、可见图层、源文件夹都不变）。
+        这里用结构签名做缓存键：同一文档在一次导出内命中缓存，避免每个组合都重跑分析；
+        用户修改绑定/可见性/源文件夹后签名变化，自动重新分析，保证正确性。
+        """
+        sig = self._compute_binding_signature()
+        cached = getattr(self, '_binding_common_categories_cache', None)
+        if cached is not None and cached[0] == sig:
+            return list(cached[1])
+        # 首次或签名变化：真正分析一次
+        self._binding_common_categories_cache = (sig, self._get_binding_common_categories())
+        return list(self._binding_common_categories_cache[1])
+

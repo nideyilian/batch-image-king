@@ -814,7 +814,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         if bm and getattr(bm, 'global_enabled', False) and getattr(bm, 'binding_groups', None):
                             categories = []
                             try:
-                                categories = target_document._get_binding_common_categories() or []
+                                categories = target_document._get_binding_common_categories_cached() or []
                                 selected = []
                                 for group in target_document.binding_manager.binding_groups.values():
                                     if getattr(group, 'last_selected_category', None):
