@@ -1,0 +1,61 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, master, codex/**]
+  pull_request:
+    branches: [main, master, codex/**]
+
+# 取消同一分支的旧 run，避免在快速 push 时堆积
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-check:
+    name: compileall (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dev dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -q -r requirements-dev.txt
+
+      - name: Compile all sources
+        shell: pwsh
+        # 编译但保持并行；同时让 ImportError 提前暴露
+        run: python -m compileall -q -j 0 app/
+
+      - name: Compile main entry
+        shell: pwsh
+        run: python -m py_compile main.py build.py
+
+  forbidden-patterns:
+    name: forbidden patterns scan
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for bare except / silent pass
+        shell: pwsh
+        # 提示给开发者，CI 不强制失败
+        run: |
+          $matches = Select-String -Path "app/**/*.py" -Pattern "^\s*except\s*:\s*$" -ErrorAction SilentlyContinue
+          if ($matches) {
+            Write-Host "::warning::Found bare except: blocks. Consider specifying exception type."
+            $matches | ForEach-Object { Write-Host "  $($_.Path):$($_.LineNumber)" }
+          } else {
+            Write-Host "No bare except: blocks found."
+          }

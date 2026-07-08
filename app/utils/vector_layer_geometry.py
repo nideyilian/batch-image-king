@@ -1,8 +1,9 @@
 """图层矢量轮廓几何：圆角矩形、贝塞尔采样、与导出/画布共用的路径点。"""
+from __future__ import annotations
+
 import logging
 
 logger = logging.getLogger(__name__)
-from __future__ import annotations
 
 import copy
 import math
