@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Optimized batch executor components."""
 
+import logging
+
+logger = logging.getLogger(__name__)
 from __future__ import annotations
 
 import os as os_module  # 避免局部变量遮蔽
@@ -146,6 +149,7 @@ class OptimizedBatchExecutorRuntimeSnapshot(object):
                 for key in runtime_keys:
                     layer_data.pop(key, None)
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/obe_runtime_snapshot.py")
             pass
 
     def _build_visible_doc_indices(self, document) -> List[int]:
@@ -257,7 +261,6 @@ class OptimizedBatchExecutorRuntimeSnapshot(object):
             self._thread_local.fast_renderer = renderer
             return self._register_worker_renderer(renderer)
         except Exception:
-            # 保底回退：若实例化失败，继续使用全局渲染器
             from app.utils.fast_renderer import get_global_fast_renderer
             return self._register_worker_renderer(get_global_fast_renderer())
 

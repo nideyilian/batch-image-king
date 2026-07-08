@@ -5,6 +5,9 @@
 提供高质量的图像保存和处理功能
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 from PIL import Image, ImageFilter, ImageEnhance
 import numpy as np
@@ -44,7 +47,7 @@ class ImageQualityManager:
                 print(f"保存图像失败: {report.error}")
             return bool(report.success)
         except Exception:
-            # 保持旧逻辑作为兜底，避免服务层导入异常影响导出可用性。
+            logger.debug("静默异常已忽略: except in utils/image_quality.py")
             pass
 
         try:
@@ -75,6 +78,7 @@ class ImageQualityManager:
 
                 image = prepare_image_for_export(image, format_name, get_quality_policy("quality"))
             except Exception:
+                logger.debug("静默异常已忽略: except in utils/image_quality.py")
                 pass
 
             # 处理不同格式

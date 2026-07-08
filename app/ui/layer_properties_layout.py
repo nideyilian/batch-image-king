@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
@@ -51,6 +54,7 @@ class LayerPropertiesLayout(object):
                             if self.current_layer is self.document.layers[selected_index]:
                                 return
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/layer_properties_layout.py")
                 pass
         # 本地参数编辑期间，避免 document_changed 回流触发全量 update_panel
         # 仅在当前仍是同一选中图层时抑制，防止图层切换被误拦截
@@ -61,6 +65,7 @@ class LayerPropertiesLayout(object):
                     if self.current_layer is self.document.layers[idx]:
                         return
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/layer_properties_layout.py")
                 pass
 
         # 更新的前提是已经选择了图层
@@ -1075,6 +1080,7 @@ class LayerPropertiesLayout(object):
                         try:
                             dock.restoreGeometry(geometry)
                         except Exception:
+                            logger.debug("静默异常已忽略: except in ui/layer_properties_layout.py")
                             pass
                 else:
                     dock.setFloating(False)

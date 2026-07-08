@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QWidget, QComboBox, QLineEdit, QVBoxLayout,
                                QHBoxLayout, QLabel, QPushButton, QListWidget,
                                QListWidgetItem, QSplitter, QGroupBox, QCheckBox,
@@ -471,6 +474,7 @@ class EnhancedFontSelector(QWidget):
             with open(favorites_file, 'w', encoding='utf-8') as f:
                 json.dump({'favorites': self.favorite_fonts}, f, ensure_ascii=False, indent=2)
         except Exception:
+            logger.debug("静默异常已忽略: except in ui/enhanced_font_selector.py")
             pass
 
     def load_recent_fonts(self):
@@ -506,6 +510,7 @@ class EnhancedFontSelector(QWidget):
             with open(recent_file, "w", encoding="utf-8") as f:
                 json.dump({"recent": self.recent_fonts}, f, ensure_ascii=False, indent=2)
         except Exception:
+            logger.debug("静默异常已忽略: except in ui/enhanced_font_selector.py")
             pass
 
     def _font_display_name(self, font_name: str) -> str:

@@ -3,6 +3,25 @@
 包含Photoshop级别的图像处理功能
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def safe_print(message: str):
+    """安全的打印函数，避免编码问题"""
+    try:
+        print(message)
+    except (UnicodeEncodeError, OSError):
+        try:
+            # 尝试使用ASCII编码
+            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
+            print(f"[DEBUG] {ascii_message}")
+        except:
+            logger.debug("静默异常已忽略: except in engines/__init__.py")
+            print("[DEBUG] Message encoding failed")
+
+
 # 安全的导入机制
 ENGINES_AVAILABLE = False
 __all__ = []
@@ -41,19 +60,6 @@ def get_advanced_compositor():
         try:
             return AdvancedCompositorManager, CompositeQuality
         except:
+            logger.debug("静默异常已忽略: except in engines/__init__.py")
             pass
     return None, None
-
-
-def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
-    try:
-        print(message)
-    except (UnicodeEncodeError, OSError):
-        try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            print(f"[DEBUG] {ascii_message}")
-        except:
-            # 最后的备选方案
-            print("[DEBUG] Message encoding failed")

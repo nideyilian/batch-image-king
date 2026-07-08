@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 import copy
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -20,10 +23,12 @@ def set_parent_group_id(layer, group_id: Optional[str]):
     try:
         setattr(layer, "parent_group_id", value)
     except Exception:
+        logger.debug("静默异常已忽略: except in utils/layer_tree.py")
         pass
     try:
         setattr(layer, "_parent_group_id", value)
     except Exception:
+        logger.debug("静默异常已忽略: except in utils/layer_tree.py")
         pass
 
 
@@ -105,6 +110,7 @@ def group_bounds(nodes: Iterable, group_or_id, include_hidden: bool = False) -> 
             w = max(0, int(getattr(layer, "width", 0)))
             h = max(0, int(getattr(layer, "height", 0)))
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/layer_tree.py")
             continue
         bounds.append((x, y, x + w, y + h))
     if not bounds:

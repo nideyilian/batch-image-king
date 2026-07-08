@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """BatchExportPrecomputerV2 - 批量导出预计算核心（从 batch_export_precomputer.py 拆分）"""
 
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 import sys
 import re
@@ -135,6 +138,7 @@ class BatchExportPrecomputerV2:
                 if 0 <= mapped_doc_idx < len(doc_layers):
                     return doc_layers[mapped_doc_idx]
             except Exception:
+                logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                 pass
 
         # 2) 按“文档真实索引”解析（新逻辑主路径）
@@ -144,6 +148,7 @@ class BatchExportPrecomputerV2:
                 if (not has_hidden_layers) or (idx in visible_doc_set):
                     return doc_layers[idx]
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
             pass
 
         # 3) 兼容回退：按可见层索引解析
@@ -154,6 +159,7 @@ class BatchExportPrecomputerV2:
                     return doc_layers[mapped_doc_idx]
                 return self.visible_layers[idx]
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
             pass
 
         return None
@@ -230,7 +236,7 @@ class BatchExportPrecomputerV2:
                                 'files': [str(p) for p in files if isinstance(p, str)]
                             }
         except Exception:
-            # 缓存损坏时忽略并继续运行，不影响导出功能
+            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
             pass
 
     def _save_persistent_folder_index_cache(self, force: bool = False):
@@ -254,6 +260,7 @@ class BatchExportPrecomputerV2:
             self._folder_index_cache_dirty = False
             self._folder_index_last_save_time = now
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
             pass
 
     def _get_directory_mtime_ns(self, directory: str) -> int:
@@ -278,6 +285,7 @@ class BatchExportPrecomputerV2:
                         if name_lower.endswith(self._supported_image_ext):
                             files.append(entry.path)
                     except Exception:
+                        logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                         continue
         except Exception:
             return []
@@ -519,6 +527,7 @@ class BatchExportPrecomputerV2:
                 if candidates:
                     return candidates
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
             pass
 
         current_text = getattr(layer, 'current_text', '')
@@ -594,6 +603,7 @@ class BatchExportPrecomputerV2:
             try:
                 int_idx = int(idx)
             except Exception:
+                logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                 continue
             if int_idx in normalized:
                 continue
@@ -604,6 +614,7 @@ class BatchExportPrecomputerV2:
                 try:
                     print(f"[V2] 忽略文字图层的图像唯一使用设置: {int_idx} '{getattr(layer, 'name', '')}'")
                 except Exception:
+                    logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                     pass
                 continue
             normalized.append(int_idx)
@@ -635,6 +646,7 @@ class BatchExportPrecomputerV2:
                         layer_name = self.document.layers[int(idx)].name
                         print(f"[V2] 跳过不适用图像唯一使用的图层: {idx} '{layer_name}'")
                     except Exception:
+                        logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                         pass
                     continue
                 pool = [
@@ -1522,6 +1534,7 @@ class BatchExportPrecomputerV2:
                                             if files:
                                                 layer_states[layer_idx] = files[force_attempts % len(files)]
                                 except:
+                                    logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                                     pass
                         
                         if layer_states:
@@ -1714,7 +1727,6 @@ class BatchExportPrecomputerV2:
                                 if next_file:
                                     layer_states[layer_idx] = next_file
                         except Exception as e:
-                            # 安全回退，不影响生成流程
                             next_file = selector.select_next_file() if hasattr(selector, 'select_next_file') else None
                             if next_file:
                                 layer_states[layer_idx] = next_file
@@ -1773,6 +1785,7 @@ class BatchExportPrecomputerV2:
                                     sel_index = (successfully_generated * 7919 + layer_idx * 9973) % len(base_pool)
                                     layer_states[layer_idx] = base_pool[sel_index]
                     except Exception:
+                        logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                         pass
             
             # 🔧 关键步骤3：生成组合的唯一标识（保持图层顺序）
@@ -2337,6 +2350,7 @@ class BatchExportPrecomputerV2:
                         try:
                             global_avoid_manager.record_combination_usage(list(layer_states.values()))
                         except Exception:
+                            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                             pass
                         self._render_progress_line("预计算", len(combinations), count, progress_start)
 
@@ -2368,6 +2382,7 @@ class BatchExportPrecomputerV2:
                         f"使用均衡随机选图以降低连续重复感"
                     )
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
             pass
 
         while len(combinations) < count and attempts < int(dynamic_budget_state["current_limit"]):
@@ -2818,6 +2833,7 @@ class BatchExportPrecomputerV2:
                             if hasattr(self.document, 'layers') and 0 <= matched_doc_idx < len(self.document.layers):
                                 used_doc_ids.add(id(self.document.layers[matched_doc_idx]))
                         except Exception:
+                            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                             pass
 
                 expected_count = len(group_idx_to_doc_idx)
@@ -2865,6 +2881,7 @@ class BatchExportPrecomputerV2:
                                     sel = base_pool[(combination_index * 7919 + gi * 9973) % len(base_pool)]
                                     completed[gi] = sel
                         except Exception:
+                            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                             pass
                     if len(completed) != expected_count:
                         print(f"[🔍 预计算详细日志] ⚠️ 补全失败，跳过绑定组 '{group.name}' (覆盖 {len(completed)}/{expected_count})")
@@ -2903,6 +2920,7 @@ class BatchExportPrecomputerV2:
                             trace_rows.append((layer_name, file_path))
                         binding_manager.append_debug_trace("export_precompute", group.name, category, trace_rows)
                 except Exception:
+                    logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                     pass
         
         return layer_states
@@ -3018,6 +3036,7 @@ class BatchExportPrecomputerV2:
                         try:
                             layer_files = self._get_folder_images_cached(layer.image_source, category=category)
                         except:
+                            logger.debug("静默异常已忽略: except in utils/batch_export_precomputer_v2.py")
                             pass
                         
                         if layer_files:
@@ -3092,7 +3111,6 @@ class BatchExportPrecomputerV2:
         try:
             filename = unicodedata.normalize('NFKC', filename)
         except Exception:
-            # /
             try:
                 filename = filename.encode('utf-8', 'ignore').decode('utf-8')
             except Exception:

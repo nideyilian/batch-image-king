@@ -5,6 +5,9 @@
 遵循现代设计原则，将所有参数整合到一个紧凑的界面中
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QSlider, QFrame,
                                QToolButton, QButtonGroup, QSizePolicy, QCheckBox,
@@ -453,6 +456,7 @@ class IntegratedTextPanelContent(object):
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump({"recent": self._recent_fonts[:self._recent_font_limit]}, f, ensure_ascii=False, indent=2)
         except Exception:
+            logger.debug("静默异常已忽略: except in ui/integrated_text_panel_content.py")
             pass
 
     def _clear_layout_widgets(self, layout: QHBoxLayout):

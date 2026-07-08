@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QListWidget, QListWidgetItem, QMessageBox,
                            QLineEdit, QTextEdit, QFileDialog, QGroupBox, QSplitter,
@@ -178,6 +181,7 @@ class PresetDetailWidget(QWidget):
                 created_dt = datetime.datetime.fromisoformat(created)
                 created = created_dt.strftime("%Y-%m-%d %H:%M:%S")
             except:
+                logger.debug("静默异常已忽略: except in ui/preset_manager_dialog.py")
                 pass
 
         modified = preset_info.get("modified_at", "")
@@ -186,6 +190,7 @@ class PresetDetailWidget(QWidget):
                 modified_dt = datetime.datetime.fromisoformat(modified)
                 modified = modified_dt.strftime("%Y-%m-%d %H:%M:%S")
             except:
+                logger.debug("静默异常已忽略: except in ui/preset_manager_dialog.py")
                 pass
 
         self.created_label.setText(created)
@@ -639,6 +644,7 @@ class PresetManagerDialog(QDialog):
                 created_dt = datetime.datetime.fromisoformat(created_at)
                 created_at = created_dt.strftime("%Y-%m-%d %H:%M:%S")
             except:
+                logger.debug("静默异常已忽略: except in ui/preset_manager_dialog.py")
                 pass
         self.date_label.setText(created_at)
 

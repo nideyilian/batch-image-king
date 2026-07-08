@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                               QDialogButtonBox, QLineEdit, QCheckBox, QSpinBox, QComboBox,
                               QFormLayout, QGroupBox, QMessageBox, QFileDialog)
@@ -114,6 +117,7 @@ class ExportParamsTemplate:
                     template = ExportParamsTemplate.load_template(file_path)
                     templates.append(template)
                 except:
+                    logger.debug("静默异常已忽略: except in ui/export_params_template.py")
                     pass
 
         return templates
@@ -313,7 +317,6 @@ def safe_print(message: str):
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
         except:
-            # 最后的备选方案
             print("[DEBUG] Message encoding failed")
 
         dialog.setWindowTitle("选择模板")

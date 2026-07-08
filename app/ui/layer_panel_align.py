@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QListWidget, QListWidgetItem, QCheckBox,
                            QAbstractItemView, QInputDialog, QMenu, QApplication,
@@ -379,6 +382,7 @@ class LayerPanelAlign(object):
                 self.document.save_state("对齐镜像图层")
                 return
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/layer_panel_align.py")
                 pass
 
         fill_enabled = bool(getattr(layer, 'clone_fill_enabled', False))
@@ -458,6 +462,7 @@ class LayerPanelAlign(object):
                     self.document.save_state("对齐填充整体")
                     return
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/layer_panel_align.py")
                 pass
 
         # 常规单图层对齐（无分身或分身/镜像处理失败时）

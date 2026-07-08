@@ -9,6 +9,8 @@ import concurrent.futures
 import gc
 import logging
 
+logger = logging.getLogger(__name__)
+
 # 导入参数模板
 from app.ui.export_params_template import ExportParamsTemplate, ExportParamsDialog
 from app.ui.batch_export_dialog import BatchExportDialog
@@ -73,6 +75,7 @@ class ExportWorker(QRunnable):
                 logger = logging.getLogger('批图王')
                 logger.error(f"导出标签页 '{self.tab_name}' 时出错: {error_msg}", exc_info=True)
             except:
+                logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                 pass
             safe_print(f"导出标签页 '{self.tab_name}' 时出错: {error_msg}")
             self.signals.finished.emit(self.tab_index, False, error_msg)
@@ -82,6 +85,7 @@ class ExportWorker(QRunnable):
                 # 强制垃圾回收
                 gc.collect()
             except:
+                logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                 pass
 
     def cancel(self):
@@ -95,6 +99,7 @@ class ExportWorker(QRunnable):
             if hasattr(self.document, 'cancel_export'):
                 self.document.cancel_export()
         except Exception:
+            logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
             pass
 
 
@@ -215,10 +220,12 @@ class MultiTabExportDialog(QDialog):
                 if status_bar is not None:
                     status_bar.showMessage(str(message), int(timeout_ms))
         except Exception:
+            logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
             pass
         try:
             safe_print(str(message))
         except Exception:
+            logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
             pass
 
     def _build_tab_export_request(self, document, output_dir=None):
@@ -241,6 +248,7 @@ class MultiTabExportDialog(QDialog):
                 if dialog is not None:
                     dialog.deleteLater()
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                 pass
 
     def update_tab_list(self):
@@ -484,12 +492,12 @@ class MultiTabExportDialog(QDialog):
                 self.progress_dialog.canceled.connect(self.cancel_export)
 
             except Exception as e:
-                # 处理启动导出时的异常
                 error_msg = f"启动多线程导出时出错: {str(e)}"
                 try:
                     logger = logging.getLogger('批图王')
                     logger.error(error_msg, exc_info=True)
                 except:
+                    logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                     pass
                 safe_print(error_msg)
                 self._notify_non_blocking(error_msg, 10000)
@@ -513,6 +521,7 @@ class MultiTabExportDialog(QDialog):
             try:
                 self.running_exports.pop(tab_index, None)
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                 pass
             self.export_results['completed'] += 1
 
@@ -636,6 +645,7 @@ class MultiTabExportDialog(QDialog):
                     try:
                         self.running_exports.pop(finished_tab_index, None)
                     except Exception:
+                        logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                         pass
                     if success:
                         self._handle_export_result(True, tab_name)
@@ -649,7 +659,6 @@ class MultiTabExportDialog(QDialog):
                 # 不立即处理下一个，等待当前导出完成
                 return
         except Exception as e:
-            # 记录错误信息
             error_msg = str(e)
             safe_print(f"导出标签页 '{tab_name}' 时出错: {error_msg}")
 
@@ -785,12 +794,12 @@ class MultiTabExportDialog(QDialog):
             # 导出完成后关闭该实例，主窗口会清理映射
             self.close()
         except Exception as e:
-            # 处理导出完成时的异常
             error_msg = f"完成导出时出错: {str(e)}"
             try:
                 logger = logging.getLogger('批图王')
                 logger.error(error_msg, exc_info=True)
             except:
+                logger.debug("静默异常已忽略: except in ui/multi_tab_export_dialog.py")
                 pass
             safe_print(error_msg)
         finally:
@@ -819,5 +828,4 @@ def safe_print(message: str):
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
         except:
-            # 最后的备选方案
             print("[DEBUG] Message encoding failed")

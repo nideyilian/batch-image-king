@@ -4,6 +4,9 @@
 """
 
 
+import logging
+
+logger = logging.getLogger(__name__)
 import os as _os
 _BTPW_VERBOSE = _os.environ.get("BTPW_VERBOSE_LOG", "0").strip().lower() in ("1", "true", "yes", "on")
 _ALWAYS_PRINT_KW = ("[ERROR]", "[CRITICAL]", "[严重错误]", "错误", "失败", "Exception", "Traceback", "[WARNING]")
@@ -209,6 +212,7 @@ class ImageMemoryTracker:
                             del image_ref
                             cleanup_count += 1
                         except:
+                            logger.debug("静默异常已忽略: except in utils/intelligent_memory_manager.py")
                             pass
         
         if cleanup_count > 0:

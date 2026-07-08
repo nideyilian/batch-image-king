@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -182,6 +185,7 @@ def export_with_worker(
             if proc is not None and proc.poll() is None:
                 proc.terminate()
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
             pass
         return WorkerExportResult(True, False, False, f"独立导出进程异常: {exc}", manifest_path)
 
@@ -239,6 +243,7 @@ def _manifest_progress(manifest: dict) -> Optional[int]:
         if isinstance(progress, dict):
             return int(progress.get("current", 0) or 0)
     except Exception:
+        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
         pass
     return None
 
@@ -249,6 +254,7 @@ def _manifest_last_file(manifest: dict) -> str:
         if isinstance(progress, dict):
             return str(progress.get("last_file", "") or "")
     except Exception:
+        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
         pass
     return ""
 
@@ -259,6 +265,7 @@ def _manifest_stage(manifest: dict) -> str:
         if isinstance(progress, dict):
             return str(progress.get("stage", "") or "")
     except Exception:
+        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
         pass
     return ""
 
@@ -268,4 +275,5 @@ def _touch(path: str) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text("cancel", encoding="utf-8")
     except Exception:
+        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
         pass

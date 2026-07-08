@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtCore import QObject, Signal, Property
 import os
 import builtins
@@ -270,7 +273,7 @@ class LayerTransform(object):
             self._cached_image_path = None
 
         except Exception as e:
-            # 静默处理清理错误，不影响主要功能
+            logger.debug("静默异常已忽略: except in models/layer_transform.py")
             pass
 
     def serialize(self):

@@ -8,6 +8,9 @@
 5. 向后兼容性
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 import numpy as np
 from PIL import Image
 from typing import Tuple, Optional, Dict, Any, List, Union
@@ -48,7 +51,6 @@ def safe_print(message: str):
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
         except:
-            # 最后的备选方案
             print("[DEBUG] Message encoding failed")
 
 
@@ -414,6 +416,7 @@ class AdvancedCompositorManager:
             try:
                 return LegacyBlender.apply_blend_mode(base, overlay, mode, 1.0)
             except:
+                logger.debug("静默异常已忽略: except in engines/advanced_compositor_manager.py")
                 pass
         
         # 最简单的alpha合成

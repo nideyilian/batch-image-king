@@ -4,6 +4,9 @@
 """
 
 
+import logging
+
+logger = logging.getLogger(__name__)
 import os as _os
 _BTPW_VERBOSE = _os.environ.get("BTPW_VERBOSE_LOG", "0").strip().lower() in ("1", "true", "yes", "on")
 _ALWAYS_PRINT_KW = ("[ERROR]", "[CRITICAL]", "[严重错误]", "错误", "失败", "Exception", "Traceback", "[WARNING]")
@@ -240,6 +243,7 @@ class IntelligentRenderCache:
                         if hasattr(layer, 'polygon_corner_radius'):
                             layer_parts.append(f"poly_radius:{getattr(layer, 'polygon_corner_radius', 0)}")
                 except Exception:
+                    logger.debug("静默异常已忽略: except in utils/intelligent_render_cache.py")
                     pass
                 
                 # 🔧 修复：添加描边参数到缓存键

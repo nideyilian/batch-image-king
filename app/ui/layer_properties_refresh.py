@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
@@ -531,6 +534,7 @@ class LayerPropertiesRefresh(object):
                     self.shape_preview.set_polygon_params(layer.polygon_rotation, sides)
                 self.shape_preview.update()
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/layer_properties_refresh.py")
                 pass
 
             # 图像源类型

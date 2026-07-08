@@ -1,4 +1,7 @@
 """图层矢量轮廓几何：圆角矩形、贝塞尔采样、与导出/画布共用的路径点。"""
+import logging
+
+logger = logging.getLogger(__name__)
 from __future__ import annotations
 
 import copy
@@ -127,6 +130,7 @@ def normalize_vector_path_points(points: Any) -> List[List[float]]:
         try:
             normalized.append([float(x), float(y)])
         except (TypeError, ValueError):
+            logger.debug("静默异常已忽略: except in utils/vector_layer_geometry.py")
             continue
     return normalized
 
@@ -146,6 +150,7 @@ def normalize_vector_bezier_nodes(nodes: Any) -> List[Dict[str, Any]]:
             out_x = float(n.get("out_x", x))
             out_y = float(n.get("out_y", y))
         except (TypeError, ValueError):
+            logger.debug("静默异常已忽略: except in utils/vector_layer_geometry.py")
             continue
         nt = str(n.get("node_type", "corner")).lower()
         if nt not in {"corner", "smooth", "symmetric"}:

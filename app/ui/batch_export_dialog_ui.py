@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """BatchExportDialog 方法 mixin：由拆分脚本生成，方法原属于 BatchExportDialog。"""
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QSpinBox, QLineEdit, QFormLayout,
                            QFileDialog, QDialogButtonBox, QComboBox, QCheckBox, QGroupBox, QMessageBox,
@@ -805,6 +808,7 @@ class BatchExportDialogUiMixin:
                         try:
                             filename = unicodedata.normalize('NFKC', filename)
                         except Exception:
+                            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_ui.py")
                             pass
 
                         # 使用Document类的方法来提取主文件名

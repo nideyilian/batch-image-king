@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtCore import QObject, Signal
 from PIL import Image, ImageDraw, ImageChops
 import numpy as np
@@ -477,4 +480,5 @@ class ShapedLayer(Layer):
         try:
             self.clear_cache()
         except Exception:
+            logger.debug("静默异常已忽略: except in models/shaped_layer.py")
             pass

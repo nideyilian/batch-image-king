@@ -5,6 +5,9 @@
 提供各种状态的可视化指示，包括文档修改状态、图层状态、选择状态等
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout,
                            QPushButton, QProgressBar, QFrame)
 from PySide6.QtCore import Qt, Signal, QTimer
@@ -201,6 +204,7 @@ class DocumentStatusIndicator(QWidget):
                 self.document.document_changed.disconnect(self.on_document_changed)
                 self.document.layer_selected.disconnect(self.on_layer_selected)
             except:
+                logger.debug("静默异常已忽略: except in ui/status_indicators.py")
                 pass
 
         self.document = document

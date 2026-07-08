@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
@@ -263,6 +266,7 @@ class LayerPropertiesSource(object):
                 try:
                     self.document.layers_selection_changed.disconnect(self._on_layers_selection_changed)
                 except Exception:
+                    logger.debug("静默异常已忽略: except in ui/layer_properties_source.py")
                     pass
             self.document.document_changed.disconnect(self.delayed_update_panel)
 

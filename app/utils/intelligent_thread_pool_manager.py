@@ -13,6 +13,8 @@ from enum import Enum
 from typing import Dict, Optional, Callable, Any, List, Union, Tuple
 from queue import PriorityQueue, Queue
 import logging
+
+logger = logging.getLogger(__name__)
 import weakref
 
 
@@ -305,7 +307,6 @@ class IntelligentThreadPoolManager:
                     try:
                         result = future.result(timeout=task_info.timeout)
                     except TimeoutError:
-                        # 超时：记录并触发错误回调
                         self.logger.warning(
                             f"任务超时({task_info.timeout:.1f}s): {task_info.task_id}"
                         )
@@ -329,7 +330,6 @@ class IntelligentThreadPoolManager:
             return result
             
         except Exception as e:
-            # 执行错误回调
             if task_info.error_callback:
                 try:
                     task_info.error_callback(e)
@@ -606,6 +606,7 @@ class IntelligentThreadPoolManager:
                 try:
                     queue.put(None, block=False)
                 except:
+                    logger.debug("静默异常已忽略: except in utils/intelligent_thread_pool_manager.py")
                     pass
             
             # 等待调度线程结束

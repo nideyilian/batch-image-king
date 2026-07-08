@@ -6,6 +6,9 @@
 """
 
 
+import logging
+
+logger = logging.getLogger(__name__)
 import os as _os
 _BTPW_VERBOSE = _os.environ.get("BTPW_VERBOSE_LOG", "0").strip().lower() in ("1", "true", "yes", "on")
 _ALWAYS_PRINT_KW = ("[ERROR]", "[CRITICAL]", "[严重错误]", "错误", "失败", "Exception", "Traceback", "[WARNING]")
@@ -409,6 +412,7 @@ class GlobalAvoidRepeatManager:
                             if decoded is not None:
                                 return decoded
                     except Exception:
+                        logger.debug("静默异常已忽略: except in utils/global_avoid_repeat_manager.py")
                         pass
                     # 回退：PIL 读取后转 BGR
                     try:
@@ -454,7 +458,6 @@ class GlobalAvoidRepeatManager:
                 return similarity
                 
             except ImportError:
-                # 如果没有OpenCV，使用简化方法
                 similarity = 0.5 if os.path.basename(img1_path) == os.path.basename(img2_path) else 0.0
                 self.image_similarity_cache[cache_key] = similarity
                 return similarity
@@ -544,6 +547,7 @@ class GlobalAvoidRepeatManager:
             elif env_val in ("0", "false", "no", "off"):
                 enable_similarity_filter = False
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/global_avoid_repeat_manager.py")
             pass
         
         for layer_idx, pool in layer_pools.items():

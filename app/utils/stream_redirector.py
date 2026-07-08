@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 import sys
 import tempfile
 from datetime import datetime
@@ -34,6 +37,7 @@ class StreamLogWriter:
             self._handle.write(str(message))
             self._handle.flush()
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/stream_redirector.py")
             pass
 
     def flush(self):
@@ -41,6 +45,7 @@ class StreamLogWriter:
             if self._handle is not None:
                 self._handle.flush()
         except Exception:
+            logger.debug("静默异常已忽略: except in utils/stream_redirector.py")
             pass
 
     def isatty(self):

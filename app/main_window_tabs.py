@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Main window components."""
 
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QMainWindow, QDockWidget, QFileDialog,                                QVBoxLayout, QWidget, QMenu, QToolBar, QSplitter,                               QLabel, QSpinBox, QHBoxLayout, QPushButton, QMessageBox, QInputDialog,                               QTabWidget, QTabBar, QDialog, QFormLayout, QDialogButtonBox,                               QSizePolicy, QLineEdit)
 from PySide6.QtCore import Qt, QSize, QPoint, QRect, QSettings, QTimer
 from PySide6.QtGui import QIcon, QColor, QAction, QCloseEvent, QKeySequence, QPixmap
@@ -30,7 +33,7 @@ class MainWindowTabs(object):
                 if hasattr(self.document, 'layer_selected'):
                     self.document.layer_selected.disconnect(self.update_copy_paste_actions)
             except Exception:
-                # 如果信号未连接，会抛出异常，这里忽略
+                logger.debug("静默异常已忽略: except in main_window_tabs.py")
                 pass
     
         # 更新document引用
@@ -282,7 +285,6 @@ class MainWindowTabs(object):
             try:
                 new_layer = layer.duplicate(parent=new_document)
             except TypeError:
-                # 兼容旧实现：部分图层duplicate不接收parent参数
                 new_layer = layer.duplicate()
             except Exception as e:
                 print(f"复制图层失败，已跳过: {e}")

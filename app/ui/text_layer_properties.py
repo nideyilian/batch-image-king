@@ -5,6 +5,9 @@
 将所有参数整合到一个紧凑、专业的界面中
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -56,6 +59,7 @@ class TextLayerPropertiesPanel(QWidget):
                 self.text_layer.changed.disconnect()
                 self.text_layer.text_changed.disconnect()
             except:
+                logger.debug("静默异常已忽略: except in ui/text_layer_properties.py")
                 pass
 
         self.text_layer = text_layer
@@ -180,6 +184,7 @@ class TextLayerPropertiesPanel(QWidget):
                     self.document.layer_changed.emit()
                     self.document.document_changed.emit()
                 except Exception:
+                    logger.debug("静默异常已忽略: except in ui/text_layer_properties.py")
                     pass
 
     def on_create_text_requested(self, text_content):

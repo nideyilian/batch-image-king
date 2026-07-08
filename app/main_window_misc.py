@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Main window components."""
 
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QMainWindow, QDockWidget, QFileDialog,                                QVBoxLayout, QWidget, QMenu, QToolBar, QSplitter,                               QLabel, QSpinBox, QHBoxLayout, QPushButton, QMessageBox, QInputDialog,                               QTabWidget, QTabBar, QDialog, QFormLayout, QDialogButtonBox,                               QSizePolicy, QLineEdit)
 from PySide6.QtCore import Qt, QSize, QPoint, QRect, QSettings, QTimer
 from PySide6.QtGui import QIcon, QColor, QAction, QCloseEvent, QKeySequence, QPixmap
@@ -188,6 +191,7 @@ class MainWindowMisc(object):
                                 if hasattr(layer, 'cached_image'):
                                     layer.cached_image = None
                             except Exception:
+                                logger.debug("静默异常已忽略: except in main_window_misc.py")
                                 pass
                         elif hasattr(self.layer_panel, 'clear_layer_cache'):
                             self.layer_panel.clear_layer_cache(layer)

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                            QListWidget, QListWidgetItem, QLabel, QFrame,
                            QLineEdit, QFileDialog, QMessageBox, QInputDialog,
@@ -389,12 +392,14 @@ class PresetPanel(QWidget):
                 # 简化ISO格式时间显示
                 created_at = created_at.split("T")[0]
             except:
+                logger.debug("静默异常已忽略: except in ui/preset_panel.py")
                 pass
 
         if modified_at:
             try:
                 modified_at = modified_at.split("T")[0]
             except:
+                logger.debug("静默异常已忽略: except in ui/preset_panel.py")
                 pass
 
         # 构建HTML内容
@@ -500,7 +505,6 @@ def safe_print(message: str):
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
         except:
-            # 最后的备选方案
             print("[DEBUG] Message encoding failed")
 
 

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QListWidget, QListWidgetItem, QCheckBox,
                            QAbstractItemView, QInputDialog, QMenu, QApplication,
@@ -83,6 +86,7 @@ class LayerPanelSelection(object):
                 if hasattr(self.document, 'select_layers'):
                     self.document.select_layers(ui_selected, primary_index=ui_selected[0])
             except Exception:
+                logger.debug("静默异常已忽略: except in ui/layer_panel_selection.py")
                 pass
         selected_indices = self._sanitize_selected_indices()
         selected_index = selected_indices[0] if selected_indices else -1
