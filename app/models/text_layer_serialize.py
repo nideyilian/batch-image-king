@@ -361,6 +361,9 @@ class TextLayerSerializeMixin:
 
     def duplicate(self, parent=None):
         """创建文字图层的副本"""
+        # 在方法内 lazy import 以避开 text_layer 模块加载时的循环依赖
+        from app.models.text_layer import TextLayer
+
         # 创建新的图层实例
         new_layer = TextLayer(
             name=self._name,

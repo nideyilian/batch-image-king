@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import logging
 
 logger = logging.getLogger(__name__)
-from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib

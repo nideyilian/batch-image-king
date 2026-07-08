@@ -1,0 +1,11 @@
+# 批图王开发依赖（测试 / 静态分析）
+# 运行时依赖仍以 requirements.txt 为准。
+# 安装：
+#   pip install -r requirements.txt
+#   pip install -r requirements-dev.txt
+
+# 单元测试
+pytest>=7.4.0
+
+# 覆盖率（可选）
+# pytest-cov>=4.1.0

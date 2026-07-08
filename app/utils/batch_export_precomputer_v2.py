@@ -24,6 +24,7 @@ from app.utils.batch_export_precomputer import (
     ExportTask,
     PrecomputedExportPlan,
 )
+from app.utils.text_layer_virtual_path import build_text_layer_virtual_path
 
 
 class BatchExportPrecomputerV2:

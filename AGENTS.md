@@ -52,7 +52,39 @@ python build.py
 pyinstaller 批图王.spec
 ```
 
-当前没有发现统一的测试套件或固定测试命令。仓库里曾出现过一些临时测试脚本，但当前根目录文件列表中没有保留正式测试入口。修改渲染、导出、图层序列化相关代码后，至少应手动运行 `python main.py`，并验证新建文档、添加图层、保存/加载、预览、导出和批量导出。
+## 测试
+
+```powershell
+# 安装测试依赖（仅首次需要）
+pip install -r requirements-dev.txt
+
+# 运行全部测试
+python -m pytest
+
+# 只跑单元测试（最快）
+python -m pytest -m unit
+
+# 跑单个文件
+python -m pytest tests/test_document_core.py -v
+```
+
+测试根目录为 `tests/`，使用 pytest 风格 + 旧 unittest.TestCase 混用。配置文件 `pytest.ini` + 根目录 `conftest.py` + `tests/__init__.py` 已就绪。
+
+覆盖范围：
+
+- `test_document_core.py` — Document 生命周期、序列化往返、undo/redo
+- `test_layer_serialize.py` — Layer / LayerSerializer 序列化、duplicate 独立性
+- `test_text_layer_core.py` — TextLayer 文字行、绑定模式、序列化类型保持
+- `test_fast_renderer_smoke.py` — FastRenderer 烟雾测试、batch metrics
+- 17 个原有 unittest 风格测试（AI、批量导出、UI、崩溃会话等）
+
+新增测试请：
+
+- 用 `pytest` 风格（直接函数 + `assert`），旧文件维持 `unittest.TestCase`。
+- 纯逻辑测试加 `@pytest.mark.unit`，需要 GUI / Qt / 真实 I/O 的加 `@pytest.mark.integration`。
+- 不依赖具体 QApplication；在 `setUp` 中按需构造 document 即可。
+
+修改渲染、导出、图层序列化相关代码后，至少应跑一次 `python -m pytest`，并验证新建文档、添加图层、保存/加载、预览、导出和批量导出。
 
 ## 入口与启动流程
 

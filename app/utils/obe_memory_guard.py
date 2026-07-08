@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """Optimized batch executor components."""
 
+from __future__ import annotations
+
 import logging
 
 logger = logging.getLogger(__name__)
-from __future__ import annotations
 
 import os as os_module  # 避免局部变量遮蔽
 import time
