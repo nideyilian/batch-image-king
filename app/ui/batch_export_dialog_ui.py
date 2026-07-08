@@ -482,8 +482,13 @@ class BatchExportDialogUiMixin:
         layout.addLayout(settings_layout)
 
         # 按钮区域
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.accept)
+        # 使用 ActionRole 显式创建“确定”按钮，避免 QDialogButtonBox 的默认行为
+        # 在点击 Ok 角色按钮时自动调用 QDialog.accept() 并关闭对话框。
+        # 批量导出需要在后台线程启动后保持对话框打开以显示进度。
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Cancel)
+        self.ok_btn = QPushButton("确定")
+        self.button_box.addButton(self.ok_btn, QDialogButtonBox.ActionRole)
+        self.ok_btn.clicked.connect(self._on_export_confirmed)
         self.button_box.rejected.connect(self.reject)
         self.minimize_btn = QPushButton("缩小到标签")
         self.minimize_btn.setToolTip("隐藏导出窗口，任务继续在后台运行")
@@ -492,11 +497,11 @@ class BatchExportDialogUiMixin:
         self.button_box.addButton(self.minimize_btn, QDialogButtonBox.ActionRole)
 
         # 设置按钮中文文本
-        self.button_box.button(QDialogButtonBox.Ok).setText("确定")
+        self.ok_btn.setText("确定")
         self.button_box.button(QDialogButtonBox.Cancel).setText("取消")
 
         # 默认禁用确认按钮，直到选择导出目录
-        self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
+        self.ok_btn.setEnabled(False)
 
         layout.addWidget(self.button_box)
 
@@ -845,7 +850,7 @@ class BatchExportDialogUiMixin:
         if path:
             # 即使路径不存在也更新目录，导出时会自动创建
             self.directory = path
-            self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+            self.ok_btn.setEnabled(True)
 
             # 如果目录不存在，添加提示信息
             if not os.path.isdir(path):
@@ -863,7 +868,7 @@ class BatchExportDialogUiMixin:
         else:
             # 如果路径为空，则禁用确认按钮和打开目录按钮
             self.directory = ""
-            self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
+            self.ok_btn.setEnabled(False)
             if hasattr(self, 'open_dir_btn'):
                 self.open_dir_btn.setEnabled(False)
             self.path_edit.setStyleSheet("")
@@ -912,7 +917,7 @@ class BatchExportDialogUiMixin:
             self.path_edit.setText(directory)
             self.path_edit.setStyleSheet("")  # 清除可能的样式
             self.path_edit.setToolTip("")     # 清除可能的提示
-            self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+            self.ok_btn.setEnabled(True)
             # 启用打开目录按钮
             if hasattr(self, 'open_dir_btn'):
                 self.open_dir_btn.setEnabled(True)

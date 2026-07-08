@@ -15,17 +15,6 @@ from app.ui.batch_export_dialog_settings import BatchExportDialogSettingsMixin
 from app.ui.batch_export_dialog_ui import BatchExportDialogUiMixin
 from app.ui.batch_export_dialog_progress import BatchExportDialogProgressMixin
 
-class _BatchExportTask(QRunnable):
-    """Run one batch export without touching Qt widgets from the worker thread."""
-
-    def __init__(self, callback):
-        super().__init__()
-        self._callback = callback
-        self.setAutoDelete(True)
-
-    def run(self):
-        self._callback()
-
 class BatchExportDialog(QDialog, BatchExportDialogSettingsMixin, BatchExportDialogUiMixin, BatchExportDialogProgressMixin):
     """批量导出对话框"""
 

@@ -152,7 +152,7 @@ class BatchExportDialogSettingsMixin:
                     self._apply_current_date_to_path_field()
             # 有目录时允许确定
             if hasattr(self, 'button_box'):
-                self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+                self.ok_btn.setEnabled(True)
 
         # 更新预览
         self.update_preview()
@@ -292,7 +292,7 @@ class BatchExportDialogSettingsMixin:
                 ):
                     self._apply_current_date_to_path_field()
             if hasattr(self, 'button_box'):
-                self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+                self.ok_btn.setEnabled(True)
 
         # 最大文件大小（KB）
         if 'max_file_size_kb' in settings:

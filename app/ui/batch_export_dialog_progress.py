@@ -17,6 +17,18 @@ import json
 import time
 
 
+class _BatchExportTask(QRunnable):
+    """Run one batch export without touching Qt widgets from the worker thread."""
+
+    def __init__(self, callback):
+        super().__init__()
+        self._callback = callback
+        self.setAutoDelete(True)
+
+    def run(self):
+        self._callback()
+
+
 class BatchExportDialogProgressMixin:
 
     def build_export_request(self):
@@ -76,8 +88,13 @@ class BatchExportDialogProgressMixin:
             use_smart_sampling=bool(request.get('use_smart_sampling', True))
         )
 
-    def accept(self):
-        """确认导出"""
+    def _on_export_confirmed(self):
+        """确认导出（由“确定”按钮触发，不关闭对话框）。
+
+        注意：QDialog.accept() 在 PySide6 中是 C++ 槽，Python 端重写的 accept()
+        无法覆盖其关闭对话框的默认行为，因此将导出确认逻辑放在独立方法中，
+        由 ActionRole 的自定义按钮通过 clicked 信号调用。
+        """
         directory = self._resolved_export_directory()
         if not directory:
             return
@@ -155,14 +172,14 @@ class BatchExportDialogProgressMixin:
             self._progress_refresh_timer.start()
             self.progress_cancel_btn.setEnabled(True)
             self.minimize_btn.setEnabled(True)
-            self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
+            self.ok_btn.setEnabled(False)
             self.button_box.button(QDialogButtonBox.Cancel).setEnabled(False)
             self._set_tab_runtime_status("正在批量导出")
             self._update_performance_diagnostics(clear_only=True)
         else:
             self.progress_cancel_btn.setEnabled(False)
             self.minimize_btn.setEnabled(False)
-            self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+            self.ok_btn.setEnabled(True)
             self.button_box.button(QDialogButtonBox.Cancel).setEnabled(True)
             self._export_total_count = 0
             self._export_started_at = None
@@ -381,7 +398,7 @@ class BatchExportDialogProgressMixin:
                 # 🔧 关键修复：直接一次性导出所有图片，不再分批处理
                 # 这样可以确保避重机制在整个导出过程中生效，避免批次间重复
                 print(f"[批量导出] 🚀 开始一次性导出 {count} 张图片（不分批）")
-                result = BatchExportDialog.execute_export_request(
+                result = self.execute_export_request(
                     self.document,
                     export_request,
                     cancel_callback=check_canceled
@@ -684,7 +701,7 @@ class BatchExportDialogProgressMixin:
             pass
 
         # 启用按钮
-        self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+        self.ok_btn.setEnabled(True)
         self.button_box.button(QDialogButtonBox.Cancel).setEnabled(True)
 
         if success:
