@@ -9,7 +9,9 @@ from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import (    child_indices_for_group,    expand_group_indices,    group_bounds,    is_layer_group,    is_effectively_locked,    is_effectively_visible,)
 import time
 import threading
+import logging
 
+logger = logging.getLogger(__name__)
 class CanvasWidgetCanvasRender(object):
     def _invalidate_composition_cache(self):
         """文档发生变化时使合成图缓存失效"""
@@ -151,6 +153,7 @@ class CanvasWidgetCanvasRender(object):
             self._invalidate_scaled_pixmap_cache()
             return pixmap
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
             return None
 
     def _get_cached_composition_pixmap(self):
@@ -203,6 +206,7 @@ class CanvasWidgetCanvasRender(object):
             if isinstance(snapshot, dict):
                 return snapshot
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
             pass
         return None
 
@@ -221,6 +225,7 @@ class CanvasWidgetCanvasRender(object):
             snapshot_document._needs_cache_refresh = False
             return snapshot_document
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
             return None
 
     def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, snapshot_data=None):
@@ -253,6 +258,7 @@ class CanvasWidgetCanvasRender(object):
             if image is not None:
                 return image
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
             pass
 
         try:
@@ -260,12 +266,14 @@ class CanvasWidgetCanvasRender(object):
             if image is not None:
                 return image
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
             pass
 
         if using_snapshot:
             try:
                 return self.document.render_composition()
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
                 return None
         return None
 
@@ -281,6 +289,7 @@ class CanvasWidgetCanvasRender(object):
                 img_data = rgba.tobytes("raw", "RGBA")
                 qimage = QImage(img_data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
                 return None
         return QPixmap.fromImage(qimage)
 
@@ -383,6 +392,7 @@ class CanvasWidgetCanvasRender(object):
                 try:
                     self.document._quick_first_frame = False
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
                     pass
             # 重新启动一次全质量渲染（不低质量），覆盖快速首帧
             if not restart:

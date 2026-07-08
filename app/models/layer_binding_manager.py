@@ -39,7 +39,9 @@ except ImportError as e:
 
 from app.models.binding_group import BindingGroup
 from app.models.global_combination_manager import GlobalCombinationManager
+import logging
 
+logger = logging.getLogger(__name__)
 class LayerBindingManager:
     """图层绑定管理器"""
 
@@ -276,6 +278,7 @@ class LayerBindingManager:
                                 text_virtual_files.append(line_str)
                                 print(f"[直接匹配] 提取文字行作为虚拟文件名: '{line_str}'")
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in layer_binding_manager.py")
                         pass
             
             # 提取图像图层的文件名（不含路径）
@@ -446,6 +449,7 @@ class LayerBindingManager:
             try:
                 group.last_selected_category = selected_category
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in layer_binding_manager.py")
                 pass
             random.seed()  # 恢复随机状态
 
@@ -466,6 +470,7 @@ class LayerBindingManager:
                     trace_rows.append((layer_name, file_path))
                 self.append_debug_trace("preview_randomize", group.name, selected_category, trace_rows)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in layer_binding_manager.py")
                 pass
             
             # 🔧 100%准确率验证：确保绑定结果的语义正确性

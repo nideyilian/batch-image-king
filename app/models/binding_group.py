@@ -9,6 +9,7 @@ import time
 import hashlib
 import itertools
 import json
+import logging
 from typing import Dict, List, Set, Tuple, Optional
 from collections import defaultdict, Counter
 from app.utils.print_utils import safe_print as _safe_print
@@ -17,6 +18,8 @@ from app.utils.text_layer_virtual_path import (
     build_text_layer_virtual_path,
     parse_text_layer_virtual_path,
 )
+
+logger = logging.getLogger(__name__)
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
 print = _safe_print
@@ -109,6 +112,7 @@ class BindingGroup:
                     'files': normalized_files
                 }
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in binding_group.py")
             pass
         finally:
             # 分类索引加载后尝试落盘（兼容旧缓存结构）
@@ -135,6 +139,7 @@ class BindingGroup:
             cls._folder_category_index_dirty = False
             cls._folder_category_index_last_save_time = now
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in binding_group.py")
             pass
 
     @staticmethod
@@ -319,6 +324,7 @@ class BindingGroup:
                         categories = sorted(self._extract_categories_for_filename(filename_without_ext))
                         entries.append({'path': file_path, 'categories': categories})
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in binding_group.py")
                         continue
         except Exception:
             return []
@@ -471,6 +477,7 @@ class BindingGroup:
                                 text_virtual_files.append(virtual_filename)
                                 print(f"[直接匹配] 文字虚拟文件: '{virtual_filename}'")
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in binding_group.py")
                         pass
                 
                 # 也检查current_text
@@ -985,6 +992,7 @@ class BindingGroup:
                             if vpath not in self.file_categories[category_name][idx]:
                                 self.file_categories[category_name][idx].append(vpath)
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in binding_group.py")
             pass
     
     def get_available_categories(self) -> List[str]:

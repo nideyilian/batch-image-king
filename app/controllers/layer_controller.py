@@ -5,6 +5,7 @@
 """
 
 import copy
+import logging
 
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 from PySide6.QtCore import QObject, Signal
@@ -23,6 +24,8 @@ from app.utils.layer_tree import (
     is_layer_group,
     set_parent_group_id,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class LayerController(QObject):
@@ -67,6 +70,7 @@ class LayerController(QObject):
                 'layer_name': getattr(layer, 'name', '未命名图层'),
             }
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in layer_controller.py")
             return None
 
     def _create_layer_from_clipboard_item(self, item):
@@ -444,6 +448,7 @@ class LayerController(QObject):
                 try:
                     new_idx = self.document.layers.index(layer)
                 except ValueError:
+                    logger.debug("静默异常已忽略: except ValueError: in layer_controller.py")
                     continue
                 if new_idx not in new_selection:
                     new_selection.append(new_idx)
@@ -534,6 +539,7 @@ class LayerController(QObject):
                         if hasattr(new_layer, 'changed') and hasattr(new_layer.changed, 'connect'):
                             new_layer.changed.connect(self.document.document_changed.emit)
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in layer_controller.py")
                         pass
                     self.document.layers.append(new_layer)
                     pasted_indices.append(len(self.document.layers) - 1)

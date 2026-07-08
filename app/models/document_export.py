@@ -19,6 +19,8 @@ import hashlib
 from app.utils.render_diagnostics import log_branch, log_sampling
 from app.utils.print_utils import safe_print as _safe_print
 from app.models.layer_size_match_manager import LayerSizeMatchManager
+import logging
+logger = logging.getLogger(__name__)
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
 print = _safe_print
@@ -197,6 +199,7 @@ class DocumentExport:
                     try:
                         self._cleanup_layers_after_export()
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in document_export.py")
                         pass
                     if worker_result.success:
                         if hasattr(self, 'export_stage_updated'):
@@ -429,6 +432,7 @@ class DocumentExport:
                             # 对于有setter的cached_image属性
                             layer.cached_image = None
                         except:
+                            logger.debug("静默异常已忽略: except: in document_export.py")
                             pass
                     
                     cleaned_count += 1
@@ -469,6 +473,7 @@ class DocumentExport:
                         try:
                             layer.cached_image = None
                         except Exception:
+                            logger.debug("静默异常已忽略: except Exception: in document_export.py")
                             pass
                     if hasattr(layer, '_current_image_cache'):
                         layer._current_image_cache = None
@@ -494,16 +499,19 @@ class DocumentExport:
                 from app.utils.intelligent_render_cache import clear_global_cache as _clear_render_cache
                 _clear_render_cache()
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in document_export.py")
                 pass
             try:
                 from app.utils.intelligent_cache_system import get_intelligent_cache as _get_intelligent_cache
                 _get_intelligent_cache().clear_all_caches()
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in document_export.py")
                 pass
             try:
                 from app.utils.advanced_image_cache import get_advanced_image_cache as _get_advanced_cache
                 _get_advanced_cache().clear_cache()
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in document_export.py")
                 pass
 
             # 强制回收游离对象，确保任务完成后内存及时回落
@@ -750,6 +758,7 @@ class DocumentExport:
                 else:
                     print(f"[绑定分析]   ⚠️ 无图像支撑分类，保留原分类以避免空结果")
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in document_export.py")
                 pass
             
             if not group_categories:
@@ -1228,6 +1237,7 @@ class DocumentExport:
                     setattr(layer, 'parent_group_id', str(parent_group_id))
                     setattr(layer, '_parent_group_id', str(parent_group_id))
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in document_export.py")
                     pass
             return layer
                 
@@ -1406,6 +1416,7 @@ class DocumentExport:
         try:
             self._last_export_error = "导出已取消"
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in document_export.py")
             pass
 
         # 尝试立即中断执行器与预计算器，降低取消延迟
@@ -1414,12 +1425,14 @@ class DocumentExport:
             if active_executor and hasattr(active_executor, 'cancel'):
                 active_executor.cancel()
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in document_export.py")
             pass
         try:
             active_precomputer = getattr(self, '_active_precomputer', None)
             if active_precomputer is not None:
                 setattr(active_precomputer, '_was_canceled', True)
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in document_export.py")
             pass
         
         # 强制垃圾回收以释放资源
@@ -1427,6 +1440,7 @@ class DocumentExport:
             import gc
             gc.collect()
         except:
+            logger.debug("静默异常已忽略: except: in document_export.py")
             pass
 
 
@@ -1678,6 +1692,7 @@ class DocumentExport:
                 logger = logging.getLogger('批图王')
                 logger.error(f"保存文档失败: {e}", exc_info=True)
             except:
+                logger.debug("静默异常已忽略: except: in document_export.py")
                 pass
             print(f"保存文档失败: {e}")
             return False
@@ -1788,6 +1803,7 @@ class DocumentExport:
                 logger = logging.getLogger('批图王')
                 logger.error(error_msg, exc_info=True)
             except:
+                logger.debug("静默异常已忽略: except: in document_export.py")
                 pass
             print(error_msg)
 

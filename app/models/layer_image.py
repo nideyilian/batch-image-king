@@ -15,6 +15,8 @@ from typing import List, Tuple
 import math
 from app.utils.image.high_quality_resampler import HighQualityResampler
 from app.utils.render_diagnostics import log_branch
+import logging
+logger = logging.getLogger(__name__)
 
 
 _LAYER_DEBUG = os.environ.get("BTPW_LAYER_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on")
@@ -330,6 +332,7 @@ class LayerImage(object):
                 logger = logging.getLogger('批图王')
                 logger.error(f"无法加载图像 {image_path}: {e}", exc_info=True)
             except:
+                logger.debug("静默异常已忽略: except: in layer_image.py")
                 pass
             print(f"无法加载图像 {image_path}: {e}")
             return self._create_error_image()
@@ -896,6 +899,7 @@ class LayerImage(object):
             try:
                 return HighQualityResampler.resize(image, (target_width, target_height), method=Resampling.LANCZOS, enable_sharpening=True)
             except:
+                logger.debug("静默异常已忽略: except: in layer_image.py")
                 return None
     
     def _scale_to_fit(self, image):

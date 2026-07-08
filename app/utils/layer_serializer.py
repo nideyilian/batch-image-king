@@ -6,6 +6,8 @@
 import copy
 from typing import Dict, Any, Optional, Union
 from PIL import Image
+import logging
+logger = logging.getLogger(__name__)
 
 
 class LayerSerializer:
@@ -435,5 +437,6 @@ class LayerSerializer:
                 try:
                     setattr(layer_obj, attr, None)
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in layer_serializer.py")
                     pass
 

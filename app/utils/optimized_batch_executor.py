@@ -21,7 +21,9 @@ from app.utils.obe_plan_execution import OptimizedBatchExecutorPlanExecution
 from app.utils.obe_task_render import OptimizedBatchExecutorTaskRender
 from app.utils.obe_io_export import OptimizedBatchExecutorIoExport
 from app.utils.obe_task_render import SaveTaskResult  # 兼容 re-export
+import logging
 
+logger = logging.getLogger(__name__)
 def _should_retry_with_default_runtime(
     *,
     success: bool,
@@ -51,6 +53,7 @@ class OptimizedBatchExportManager:
         try:
             document._last_export_report = report
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
             pass
         try:
             history = getattr(document, '_export_report_history', None)
@@ -64,6 +67,7 @@ class OptimizedBatchExportManager:
                 history = history[-limit:]
             document._export_report_history = history
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
             pass
         try:
             import json
@@ -74,6 +78,7 @@ class OptimizedBatchExportManager:
                 f.write(json.dumps(report, ensure_ascii=False, default=str) + "\n")
             setattr(document, '_last_export_report_file', report_file)
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
             pass
 
     @staticmethod
@@ -170,6 +175,7 @@ class OptimizedBatchExportManager:
                 if hasattr(document, '_active_precomputer'):
                     document._active_precomputer = None
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
 
         print(f"[V2] : {count} ")
@@ -215,6 +221,7 @@ class OptimizedBatchExportManager:
                         )
                         OptimizedBatchExportManager._record_export_report(document, report)
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                         pass
                     return False
             
@@ -251,6 +258,7 @@ class OptimizedBatchExportManager:
                     )
                     OptimizedBatchExportManager._record_export_report(document, report)
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                     pass
                 return False
                 
@@ -281,6 +289,7 @@ class OptimizedBatchExportManager:
                 )
                 OptimizedBatchExportManager._record_export_report(document, report)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
             return False
 
@@ -291,6 +300,7 @@ class OptimizedBatchExportManager:
             try:
                 document._active_precomputer = precomputer
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
 
             #  
@@ -328,6 +338,7 @@ class OptimizedBatchExportManager:
                 document._last_precompute_summary = precompute_summary
                 document._last_runtime_tuning = runtime_tuning
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
 
             # 记录导出调整信息，供 UI 提示
@@ -343,6 +354,7 @@ class OptimizedBatchExportManager:
                     }
                     adjustment_info = document._last_export_adjustment
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
 
             if getattr(precomputer, '_was_canceled', False):
@@ -375,6 +387,7 @@ class OptimizedBatchExportManager:
                     )
                     OptimizedBatchExportManager._record_export_report(document, report)
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                     pass
                 return False
 
@@ -394,10 +407,12 @@ class OptimizedBatchExportManager:
                 try:
                     executor._io_profile = str(runtime_tuning.get("derived_io_profile"))
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                     pass
             try:
                 document._active_export_executor = executor
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
             if stage_callback:
                 stage_callback("渲染与写盘")
@@ -431,6 +446,7 @@ class OptimizedBatchExportManager:
                         fallback_succeeded = True
                         executor = fallback_executor
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
 
             # 记录导出性能统计，供 UI 诊断面板展示
@@ -578,6 +594,7 @@ class OptimizedBatchExportManager:
                 )
                 OptimizedBatchExportManager._record_export_report(document, report)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
 
             if success:
@@ -602,6 +619,7 @@ class OptimizedBatchExportManager:
                 try:
                     setattr(document, '_last_export_error', error_msg)
                 except:
+                    logger.debug("静默异常已忽略: except: in optimized_batch_executor.py")
                     pass
             _clear_active_handles()
             try:
@@ -626,6 +644,7 @@ class OptimizedBatchExportManager:
                 )
                 OptimizedBatchExportManager._record_export_report(document, report)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in optimized_batch_executor.py")
                 pass
             return False
 

@@ -19,6 +19,8 @@ import hashlib
 from app.utils.render_diagnostics import log_branch, log_sampling
 from app.utils.print_utils import safe_print as _safe_print
 from app.models.layer_size_match_manager import LayerSizeMatchManager
+import logging
+logger = logging.getLogger(__name__)
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
 print = _safe_print
@@ -719,6 +721,7 @@ class DocumentRender:
                             if auto_blend == 'normal' and sample_a > 0.01 and neutral and (near_black or max(r, g, b) < 48):
                                 auto_blend = 'multiply'
                         except Exception:
+                            logger.debug("静默异常已忽略: except Exception: in document_render.py")
                             pass
 
                         if is_batch_mode:

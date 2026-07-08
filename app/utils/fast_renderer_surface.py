@@ -50,7 +50,9 @@ from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
 from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
 from .render_diagnostics import log_branch
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 class FastRendererSurface(object):
@@ -132,6 +134,7 @@ class FastRendererSurface(object):
                     layer.width = target_w
                     layer.height = target_h
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                     pass
 
             if rotation_override is not None:
@@ -149,6 +152,7 @@ class FastRendererSurface(object):
                     try:
                         layer.rotation = rot
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                         pass
 
             raw_image = self._get_layer_image(layer, document, was_just_loaded)
@@ -173,6 +177,7 @@ class FastRendererSurface(object):
                         layer.width = original_w
                         layer.height = original_h
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                         pass
 
                 if rotation_override is not None:
@@ -186,8 +191,10 @@ class FastRendererSurface(object):
                         try:
                             layer.rotation = original_rotation
                         except Exception:
+                            logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                             pass
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                 pass
 
         if layer_image is not None:
@@ -583,12 +590,14 @@ class FastRendererSurface(object):
             try:
                 builtins.print(line)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                 pass
             if export_trace_file:
                 try:
                     with open(export_trace_file, 'a', encoding='utf-8') as f:
                         f.write(line + "\n")
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                     pass
 
         manager = getattr(document, 'layer_size_match_manager', None)
@@ -813,6 +822,7 @@ class FastRendererSurface(object):
                     opaque = self._close_opaque_mask(opaque)
                     transparent = ~opaque
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
                 pass
 
             h, w = transparent.shape
@@ -1595,6 +1605,7 @@ class FastRendererSurface(object):
                     image = image.resize((target_w, target_h), Image.Resampling.BILINEAR)
             return image
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
             return None
 
     def _get_batch_preloaded_raw_image(self, document, image_path: str):

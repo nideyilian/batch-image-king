@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """TextLayer 方法 mixin：本文件由拆分脚本生成，方法原属于 TextLayer。"""
+import logging
 from PySide6.QtCore import QObject, Signal, Property
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -14,6 +15,8 @@ from pathlib import Path
 from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TextLayerSerializeMixin:
@@ -94,6 +97,7 @@ class TextLayerSerializeMixin:
                 start = max(0, min(text_len, int(item.get("start", 0))))
                 end = max(0, min(text_len, int(item.get("end", 0))))
             except (TypeError, ValueError):
+                logger.debug("静默异常已忽略: except (TypeError, ValueError): in text_layer_serialize.py")
                 continue
             if end <= start:
                 continue

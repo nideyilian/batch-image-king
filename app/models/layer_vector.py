@@ -15,6 +15,8 @@ from typing import List, Tuple
 import math
 from app.utils.image.high_quality_resampler import HighQualityResampler
 from app.utils.render_diagnostics import log_branch
+import logging
+logger = logging.getLogger(__name__)
 
 
 _LAYER_DEBUG = os.environ.get("BTPW_LAYER_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on")
@@ -213,6 +215,7 @@ class LayerVector(object):
             try:
                 normalized.append([float(x), float(y)])
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in layer_vector.py")
                 continue
         return normalized
 
@@ -232,6 +235,7 @@ class LayerVector(object):
                 out_x = float(n.get('out_x', x))
                 out_y = float(n.get('out_y', y))
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in layer_vector.py")
                 continue
             normalized.append({
                 'x': x,

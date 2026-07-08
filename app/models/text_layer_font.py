@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """TextLayer 方法 mixin：本文件由拆分脚本生成，方法原属于 TextLayer。"""
+import logging
 from PySide6.QtCore import QObject, Signal, Property
 from PIL import Image, ImageDraw, ImageFont
 import os
@@ -14,6 +15,8 @@ from pathlib import Path
 from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TextLayerFontMixin:
@@ -104,6 +107,7 @@ class TextLayerFontMixin:
                 matched_dirs = glob.glob(pattern.replace("/", "\\"))
                 font_dirs.extend(matched_dirs)
             except:
+                logger.debug("静默异常已忽略: except: in text_layer_font.py")
                 pass
 
         font_extensions = {'.ttf', '.otf', '.ttc', '.fon', '.fnt'}
@@ -126,6 +130,7 @@ class TextLayerFontMixin:
                                 if font_info:
                                     fonts.append(font_info)
             except (PermissionError, OSError):
+                logger.debug("静默异常已忽略: except (PermissionError, OSError): in text_layer_font.py")
                 continue
 
         # 尝试从Windows注册表获取字体
@@ -133,6 +138,7 @@ class TextLayerFontMixin:
             registry_fonts = self._get_windows_registry_fonts()
             fonts.extend(registry_fonts)
         except:
+            logger.debug("静默异常已忽略: except: in text_layer_font.py")
             pass
 
         return fonts
@@ -169,6 +175,7 @@ class TextLayerFontMixin:
                                 if font_info:
                                     fonts.append(font_info)
             except (PermissionError, OSError):
+                logger.debug("静默异常已忽略: except (PermissionError, OSError): in text_layer_font.py")
                 continue
 
         return fonts
@@ -206,6 +213,7 @@ class TextLayerFontMixin:
                                 if font_info:
                                     fonts.append(font_info)
             except (PermissionError, OSError):
+                logger.debug("静默异常已忽略: except (PermissionError, OSError): in text_layer_font.py")
                 continue
 
         return fonts
@@ -288,9 +296,11 @@ class TextLayerFontMixin:
                                 'filename': font_file
                             })
                     except:
+                        logger.debug("静默异常已忽略: except: in text_layer_font.py")
                         continue
 
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in text_layer_font.py")
             pass
 
         return fonts
@@ -323,6 +333,7 @@ class TextLayerFontMixin:
                 return valid_fonts if valid_fonts else None
 
         except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            logger.debug("静默异常已忽略: except (FileNotFoundError, json.JSONDecodeError, KeyError): in text_layer_font.py")
             pass
 
         return None
@@ -566,6 +577,7 @@ class TextLayerFontMixin:
                         if not any(indicator in file_name_no_ext for indicator in style_indicators):
                             return os.path.join(font_dir, font_file)
             except (PermissionError, OSError):
+                logger.debug("静默异常已忽略: except (PermissionError, OSError): in text_layer_font.py")
                 continue
 
         # 如果没有找到特殊样式的字体，回退到普通字体
@@ -580,6 +592,7 @@ class TextLayerFontMixin:
                         any(font_file.lower().endswith(ext) for ext in font_extensions)):
                         return os.path.join(font_dir, font_file)
             except (PermissionError, OSError):
+                logger.debug("静默异常已忽略: except (PermissionError, OSError): in text_layer_font.py")
                 continue
 
         return None

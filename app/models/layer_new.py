@@ -14,6 +14,8 @@ import threading
 from typing import List, Tuple
 from app.models.layer_properties import LayerPropertyManager, CommonLayerOperations, ShapeType
 from app.utils.render_diagnostics import log_branch, log_sampling
+import logging
+logger = logging.getLogger(__name__)
 
 _LAYER_RENDER_VERBOSE = os.environ.get("BTPW_LAYER_RENDER_VERBOSE", "0") == "1"
 
@@ -1142,6 +1144,7 @@ class Layer(QObject):
                 if hasattr(self, 'changed') and hasattr(self.changed, 'emit'):
                     self.changed.emit()
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in layer_new.py")
                 pass
         
         try:
@@ -1158,6 +1161,7 @@ class Layer(QObject):
                 except Exception as e:
                     print(f"无法加载图像 {src}: {e}")
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in layer_new.py")
             pass
         
         return self.get_random_image(force_random=False)
@@ -1235,6 +1239,7 @@ class Layer(QObject):
                 try:
                     img.load()
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in layer_new.py")
                     pass
                 if img.mode != 'RGBA':
                     img = img.convert('RGBA')
@@ -1243,6 +1248,7 @@ class Layer(QObject):
                 try:
                     img.close()
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in layer_new.py")
                     pass
 
             return self._process_image(self._cached_source_image.copy())
@@ -1833,6 +1839,7 @@ class Layer(QObject):
                 final_result.info["vector_offset_x"] = vector_offset_x
                 final_result.info["vector_offset_y"] = vector_offset_y
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in layer_new.py")
                 pass
             self._set_effects_stage_cache(stage3_key, final_result)
 

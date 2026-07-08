@@ -50,7 +50,9 @@ from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
 from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
 from .render_diagnostics import log_branch
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 class FastRendererComposite(object):
@@ -216,12 +218,14 @@ class FastRendererComposite(object):
                 try:
                     builtins.print(line)
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_composite.py")
                     pass
                 if export_trace_file:
                     try:
                         with open(export_trace_file, 'a', encoding='utf-8') as f:
                             f.write(line + "\n")
                     except Exception:
+                        logger.debug("静默异常已忽略: except Exception: in fast_renderer_composite.py")
                         pass
 
             # 处理文字图层

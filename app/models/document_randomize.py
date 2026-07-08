@@ -19,6 +19,8 @@ import hashlib
 from app.utils.render_diagnostics import log_branch, log_sampling
 from app.utils.print_utils import safe_print as _safe_print
 from app.models.layer_size_match_manager import LayerSizeMatchManager
+import logging
+logger = logging.getLogger(__name__)
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
 print = _safe_print
@@ -195,6 +197,7 @@ class DocumentRandomize:
                 try:
                     image_layer.get_random_image(force_random=True)
                 except:
+                    logger.debug("静默异常已忽略: except: in document_randomize.py")
                     pass
             
             # 清除缓存

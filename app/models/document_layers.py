@@ -19,6 +19,8 @@ import hashlib
 from app.utils.render_diagnostics import log_branch, log_sampling
 from app.utils.print_utils import safe_print as _safe_print
 from app.models.layer_size_match_manager import LayerSizeMatchManager
+import logging
+logger = logging.getLogger(__name__)
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
 print = _safe_print
@@ -51,6 +53,7 @@ class DocumentLayers:
                 elif os.path.isdir(src_norm):
                     is_folder = True
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in document_layers.py")
             pass
 
         layer = NewLayer(name, x, y, width, height, image_source, use_original_size, is_folder)
@@ -58,6 +61,7 @@ class DocumentLayers:
             if hasattr(layer, 'changed') and hasattr(layer.changed, 'connect'):
                 layer.changed.connect(self.document_changed.emit)
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in document_layers.py")
             pass
         self.layers.append(layer)
         self.selected_layer_index = len(self.layers) - 1
@@ -305,6 +309,7 @@ class DocumentLayers:
             try:
                 new_idx = self.layers.index(selected)
             except ValueError:
+                logger.debug("静默异常已忽略: except ValueError: in document_layers.py")
                 continue
             if new_idx not in self.selected_layer_indices:
                 self.selected_layer_indices.append(new_idx)
@@ -336,6 +341,7 @@ class DocumentLayers:
             try:
                 idx = int(idx)
             except (TypeError, ValueError):
+                logger.debug("静默异常已忽略: except (TypeError, ValueError): in document_layers.py")
                 continue
             if 0 <= idx < len(self.layers) and idx not in valid_indices:
                 valid_indices.append(idx)

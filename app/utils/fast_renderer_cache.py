@@ -50,7 +50,9 @@ from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
 from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
 from .render_diagnostics import log_branch
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 class FastRendererCache(object):
@@ -106,6 +108,7 @@ class FastRendererCache(object):
             if image is not None and hasattr(image, "close"):
                 image.close()
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in fast_renderer_cache.py")
             pass
 
     def _cache_value_bytes(self, value) -> int:

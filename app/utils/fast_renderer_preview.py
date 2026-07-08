@@ -50,7 +50,9 @@ from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
 from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
 from .render_diagnostics import log_branch
+import logging
 
+logger = logging.getLogger(__name__)
 
 
 class FastRendererPreview(object):
@@ -232,6 +234,7 @@ class FastRendererPreview(object):
                 self._last_preview_snapshot = composition.copy()
             return composition
         except Exception:
+            logger.debug("静默异常已忽略: except Exception: in fast_renderer_preview.py")
             return None
 
     def render_batch(self, document) -> Optional[Image.Image]:
@@ -306,12 +309,14 @@ class FastRendererPreview(object):
             try:
                 builtins.print(line)
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in fast_renderer_preview.py")
                 pass
             if export_trace_file:
                 try:
                     with open(export_trace_file, 'a', encoding='utf-8') as f:
                         f.write(line + "\n")
                 except Exception:
+                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_preview.py")
                     pass
         
         # 获取可见图层

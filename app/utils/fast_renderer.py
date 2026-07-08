@@ -79,6 +79,7 @@ class SmartCache:
                     match_hash = hashlib.md5(serialized_text.encode('utf-8')).hexdigest()[:8]
                     key_parts.append(f"size_match:{match_hash}")
             except Exception:
+                logger.debug("静默异常已忽略: except Exception: in fast_renderer.py")
                 pass
 
             for i, layer in enumerate(document.layers):
@@ -210,6 +211,10 @@ from app.utils.fast_renderer_cache import FastRendererCache
 from app.utils.fast_renderer_preview import FastRendererPreview
 from app.utils.fast_renderer_surface import FastRendererSurface
 from app.utils.fast_renderer_composite import FastRendererComposite
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, FastRendererComposite):
     """真正快速的渲染器（优化版本）"""
