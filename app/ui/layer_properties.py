@@ -30,6 +30,7 @@ from app.services.ai_asset_service import (
     localize_ai_error,
 )
 from app.services.ai_provider_config import AIProviderStore
+from app.utils.print_utils import safe_print
 
 # 图层面板方法已拆分到以下 mixin 模块，通过多重继承组合进主类
 from app.ui.layer_properties_base import LayerPropertiesBase

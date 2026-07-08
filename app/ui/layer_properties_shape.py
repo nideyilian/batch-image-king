@@ -1,3 +1,4 @@
+from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
                                QFileDialog, QGroupBox, QCheckBox, QComboBox,
@@ -575,18 +576,6 @@ class LayerPropertiesShape(object):
                 print(f"行 {row_index} 超出范围，总行数: {self.shape_params_layout.rowCount()}")
 
 
-def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
-    try:
-        print(message)
-    except (UnicodeEncodeError, OSError):
-        try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            print(f"[DEBUG] {ascii_message}")
-        except:
-            # 最后的备选方案
-            print("[DEBUG] Message encoding failed")
     def update_fill_enabled(self, enabled):
         if not self.current_layer:
             return

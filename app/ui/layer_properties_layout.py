@@ -1,3 +1,4 @@
+from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
                                QFileDialog, QGroupBox, QCheckBox, QComboBox,
