@@ -135,17 +135,15 @@ class AdvancedTaskQueue:
         if self.enable_batching:
             self._batch_processor_thread = threading.Thread(
                 target=self._batch_processor,
-                name="BatchProcessor"
-                # 不再设置为守护线程，避免程序退出时的锁竞争问题
-                # daemon=True
+                name="BatchProcessor",
+                daemon=True
             )
             self._batch_processor_thread.start()
         
         self._queue_monitor_thread = threading.Thread(
             target=self._queue_monitor,
-            name="QueueMonitor"
-            # 不再设置为守护线程，避免程序退出时的锁竞争问题
-            # daemon=True
+            name="QueueMonitor",
+            daemon=True
         )
         self._queue_monitor_thread.start()
     
@@ -628,11 +626,11 @@ class AdvancedTaskQueue:
                                 
                                 self.logger.info(f"自动创建批次: {batch.batch_id}, 任务数: {len(batch_tasks)}")
                 
-                time.sleep(0.5)  # 避免过于频繁的检查
+                self._shutdown_event.wait(timeout=0.5)  # 避免过于频繁的检查
                 
             except Exception as e:
                 self.logger.error(f"批次处理器错误: {e}")
-                time.sleep(1.0)
+                self._shutdown_event.wait(timeout=1.0)
     
     def _queue_monitor(self):
         """队列监控后台线程"""
@@ -648,11 +646,11 @@ class AdvancedTaskQueue:
                     # 队列健康检查
                     self._health_check()
                 
-                time.sleep(5.0)  # 每5秒检查一次
+                self._shutdown_event.wait(timeout=5.0)  # 每5秒检查一次
                 
             except Exception as e:
                 self.logger.error(f"队列监控错误: {e}")
-                time.sleep(1.0)
+                self._shutdown_event.wait(timeout=1.0)
     
     def _check_batch_completion(self, completed_task_id: str):
         """检查批次完成状态"""

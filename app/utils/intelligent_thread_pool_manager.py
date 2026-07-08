@@ -225,10 +225,8 @@ class IntelligentThreadPoolManager:
         """资源监控循环"""
         while not self._shutdown_event.is_set():
             try:
-                # 每30秒检查一次资源使用情况
-                time.sleep(30)
-                
-                if self._shutdown_event.is_set():
+                # 每30秒检查一次资源使用情况（使用可中断的 wait）
+                if self._shutdown_event.wait(timeout=30):
                     break
                 
                 system_resources = self._get_system_resources()
@@ -301,8 +299,19 @@ class IntelligentThreadPoolManager:
         try:
             # 执行任务
             if task_info.timeout:
-                # TODO: 实现超时控制
-                result = task_info.func(*task_info.args, **task_info.kwargs)
+                # 有超时限制：在临时线程中执行，主线程等待结果
+                with ThreadPoolExecutor(max_workers=1, thread_name_prefix="timeout-worker") as ex:
+                    future = ex.submit(task_info.func, *task_info.args, **task_info.kwargs)
+                    try:
+                        result = future.result(timeout=task_info.timeout)
+                    except TimeoutError:
+                        # 超时：记录并触发错误回调
+                        self.logger.warning(
+                            f"任务超时({task_info.timeout:.1f}s): {task_info.task_id}"
+                        )
+                        raise TimeoutError(
+                            f"任务 {task_info.task_id} 执行超时({task_info.timeout}s)"
+                        )
             else:
                 result = task_info.func(*task_info.args, **task_info.kwargs)
             
@@ -411,20 +420,20 @@ class IntelligentThreadPoolManager:
         )
         
         try:
+            # 始终将任务放入底层调度队列，由 _task_scheduler 消费并执行
+            queue = self._task_queues[task_type]
+            queue.put(task_info, block=False)
+            self.logger.debug(f"任务已提交: {task_id}")
+            
             if use_advanced_queue and hasattr(self, '_advanced_queue'):
-                # 使用高级队列管理器
-                return self._advanced_queue.submit_task(
+                # 同时使用高级队列管理器（用于统计、监控、批次管理等）
+                self._advanced_queue.submit_task(
                     task_info=task_info,
                     deadline=deadline,
                     weight=weight
                 )
-            else:
-                # 使用原有的简单队列
-                queue = self._task_queues[task_type]
-                queue.put(task_info, block=False)
-                
-                self.logger.debug(f"任务已提交: {task_id}")
-                return task_id
+            
+            return task_id
                 
         except Exception as e:
             self.logger.error(f"提交任务失败: {e}")
