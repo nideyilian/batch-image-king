@@ -8,6 +8,7 @@ import pickle
 from PIL import Image, ImageDraw, ImageFont
 
 from app.utils.preset_document_loader import documents_from_preset_data
+from app.utils.trusted_pickle import load_trusted_pickle
 
 
 class PresetThumbnailService:
@@ -49,7 +50,7 @@ class PresetThumbnailService:
 
     def _render_preset_preview(self, preset_path):
         with open(preset_path, "rb") as preset_file:
-            preset_data = pickle.load(preset_file)
+            preset_data = load_trusted_pickle(preset_file, preset_path)
 
         documents = documents_from_preset_data(preset_data)
         if not documents:

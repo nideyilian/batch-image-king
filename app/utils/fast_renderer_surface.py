@@ -50,6 +50,7 @@ from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
 from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
 from .render_diagnostics import log_branch
+from .render_cache_keys import build_layer_positions_key
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1253,27 +1254,9 @@ class FastRendererSurface(object):
             return holes or []
 
     def _build_layer_positions_key(self, layer, document) -> str:
-        """构建图层位置缓存键（仅包含影响分身/填充位置的参数）"""
+        """?????????????????/????????"""
         try:
-            parts = [
-                f"doc:{id(document)}",
-                f"layer:{id(layer)}",
-                f"canvas:{document.canvas_width}x{document.canvas_height}",
-                f"base:{getattr(layer, 'x', 0)},{getattr(layer, 'y', 0)}",
-                f"size:{getattr(layer, 'width', 0)}x{getattr(layer, 'height', 0)}",
-                f"clone:{int(bool(getattr(layer, 'clone_enabled', False)))}",
-                f"fill:{int(bool(getattr(layer, 'clone_fill_enabled', False)))}",
-                f"fill_spacing:{getattr(layer, 'clone_fill_spacing', 0)}",
-                f"fill_angle:{float(getattr(layer, 'clone_fill_angle', 0.0)):.3f}",
-                f"fill_mode:{getattr(layer, 'clone_fill_mode', 'grid')}",
-                f"fill_margin:{getattr(layer, 'clone_fill_margin', 0)}",
-                f"mirror:{getattr(layer, 'clone_mirror_mode', 'none')}",
-                f"rnd_dx:{getattr(layer, '_current_random_offset_x', 0)}",
-                f"rnd_dy:{getattr(layer, '_current_random_offset_y', 0)}",
-                f"rnd_scale:{float(getattr(layer, '_current_random_scale', 1.0)):.6f}",
-                f"rnd_rot:{float(getattr(layer, '_current_random_rotation', 0.0)):.3f}",
-            ]
-            return hashlib.md5("|".join([str(p) for p in parts]).encode('utf-8')).hexdigest()
+            return build_layer_positions_key(layer, document)
         except Exception:
             return f"fallback_layer_positions_{id(layer)}_{time.time()}"
 

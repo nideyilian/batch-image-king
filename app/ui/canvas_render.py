@@ -262,7 +262,9 @@ class CanvasWidgetCanvasRender(object):
             pass
 
         try:
-            image = render_document.render_composition()
+            from app.services.render_service import render_document_legacy_fallback
+
+            image = render_document_legacy_fallback(render_document)
             if image is not None:
                 return image
         except Exception:
@@ -271,7 +273,9 @@ class CanvasWidgetCanvasRender(object):
 
         if using_snapshot:
             try:
-                return self.document.render_composition()
+                from app.services.render_service import render_document_legacy_fallback
+
+                return render_document_legacy_fallback(self.document)
             except Exception:
                 logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
                 return None

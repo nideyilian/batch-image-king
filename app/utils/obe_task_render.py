@@ -1033,12 +1033,14 @@ class OptimizedBatchExecutorTaskRender(object):
     
         # 
         try:
-            canvas = self.document.render_composition(
-                random_mode=False,  # 
-                optimize_memory=True,
-                is_batch_mode=True,
-                enable_gpu=False  # GPU
-            )
+            from app.services.render_service import RenderRequest, get_render_service
+
+            result = get_render_service().render(RenderRequest(
+                document=self.document,
+                mode="export",
+                batch_mode=True,
+            ))
+            canvas = result.image
         
             #  
             # 

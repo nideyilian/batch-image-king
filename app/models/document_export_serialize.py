@@ -19,6 +19,7 @@ import pickle
 logger = logging.getLogger(__name__)
 
 from app.models.layer_new import Layer as NewLayer  # noqa: E402
+from app.utils.trusted_pickle import load_trusted_pickle
 
 
 class DocumentExportSerialize:
@@ -166,7 +167,7 @@ class DocumentExportSerialize:
                 has_error_handler = False
 
             with open(file_path, 'rb') as f:
-                document_data = pickle.load(f)
+                document_data = load_trusted_pickle(f, file_path)
 
             # 检查文档版本
             doc_version = document_data.get('version', 1)  # 默认为版本1（无版本号的旧文件）

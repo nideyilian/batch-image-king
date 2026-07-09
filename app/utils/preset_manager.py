@@ -9,6 +9,8 @@ import re
 import copy
 from pathlib import Path
 
+from app.utils.trusted_pickle import load_trusted_pickle
+
 class PresetManager:
     """预设管理器，负责管理项目预设"""
 
@@ -424,7 +426,7 @@ class PresetManager:
         try:
             # 加载预设文件数据
             with open(preset_path, 'rb') as f:
-                preset_data = pickle.load(f)
+                preset_data = load_trusted_pickle(f, preset_path)
 
             # 如果是新格式，直接返回
             if isinstance(preset_data, dict) and 'id' in preset_data:
@@ -560,7 +562,7 @@ class PresetManager:
 
             # 加载预设数据
             with open(preset_path, 'rb') as f:
-                export_data['preset_data'] = pickle.load(f)
+                export_data['preset_data'] = load_trusted_pickle(f, preset_path)
 
             # 保存导出文件
             with open(export_path, 'wb') as f:
@@ -576,7 +578,7 @@ class PresetManager:
         try:
             # 加载导入文件
             with open(import_path, 'rb') as f:
-                import_data = pickle.load(f)
+                import_data = load_trusted_pickle(f, import_path)
 
             # 检查导入数据格式
             if isinstance(import_data, dict) and 'export_type' in import_data:
@@ -709,7 +711,7 @@ class PresetManager:
                 if os.path.exists(preset_path):
                     try:
                         with open(preset_path, 'rb') as f:
-                            preset_data = pickle.load(f)
+                            preset_data = load_trusted_pickle(f, preset_path)
 
                         export_data['presets'].append({
                             'info': preset_info,

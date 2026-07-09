@@ -9,6 +9,8 @@ import pickle
 from typing import Optional, Dict, Any
 from PySide6.QtCore import QObject, Signal
 
+from app.utils.trusted_pickle import load_trusted_pickle
+
 
 class DocumentSerializer(QObject):
     """
@@ -87,7 +89,7 @@ class DocumentSerializer(QObject):
             
             # 使用pickle加载
             with open(file_path, 'rb') as f:
-                document_data = pickle.load(f)
+                document_data = load_trusted_pickle(f, file_path)
             
             self.deserialization_finished.emit(True)
             return document_data
