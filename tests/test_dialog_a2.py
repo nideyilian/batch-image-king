@@ -6,7 +6,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtTest import QTest
+from PySide6 import QtTest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from app.ui.color_picker_dialog_a2 import ColorPickerDialogA2
@@ -73,7 +73,7 @@ class DialogA2Test(unittest.TestCase):
         swatch = dialog.swatch_buttons[1]
         expected = swatch.property("color")
 
-        QTest.mouseClick(swatch, Qt.LeftButton, pos=QPoint(6, 6))
+        QtTest.QTest.mouseClick(swatch, Qt.LeftButton, pos=QPoint(6, 6))
         QApplication.processEvents()
 
         selected = dialog.selected_color()

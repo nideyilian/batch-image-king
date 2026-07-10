@@ -51,6 +51,7 @@ from .intelligent_render_cache import get_intelligent_cache
 from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
 from .render_diagnostics import log_branch
 from .render_cache_keys import build_layer_positions_key
+from .render_geometry import normalize_angle_180, pick_min_delta_rotation, to_small_tilt_by_axis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -279,35 +280,11 @@ class FastRendererSurface(object):
 
     def _normalize_angle_180(self, angle: float) -> float:
         """归一化角度到 (-180, 180]。"""
-        a = float(angle)
-        while a <= -180.0:
-            a += 360.0
-        while a > 180.0:
-            a -= 360.0
-        return a
+        return normalize_angle_180(angle)
 
     def _pick_min_delta_rotation(self, target_angle: float, reference_angle: float) -> float:
         """从等价角中选与参考角差值最小的角度，并将旋转差限制在 ±90°。"""
-        ref = self._normalize_angle_180(reference_angle)
-        candidates = []
-        for k in (-2, -1, 0, 1, 2):
-            candidates.append(float(target_angle) + 180.0 * float(k))
-        best_delta = None
-        best_abs = None
-        for c in candidates:
-            delta = self._normalize_angle_180(c - ref)
-            # 矩形方向 180° 周期等价：优先把差值折叠到 [-90, 90]
-            if delta > 90.0:
-                delta -= 180.0
-            elif delta < -90.0:
-                delta += 180.0
-            abs_delta = abs(delta)
-            if best_delta is None or abs_delta < best_abs:
-                best_delta = delta
-                best_abs = abs_delta
-        if best_delta is None:
-            return self._normalize_angle_180(ref)
-        return self._normalize_angle_180(ref + best_delta)
+        return pick_min_delta_rotation(target_angle, reference_angle)
 
     def _to_small_tilt_by_axis(self, raw_angle_deg: float, bbox_w: int, bbox_h: int) -> float:
         """
@@ -316,34 +293,7 @@ class FastRendererSurface(object):
         - 若两者接近，使用 bbox 长宽作为稳定性兜底
         返回值限制在 [-90, 90]，并优先最小绝对值。
         """
-        a = self._normalize_angle_180(raw_angle_deg)
-        # 角度以 180° 为等价周期，先计算相对两条主轴的最小差值
-        tilt_h = self._normalize_angle_180(a)
-        if tilt_h > 90.0:
-            tilt_h -= 180.0
-        elif tilt_h < -90.0:
-            tilt_h += 180.0
-
-        tilt_v = self._normalize_angle_180(a - 90.0)
-        if tilt_v > 90.0:
-            tilt_v -= 180.0
-        elif tilt_v < -90.0:
-            tilt_v += 180.0
-
-        abs_h = abs(float(tilt_h))
-        abs_v = abs(float(tilt_v))
-
-        # 两轴都接近时，使用 bbox 方向作为稳定兜底，避免角度在预览中抖动跳变
-        if abs(abs_h - abs_v) <= 3.0:
-            tilt = float(tilt_v if int(bbox_h) >= int(bbox_w) else tilt_h)
-        else:
-            tilt = float(tilt_h if abs_h <= abs_v else tilt_v)
-
-        if tilt > 90.0:
-            tilt -= 180.0
-        elif tilt < -90.0:
-            tilt += 180.0
-        return float(tilt)
+        return to_small_tilt_by_axis(raw_angle_deg, bbox_w, bbox_h)
 
     def _estimate_oriented_size(
         self,

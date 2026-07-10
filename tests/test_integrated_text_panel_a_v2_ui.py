@@ -4,7 +4,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtTest import QTest
+from PySide6 import QtTest
 from PySide6.QtWidgets import QApplication, QSizePolicy
 
 from app.models.text_layer import TextLayer
@@ -162,7 +162,7 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
         center = QPoint(switch.width() // 2, switch.height() // 2)
 
         self.assertTrue(switch.hitButton(center))
-        QTest.mouseClick(switch, Qt.LeftButton, pos=center)
+        QtTest.QTest.mouseClick(switch, Qt.LeftButton, pos=center)
         QApplication.processEvents()
 
         self.assertTrue(switch.isChecked())
