@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject, Signal
 
 from app.models.document import Document
 from app.ui.new_canvas_dialog import NewCanvasDialog
+from app.utils.initial_preview import prime_initial_preview
 
 
 class DocumentController(QObject):
@@ -60,6 +61,7 @@ class DocumentController(QObject):
                 try:
                     # 加载文档
                     if document.load_document(file_path):
+                        prime_initial_preview(document)
                         # 创建新标签页
                         tab_index = self.main_window.create_new_tab(document)
                         self.document_operation_completed.emit("open_document", True)

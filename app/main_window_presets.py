@@ -15,6 +15,7 @@ from app.ui.layer_properties import LayerPropertiesPanel
 from app.utils.preset_manager import PresetManager
 from app.ui.status_indicators import status_manager
 from app.ui.visual_hierarchy import VisualHierarchy
+from app.utils.initial_preview import prime_initial_preview
 import os
 import pickle
 
@@ -205,6 +206,7 @@ class MainWindowPresets(object):
             if documents:
                 created_tabs = 0
                 for document in documents:
+                    prime_initial_preview(document)
                     tab_index = self.create_new_tab(document)
                     tab_name = getattr(document, 'original_tab_name', None) or getattr(document, 'tab_name', None) or f"标签页 {tab_index + 1}"
                     self.tab_widget.setTabText(tab_index, tab_name)
