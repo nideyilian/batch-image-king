@@ -25,14 +25,15 @@ class MainWindowTabs(object):
     def active_document_changed(self, document):
         """当活动文档变更时"""
         # 先断开旧文档的信号连接
-        if hasattr(self, 'document') and self.document:
+        old_document = getattr(self, '_document', None)
+        if old_document:
             try:
                 # 断开信号连接
-                self.document.history_changed.disconnect(self.update_history_actions)
-                self.document.document_changed.disconnect(self.update_document_info)
+                old_document.history_changed.disconnect(self.update_history_actions)
+                old_document.document_changed.disconnect(self.update_document_info)
                 # 断开图层选择信号
-                if hasattr(self.document, 'layer_selected'):
-                    self.document.layer_selected.disconnect(self.update_copy_paste_actions)
+                if hasattr(old_document, 'layer_selected'):
+                    old_document.layer_selected.disconnect(self.update_copy_paste_actions)
             except Exception:
                 logger.warning("静默异常已忽略: except in main_window_tabs.py", exc_info=True)
                 pass

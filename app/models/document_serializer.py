@@ -9,6 +9,12 @@ import pickle
 from typing import Optional, Dict, Any
 from PySide6.QtCore import QObject, Signal
 
+from app.models.serialization_compat import (
+    normalize_layer_data,
+    restore_binding_groups,
+    restore_parent_group_id,
+    serialize_binding_groups,
+)
 from app.utils.trusted_pickle import load_trusted_pickle
 
 
@@ -146,15 +152,7 @@ class DocumentSerializer(QObject):
         # 如果有绑定管理器，也保存（适配新接口，弃用旧方法）
         if hasattr(document, 'binding_manager') and document.binding_manager:
             try:
-                if hasattr(document.binding_manager, 'serialize') and callable(document.binding_manager.serialize):
-                    document_data['binding_groups'] = document.binding_manager.serialize()
-                elif hasattr(document.binding_manager, 'get_all_groups_data') and callable(document.binding_manager.get_all_groups_data):
-                    # 兼容旧接口（不推荐）：返回旧格式
-                    document_data['binding_groups'] = document.binding_manager.get_all_groups_data()
-                else:
-                    # 显式弃用：无可用接口
-                    print("[DocumentSerializer] 绑定管理器未提供序列化接口，已跳过绑定数据保存")
-                    document_data['binding_groups'] = {}
+                document_data['binding_groups'] = serialize_binding_groups(document.binding_manager)
             except Exception as e:
                 print(f"[DocumentSerializer] 保存绑定组失败: {e}")
                 document_data['binding_groups'] = {}
@@ -297,12 +295,7 @@ class DocumentSerializer(QObject):
                 try:
                     binding_data = document_data.get('binding_groups') or {}
                     manager = document.binding_manager
-                    if hasattr(manager, 'restore_from_data') and callable(manager.restore_from_data):
-                        manager.restore_from_data(binding_data)
-                    elif hasattr(manager, 'deserialize') and callable(manager.deserialize):
-                        manager.deserialize(binding_data, getattr(document, 'layers', []))
-                    else:
-                        print("[DocumentSerializer] 绑定管理器缺少可用的恢复接口，已跳过绑定组恢复")
+                    restore_binding_groups(manager, binding_data, getattr(document, 'layers', []))
                 except Exception as e:
                     print(f"[DocumentSerializer] 恢复绑定组失败: {e}")
 
@@ -334,6 +327,7 @@ class DocumentSerializer(QObject):
             Layer实例
         """
         # 根据图层类型创建相应的图层对象
+        layer_data = normalize_layer_data(layer_data)
         layer_type = layer_data.get('type', 'image')
         
         if layer_type == 'group':
@@ -343,29 +337,17 @@ class DocumentSerializer(QObject):
             # 文字图层
             from app.models.text_layer import TextLayer
             layer = TextLayer.deserialize(layer_data, parent=parent)
-            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
-            if parent_group_id:
-                setattr(layer, 'parent_group_id', str(parent_group_id))
-                setattr(layer, '_parent_group_id', str(parent_group_id))
-            return layer
+            return restore_parent_group_id(layer, layer_data)
         elif layer_type == 'shaped':
             # 异形图层
             from app.models.shaped_layer_new import ShapedLayer
             layer = ShapedLayer.deserialize(layer_data, parent=parent)
-            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
-            if parent_group_id:
-                setattr(layer, 'parent_group_id', str(parent_group_id))
-                setattr(layer, '_parent_group_id', str(parent_group_id))
-            return layer
+            return restore_parent_group_id(layer, layer_data)
         else:
             # 普通图层
             from app.models.layer_new import Layer
             layer = Layer.deserialize(layer_data, parent=parent)
-            parent_group_id = layer_data.get('parent_group_id') or layer_data.get('_parent_group_id')
-            if parent_group_id:
-                setattr(layer, 'parent_group_id', str(parent_group_id))
-                setattr(layer, '_parent_group_id', str(parent_group_id))
-            return layer
+            return restore_parent_group_id(layer, layer_data)
 
 
 if __name__ == "__main__":

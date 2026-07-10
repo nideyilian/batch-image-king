@@ -17,6 +17,12 @@
 
 from __future__ import annotations
 
+# Architecture note:
+# RenderService is the standard render boundary. Interactive canvas preview uses
+# app.services.preview_render_service as a separate latency-oriented boundary.
+# Direct FastRenderer imports outside these services should be treated as
+# explicit exceptions and covered by contract tests.
+
 from dataclasses import dataclass
 import time
 from typing import Callable, Optional

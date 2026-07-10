@@ -80,9 +80,8 @@ class DocumentExportRender:
                 if not render_result.ok and render_result.error:
                     print(f"[导出] 渲染服务提示: {render_result.error}")
             except Exception:
-                from app.utils.fast_renderer import get_global_fast_renderer
-                fast_renderer = get_global_fast_renderer()
-                image = fast_renderer.render_batch(self)
+                from app.services.render_service import render_document_legacy_fallback
+                image = render_document_legacy_fallback(self, batch_mode=True)
 
             if image is None:
                 self._last_export_error = "渲染失败：渲染器返回None"

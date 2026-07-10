@@ -6,6 +6,7 @@
 
 import copy
 import logging
+import os
 
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 from PySide6.QtCore import QObject, Signal
@@ -107,6 +108,9 @@ class LayerController(QObject):
 
         # 旧格式：直接存图层对象（兼容）
         if item is not None and hasattr(item, 'duplicate'):
+            if os.environ.get("BTPW_ENABLE_LEGACY_LAYER_CLIPBOARD", "0") != "1":
+                logger.warning("Legacy layer-object clipboard payload ignored")
+                return []
             try:
                 return [item.duplicate(parent=self.document)]
             except TypeError:

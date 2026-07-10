@@ -236,28 +236,16 @@ class CanvasWidgetCanvasRender(object):
         if not using_snapshot:
             render_document = self.document
         try:
-            from app.utils.fast_renderer import get_global_fast_renderer
-            fast_renderer = get_global_fast_renderer()
-            if interactive_low_quality and active_layer_index >= 0:
-                image = fast_renderer.render_preview_incremental(
-                    render_document,
-                    active_layer_index=active_layer_index,
-                    force_refresh=force_refresh,
-                    interactive_low_quality=True
-                )
-            elif interactive_low_quality:
-                image = fast_renderer.render_preview_live(
-                    render_document,
-                    interactive_low_quality=True
-                )
-            else:
-                image = fast_renderer.render_preview(
-                    render_document,
-                    force_refresh=force_refresh,
-                    interactive_low_quality=interactive_low_quality
-                )
-            if image is not None:
-                return image
+            from app.services.preview_render_service import render_preview_to_image
+
+            result = render_preview_to_image(
+                render_document,
+                force_refresh=force_refresh,
+                interactive_low_quality=interactive_low_quality,
+                active_layer_index=active_layer_index,
+            )
+            if result.image is not None:
+                return result.image
         except Exception:
             logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             pass

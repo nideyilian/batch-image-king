@@ -30,6 +30,26 @@ import pickle
 ICON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "resources")
 
 class MainWindow(QMainWindow, MainWindowUi, MainWindowTabs, MainWindowActions, MainWindowPresets, MainWindowMisc):
+    @property
+    def document(self):
+        manager = getattr(self, "document_manager", None)
+        if manager is not None:
+            try:
+                active = manager.get_active_document()
+                if active is not None:
+                    return active
+            except Exception:
+                pass
+        return getattr(self, "_document", None)
+
+    @document.setter
+    def document(self, value):
+        self._document = value
+
+    def current_document(self):
+        """Canonical current-document accessor for new code."""
+        return self.document
+
     def __init__(self):
         super().__init__()
         

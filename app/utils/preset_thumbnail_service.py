@@ -57,8 +57,10 @@ class PresetThumbnailService:
             return None
 
         try:
-            from app.utils.fast_renderer import get_global_fast_renderer
-            preview = get_global_fast_renderer().render_preview(documents[0], force_refresh=True)
+            from app.services.preview_render_service import render_preview_to_image
+
+            result = render_preview_to_image(documents[0], force_refresh=True)
+            preview = result.image
         except Exception:
             preview = documents[0].render_document() if hasattr(documents[0], "render_document") else None
 

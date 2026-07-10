@@ -15,12 +15,40 @@ from __future__ import annotations
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import logging
+from dataclasses import dataclass
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class BatchExportResult:
+    success: bool
+    error: str = ""
+    report: Optional[dict] = None
+    stage: str = ""
+    cleanup_required: bool = True
+
+
 class DocumentExportBatch:
     """Document 导出相关：批量执行子 mixin。"""
+
+    def _finish_batch_export_result(self, result: BatchExportResult) -> bool:
+        self._is_batch_export_running = False
+        if result.report is not None:
+            self._last_export_report = result.report
+        if result.error:
+            self._last_export_error = result.error
+        if hasattr(self, 'export_stage_updated'):
+            self.export_stage_updated.emit("收尾清理")
+        if result.cleanup_required:
+            try:
+                self._cleanup_layers_after_export()
+            except Exception:
+                logger.warning("Batch export cleanup failed", exc_info=True)
+        if hasattr(self, 'export_stage_updated'):
+            self.export_stage_updated.emit(result.stage or ("导出完成" if result.success else "导出失败"))
+        return bool(result.success)
 
     def batch_export(
         self,
@@ -108,11 +136,20 @@ class DocumentExportBatch:
                     if worker_result.success:
                         if hasattr(self, 'export_stage_updated'):
                             self.export_stage_updated.emit("导出完成")
-                        return True
+                        return self._finish_batch_export_result(
+                            BatchExportResult(success=True, stage="导出完成", cleanup_required=False)
+                        )
                     self._last_export_error = worker_result.error or "独立导出进程失败"
                     if hasattr(self, 'export_stage_updated'):
                         self.export_stage_updated.emit("导出失败")
-                    return False
+                    return self._finish_batch_export_result(
+                        BatchExportResult(
+                            success=False,
+                            error=worker_result.error or "独立导出进程失败",
+                            stage="导出失败",
+                            cleanup_required=False,
+                        )
+                    )
         except Exception as worker_launch_error:
             print(f"[批量导出] 独立导出进程不可用，回退内部导出: {worker_launch_error}")
         if hasattr(self, 'export_stage_updated'):
@@ -138,10 +175,9 @@ class DocumentExportBatch:
             return False
         try:
             # 只清理渲染缓存，保留其他状态
-            from app.utils.fast_renderer import get_global_fast_renderer
-            renderer = get_global_fast_renderer()
-            if hasattr(renderer, 'clear_cache'):
-                renderer.clear_cache()
+            from app.services.preview_render_service import clear_preview_render_cache
+            clear_preview_render_cache()
+            if True:
                 print("[🔧 批量导出] ✅ 渲染缓存已清理")
         except Exception as e:
             print(f"[🔧 批量导出] ⚠️ 缓存清理失败: {e}")
@@ -274,7 +310,9 @@ class DocumentExportBatch:
                 self._cleanup_layers_after_export()
                 if hasattr(self, 'export_stage_updated'):
                     self.export_stage_updated.emit("导出完成")
-                return True
+                return self._finish_batch_export_result(
+                    BatchExportResult(success=True, stage="导出完成", cleanup_required=False)
+                )
             else:
                 print(f"[批量导出] 预计算导出失败")
                 if hasattr(self, 'export_stage_updated'):
@@ -284,7 +322,9 @@ class DocumentExportBatch:
                 self._cleanup_layers_after_export()
                 if hasattr(self, 'export_stage_updated'):
                     self.export_stage_updated.emit("导出失败")
-                return False
+                return self._finish_batch_export_result(
+                    BatchExportResult(success=False, stage="导出失败", cleanup_required=False)
+                )
 
         except Exception as e:
             print(f"[批量导出] 预计算导出异常: {e}")
@@ -295,7 +335,9 @@ class DocumentExportBatch:
             self._is_batch_export_running = False
             # 🔧 关键修复：清理所有图层的临时状态
             self._cleanup_layers_after_export()
-            return False
+            return self._finish_batch_export_result(
+                BatchExportResult(success=False, error=str(e), stage="导出异常", cleanup_required=False)
+            )
 
     def _clear_layer_temporary_states(self):
         """加载文档后清理所有图层的临时状态"""
