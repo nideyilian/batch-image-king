@@ -59,7 +59,7 @@ class FastRendererPreview(object):
     """Mixin for fast_renderer_preview (split from FastRenderer)."""
 
     @_serialized_preview
-    def render_preview(self, document, force_refresh: bool = False, interactive_low_quality: bool = False) -> Optional[Image.Image]:
+    def render_preview(self, document, force_refresh: bool = False, interactive_low_quality: bool = False, cancel_token=None) -> Optional[Image.Image]:
         """预览渲染 - 优化版本，使用智能缓存和内存管理"""
         quality_level = 'preview_interactive' if interactive_low_quality else 'preview'
         log_branch(
@@ -153,10 +153,13 @@ class FastRendererPreview(object):
         document,
         active_layer_index: int,
         force_refresh: bool = False,
-        interactive_low_quality: bool = True
+        interactive_low_quality: bool = True,
+        cancel_token=None,
     ) -> Optional[Image.Image]:
         """交互期增量预览：复用静态底图，仅重算当前操作图层并合成。"""
         try:
+            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+                return None
             if active_layer_index < 0 or active_layer_index >= len(document.layers):
                 return self.render_preview(force_refresh=force_refresh, document=document, interactive_low_quality=interactive_low_quality)
 
@@ -222,15 +225,19 @@ class FastRendererPreview(object):
     def render_preview_live(
         self,
         document,
-        interactive_low_quality: bool = True
+        interactive_low_quality: bool = True,
+        cancel_token=None,
     ) -> Optional[Image.Image]:
         """Render the current document state directly for responsive interaction."""
         try:
+            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+                return None
             composition = self._fast_render(
                 document,
                 preview_mode=True,
                 was_just_loaded=False,
-                low_quality_preview=interactive_low_quality
+                low_quality_preview=interactive_low_quality,
+                cancel_token=cancel_token,
             )
             if composition is not None:
                 self._last_preview_snapshot = composition.copy()
@@ -293,7 +300,8 @@ class FastRendererPreview(object):
         preview_mode: bool = True,
         was_just_loaded: bool = False,
         low_quality_preview: bool = False,
-        skip_layer_index: int = -1
+        skip_layer_index: int = -1,
+        cancel_token=None,
     ) -> Optional[Image.Image]:
         """快速渲染实现"""
         render_scale = self._get_interactive_render_scale(document, preview_mode, low_quality_preview)
@@ -334,6 +342,9 @@ class FastRendererPreview(object):
         
         # 渲染每个图层
         for layer in visible_layers:
+            # 阶段 4：每层渲染前检查 token，过期任务尽早返回
+            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+                return composition
             # 获取图层属性
             opacity = getattr(layer, 'opacity', 1.0)
             blend_mode = self._get_layer_blend_mode(layer)

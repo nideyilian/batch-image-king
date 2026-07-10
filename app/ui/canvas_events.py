@@ -8,10 +8,130 @@ from PySide6.QtGui import QPainter, QColor, QPen, QImage, QPixmap, QCursor, QBru
 from PySide6.QtCore import Qt, QRect, QPoint, QSize, Signal, QTimer, QRunnable, QThreadPool
 from app.ui.dark_theme import CursorDarkTheme
 from app.utils.layer_tree import (    child_indices_for_group,    expand_group_indices,    group_bounds,    is_layer_group,    is_effectively_locked,    is_effectively_visible,)
+from app.ui.preview_interaction_overlay import _LayerSurface, make_pixmap_from_image
+from PIL import Image
+import logging
 import time
 import threading
 
+logger = logging.getLogger(__name__)
+
 class CanvasWidgetCanvasEvents(object):
+    def _begin_interaction_overlay(self, kind, layer_indices, start_positions):
+        """Capture a static base pixmap and layer surfaces for an overlay drag.
+
+        ``start_positions`` is a dict of {layer_index: (x, y)} captured BEFORE
+        the mouse moved.  After this call the canvas widget will not mutate
+        the document during move events — only the temporary delta is updated.
+        """
+        renderer = None
+        try:
+            from app.services.preview_render_service import get_preview_render_service
+            service = get_preview_render_service()
+            # service 内部用 global fast renderer，这里只是触发一次合成
+        except Exception:
+            service = None
+
+        base_image = None
+        if getattr(self, "_composition_pixmap_cache", None) is not None and not self._composition_pixmap_cache.isNull():
+            # 优先复用当前合成图（拖拽中通常就是上一帧结果），保证低延迟。
+            try:
+                base_image = self._qpixmap_to_pil(self._composition_pixmap_cache)
+            except Exception:
+                base_image = None
+        if base_image is None and service is not None:
+            try:
+                from app.services.preview_render_service import PreviewRenderRequest
+                result = service.render(
+                    PreviewRenderRequest(
+                        document=self.document,
+                        force_refresh=False,
+                        interactive_low_quality=True,
+                    )
+                )
+                base_image = result.image
+            except Exception:
+                base_image = None
+
+        if base_image is not None:
+            try:
+                self._interaction_overlay.base_pixmap = make_pixmap_from_image(base_image)
+                self._interaction_overlay.base_composition_image = base_image.copy()
+            except Exception:
+                self._interaction_overlay.base_pixmap = None
+                self._interaction_overlay.base_composition_image = None
+        else:
+            self._interaction_overlay.base_pixmap = None
+            self._interaction_overlay.base_composition_image = None
+
+        self._interaction_overlay.delta = QPoint(0, 0)
+        self._interaction_overlay.surfaces.clear()
+        self._interaction_overlay.layer_indices = list(layer_indices)
+        self._interaction_overlay.kind = kind
+        self._interaction_overlay.started_at_ms = time.time() * 1000.0
+
+        # 预取活动图层的 surface：使用 FastRenderer._get_layer_surface_cached
+        # 注意：仅在白名单文件内允许直接 import；这里我们通过 service
+        # 提供的轻量入口获取 surface。
+        if base_image is not None:
+            for idx in layer_indices:
+                if not (0 <= idx < len(self.document.layers)):
+                    continue
+                layer = self.document.layers[idx]
+                if layer is None or getattr(layer, "_is_group", False):
+                    continue
+                surface_img = self._get_layer_surface_for_overlay(layer)
+                if surface_img is None:
+                    continue
+                sx, sy = start_positions.get(idx, (int(getattr(layer, "x", 0)), int(getattr(layer, "y", 0))))
+                self._interaction_overlay.surfaces[idx] = _LayerSurface(
+                    layer_index=idx,
+                    base_x=int(sx),
+                    base_y=int(sy),
+                    width=int(getattr(layer, "width", surface_img.width)),
+                    height=int(getattr(layer, "height", surface_img.height)),
+                    image=surface_img,
+                )
+
+        self._interaction_overlay.active = True
+        # overlay 模式下不再依赖节流重渲染
+        self._interactive_low_quality_active = False
+        self._interactive_requires_recompose = False
+
+    def _get_layer_surface_for_overlay(self, layer):
+        """阶段 2 辅助：尽量拿到一个图层的 PIL 表面用于 overlay 绘制。
+
+        直接走 preview_render_service 提供的接口，避免在 UI 层直接引用
+        FastRenderer（白名单规则）。
+        """
+        try:
+            from app.services.preview_render_service import get_layer_surface_for_overlay
+            return get_layer_surface_for_overlay(self.document, layer)
+        except Exception:
+            pass
+        try:
+            cached = getattr(layer, "cached_image", None) or getattr(layer, "_cached_image", None)
+            if cached is not None:
+                return cached
+        except Exception:
+            pass
+        return None
+
+    def _end_interaction_overlay(self):
+        self._interaction_overlay.reset()
+
+    def _qpixmap_to_pil(self, pixmap):
+        if pixmap is None or pixmap.isNull():
+            return None
+        try:
+            qimage = pixmap.toImage().convertToFormat(QImage.Format_RGBA8888)
+            width = qimage.width()
+            height = qimage.height()
+            data = qimage.bits().tobytes()
+            return Image.frombytes("RGBA", (width, height), data, "raw", "RGBA", 0, 1)
+        except Exception:
+            return None
+
     def mousePressEvent(self, event):
         """鼠标按下事件处理"""
         if event.button() == Qt.LeftButton:
@@ -115,12 +235,53 @@ class CanvasWidgetCanvasEvents(object):
                     event.accept()
                     return
 
-            # 检查点击的位置是否在图层上
-            layer_index = self.get_layer_at_position(event.pos())
+            # 检查点击的位置是否命中图层（返回从顶到底的命中栈）
+            hit_stack = self.get_layers_at_position(event.pos())
 
-            if layer_index >= 0:
-                # 立即选中图层（点击选中）
-                if not event.modifiers() & Qt.AltModifier:
+            if hit_stack:
+                modifiers = event.modifiers()
+                alt_or_ctrl = bool(modifiers & (Qt.AltModifier | Qt.ControlModifier))
+                shift = bool(modifiers & Qt.ShiftModifier)
+
+                if alt_or_ctrl:
+                    # Alt/Ctrl：在当前位置命中的图层栈里循环/穿透选择下一层。
+                    current = self.document.selected_layer_index
+                    if current in hit_stack:
+                        cur_pos = hit_stack.index(current)
+                        target = hit_stack[(cur_pos + 1) % len(hit_stack)]
+                    else:
+                        target = hit_stack[0]
+                    if hasattr(self.document, 'select_layers'):
+                        self.document.select_layers([target], primary_index=target)
+                    else:
+                        self.document.select_layer(target)
+                    layer_index = target
+                    if modifiers & Qt.ControlModifier:
+                        # Ctrl：仅穿透选择，不启动拖拽。
+                        event.accept()
+                        return
+                    # Alt：选中并允许拖拽。
+                elif shift:
+                    # Shift：在选中集合中切换该图层（加入 / 移除）。
+                    layer_index = hit_stack[0]
+                    selected_indices = list(getattr(self.document, 'selected_layer_indices', []) or [])
+                    if layer_index in selected_indices:
+                        new_selection = [idx for idx in selected_indices if idx != layer_index]
+                        new_primary = new_selection[0] if new_selection else -1
+                    else:
+                        new_selection = selected_indices + [layer_index]
+                        new_primary = layer_index
+                    if hasattr(self.document, 'select_layers'):
+                        self.document.select_layers(new_selection, primary_index=new_primary)
+                    else:
+                        self.document.select_layer(new_primary)
+                    # 移除后该图层不在选中集合里，则不发起拖拽。
+                    if layer_index not in getattr(self.document, 'selected_layer_indices', []):
+                        event.accept()
+                        return
+                else:
+                    # 普通点击：选中命中栈最上层（普通点击永远取最上层）。
+                    layer_index = hit_stack[0]
                     selected_indices = list(getattr(self.document, 'selected_layer_indices', []) or [])
                     if layer_index not in selected_indices:
                         if hasattr(self.document, 'select_layers'):
@@ -373,6 +534,15 @@ class CanvasWidgetCanvasEvents(object):
                         self.is_dragging_layer = True
                         self.document.save_state("批量移动图层前" if len(drag_indices) > 1 else "移动图层前")
                         self.setCursor(Qt.ClosedHandCursor)
+                        # 阶段 2：进入 overlay 模式
+                        try:
+                            self._begin_interaction_overlay(
+                                kind="move",
+                                layer_indices=list(drag_indices),
+                                start_positions=dict(getattr(self, 'dragging_layer_start_positions', {}) or {}),
+                            )
+                        except Exception as exc:
+                            logger.warning("启动拖拽 overlay 失败: %s", exc)
                     else:
                         # 图层锁定，取消拖拽
                         self.potential_drag = False
@@ -388,6 +558,7 @@ class CanvasWidgetCanvasEvents(object):
                 self.dragging_layer_index = -1
                 self.layer_drag_start = None
                 self._interactive_low_quality_active = False
+                self._end_interaction_overlay()
                 return
 
             # 计算新位置
@@ -410,7 +581,14 @@ class CanvasWidgetCanvasEvents(object):
                 delta_x = new_x - base_start_x
                 delta_y = new_y - base_start_y
 
-                # 更新图层位置。多选时保持各图层相对位置。
+                # overlay 模式：只更新临时 delta，不写回 layer.x/y
+                if self._interaction_overlay.is_active():
+                    self._interaction_overlay.delta = QPoint(int(round(delta_x * self.zoom_factor)), int(round(delta_y * self.zoom_factor)))
+                    self.update()
+                    event.accept()
+                    return
+
+                # 回退：直接写回（兼容老路径或 overlay 初始化失败时）
                 drag_indices = getattr(self, 'dragging_layer_indices', [self.dragging_layer_index])
                 for idx in drag_indices:
                     if not (0 <= idx < len(self.document.layers)):
@@ -574,11 +752,38 @@ class CanvasWidgetCanvasEvents(object):
                 self.is_dragging_layer = False
                 self._snap_feedback_active = False
 
-                # 如果位置有变化，保存历史记录
-                if self.dragging_layer_index >= 0:
-                    drag_count = len(getattr(self, 'dragging_layer_indices', []) or [self.dragging_layer_index])
-                    self.document.save_state("批量移动图层" if drag_count > 1 else "移动图层")
+                # overlay 模式下，结束时一次性把临时 delta 写回模型
+                if self._interaction_overlay.is_active() and self.dragging_layer_index >= 0:
+                    delta_doc = self._interaction_overlay.delta
+                    if self.zoom_factor > 0:
+                        dx_doc = int(round(delta_doc.x() / self.zoom_factor))
+                        dy_doc = int(round(delta_doc.y() / self.zoom_factor))
+                    else:
+                        dx_doc = dy_doc = 0
+                    start_positions = getattr(self, 'dragging_layer_start_positions', {}) or {}
+                    drag_indices = getattr(self, 'dragging_layer_indices', [self.dragging_layer_index]) or [self.dragging_layer_index]
+                    wrote = False
+                    for idx in drag_indices:
+                        if not (0 <= idx < len(self.document.layers)):
+                            continue
+                        target_layer = self.document.layers[idx]
+                        if is_effectively_locked(target_layer, self.document.layers):
+                            continue
+                        start_x, start_y = start_positions.get(idx, (int(target_layer.x), int(target_layer.y)))
+                        target_layer.x = start_x + dx_doc
+                        target_layer.y = start_y + dy_doc
+                        wrote = True
+                    self._end_interaction_overlay()
+                    if wrote:
+                        drag_count = len(drag_indices)
+                        self.document.save_state("批量移动图层" if drag_count > 1 else "移动图层")
                     self._request_high_quality_refresh()
+                else:
+                    # 如果位置有变化，保存历史记录
+                    if self.dragging_layer_index >= 0:
+                        drag_count = len(getattr(self, 'dragging_layer_indices', []) or [self.dragging_layer_index])
+                        self.document.save_state("批量移动图层" if drag_count > 1 else "移动图层")
+                        self._request_high_quality_refresh()
 
                 self.dragging_layer_index = -1
                 self.layer_drag_start = None
@@ -621,6 +826,19 @@ class CanvasWidgetCanvasEvents(object):
                 self.show_rulers = not self.show_rulers
                 self._persist_view_settings_to_document()
                 self.update()
+                event.accept()
+                return
+
+            # 阶段 1：Ctrl+P 打印预览性能报告（仅在 BTPW_PREVIEW_PERF=1 时有效）
+            if event.key() == Qt.Key_P:
+                try:
+                    from app.utils.preview_perf import is_perf_enabled, PreviewPerfMonitor
+                    if is_perf_enabled():
+                        report = PreviewPerfMonitor.instance().report(force=True)
+                        if report:
+                            print(report)
+                except Exception as exc:
+                    logger.warning("打印预览性能报告失败: %s", exc)
                 event.accept()
                 return
 

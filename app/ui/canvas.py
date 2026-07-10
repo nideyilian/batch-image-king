@@ -19,6 +19,11 @@ from app.ui.canvas_render import CanvasWidgetCanvasRender
 from app.ui.canvas_draw import CanvasWidgetCanvasDraw
 from app.ui.canvas_hit import CanvasWidgetCanvasHit
 from app.ui.canvas_events import CanvasWidgetCanvasEvents
+from app.ui.preview_interaction_overlay import (
+    InteractionOverlayState,
+    _LayerSurface,
+    make_pixmap_from_image,
+)
 import time
 import threading
 
@@ -114,6 +119,17 @@ class CanvasWidget(QWidget, CanvasWidgetCanvasView, CanvasWidgetCanvasRender, Ca
         self.document.document_changed.connect(self._invalidate_composition_cache)
         self.document.layer_changed.connect(self._invalidate_composition_cache)
 
+        # 性能埋点：监控 document/layer_changed 频率。
+        try:
+            from app.utils.preview_perf import is_perf_enabled
+            if is_perf_enabled():
+                from app.utils.preview_perf import PreviewPerfMonitor
+                _perf_monitor = PreviewPerfMonitor.instance()
+                self.document.document_changed.connect(_perf_monitor.record_document_changed)
+                self.document.layer_changed.connect(_perf_monitor.record_layer_changed)
+        except Exception:
+            pass
+
         # 交互过程（拖拽/缩放）刷新节流，避免高频事件导致掉帧
         self._interactive_frame_interval_ms = 16  # 约60FPS，交互期间优先保障鼠标跟手
         self._last_interactive_update_ms = 0.0
@@ -198,6 +214,31 @@ class CanvasWidget(QWidget, CanvasWidgetCanvasView, CanvasWidgetCanvasRender, Ca
         self._max_scaled_composition_cache_entries = 8
         self._composition_mipmap_cache_key = None
         self._composition_mipmap_cache = []
+
+        # 阶段 2：交互 Overlay 状态
+        self._interaction_overlay = InteractionOverlayState()
+        # 阶段 4：后台预览渲染取消 token
+        from app.utils.preview_render_token import PreviewRenderTokenSource
+        self._preview_render_token_source = PreviewRenderTokenSource()
+
+        # 阶段 6：hit-test 缓存
+        self._hit_cache_generation = 0
+        self._hit_cache_built_generation = -1
+        self._hit_cache_zoom = -1.0
+        self._hit_cache_offset_x = 0
+        self._hit_cache_offset_y = 0
+        self._hit_cache_layers_version = -1
+        self._hit_cache_hit_version = -1
+        self._hit_rect_cache = {}  # layer_index -> QRect
+        self._hit_path_cache = {}  # layer_index -> QPainterPath
+        self._hit_clone_positions_cache = {}  # layer_index -> [positions]
+        self._hit_visible_layers_cache = []  # [layer_index, ...]
+        self._hit_cache_locked_states = {}  # layer_index -> bool
+
+        # 阶段 7：选中覆盖层几何缓存（key=layer_index, zoom, offset_x, offset_y）
+        self._selection_overlay_cache = None
+        self._selection_overlay_cache_key = None
+        self._selection_overlay_cache_geom = None  # {'display_rects': [...], 'handles': [...], ...}
 
         # Photoshop风格标尺与参考线
         self.show_rulers = True

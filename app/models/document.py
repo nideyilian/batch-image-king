@@ -122,6 +122,11 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         # 快速首帧标记：随机化等整体变更后先低质量即时出图，后台补全全质量
         self._quick_first_frame = False
 
+        # 命中测试版本：任何影响“画布点击层级/几何/可见性/锁定/分身/组结构”
+        # 的变更都必须递增它。预览点击命中缓存以该版本为准，而不是只看
+        # 图层数量，避免“画面已刷新但点击仍命中旧层级/旧矩形”的问题。
+        self.hit_test_version = 0
+
         # 最近一次变更上下文（用于UI增量刷新）
         self._last_change_context = None
 
@@ -228,6 +233,14 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
     def clear_change_context(self):
         self._last_change_context = None
 
+    def bump_hit_test_version(self):
+        """递增命中测试版本，强制预览点击缓存失效。
+
+        应在以下操作后调用：图层增删、上下移动、显示/隐藏、锁定/解锁、
+        位置/尺寸/旋转变化、形状/路径/圆角变化、分身参数变化、组结构变化。
+        """
+        self.hit_test_version = getattr(self, "hit_test_version", 0) + 1
+
     def get_view_settings(self):
         return self.view_settings
 
@@ -283,6 +296,9 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         self.selected_layer_index = state.get('selected_layer_index', -1)
         self.selected_layer_indices = list(state.get('selected_layer_indices', []))
 
+        # 命中测试缓存需要随撤销/重做的结构变化失效
+        self.bump_hit_test_version()
+
         # 恢复图层
         from app.models.layer_new import Layer as NewLayer
         import logging
@@ -310,4 +326,5 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         self.selected_layer_indices = []
         self.current_file_path = None
         self.is_modified = False
+        self.bump_hit_test_version()
         self.document_changed.emit()

@@ -7,9 +7,38 @@ from PySide6.QtWidgets import QWidget, QScrollArea, QVBoxLayout, QHBoxLayout, QL
 from PySide6.QtGui import QPainter, QColor, QPen, QImage, QPixmap, QCursor, QBrush, QPainterPath
 from PySide6.QtCore import Qt, QRect, QPoint, QSize, Signal, QTimer, QRunnable, QThreadPool
 from app.ui.dark_theme import CursorDarkTheme
-from app.utils.layer_tree import (    child_indices_for_group,    expand_group_indices,    group_bounds,    is_layer_group,    is_effectively_locked,    is_effectively_visible,)
+from app.utils.layer_tree import (    child_indices_for_group,    expand_group_indices,    get_parent_group_id,    group_bounds,    is_layer_group,    is_effectively_locked,    is_effectively_visible,)
 import time
 import threading
+
+# ---------------------------------------------------------------------------
+# 层级契约：预览点击与渲染统一以 document.layers 的列表方向为准。
+#
+#   document.layers[0]     = 底层（最先绘制）
+#   document.layers[-1]    = 顶层（最后绘制，视觉最上）
+#
+# 所有“从顶到底命中”/“从底到顶渲染”的遍历都必须经过这两个 helper，
+# 禁止在业务代码里直接写 reversed(...) / range(...) 方向，避免以后图层面板
+# 显示顺序变化时画布命中逻辑出错。
+# ---------------------------------------------------------------------------
+
+def iter_render_order(layers):
+    """自底向顶（绘制顺序）：index 0 -> len-1。"""
+    return range(len(layers))
+
+
+def iter_hit_order(layers):
+    """自顶向底（命中顺序）：index len-1 -> 0。"""
+    return range(len(layers) - 1, -1, -1)
+
+
+# 预览点击命中相关常量
+# 透明像素命中阈值：alpha >= 该值才算命中（允许半透明阴影/边缘正常点中）。
+_ALPHA_HIT_THRESHOLD = 8
+# 锁定图层是否允许从画布命中：True=可点选但不可拖拽（兼容设计软件，默认当前行为）；
+# False=锁定层不可从画布命中（只能从图层面板选中）。两类语义都请确保
+# “能否选中”与“能否拖动”分离，不要混在一起。
+LOCKED_LAYER_CANVAS_PICKABLE = True
 
 class CanvasWidgetCanvasHit(object):
     def get_layer_rect(self, layer_index):
@@ -340,80 +369,238 @@ class CanvasWidgetCanvasHit(object):
 
     def get_layer_at_position(self, pos):
         """获取鼠标位置所在的图层索引"""
-        # If a group is already selected, treat its visible child bounds as one
-        # editable object so dragging in the preview keeps the group selected.
-        selected_index = getattr(self.document, "selected_layer_index", -1)
-        if 0 <= selected_index < len(self.document.layers):
-            selected_layer = self.document.layers[selected_index]
-            if is_layer_group(selected_layer) and not is_effectively_locked(selected_layer, self.document.layers):
-                rect = self.get_layer_rect(selected_index)
-                if rect and rect.contains(pos):
-                    return selected_index
+        from app.utils.preview_perf import PreviewPerfMonitor, is_perf_enabled, time_block
+        perf = PreviewPerfMonitor.instance() if is_perf_enabled() else None
+        if perf is None:
+            return self._get_layer_at_position_impl(pos)
+        with time_block(perf.hit_test):
+            return self._get_layer_at_position_impl(pos)
 
-        # 从上到下（从顶层到底层）检查图层
-        for i in range(len(self.document.layers) - 1, -1, -1):
-            layer = self.document.layers[i]
-            if layer is None or is_layer_group(layer):
-                continue
-            if (not is_effectively_visible(layer, self.document.layers)) or is_effectively_locked(layer, self.document.layers):
-                continue
+    def _get_layer_at_position_impl(self, pos):
+        """Actual hit-test implementation. See :meth:`get_layer_at_position` for the
+        timed public entry point."""
+        # 阶段 6：使用缓存加速
+        if not self._hit_cache_is_fresh():
+            self._build_hit_cache()
 
-            # 判断是否启用了分身效果
-            is_clone_enabled = (hasattr(layer, 'clone_enabled') and layer.clone_enabled)
+        stack = self.get_layers_at_position(pos)
+        return stack[0] if stack else -1
 
-            if is_clone_enabled:
-                # 先检查原始位置
-                rect = self.get_layer_rect(i)
-                if rect and self._build_rect_path(layer, rect).contains(pos):
-                    return i
+    def _is_layer_canvas_pickable(self, layer, index):
+        """统一判定某个图层是否可从画布点击命中。
 
-                # 如果有分身功能，还需要检查所有分身位置
+        规则（与渲染/图层面板一致）：
+        - 组本身不可直接点选（点组由专门逻辑处理）。
+        - 不可见（含父组隐藏）永远不可命中。
+        - 锁定层：默认仍可点选（LOCKED_LAYER_CANVAS_PICKABLE=True），
+          但“可点选”与“可拖动”是分离的——拖动逻辑里会再次判定锁定并禁止拖动。
+          若要改为“锁定层禁止从画布命中”，把该常量改为 False 即可。
+        """
+        if layer is None or is_layer_group(layer):
+            return False
+        if not is_effectively_visible(layer, self.document.layers):
+            return False
+        if LOCKED_LAYER_CANVAS_PICKABLE:
+            return True
+        return not is_effectively_locked(layer, self.document.layers)
+
+    def _layer_requires_alpha_hit_test(self, layer):
+        """普通图片图层需按透明像素判定，避免“点在上层透明区却选中上层”。
+
+        矢量路径/异形/文字图层由几何 path 覆盖，不需要 alpha 测试。
+        """
+        if layer is None or is_layer_group(layer):
+            return False
+        if bool(getattr(layer, "vector_path_enabled", False)):
+            return False
+        if self._get_shape_value(layer) != "rectangle":
+            return False
+        try:
+            from app.models.text_layer import TextLayer
+            if isinstance(layer, TextLayer):
+                return False
+        except Exception:
+            pass
+        img = self._get_layer_alpha_image(layer)
+        if img is None:
+            return False
+        # 没有 alpha 通道（如不透明 JPEG）则无需测试
+        return img.mode in ("RGBA", "RGBa", "LA")
+
+    def _get_layer_alpha_image(self, layer):
+        """取得用于透明像素命中的 RGBA 图像（优先用已渲染缓存，避免重复加载）。"""
+        img = getattr(layer, "cached_image", None)
+        if not self._is_pil_image(img):
+            img = None
+        if img is None:
+            getter = getattr(layer, "get_image", None)
+            if callable(getter):
                 try:
-                    if hasattr(layer, 'get_clone_positions') and callable(layer.get_clone_positions):
-                        clone_positions = layer.get_clone_positions()
+                    img = getter()
+                except Exception:
+                    img = None
+        if not self._is_pil_image(img):
+            return None
+        if img.mode != "RGBA":
+            try:
+                img = img.convert("RGBA")
+            except Exception:
+                return None
+        return img
 
-                        # 获取画布矩形
-                        canvas_rect = self.get_canvas_rect()
-                        if not canvas_rect:
-                            continue
+    @staticmethod
+    def _is_pil_image(obj):
+        return obj is not None and hasattr(obj, "mode") and hasattr(obj, "getpixel") and hasattr(obj, "width")
 
-                        # 检查每个分身位置
-                        mirror_mode = getattr(layer, 'clone_mirror_mode', 'none')
-                        positions = clone_positions
-                        if mirror_mode and mirror_mode != 'none':
-                            base = positions[:]
-                            min_x = min([x for x, _ in base])
-                            max_x = max([x + layer.width for x, _ in base])
-                            min_y = min([y for _, y in base])
-                            max_y = max([y + layer.height for _, y in base])
-                            group_width = max_x - min_x
-                            group_height = max_y - min_y
-                            mirrored_positions = []
-                            if mirror_mode == 'horizontal':
-                                mirrored_left = self.document.canvas_width - (min_x + group_width)
-                                for cx, cy in base:
-                                    offset_x = cx - min_x
-                                    mirrored_positions.append((mirrored_left + offset_x, cy))
-                            elif mirror_mode == 'vertical':
-                                mirrored_top = self.document.canvas_height - (min_y + group_height)
-                                for cx, cy in base:
-                                    offset_y = cy - min_y
-                                    mirrored_positions.append((cx, mirrored_top + offset_y))
-                            positions = positions + mirrored_positions
-                        for clone_pos in positions:
-                            clone_x, clone_y = clone_pos
-                            clone_rect = self._get_display_rect_for_layer_position(layer, clone_x, clone_y, canvas_rect)
-                            if self._build_rect_path(layer, clone_rect).contains(pos):
-                                return i
-                except Exception as e:
-                    print(f"检查分身图层点击失败: {e}")
-            else:
-                # 常规图层
-                rect = self.get_layer_rect(i)
-                if rect and self._build_rect_path(layer, rect).contains(pos):
-                    return i
+    def _hit_alpha(self, layer, pos, rect):
+        """命中透明像素判定：返回 True 表示该位置像素不透明（>=阈值）。"""
+        img = self._get_layer_alpha_image(layer)
+        if img is None:
+            return True  # 取不到图就按命中处理，避免误伤
+        if rect.width() <= 0 or rect.height() <= 0:
+            return False
+        nx = (pos.x() - rect.x()) / float(rect.width())
+        ny = (pos.y() - rect.y()) / float(rect.height())
+        if not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0):
+            return False
+        w, h = img.width, img.height
+        if w <= 0 or h <= 0:
+            return True
+        px = min(w - 1, max(0, int(round(nx * (w - 1)))))
+        py = min(h - 1, max(0, int(round(ny * (h - 1)))))
+        try:
+            pix = img.getpixel((px, py))
+        except Exception:
+            return True
+        if isinstance(pix, (tuple, list)):
+            alpha = pix[-1] if len(pix) else 255
+        else:
+            alpha = pix
+        return int(alpha) >= _ALPHA_HIT_THRESHOLD
 
-        return -1  # 没有找到图层
+    def _hit_layer_geometry(self, layer, i, pos, canvas_rect):
+        """对单个图层（含分身/镜像）做几何+透明像素精确命中。"""
+        rect = self._hit_rect_cache.get(i)
+        if rect is None:
+            rect = self.get_layer_rect(i)
+            if rect is None:
+                return False
+        path = self._hit_path_cache.get(i)
+        if path is None:
+            path = self._build_rect_path(layer, rect)
+        if rect.contains(pos) and path.contains(pos):
+            if self._layer_requires_alpha_hit_test(layer) and not self._hit_alpha(layer, pos, rect):
+                return False
+            return True
+
+        # 分身 / 镜像：同一图层的所有实例共用同一个层级，命中任意分身都选中该层。
+        clone_positions = self._hit_clone_positions_cache.get(i)
+        if not clone_positions or canvas_rect is None:
+            return False
+        try:
+            mirror_mode = getattr(layer, "clone_mirror_mode", "none")
+            positions = list(clone_positions)
+            if mirror_mode and mirror_mode != "none":
+                base = positions[:]
+                min_x = min([x for x, _ in base])
+                max_x = max([x + layer.width for x, _ in base])
+                min_y = min([y for _, y in base])
+                max_y = max([y + layer.height for _, y in base])
+                group_width = max_x - min_x
+                group_height = max_y - min_y
+                mirrored_positions = []
+                if mirror_mode == "horizontal":
+                    mirrored_left = self.document.canvas_width - (min_x + group_width)
+                    for cx, cy in base:
+                        offset_x = cx - min_x
+                        mirrored_positions.append((mirrored_left + offset_x, cy))
+                elif mirror_mode == "vertical":
+                    mirrored_top = self.document.canvas_height - (min_y + group_height)
+                    for cx, cy in base:
+                        offset_y = cy - min_y
+                        mirrored_positions.append((cx, mirrored_top + offset_y))
+                positions = positions + mirrored_positions
+            for clone_pos in positions:
+                clone_x, clone_y = clone_pos
+                clone_rect = self._get_display_rect_for_layer_position(layer, clone_x, clone_y, canvas_rect)
+                if self._build_rect_path(layer, clone_rect).contains(pos):
+                    if self._layer_requires_alpha_hit_test(layer) and not self._hit_alpha(layer, pos, clone_rect):
+                        continue
+                    return True
+        except Exception as e:
+            print(f"检查分身图层点击失败: {e}")
+        return False
+
+    def get_layers_at_position(self, pos):
+        """返回鼠标位置从顶到底命中的所有可点图层索引（含组选中规则）。
+
+        返回的列表即“命中栈”：普通点击取第一个；Alt/Ctrl 点击可在栈内循环。
+        不可见、锁定（若禁用）、组容器本身不会出现在普通结果中。
+        """
+        # 阶段 6：使用缓存加速
+        if not self._hit_cache_is_fresh():
+            self._build_hit_cache()
+
+        canvas_rect = self.get_canvas_rect()
+        selected_index = getattr(self.document, "selected_layer_index", -1)
+        selected_layer = self.document.layers[selected_index] if 0 <= selected_index < len(self.document.layers) else None
+
+        # 组选中规则：
+        # 当前已选中一个未锁定的组，且点击落在该组 bounds 内时——
+        #   - 点到具体子图层 -> 返回该子图层（可继续点选嵌套的上层）。
+        #   - 点组空白区域   -> 返回组本身（便于整体拖动组）。
+        # 点击落在组 bounds 之外，则按普通从顶到底逻辑处理。
+        if selected_layer is not None and is_layer_group(selected_layer) \
+                and not is_effectively_locked(selected_layer, self.document.layers):
+            grect = self._hit_rect_cache.get(selected_index)
+            if grect is None:
+                grect = self.get_layer_rect(selected_index)
+            if grect is not None and grect.contains(pos):
+                gid = getattr(selected_layer, "group_id", "")
+                child_stack = []
+                for i in iter_hit_order(self.document.layers):
+                    if i not in self._hit_visible_layers_cache:
+                        continue
+                    layer = self.document.layers[i]
+                    if get_parent_group_id(layer) != gid:
+                        continue
+                    if not self._is_layer_canvas_pickable(layer, i):
+                        continue
+                    if self._hit_layer_geometry(layer, i, pos, canvas_rect):
+                        child_stack.append(i)
+                if child_stack:
+                    # 点到组内具体子图层：默认选中该子图层（列表已是从顶到底）。
+                    return child_stack
+                # 组空白区域：整体操作组。
+                return [selected_index]
+
+        # 普通逻辑：从视觉最上层往下，命中第一个可点图层即收集进栈。
+        result = []
+        for i in iter_hit_order(self.document.layers):
+            if i not in self._hit_visible_layers_cache:
+                continue
+            layer = self.document.layers[i]
+            if not self._is_layer_canvas_pickable(layer, i):
+                continue
+            if self._hit_layer_geometry(layer, i, pos, canvas_rect):
+                result.append(i)
+        if not result:
+            # 没有命中任何普通图层时，允许通过点击“组的空白区域”来选中组本身
+            # （这样组既能在未选中时被点选，又能在已有图层命中时让位给图层）。
+            for i in iter_hit_order(self.document.layers):
+                node = self.document.layers[i]
+                if not is_layer_group(node):
+                    continue
+                if not is_effectively_visible(node, self.document.layers):
+                    continue
+                if is_effectively_locked(node, self.document.layers):
+                    continue
+                grect = self._hit_rect_cache.get(i)
+                if grect is None:
+                    grect = self.get_layer_rect(i)
+                if grect is not None and grect.contains(pos):
+                    return [i]
+        return result
 
     def get_handle_at_position(self, pos, layer_index):
         """获取鼠标位置所在的控制点索引"""

@@ -67,6 +67,7 @@ class DocumentLayers:
         self.selected_layer_index = len(self.layers) - 1
         self.selected_layer_indices = [self.selected_layer_index]
         self._invalidate_render_cache()
+        self.bump_hit_test_version()
         self.layer_changed.emit()
         
         # 发送图层选中信号，确保UI更新选中状态
@@ -97,6 +98,7 @@ class DocumentLayers:
         self.selected_layer_index = len(self.layers) - 1
         self.selected_layer_indices = [self.selected_layer_index]
         self._invalidate_render_cache()
+        self.bump_hit_test_version()
         self.layer_changed.emit()
         
         # 发送图层选中信号，确保UI更新选中状态
@@ -129,6 +131,7 @@ class DocumentLayers:
         self.selected_layer_index = len(self.layers) - 1
         self.selected_layer_indices = [self.selected_layer_index]
         self._invalidate_render_cache()
+        self.bump_hit_test_version()
         self.layer_changed.emit()
         
         # 发送图层选中信号，确保UI更新选中状态
@@ -158,6 +161,7 @@ class DocumentLayers:
         self.layers.append(layer)
         self.selected_layer_index = len(self.layers) - 1
         self.selected_layer_indices = [self.selected_layer_index]
+        self.bump_hit_test_version()
         self.layer_changed.emit()
         
         # 发送图层选中信号，确保UI更新选中状态
@@ -208,6 +212,7 @@ class DocumentLayers:
                 self.selected_layer_indices.insert(0, self.selected_layer_index)
 
             self._invalidate_render_cache()
+            self.bump_hit_test_version()
             self.layer_changed.emit()
             self.layer_selected.emit(self.selected_layer_index)
             self.layers_selection_changed.emit(list(self.selected_layer_indices))
@@ -235,6 +240,7 @@ class DocumentLayers:
                 idx - 1 if idx == index else idx + 1 if idx == index - 1 else idx
                 for idx in getattr(self, 'selected_layer_indices', [])
             ]
+            self.bump_hit_test_version()
             self.layer_changed.emit()
             self.layer_selected.emit(self.selected_layer_index)
             self.layers_selection_changed.emit(list(self.selected_layer_indices))
@@ -262,6 +268,7 @@ class DocumentLayers:
                 idx + 1 if idx == index else idx - 1 if idx == index + 1 else idx
                 for idx in getattr(self, 'selected_layer_indices', [])
             ]
+            self.bump_hit_test_version()
             self.layer_changed.emit()
             self.layer_selected.emit(self.selected_layer_index)
             self.layers_selection_changed.emit(list(self.selected_layer_indices))
@@ -317,6 +324,7 @@ class DocumentLayers:
             self.selected_layer_indices.insert(0, self.selected_layer_index)
         
         # 发送图层变化信号
+        self.bump_hit_test_version()
         self.layer_changed.emit()
         self.layer_selected.emit(self.selected_layer_index)
         self.layers_selection_changed.emit(list(self.selected_layer_indices))
@@ -364,6 +372,17 @@ class DocumentLayers:
         self.selected_layer_index = primary
 
         if selection_changed:
+            # 阶段 8：选择变化不触发合成图重建，只刷 overlay
+            try:
+                if hasattr(self, "set_change_context"):
+                    self.set_change_context(
+                        source="selection",
+                        layer_index=primary,
+                        fields=["selection"],
+                        reason="layer_selection_changed",
+                    )
+            except Exception:
+                pass
             self.layer_changed.emit()
             self.layer_selected.emit(primary)
             self.layers_selection_changed.emit(list(valid_indices))

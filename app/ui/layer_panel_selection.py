@@ -572,6 +572,7 @@ class LayerPanelSelection(object):
             self.document.selected_layer_index = new_group_index
         self.document.layer_changed.emit()
         self.document.document_changed.emit()
+        self.document.bump_hit_test_version()
         self.document.save_state("建立图层组")
 
     def ungroup_selected_groups(self):
@@ -599,6 +600,7 @@ class LayerPanelSelection(object):
             self.document.select_layers(child_selection, primary_index=child_selection[0] if child_selection else -1)
         self.document.layer_changed.emit()
         self.document.document_changed.emit()
+        self.document.bump_hit_test_version()
         self.document.save_state("解散图层组")
 
     def move_layer_up(self):

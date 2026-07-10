@@ -12,8 +12,188 @@ import time
 import threading
 import logging
 
+from app.utils.preview_perf import PreviewPerfMonitor, is_perf_enabled, time_block
+
 logger = logging.getLogger(__name__)
 class CanvasWidgetCanvasRender(object):
+    def _paint_interaction_overlay(self, painter: QPainter):
+        """阶段 2：拖拽 overlay 的画法，绕过后台重合成。"""
+        overlay = self._interaction_overlay
+        canvas_rect = self.get_canvas_rect()
+        if canvas_rect is None or canvas_rect.isEmpty():
+            return
+
+        # 1. 画底图（按当前 zoom 缩放）
+        base_pixmap = overlay.base_pixmap
+        if base_pixmap is not None and not base_pixmap.isNull():
+            scaled = self._get_scaled_composition_pixmap(
+                base_pixmap, canvas_rect.width(), canvas_rect.height()
+            )
+            if scaled is not None:
+                painter.drawPixmap(canvas_rect.x(), canvas_rect.y(), scaled)
+        else:
+            # 没拿到底图时退回 _get_cached_composition_pixmap 的占位
+            cached = self._get_cached_composition_pixmap()
+            if cached is not None and not cached.isNull():
+                painter.drawPixmap(canvas_rect.x(), canvas_rect.y(), cached)
+
+        # 2. 画活动图层：按 delta 偏移
+        delta = overlay.delta
+        for idx, surface in overlay.surfaces.items():
+            if surface.image is None:
+                continue
+            # 把 base 像素位置映射到屏幕位置（base_pixmap 是合成原图，缩放到 canvas_rect）
+            zoom = self.zoom_factor if self.zoom_factor > 0 else 1.0
+            screen_x = canvas_rect.x() + int(round(surface.base_x * zoom)) + delta.x()
+            screen_y = canvas_rect.y() + int(round(surface.base_y * zoom)) + delta.y()
+            screen_w = max(1, int(round(surface.width * zoom)))
+            screen_h = max(1, int(round(surface.height * zoom)))
+            target = QRect(screen_x, screen_y, screen_w, screen_h)
+            try:
+                qimage = self._pil_to_qimage(surface.image)
+            except Exception:
+                continue
+            if qimage.isNull():
+                continue
+            pix = QPixmap.fromImage(qimage)
+            painter.drawPixmap(target, pix)
+
+        # 3. 画画布边框和参考线（与普通 paint 一致）
+        painter.setPen(QPen(QColor(CursorDarkTheme.BORDER_SECONDARY), 1, Qt.SolidLine))
+        painter.drawRect(canvas_rect)
+        self._draw_guides(painter, canvas_rect)
+
+        # 4. 选中框（保持 overlay 期间选中图层可视）
+        try:
+            self._draw_selection_overlay_for_drag(painter)
+        except Exception:
+            pass
+
+        # 5. 拖拽增强（边界、方向指示器）+ 标尺
+        self._draw_drag_enhancements(painter)
+        self._draw_rulers(painter)
+
+    def _pil_to_qimage(self, image):
+        """在 overlay 路径上避开 ImageQt，统一走 RGBA 缓冲（更快、零依赖）。"""
+        if image is None:
+            return QImage()
+        if image.mode != "RGBA":
+            image = image.convert("RGBA")
+        data = image.tobytes("raw", "RGBA")
+        qimage = QImage(
+            data,
+            image.width,
+            image.height,
+            image.width * 4,
+            QImage.Format_RGBA8888,
+        )
+        return qimage.copy()
+
+    def _draw_selection_overlay_for_drag(self, painter: QPainter):
+        """拖拽期间保持选中框/控制点可见。"""
+        if self.document.selected_layer_index < 0 or self.document.selected_layer_index >= len(self.document.layers):
+            return
+        layer = self.document.layers[self.document.selected_layer_index]
+        if layer is None:
+            return
+        canvas_rect = self.get_canvas_rect()
+        if canvas_rect is None:
+            return
+        if is_layer_group(layer):
+            self._draw_group_selection(painter, self.document.selected_layer_index)
+            return
+        # 简化版：用图层真实坐标（拖拽尚未写回时这里用临时 dx/dy）
+        zoom = self.zoom_factor if self.zoom_factor > 0 else 1.0
+        delta = self._interaction_overlay.delta
+        rect = QRect(
+            canvas_rect.x() + int(round(int(getattr(layer, "x", 0)) * zoom)) + delta.x(),
+            canvas_rect.y() + int(round(int(getattr(layer, "y", 0)) * zoom)) + delta.y(),
+            max(1, int(round(int(getattr(layer, "width", 0)) * zoom))),
+            max(1, int(round(int(getattr(layer, "height", 0)) * zoom))),
+        )
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(0, 160, 230), 2, Qt.DashLine))
+        painter.drawRect(rect)
+
+    def _invalidate_hit_cache(self):
+        """阶段 6：使 hit-test 缓存失效。"""
+        self._hit_cache_generation += 1
+        self._hit_rect_cache.clear()
+        self._hit_path_cache.clear()
+        self._hit_clone_positions_cache.clear()
+        self._hit_visible_layers_cache = []
+        self._hit_cache_locked_states.clear()
+
+    def _hit_cache_is_fresh(self):
+        """检查 hit-test 缓存是否仍然有效。
+
+        命中缓存失效的判定必须覆盖三类变化：
+        1. 视图变换（zoom / offset）——几何矩形会变。
+        2. 命中测试版本（document.hit_test_version）——图层增删、上下移动、
+           显示/隐藏、锁定/解锁、位置/尺寸/旋转、形状/路径/圆角、分身参数、
+           组结构等任何影响“点哪里选哪层”的变更。
+        3. 显式失效（_hit_cache_generation）——任何文档/合成变化都让旧缓存作废。
+
+        注意：必须检查 _hit_cache_generation。否则 _invalidate_hit_cache()
+        清空缓存后若 zoom/offset/版本都未变，这里会误判为“新鲜”，导致点击
+        命中落到空缓存（返回 -1），表现为“画面已刷新但点击仍错乱”。
+        """
+        if self._hit_cache_generation != self._hit_cache_built_generation:
+            return False
+        if abs(self.zoom_factor - self._hit_cache_zoom) > 1e-6:
+            return False
+        offset = self.offset
+        if offset.x() != self._hit_cache_offset_x or offset.y() != self._hit_cache_offset_y:
+            return False
+        version = getattr(self.document, "hit_test_version", 0)
+        if version != self._hit_cache_hit_version:
+            return False
+        return True
+
+    def _build_hit_cache(self):
+        """为每个图层预计算矩形 + path，分身位置和可见性。"""
+        canvas_rect = self.get_canvas_rect()
+        if canvas_rect is None:
+            return
+        self._hit_rect_cache.clear()
+        self._hit_path_cache.clear()
+        self._hit_clone_positions_cache.clear()
+        self._hit_visible_layers_cache = []
+        self._hit_cache_locked_states.clear()
+        for i, layer in enumerate(self.document.layers):
+            if layer is None:
+                continue
+            self._hit_cache_locked_states[i] = is_effectively_locked(layer, self.document.layers)
+            if is_layer_group(layer):
+                continue
+            if not is_effectively_visible(layer, self.document.layers):
+                continue
+            self._hit_visible_layers_cache.append(i)
+            rect = self.get_layer_rect(i)
+            if rect is None:
+                continue
+            self._hit_rect_cache[i] = rect
+            self._hit_path_cache[i] = self._build_rect_path(layer, rect)
+            if getattr(layer, "clone_enabled", False) and hasattr(layer, "get_clone_positions"):
+                try:
+                    self._hit_clone_positions_cache[i] = list(layer.get_clone_positions() or [])
+                except Exception:
+                    self._hit_clone_positions_cache[i] = []
+        self._hit_cache_zoom = self.zoom_factor
+        self._hit_cache_offset_x = self.offset.x()
+        self._hit_cache_offset_y = self.offset.y()
+        self._hit_cache_hit_version = getattr(self.document, "hit_test_version", 0)
+        self._hit_cache_built_generation = self._hit_cache_generation
+
+    # 阶段 8：非视觉字段不重建合成图
+    _NON_VISUAL_FIELDS = frozenset({
+        "name",
+        "lock",
+        "selection",
+        "selected_layer_index",
+        "selected_layer_indices",
+    })
+
     def _invalidate_composition_cache(self):
         """文档发生变化时使合成图缓存失效"""
         # 导出高负载模式下允许冻结预览，避免导出线程与预览线程争用
@@ -24,7 +204,7 @@ class CanvasWidgetCanvasRender(object):
             return
 
         # 优先基于变更上下文判断是否需要失效合成缓存
-        # 非视觉字段（如名称、锁定）不触发合成图重建，只更新覆盖层即可
+        # 非视觉字段（如名称、锁定、选择）不触发合成图重建，只更新覆盖层即可
         context = None
         if hasattr(self.document, "get_change_context"):
             try:
@@ -34,9 +214,9 @@ class CanvasWidgetCanvasRender(object):
 
         if context:
             fields = set(context.get("fields", []) or [])
-            non_visual_fields = {"name", "lock", "selection"}
-            if fields and fields.issubset(non_visual_fields):
-                self._invalidate_scaled_pixmap_cache()
+            if fields and fields.issubset(self._NON_VISUAL_FIELDS):
+                # 阶段 8：选择变化不重建合成图，只刷 overlay（update()）
+                self.update()
                 return
 
         self._composition_invalidation_generation += 1
@@ -44,12 +224,16 @@ class CanvasWidgetCanvasRender(object):
         self._composition_cache_valid = False
         # Keep the last completed preview visible while the async renderer catches up.
         self._invalidate_scaled_pixmap_cache()
+        # 阶段 6：hit-test 缓存跟随文档/视图变更失效
+        self._invalidate_hit_cache()
 
     def _cancel_pending_async_preview(self):
         """Prevent stale background preview results from replacing newer local frames."""
         with self._async_render_lock:
             if not self._async_render_pending:
                 return
+            if is_perf_enabled():
+                PreviewPerfMonitor.instance().record_dropped_render()
             self._async_render_generation += 1
             self._async_render_pending = False
             self._async_render_result = None
@@ -64,6 +248,11 @@ class CanvasWidgetCanvasRender(object):
         self._scaled_composition_cache_key = None
         self._composition_mipmap_cache_key = None
         self._composition_mipmap_cache = []
+        # 阶段 6：视图变换也会让 hit-test 缓存失效
+        try:
+            self._invalidate_hit_cache()
+        except Exception:
+            pass
 
     def _get_scaled_composition_pixmap(self, source_pixmap, target_width, target_height):
         """获取按当前缩放尺寸缓存的QPixmap"""
@@ -157,9 +346,46 @@ class CanvasWidgetCanvasRender(object):
             logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             return None
 
+    def _is_viewport_only_eligible(self) -> bool:
+        """阶段 9：判断是否可以走 viewport-only 渲染。
+
+        条件：画布足够大，zoom 较小（≥2x downsample），且不是 overlay 模式。
+        """
+        try:
+            if getattr(self, "_interaction_overlay", None) is not None and self._interaction_overlay.is_active():
+                return False
+            if not (self.zoom_factor < 0.6):
+                return False
+            cw = int(getattr(self.document, "canvas_width", 0))
+            ch = int(getattr(self.document, "canvas_height", 0))
+            if cw < 2048 or ch < 2048:
+                return False
+            return True
+        except Exception:
+            return False
+
+    def _ensure_viewport_only_pixmap(self, canvas_rect):
+        """阶段 9：用上一帧 + 当前可见区域切片做低质视图，不再触发后台重渲染。
+
+        这是 fallback：放大镜、缩放滚动时优先复用上一次的合成图，
+        保持画面响应。停止后会由 _request_high_quality_refresh 拉起全质量。
+        """
+        cached = self._composition_pixmap_cache
+        if cached is None or cached.isNull():
+            return None
+        try:
+            scaled = self._get_scaled_composition_pixmap(
+                cached, canvas_rect.width(), canvas_rect.height()
+            )
+            return scaled
+        except Exception:
+            return None
+
     def _get_cached_composition_pixmap(self):
         """获取合成图QPixmap缓存，必要时重新生成"""
         self._sync_panel_interaction_state()
+        perf = PreviewPerfMonitor.instance() if is_perf_enabled() else None
+        composition_start = time.perf_counter() if perf is not None else None
         force_refresh = bool(getattr(self.document, '_needs_cache_refresh', False) or self._force_high_quality_refresh)
         if self._composition_cache_valid and self._composition_pixmap_cache is not None and not force_refresh:
             return self._composition_pixmap_cache
@@ -194,9 +420,13 @@ class CanvasWidgetCanvasRender(object):
         )
         if self._composition_pixmap_cache is not None:
             self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
+            if perf is not None and composition_start is not None:
+                perf.composition.record((time.perf_counter() - composition_start) * 1000.0)
             return self._composition_pixmap_cache
 
         self._start_async_composition_render(force_refresh, interactive_low_quality, active_layer_index, request_key)
+        if perf is not None and composition_start is not None:
+            perf.composition.record((time.perf_counter() - composition_start) * 1000.0)
         return self._create_blank_composition_pixmap()
 
     def _build_async_render_snapshot(self):
@@ -229,7 +459,7 @@ class CanvasWidgetCanvasRender(object):
             logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             return None
 
-    def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, snapshot_data=None):
+    def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, snapshot_data=None, render_token=None):
         """Render a PIL composition outside paintEvent; QPixmap conversion stays on the GUI thread."""
         render_document = self._restore_async_render_snapshot(snapshot_data)
         using_snapshot = render_document is not None
@@ -243,7 +473,10 @@ class CanvasWidgetCanvasRender(object):
                 force_refresh=force_refresh,
                 interactive_low_quality=interactive_low_quality,
                 active_layer_index=active_layer_index,
+                cancel_token=render_token,
             )
+            if result.cancelled:
+                return None
             if result.image is not None:
                 return result.image
         except Exception:
@@ -274,17 +507,25 @@ class CanvasWidgetCanvasRender(object):
         if not composition:
             return None
         try:
-            from PIL import ImageQt
-            qimage = ImageQt.toqimage(composition)
-        except Exception:
+            perf = PreviewPerfMonitor.instance() if is_perf_enabled() else None
+            if perf is not None:
+                pil_start = time.perf_counter()
             try:
-                rgba = composition.convert("RGBA")
-                img_data = rgba.tobytes("raw", "RGBA")
-                qimage = QImage(img_data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888)
+                from PIL import ImageQt
+                qimage = ImageQt.toqimage(composition)
             except Exception:
-                logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
-                return None
-        return QPixmap.fromImage(qimage)
+                try:
+                    rgba = composition.convert("RGBA")
+                    img_data = rgba.tobytes("raw", "RGBA")
+                    qimage = QImage(img_data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888)
+                except Exception:
+                    logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
+                    return None
+            if perf is not None:
+                perf.pil_to_qimage.record((time.perf_counter() - pil_start) * 1000.0)
+            return QPixmap.fromImage(qimage)
+        except Exception:
+            return None
 
     def _start_async_composition_render(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, request_key=None):
         """Start one background preview render and keep painting the previous pixmap meanwhile."""
@@ -313,6 +554,11 @@ class CanvasWidgetCanvasRender(object):
             self._async_render_restart_args = None
             self._async_render_generation += 1
             generation = self._async_render_generation
+            # 阶段 4：每次新请求前，老 token 立即标记 cancel
+            try:
+                render_token = self._preview_render_token_source.next()
+            except Exception:
+                render_token = None
 
         if force_refresh:
             self.document._needs_cache_refresh = False
@@ -328,7 +574,8 @@ class CanvasWidgetCanvasRender(object):
                     force_refresh,
                     interactive_low_quality,
                     active_layer_index,
-                    snapshot_data
+                    snapshot_data,
+                    render_token,
                 )
             except Exception as exc:
                 error = exc
@@ -365,6 +612,15 @@ class CanvasWidgetCanvasRender(object):
             self._async_render_restart_requested = False
             self._async_render_restart_args = None
             self._async_render_request_key = None
+
+        # 阶段 4：token 已取消时直接丢弃本次结果
+        try:
+            current_token = self._preview_render_token_source.peek()
+        except Exception:
+            current_token = None
+        if current_token is not None and getattr(current_token, "cancelled", False):
+            image = None
+            error = "cancelled"
 
         if image is None and error is None and not restart:
             self._async_render_timer.stop()
@@ -465,6 +721,9 @@ class CanvasWidgetCanvasRender(object):
         self._checkerboard_cache_size = cache_size
 
     def paintEvent(self, event):
+        perf = PreviewPerfMonitor.instance() if is_perf_enabled() else None
+        if perf is not None:
+            perf_start = time.perf_counter()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         view_transform_active = self._is_view_transform_active()
@@ -477,6 +736,15 @@ class CanvasWidgetCanvasRender(object):
         if self.document.canvas_width <= 0 or self.document.canvas_height <= 0:
             painter.setPen(QColor(CursorDarkTheme.TEXT_SECONDARY))
             painter.drawText(self.rect(), Qt.AlignCenter, "请创建新画布或打开现有文档")
+            if perf is not None:
+                perf.paint.record((time.perf_counter() - perf_start) * 1000.0)
+            return
+
+        # 阶段 2：overlay 模式下，不触发后台重渲染，直接画底图 + 活动图层 overlay
+        if getattr(self, '_interaction_overlay', None) is not None and self._interaction_overlay.is_active():
+            self._paint_interaction_overlay(painter)
+            if perf is not None:
+                perf.paint.record((time.perf_counter() - perf_start) * 1000.0)
             return
 
         pixmap = self._get_cached_composition_pixmap()
@@ -489,8 +757,15 @@ class CanvasWidgetCanvasRender(object):
             center_x = canvas_rect.x()
             center_y = canvas_rect.y()
 
+            # 阶段 9：视图变换 + 大画布 + 低 zoom 时直接复用上一帧的缩放结果
+            if view_transform_active and self._is_viewport_only_eligible():
+                vp = self._ensure_viewport_only_pixmap(canvas_rect)
+                if vp is not None:
+                    painter.drawPixmap(QRect(center_x, center_y, canvas_width, canvas_height), vp)
+                else:
+                    painter.drawPixmap(QRect(center_x, center_y, canvas_width, canvas_height), pixmap)
             # 视图交互时直接让 Qt 绘制到目标矩形，避免每个滚轮/平移帧分配新的大 QPixmap。
-            if view_transform_active:
+            elif view_transform_active:
                 painter.drawPixmap(QRect(center_x, center_y, canvas_width, canvas_height), pixmap)
             else:
                 scaled_pixmap = self._get_scaled_composition_pixmap(pixmap, canvas_width, canvas_height)
@@ -1012,3 +1287,5 @@ class CanvasWidgetCanvasRender(object):
         # 绘制拖拽交互增强效果
         self._draw_drag_enhancements(painter)
         self._draw_rulers(painter)
+        if perf is not None:
+            perf.paint.record((time.perf_counter() - perf_start) * 1000.0)
