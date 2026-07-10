@@ -2,7 +2,6 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QFrame, QSizePolicy, QFormLayout)
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QRect, QEasingCurve, QTimer
 from PySide6.QtGui import QFont
-from app.ui.dark_theme import CursorDarkTheme
 from app.ui.design_tokens import Tokens
 
 class CollapsibleGroupBox(QFrame):
@@ -51,28 +50,28 @@ class CollapsibleGroupBox(QFrame):
             }}
         """)
 
-        title_layout = QHBoxLayout(self.title_frame)
-        title_layout.setContentsMargins(8, 4, 7, 4)
-        title_layout.setSpacing(4)
+        self.title_layout = QHBoxLayout(self.title_frame)
+        self.title_layout.setContentsMargins(*Tokens.HEADER_MARGINS)
+        self.title_layout.setSpacing(Tokens.SEGMENT_GAP)
 
         # 标题文本
         self.title_label = QLabel(title)
         self.title_label.setStyleSheet(
-            f"color: {CursorDarkTheme.TEXT_PRIMARY}; font-weight: 700; background: transparent;"
+            f"color: {Tokens.TEXT_PRIMARY}; font-weight: {Tokens.FONT_WEIGHT_BOLD}; background: transparent;"
         )
         font = self.title_label.font()
         font.setPointSize(Tokens.FONT_SIZE_BASE)
         self.title_label.setFont(font)
 
-        title_layout.addWidget(self.title_label)
-        title_layout.addStretch()
+        self.title_layout.addWidget(self.title_label)
+        self.title_layout.addStretch()
 
         # 展开/收起按钮放在右侧，匹配参考图的折叠箭头位置
         self.toggle_button = QPushButton()
-        self.toggle_button.setFixedSize(18, 18)
+        self.toggle_button.setFixedSize(Tokens.COLLAPSE_BUTTON_SIZE, Tokens.COLLAPSE_BUTTON_SIZE)
         self.toggle_button.setFlat(True)
         self.toggle_button.clicked.connect(self.toggle_collapsed)
-        title_layout.addWidget(self.toggle_button)
+        self.title_layout.addWidget(self.toggle_button)
         self.update_toggle_button()
 
         # 使整个标题栏可点击
@@ -91,8 +90,8 @@ class CollapsibleGroupBox(QFrame):
         """)
 
         self.container_layout = QVBoxLayout(self.content_container)
-        self.container_layout.setContentsMargins(8, 8, 8, 9)
-        self.container_layout.setSpacing(6)
+        self.container_layout.setContentsMargins(*Tokens.GROUP_CONTENT_MARGINS)
+        self.container_layout.setSpacing(Tokens.ROW_GAP)
 
         self.main_layout.addWidget(self.content_container)
 
@@ -158,16 +157,16 @@ class CollapsibleGroupBox(QFrame):
             QPushButton {{
                 background: transparent;
                 border: none;
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                font-size: 14px;
-                font-weight: 700;
+                color: {Tokens.TEXT_PRIMARY};
+                font-size: {Tokens.FONT_SIZE_BASE + 1}px;
+                font-weight: {Tokens.FONT_WEIGHT_BOLD};
                 text-align: center;
                 padding: 0px;
             }}
             QPushButton:hover {{
-                color: {CursorDarkTheme.ACCENT_HOVER};
+                color: {Tokens.ACCENT_HOVER};
                 background-color: rgba(255, 255, 255, 0.07);
-                border-radius: 4px;
+                border-radius: {Tokens.INDICATOR_RADIUS}px;
             }}
         """)
 
