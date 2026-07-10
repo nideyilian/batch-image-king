@@ -107,11 +107,14 @@ class LayerEffects(object):
             print(f"应用特效前图像尺寸: {image.width}x{image.height}, 图层尺寸: {self._width}x{self._height}")
         
         # 如果图像尺寸与图层尺寸不匹配，根据模式处理
+        fit_mode = int(getattr(self, '_fit_mode', 0))
         if image.width != self._width or image.height != self._height:
-            if self._fit_mode == 2:
+            if fit_mode == 2:
                 # 等比缩放不裁剪模式：保持原图尺寸，继续应用特效
                 if not is_batch_mode:
                     print(f"等比缩放不裁剪模式：保持图像尺寸不变 {image.width}x{image.height}，继续应用圆角/描边")
+            elif fit_mode == 1:
+                image = self._center_image_on_layer_canvas(image, self._width, self._height)
             else:
                 if not is_batch_mode:
                     print(f"警告：图像尺寸与图层尺寸不匹配，调整图像大小: {image.width}x{image.height} => {self._width}x{self._height}")
@@ -234,7 +237,7 @@ class LayerEffects(object):
                     final_result = self._apply_outer_stroke(final_result)
 
             # 非矢量管线才强制收敛到图层尺寸；矢量管线允许外扩（居中/外描边）
-            if (not use_vector_stroke_pipeline) and self._fit_mode != 2 and (final_result.width != self._width or final_result.height != self._height):
+            if (not use_vector_stroke_pipeline) and self._fit_mode not in (1, 2) and (final_result.width != self._width or final_result.height != self._height):
                 if not is_batch_mode:
                     print(f"警告：应用特效后图像尺寸变化: {final_result.width}x{final_result.height}，调整为图层尺寸: {self._width}x{self._height}")
                 final_result = self._resize_with_premultiplied_alpha(final_result, (self._width, self._height))
@@ -245,6 +248,29 @@ class LayerEffects(object):
         if not is_batch_mode:
             print(f"应用特效后图像尺寸: {final_result.width}x{final_result.height}, 图层尺寸: {self._width}x{self._height}")
         return final_result
+
+    def _center_image_on_layer_canvas(self, image, target_width, target_height):
+        """Return a layer-sized transparent canvas with image centered, preserving ratio."""
+        target_width = max(1, int(target_width))
+        target_height = max(1, int(target_height))
+        if image.width > target_width or image.height > target_height:
+            scale = min(target_width / image.width, target_height / image.height)
+            new_size = (
+                max(1, int(round(image.width * scale))),
+                max(1, int(round(image.height * scale))),
+            )
+            image = self._resize_with_premultiplied_alpha(image, new_size)
+        elif image.mode != 'RGBA':
+            image = image.convert('RGBA')
+
+        canvas = Image.new('RGBA', (target_width, target_height), (0, 0, 0, 0))
+        x = (target_width - image.width) // 2
+        y = (target_height - image.height) // 2
+        if image.mode == 'RGBA':
+            canvas.paste(image, (x, y), image)
+        else:
+            canvas.paste(image, (x, y))
+        return canvas
 
     def _build_rounded_rect_outline_points_px(self):
         from app.utils.vector_layer_geometry import build_rounded_rect_outline_points

@@ -112,7 +112,10 @@ class FastRendererSurface(object):
             fallback = self._get_layer_surface_cached(layer, document, was_just_loaded)
             if fallback is not None:
                 # 导出与预览统一：回退分支也必须先裁透明边再覆盖缩放，避免留白
-                fallback = self._resize_cover_from_content(fallback, target_w, target_h)
+                if int(getattr(layer, 'fit_mode', 0)) == 1:
+                    fallback = self._center_surface_on_canvas(fallback, target_w, target_h)
+                elif int(getattr(layer, 'fit_mode', 0)) != 2:
+                    fallback = self._resize_cover_from_content(fallback, target_w, target_h)
             return fallback
 
         original_w = int(getattr(layer, 'width', target_w) or target_w)
@@ -201,7 +204,10 @@ class FastRendererSurface(object):
 
         if layer_image is not None:
             # 关键修复：先裁掉透明边再覆盖缩放，避免匹配后留白
-            layer_image = self._resize_cover_from_content(layer_image, target_w, target_h)
+            if int(getattr(layer, 'fit_mode', 0)) == 1:
+                layer_image = self._center_surface_on_canvas(layer_image, target_w, target_h)
+            elif int(getattr(layer, 'fit_mode', 0)) != 2:
+                layer_image = self._resize_cover_from_content(layer_image, target_w, target_h)
         if layer_image is not None:
             with self._size_override_surface_lock:
                 self._size_override_surface_cache[override_cache_key] = {
@@ -277,6 +283,31 @@ class FastRendererSurface(object):
         """先按非透明内容裁边，再等比覆盖缩放到目标尺寸。"""
         trimmed = self._crop_nontransparent_bbox(image)
         return self._resize_cover_keep_ratio(trimmed, target_w, target_h)
+
+    def _center_surface_on_canvas(self, image: Image.Image, target_w: int, target_h: int) -> Image.Image:
+        """Return a transparent target canvas with the image centered, preserving ratio."""
+        target_w = max(1, int(target_w))
+        target_h = max(1, int(target_h))
+        rgba = image if image.mode == 'RGBA' else image.convert('RGBA')
+        if rgba.width > target_w or rgba.height > target_h:
+            scale = min(target_w / rgba.width, target_h / rgba.height)
+            new_size = (
+                max(1, int(round(rgba.width * scale))),
+                max(1, int(round(rgba.height * scale))),
+            )
+            try:
+                from app.utils.rgba_resampler import resize_rgba_premultiplied
+                rgba = resize_rgba_premultiplied(rgba, new_size, Image.Resampling.LANCZOS)
+            except Exception:
+                rgba = rgba.resize(new_size, Image.Resampling.LANCZOS)
+        if rgba.size == (target_w, target_h):
+            return rgba
+
+        canvas = Image.new('RGBA', (target_w, target_h), (0, 0, 0, 0))
+        x = (target_w - rgba.width) // 2
+        y = (target_h - rgba.height) // 2
+        canvas.paste(rgba, (x, y), rgba)
+        return canvas
 
     def _normalize_angle_180(self, angle: float) -> float:
         """归一化角度到 (-180, 180]。"""
@@ -1744,7 +1775,10 @@ class FastRendererSurface(object):
             target_h = max(1, int(getattr(layer, "height", image.height) or image.height))
             # 关键修复：fit_mode==2 (智能适配不缩放) 的图层在拖动/缩放预览期间
             # 保留原图比例，绝不能在此被强制 resize 到图层尺寸。
-            if image.size != (target_w, target_h) and int(getattr(layer, 'fit_mode', 0)) != 2:
+            fit_mode = int(getattr(layer, 'fit_mode', 0))
+            if image.size != (target_w, target_h) and fit_mode == 1:
+                image = self._center_surface_on_canvas(image, target_w, target_h)
+            elif image.size != (target_w, target_h) and fit_mode != 2:
                 if image.mode == 'RGBA':
                     from app.utils.rgba_resampler import resize_rgba_premultiplied
                     image = resize_rgba_premultiplied(image, (target_w, target_h), Image.Resampling.BILINEAR)

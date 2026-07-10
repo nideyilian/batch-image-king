@@ -57,11 +57,14 @@ class LayerRenderingMixin:
             print(f"应用特效前图像尺寸: {image.width}x{image.height}, 图层尺寸: {self.width}x{self.height}")
 
         # 如果图像尺寸与图层尺寸不匹配，根据模式处理
+        fit_mode = int(getattr(self, 'fit_mode', 0))
         if image.width != self.width or image.height != self.height:
-            if self.fit_mode == 2:
+            if fit_mode == 2:
                 # 等比缩放不裁剪模式：保持原图尺寸，继续应用特效
                 if _LAYER_RENDER_VERBOSE:
                     print(f"等比缩放不裁剪模式：保持图像尺寸不变 {image.width}x{image.height}，继续应用圆角/描边")
+            elif fit_mode == 1:
+                image = self._center_image_on_layer_canvas(image, self.width, self.height)
             else:
                 if _LAYER_RENDER_VERBOSE:
                     print(f"警告：图像尺寸与图层尺寸不匹配，调整图像大小: {image.width}x{image.height} => {self.width}x{self.height}")
@@ -195,7 +198,7 @@ class LayerRenderingMixin:
             # 强制 resize 到 self.width/self.height，否则会把等比素材拉成图层宽高比。
             # fit_mode==0/1 在 _process_image 已经处理过尺寸，理论上尺寸与图层一致；
             # fit_mode==3 (else 拉伸) 是用户显式选择拉伸，按既有行为处理。
-            if (not use_vector_pipeline) and (int(getattr(self, 'fit_mode', 0)) != 2) \
+            if (not use_vector_pipeline) and (int(getattr(self, 'fit_mode', 0)) not in (1, 2)) \
                     and (final_result.width != self.width or final_result.height != self.height):
                 final_result = self._resize_rgba_premultiplied(final_result, (self.width, self.height), Resampling.LANCZOS)
 
@@ -220,6 +223,29 @@ class LayerRenderingMixin:
         return final_result
 
     # ==================== 缓存（类级）====================
+    def _center_image_on_layer_canvas(self, image, target_width, target_height):
+        """Return a layer-sized transparent canvas with image centered, preserving ratio."""
+        target_width = max(1, int(target_width))
+        target_height = max(1, int(target_height))
+        if image.width > target_width or image.height > target_height:
+            scale = min(target_width / image.width, target_height / image.height)
+            new_size = (
+                max(1, int(round(image.width * scale))),
+                max(1, int(round(image.height * scale))),
+            )
+            image = self._resize_rgba_premultiplied(image, new_size, Resampling.LANCZOS)
+        elif image.mode != 'RGBA':
+            image = image.convert('RGBA')
+
+        canvas = Image.new('RGBA', (target_width, target_height), (0, 0, 0, 0))
+        x = (target_width - image.width) // 2
+        y = (target_height - image.height) // 2
+        if image.mode == 'RGBA':
+            canvas.paste(image, (x, y), image)
+        else:
+            canvas.paste(image, (x, y))
+        return canvas
+
     @classmethod
     def _get_effects_stage_cache(cls, cache_key: str):
         with cls._effects_stage_cache_lock:

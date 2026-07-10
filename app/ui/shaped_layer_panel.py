@@ -1,6 +1,6 @@
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QComboBox, QSpinBox, QDoubleSpinBox, QPushButton,
+                               QComboBox, QSpinBox, QDoubleSpinBox,
                                QGroupBox, QGridLayout, QSlider, QCheckBox,
                                QDialog, QDialogButtonBox)
 from PySide6.QtCore import Qt, Signal, QPoint, QSize
@@ -61,16 +61,6 @@ class ShapedLayerPanel(QWidget):
         # layout.addWidget(preview_group)  # 移除重复的预览组，已在基本属性面板中整合
 
 
-        # 快速旋转控制组（保留独有功能）
-        rotation_group = QGroupBox("快速旋转")
-        rotation_layout = QVBoxLayout()
-
-        # 创建快速旋转按钮
-        self.create_quick_rotation_controls(rotation_layout)
-
-        rotation_group.setLayout(rotation_layout)
-        layout.addWidget(rotation_group)
-
         # 参数控制组 - 仅显示当前形状信息，不再提供编辑功能
         self.params_group = QGroupBox("形状信息")
         self.params_layout = QVBoxLayout()
@@ -96,34 +86,6 @@ class ShapedLayerPanel(QWidget):
 
         # 连接信号（在所有方法定义完成后）
         self.connect_signals()
-
-    def create_quick_rotation_controls(self, parent_layout):
-        """创建快速旋转控制按钮"""
-        # 快速旋转按钮布局
-        button_layout = QHBoxLayout()
-
-        self.rotate_0_btn = QPushButton("0°")
-        self.rotate_0_btn.setFixedSize(40, 25)
-        button_layout.addWidget(self.rotate_0_btn)
-
-        self.rotate_90_btn = QPushButton("90°")
-        self.rotate_90_btn.setFixedSize(40, 25)
-        button_layout.addWidget(self.rotate_90_btn)
-
-        self.rotate_180_btn = QPushButton("180°")
-        self.rotate_180_btn.setFixedSize(40, 25)
-        button_layout.addWidget(self.rotate_180_btn)
-
-        self.rotate_270_btn = QPushButton("270°")
-        self.rotate_270_btn.setFixedSize(40, 25)
-        button_layout.addWidget(self.rotate_270_btn)
-
-        parent_layout.addLayout(button_layout)
-
-        # 添加当前角度显示
-        self.current_rotation_label = QLabel("当前角度: 0°")
-        self.current_rotation_label.setStyleSheet("color: #888; font-size: 9pt;")
-        parent_layout.addWidget(self.current_rotation_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def create_parameter_info_display(self):
         """创建参数信息显示（只读）"""
@@ -239,37 +201,9 @@ class ShapedLayerPanel(QWidget):
         self.shape_preview.update()
         self.parameter_changed.emit()
 
-    def set_polygon_rotation(self, angle):
-        """设置多边形旋转角度 - 通过基本属性面板更新"""
-        if self._layer and not self._updating:
-            # 直接更新图层属性
-            self._layer.polygon_rotation = angle
-
-            # 更新显示
-            if hasattr(self, 'current_rotation_label'):
-                self.current_rotation_label.setText(f"当前角度: {angle}°")
-            if hasattr(self, 'polygon_rotation_label'):
-                self.polygon_rotation_label.setText(f"旋转角度: {angle}°")
-
-            # 更新形状预览
-            if self.shape_preview:
-                self.shape_preview.set_polygon_params(angle, 5 if self._layer.shape_type == ShapeType.PENTAGON else 6)
-                self.shape_preview.update()
-
-            # 触发参数变更信号
-            self.parameter_changed.emit()
-
     def connect_signals(self):
         """连接所有信号"""
-        # 快速旋转按钮信号（保留独有功能）
-        if self.rotate_0_btn:
-            self.rotate_0_btn.clicked.connect(lambda: self.set_polygon_rotation(0))
-        if self.rotate_90_btn:
-            self.rotate_90_btn.clicked.connect(lambda: self.set_polygon_rotation(90))
-        if self.rotate_180_btn:
-            self.rotate_180_btn.clicked.connect(lambda: self.set_polygon_rotation(180))
-        if self.rotate_270_btn:
-            self.rotate_270_btn.clicked.connect(lambda: self.set_polygon_rotation(270))
+        pass
 
     def set_layer(self, layer: ShapedLayer):
         """设置当前编辑的图层"""
@@ -298,7 +232,6 @@ class ShapedLayerPanel(QWidget):
             # 更新多边形参数信息（只读显示）
             if hasattr(self._layer, 'polygon_rotation'):
                 self.polygon_rotation_label.setText(f"旋转角度: {self._layer.polygon_rotation}°")
-                self.current_rotation_label.setText(f"当前角度: {self._layer.polygon_rotation}°")
             if hasattr(self._layer, 'polygon_corner_radius'):
                 self.polygon_radius_label.setText(f"圆角半径: {self._layer.polygon_corner_radius}")
 
