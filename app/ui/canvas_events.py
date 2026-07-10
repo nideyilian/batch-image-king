@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Canvas widget components."""
 
 from collections import OrderedDict

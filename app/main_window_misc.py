@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Main window components."""
 
 import logging
@@ -191,7 +192,7 @@ class MainWindowMisc(object):
                                 if hasattr(layer, 'cached_image'):
                                     layer.cached_image = None
                             except Exception:
-                                logger.debug("静默异常已忽略: except in main_window_misc.py")
+                                logger.warning("静默异常已忽略: except in main_window_misc.py", exc_info=True)
                                 pass
                         elif hasattr(self.layer_panel, 'clear_layer_cache'):
                             self.layer_panel.clear_layer_cache(layer)

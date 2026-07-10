@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Layer 子 mixin 1: 图像源管理 + 图像加载/缩放/裁剪 + 图像缓存
 
 从原 layer_new.py 拆分。涵盖：
@@ -180,7 +181,7 @@ class LayerImageSourceMixin:
                 if hasattr(self, 'changed') and hasattr(self.changed, 'emit'):
                     self.changed.emit()
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in layer_new.py")
+                logger.warning("静默异常已忽略: except Exception: in layer_new.py", exc_info=True)
                 pass
 
         try:
@@ -197,7 +198,7 @@ class LayerImageSourceMixin:
                 except Exception as e:
                     print(f"无法加载图像 {src}: {e}")
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in layer_new.py")
+            logger.warning("静默异常已忽略: except Exception: in layer_new.py", exc_info=True)
             pass
 
         return self.get_random_image(force_random=False)
@@ -273,7 +274,7 @@ class LayerImageSourceMixin:
                 try:
                     img.load()
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in layer_new.py")
+                    logger.warning("静默异常已忽略: except Exception: in layer_new.py", exc_info=True)
                     pass
                 if img.mode != 'RGBA':
                     img = img.convert('RGBA')
@@ -282,7 +283,7 @@ class LayerImageSourceMixin:
                 try:
                     img.close()
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in layer_new.py")
+                    logger.warning("静默异常已忽略: except Exception: in layer_new.py", exc_info=True)
                     pass
 
             return self._process_image(self._cached_source_image.copy())
@@ -309,6 +310,10 @@ class LayerImageSourceMixin:
             return self._scale_and_crop(original_image)
         elif fit_mode == 1:  # 智能缩放不裁剪
             return self._scale_to_fit(original_image)
+        elif fit_mode == 2:  # 智能适配不缩放
+            # 🔧 关键修复：保持原图尺寸返回，避免拉伸变形。
+            # 渲染管线会按图层尺寸创建画布并将原图居中放置。
+            return original_image.copy() if hasattr(original_image, 'copy') else original_image
         else:  # 拉伸适配
             # 使用预乘Alpha缩放以保护半透明图像质量
             if original_image.mode == 'RGBA':

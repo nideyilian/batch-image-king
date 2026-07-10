@@ -11,6 +11,7 @@
 不直接修改图层，单独可测。
 """
 from __future__ import annotations
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import logging
 from typing import List
@@ -226,7 +227,7 @@ class DocumentExportAnalysis:
                 else:
                     print(f"[绑定分析]   ⚠️ 无图像支撑分类，保留原分类以避免空结果")
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in document_export_analysis.py")
+                logger.warning("静默异常已忽略: except Exception: in document_export_analysis.py", exc_info=True)
                 pass
 
             if not group_categories:
@@ -313,4 +314,3 @@ class DocumentExportAnalysis:
         # 首次或签名变化：真正分析一次
         self._binding_common_categories_cache = (sig, self._get_binding_common_categories())
         return list(self._binding_common_categories_cache[1])
-

@@ -888,7 +888,7 @@ class TextLayerRenderMixin:
         return self._normalize_auto_fit_padding(image)
 
     def _normalize_auto_fit_padding(self, image: Image.Image) -> Image.Image:
-        """?????????????????????"""
+        """自动适配时按真实非透明像素统一四边内边距。"""
         if not self._auto_fit_text_box or self._auto_fit_lock or self._background_enabled:
             return image
 

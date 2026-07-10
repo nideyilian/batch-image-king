@@ -412,7 +412,7 @@ class GlobalAvoidRepeatManager:
                             if decoded is not None:
                                 return decoded
                     except Exception:
-                        logger.debug("静默异常已忽略: except in utils/global_avoid_repeat_manager.py")
+                        logger.warning("静默异常已忽略: except in utils/global_avoid_repeat_manager.py", exc_info=True)
                         pass
                     # 回退：PIL 读取后转 BGR
                     try:
@@ -547,7 +547,7 @@ class GlobalAvoidRepeatManager:
             elif env_val in ("0", "false", "no", "off"):
                 enable_similarity_filter = False
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/global_avoid_repeat_manager.py")
+            logger.warning("静默异常已忽略: except in utils/global_avoid_repeat_manager.py", exc_info=True)
             pass
         
         for layer_idx, pool in layer_pools.items():

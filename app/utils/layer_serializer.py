@@ -437,6 +437,5 @@ class LayerSerializer:
                 try:
                     setattr(layer_obj, attr, None)
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in layer_serializer.py")
+                    logger.warning("静默异常已忽略: except Exception: in layer_serializer.py", exc_info=True)
                     pass
-

@@ -191,7 +191,7 @@ def export_with_worker(
             if proc is not None and proc.poll() is None:
                 proc.terminate()
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+            logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
             pass
         return WorkerExportResult(True, False, False, f"独立导出进程异常: {exc}", manifest_path)
 
@@ -249,7 +249,7 @@ def _manifest_progress(manifest: dict) -> Optional[int]:
         if isinstance(progress, dict):
             return int(progress.get("current", 0) or 0)
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         pass
     return None
 
@@ -260,7 +260,7 @@ def _manifest_last_file(manifest: dict) -> str:
         if isinstance(progress, dict):
             return str(progress.get("last_file", "") or "")
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         pass
     return ""
 
@@ -271,7 +271,7 @@ def _manifest_stage(manifest: dict) -> str:
         if isinstance(progress, dict):
             return str(progress.get("stage", "") or "")
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         pass
     return ""
 
@@ -281,7 +281,7 @@ def _touch(path: str) -> None:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text("cancel", encoding="utf-8")
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         pass
 
 
@@ -302,7 +302,7 @@ def _apply_worker_report_to_document(document, manifest: dict, requested_count: 
             try:
                 document._last_export_report = report
             except Exception:
-                logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
                 pass
         # 2) perf_stats 优先用 report 里的 summary,否则用 manifest 的 progress
         progress = manifest.get("progress") if isinstance(manifest, dict) else {}
@@ -351,17 +351,17 @@ def _apply_worker_report_to_document(document, manifest: dict, requested_count: 
         try:
             document._last_export_perf_stats = base
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+            logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
             pass
         # 3) 清掉 _last_export_error,避免上一轮的失败文案残留
         try:
             if success_flag:
                 document._last_export_error = ""
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+            logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
             pass
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         pass
 
 
@@ -382,7 +382,7 @@ def _cleanup_workdir_on_success(work_dir: Path, manifest_path: str) -> None:
                     if sibling.exists():
                         sibling.unlink()
                 except Exception:
-                    logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                    logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         if work_dir is not None:
             wd = Path(work_dir)
             if wd.exists() and wd.is_dir():
@@ -395,13 +395,13 @@ def _cleanup_workdir_on_success(work_dir: Path, manifest_path: str) -> None:
                             import shutil
                             shutil.rmtree(entry, ignore_errors=True)
                     except Exception:
-                        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
                 try:
                     wd.rmdir()
                 except Exception:
                     # 仍残留条目,放弃删除目录本身,不影响主流程
-                    logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+                    logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
                     pass
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/export_worker_client.py")
+        logger.warning("静默异常已忽略: except in utils/export_worker_client.py", exc_info=True)
         pass

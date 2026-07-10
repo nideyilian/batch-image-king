@@ -44,11 +44,6 @@ def needs_cropping(bounds, image):
     return (left > 0 or top > 0 or right < image.width or bottom < image.height)
 
 
-# 向后兼容：为现有代码提供Layer类别名
-# 这样现有代码可以继续使用 from app.models.document import Layer
-# 但实际上使用的是更完善的新Layer类
-Layer = NewLayer
-
 
 class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport, QObject):
     """文档模型，包含画布和图层信息
@@ -96,9 +91,7 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         from app.models.document_serializer import DocumentSerializer
         self._serializer = DocumentSerializer(parent=self)
 
-        # ===== 重构：使用DocumentRenderer管理渲染 =====
-        from app.models.document_renderer import DocumentRenderer
-        self._renderer = DocumentRenderer(parent=self)
+        # 渲染统一走 app.services.render_service（FastRenderer 单一路出口）。
 
         # ===== 重构：使用BatchExportCoordinator协调导出 =====
         from app.models.batch_export_coordinator import BatchExportCoordinator

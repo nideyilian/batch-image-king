@@ -17,7 +17,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             safe_print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             # 最后的备选方案
             safe_print("[DEBUG] Message encoding failed")
 
@@ -224,7 +224,7 @@ class EnhancedCornerRenderer:
                 r, g, b, a = image.split()
                 result = Image.merge('RGBA', (r, g, b, mask))
                 return result
-            except:
+            except Exception:
                 return image
     
     def _postprocess_corners(self, image: Image.Image, radius: int) -> Image.Image:

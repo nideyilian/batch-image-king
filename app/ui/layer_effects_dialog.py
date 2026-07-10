@@ -3,6 +3,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from app.ui.color_picker_dialog_a2 import get_color_a2
+from app.ui.property_widgets import PropertySwitch
 
 class LayerEffectsDialog(QDialog):
     def __init__(self, document, parent=None):
@@ -54,8 +55,8 @@ class LayerEffectsDialog(QDialog):
         self.corner_spin.setRange(0, 1000)
         form.addRow("圆角半径:", self.corner_spin)
 
-        self.stroke_enable = QCheckBox("启用描边")
-        form.addRow(self.stroke_enable)
+        self.stroke_enable = PropertySwitch()
+        form.addRow("启用描边", self.stroke_enable)
 
         self.stroke_width = QSpinBox()
         self.stroke_width.setRange(1, 1000)
@@ -79,8 +80,8 @@ class LayerEffectsDialog(QDialog):
         tab = QWidget()
         form = QFormLayout(tab)
 
-        self.color_overlay_enable = QCheckBox("启用颜色叠加")
-        form.addRow(self.color_overlay_enable)
+        self.color_overlay_enable = PropertySwitch()
+        form.addRow("启用颜色叠加", self.color_overlay_enable)
 
         # Color
         color_layout = QHBoxLayout()
@@ -108,8 +109,8 @@ class LayerEffectsDialog(QDialog):
         tab = QWidget()
         form = QFormLayout(tab)
 
-        self.gradient_overlay_enable = QCheckBox("启用渐变叠加")
-        form.addRow(self.gradient_overlay_enable)
+        self.gradient_overlay_enable = PropertySwitch()
+        form.addRow("启用渐变叠加", self.gradient_overlay_enable)
 
         # Start Color
         start_layout = QHBoxLayout()

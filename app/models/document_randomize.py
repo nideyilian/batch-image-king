@@ -196,8 +196,8 @@ class DocumentRandomize:
                 # 如果没有该属性，尝试其他方法
                 try:
                     image_layer.get_random_image(force_random=True)
-                except:
-                    logger.debug("静默异常已忽略: except: in document_randomize.py")
+                except Exception:
+                    logger.warning("静默异常已忽略: except: in document_randomize.py", exc_info=True)
                     pass
             
             # 清除缓存
@@ -314,27 +314,19 @@ class DocumentRandomize:
 
 
     def _optimize_memory(self):
-        """优化内存使用，减少内存占用"""
+        """优化内存使用，减少内存占用。
+
+        统一使用 ``intelligent_memory_manager``（与渲染管线一致的内存管理器），
+        避免历史上误用 ``memory_manager.get_memory_manager``（该模块并未导出此符号，
+        导致始终走入 ImportError 兜底分支）的歧义。
+        """
         try:
-            from app.utils.memory_manager import get_memory_manager
+            from app.utils.intelligent_memory_manager import get_memory_manager
             memory_manager = get_memory_manager()
-
-            # 记录优化前的内存使用
-            memory_before = memory_manager.get_memory_usage()
-
-            # 清除图层缓存
-            for layer in self.layers:
-                if hasattr(layer, 'clear_cache'):
-                    layer.clear_cache()
-                elif hasattr(layer, '_cached_images'):
-                    layer._cached_images = {}
-
-            # 使用内存管理器进行清理
-            freed_mb = memory_manager.force_cleanup()
-
-            print(f"文档内存优化完成: 释放 {freed_mb} MB")
-
-        except ImportError:
+            memory_manager.force_optimization()
+            print("文档内存优化完成")
+        except Exception:
+            logger.warning("静默异常已忽略: except Exception: in document_randomize._optimize_memory", exc_info=True)
             # 回退到原有的简单清理方式
             import gc
             for layer in self.layers:

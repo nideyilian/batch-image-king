@@ -243,7 +243,7 @@ class IntelligentRenderCache:
                         if hasattr(layer, 'polygon_corner_radius'):
                             layer_parts.append(f"poly_radius:{getattr(layer, 'polygon_corner_radius', 0)}")
                 except Exception:
-                    logger.debug("静默异常已忽略: except in utils/intelligent_render_cache.py")
+                    logger.warning("静默异常已忽略: except in utils/intelligent_render_cache.py", exc_info=True)
                     pass
                 
                 # 🔧 修复：添加描边参数到缓存键
@@ -475,7 +475,7 @@ class IntelligentRenderCache:
         try:
             # 这里可以实现更复杂的关联逻辑
             return False
-        except:
+        except Exception:
             return False
     
     def clear(self):

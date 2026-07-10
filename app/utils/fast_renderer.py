@@ -79,7 +79,7 @@ class SmartCache:
                     match_hash = hashlib.md5(serialized_text.encode('utf-8')).hexdigest()[:8]
                     key_parts.append(f"size_match:{match_hash}")
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in fast_renderer.py")
+                logger.warning("静默异常已忽略: except Exception: in fast_renderer.py", exc_info=True)
                 pass
 
             for i, layer in enumerate(document.layers):
@@ -273,6 +273,18 @@ class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, 
         self._size_override_surface_cache = OrderedDict()
         self._size_override_surface_lock = threading.RLock()
         self._max_size_override_surface_entries = 192
+        # 大小匹配公共参数缓存：预解析图层名字典与源图层 surface/position 键，避免每张图重复解析
+        self._size_match_task_ctx_cache = OrderedDict()
+        self._size_match_task_ctx_lock = threading.RLock()
+        self._max_size_match_task_ctx_entries = 32
+        # 大小匹配整份 override 会话缓存：源图层固定时跨图复用，避免重复几何计算
+        self._size_match_override_session_cache = OrderedDict()
+        self._size_match_override_session_lock = threading.RLock()
+        self._max_size_match_override_session_entries = 96
+        # 可见图层列表会话缓存：避免每张图重复 O(N^2) 的组可见性展开计算
+        self._visible_layers_session_cache = OrderedDict()
+        self._visible_layers_session_lock = threading.RLock()
+        self._max_visible_layers_session_entries = 32
         # 批量导出会话缓存：减少重复读盘与重复处理
         self._batch_raw_image_cache = OrderedDict()
         self._batch_raw_image_lock = threading.RLock()

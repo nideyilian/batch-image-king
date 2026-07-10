@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Canvas widget components."""
 
 from collections import OrderedDict
@@ -153,7 +154,7 @@ class CanvasWidgetCanvasRender(object):
             self._invalidate_scaled_pixmap_cache()
             return pixmap
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+            logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             return None
 
     def _get_cached_composition_pixmap(self):
@@ -206,7 +207,7 @@ class CanvasWidgetCanvasRender(object):
             if isinstance(snapshot, dict):
                 return snapshot
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+            logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             pass
         return None
 
@@ -225,7 +226,7 @@ class CanvasWidgetCanvasRender(object):
             snapshot_document._needs_cache_refresh = False
             return snapshot_document
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+            logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             return None
 
     def _render_composition_image_for_async(self, force_refresh: bool, interactive_low_quality: bool, active_layer_index: int, snapshot_data=None):
@@ -258,7 +259,7 @@ class CanvasWidgetCanvasRender(object):
             if image is not None:
                 return image
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+            logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             pass
 
         try:
@@ -268,7 +269,7 @@ class CanvasWidgetCanvasRender(object):
             if image is not None:
                 return image
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+            logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
             pass
 
         if using_snapshot:
@@ -277,7 +278,7 @@ class CanvasWidgetCanvasRender(object):
 
                 return render_document_legacy_fallback(self.document)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+                logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
                 return None
         return None
 
@@ -293,7 +294,7 @@ class CanvasWidgetCanvasRender(object):
                 img_data = rgba.tobytes("raw", "RGBA")
                 qimage = QImage(img_data, rgba.width, rgba.height, rgba.width * 4, QImage.Format_RGBA8888)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+                logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
                 return None
         return QPixmap.fromImage(qimage)
 
@@ -396,7 +397,7 @@ class CanvasWidgetCanvasRender(object):
                 try:
                     self.document._quick_first_frame = False
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in canvas_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in canvas_render.py", exc_info=True)
                     pass
             # 重新启动一次全质量渲染（不低质量），覆盖快速首帧
             if not restart:

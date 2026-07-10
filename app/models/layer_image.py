@@ -331,8 +331,8 @@ class LayerImage(object):
                 import logging
                 logger = logging.getLogger('批图王')
                 logger.error(f"无法加载图像 {image_path}: {e}", exc_info=True)
-            except:
-                logger.debug("静默异常已忽略: except: in layer_image.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except: in layer_image.py", exc_info=True)
                 pass
             print(f"无法加载图像 {image_path}: {e}")
             return self._create_error_image()
@@ -634,7 +634,7 @@ class LayerImage(object):
                 # 计算等比缩放尺寸
                 src_ratio = processed_image.width / processed_image.height
                 target_ratio = target_width / target_height
-                
+
                 if src_ratio > target_ratio:
                     # 源图更宽，以宽度为基准缩放
                     scale_width = target_width
@@ -643,25 +643,36 @@ class LayerImage(object):
                     # 源图更高或相等，以高度为基准缩放
                     scale_height = target_height
                     scale_width = int(scale_height * src_ratio)
-                
+
                 # 等比缩放确保不会为0
                 scale_width = max(1, scale_width)
                 scale_height = max(1, scale_height)
-                
+
                 # 等比缩放
                 scaled_image = self._resize_with_premultiplied_alpha(processed_image, (scale_width, scale_height))
-                
+
                 # 计算居中位置
                 x = (target_width - scale_width) // 2
                 y = (target_height - scale_height) // 2
-                
+
                 # 将缩放后的图像粘贴到透明背景的中心
                 final_image.paste(scaled_image, (x, y), scaled_image)
-                
+
                 if not is_batch_mode:
                     print(f"智能缩放不裁剪: 原图宽高比 {src_ratio:.2f}, 目标宽高比 {target_ratio:.2f}")
                     print(f"智能缩放不裁剪: {'原图更宽' if src_ratio > target_ratio else '原图更高'}, 缩放尺寸 {scale_width}x{scale_height}")
                     print(f"智能缩放不裁剪: 最终尺寸 {target_width}x{target_height}, 内容位置 ({x}, {y})")
+            elif self._fit_mode == 2:  # 智能适配不缩放
+                # 🔧 关键修复：保持原图尺寸居中放置，避免拉伸变形
+                if not is_batch_mode:
+                    print(f"使用智能适配不缩放模式: 保持原图尺寸 {processed_image.width}x{processed_image.height}")
+                # 计算居中位置
+                x = (target_width - processed_image.width) // 2
+                y = (target_height - processed_image.height) // 2
+                # 将原图粘贴到图层尺寸画布的中心
+                final_image.paste(processed_image, (x, y), processed_image)
+                if not is_batch_mode:
+                    print(f"智能适配不缩放: 内容位置 ({x}, {y})")
             else:  # 拉伸适配
                 if not is_batch_mode:
                     print(f"使用拉伸适配调整到图层尺寸: {target_width}x{target_height}")
@@ -898,8 +909,8 @@ class LayerImage(object):
             # 发生任何错误，尝试直接缩放原图
             try:
                 return HighQualityResampler.resize(image, (target_width, target_height), method=Resampling.LANCZOS, enable_sharpening=True)
-            except:
-                logger.debug("静默异常已忽略: except: in layer_image.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except: in layer_image.py", exc_info=True)
                 return None
     
     def _scale_to_fit(self, image):
@@ -1106,4 +1117,3 @@ class LayerImage(object):
             import traceback
             traceback.print_exc()
             return image
-

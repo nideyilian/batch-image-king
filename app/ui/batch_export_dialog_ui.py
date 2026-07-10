@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """BatchExportDialog 方法 mixin：由拆分脚本生成，方法原属于 BatchExportDialog。"""
 import logging
 
@@ -813,7 +814,7 @@ class BatchExportDialogUiMixin:
                         try:
                             filename = unicodedata.normalize('NFKC', filename)
                         except Exception:
-                            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_ui.py")
+                            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_ui.py", exc_info=True)
                             pass
 
                         # 使用Document类的方法来提取主文件名

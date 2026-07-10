@@ -13,6 +13,7 @@
 属于预存 NameError 风险。本 mixin 在文件顶部补上正确 import。
 """
 from __future__ import annotations
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import logging
 import os

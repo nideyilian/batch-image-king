@@ -203,8 +203,8 @@ class DocumentStatusIndicator(QWidget):
             try:
                 self.document.document_changed.disconnect(self.on_document_changed)
                 self.document.layer_selected.disconnect(self.on_layer_selected)
-            except:
-                logger.debug("静默异常已忽略: except in ui/status_indicators.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/status_indicators.py", exc_info=True)
                 pass
 
         self.document = document

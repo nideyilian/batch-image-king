@@ -247,7 +247,7 @@ class IntegratedTextPanelBase(object):
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
-    def _make_parameter_grid(self, *pairs):
+    def _make_parameter_grid(self, *pairs, single_row=False):
         container = QFrame()
         container.setProperty("role", "parameterGrid")
         container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -255,6 +255,22 @@ class IntegratedTextPanelBase(object):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(PropertyPanelA2.ROW_GAP)
         grid.setVerticalSpacing(PropertyPanelA2.ROW_GAP)
+
+        if single_row:
+            count = len(pairs)
+            for index, (title, control) in enumerate(pairs):
+                col = index * 3
+                title_label = self._label(title, width=PropertyPanelA2.SECONDARY_LABEL_WIDTH)
+                grid.addWidget(title_label, 0, col)
+                grid.addWidget(control, 0, col + 1)
+                grid.setColumnMinimumWidth(col + 2, PropertyPanelA2.ROW_GAP)
+            for c in range(2, count * 3, 3):
+                grid.setColumnStretch(c, 1)
+            container._responsive_single = True
+            container._responsive_count = count
+            container._responsive_labels = [grid.itemAtPosition(0, i * 3).widget() for i in range(count)]
+            container._responsive_controls = [grid.itemAtPosition(0, i * 3 + 1).widget() for i in range(count)]
+            return container
 
         for index, (title, control) in enumerate(pairs):
             row_index = index // 2
@@ -559,33 +575,32 @@ class IntegratedTextPanelBase(object):
 
         card_layout.addWidget(self._make_core_divider())
 
-        self.line_spacing_spin = self._make_spin(76)
+        self.auto_fit_check = QCheckBox("自动适配边框")
+        self.auto_fit_check.setChecked(True)
+        self.auto_fit_row = self._make_param_row("文本框", self.auto_fit_check)
+        card_layout.addLayout(self.auto_fit_row)
+
+        self.line_spacing_spin = self._make_spin(60)
         self.line_spacing_spin.setRange(50, 300)
         self.line_spacing_spin.setValue(120)
         self.line_spacing_spin.setSuffix("%")
-        self.letter_spacing_spin = self._make_spin(76)
+        self.letter_spacing_spin = self._make_spin(60)
         self.letter_spacing_spin.setRange(-20, 100)
         self.letter_spacing_spin.setValue(0)
         self.letter_spacing_spin.setSuffix("px")
-        self.spacing_params_row = self._make_parameter_grid(
-            ("间距", self.line_spacing_spin),
-            ("字距", self.letter_spacing_spin),
-        )
-        card_layout.addWidget(self.spacing_params_row)
-
-        card_layout.addWidget(self._make_core_divider())
-
-        self.auto_fit_check = QCheckBox("自动适配边框")
-        self.auto_fit_check.setChecked(True)
-        self.text_box_padding_spin = self._make_spin(76)
+        self.text_box_padding_spin = self._make_spin(60)
         self.text_box_padding_spin.setRange(0, 200)
         self.text_box_padding_spin.setValue(5)
         self.text_box_padding_spin.setSuffix("px")
-        self.text_box_params_row = self._make_parameter_grid(
-            ("文本框", self.auto_fit_check),
+        # 间距、字距、边距 三个参数排成同一行
+        self.spacing_params_row = self._make_parameter_grid(
+            ("间距", self.line_spacing_spin),
+            ("字距", self.letter_spacing_spin),
             ("边距", self.text_box_padding_spin),
+            single_row=True,
         )
-        card_layout.addWidget(self.text_box_params_row)
+        self.text_box_params_row = self.spacing_params_row
+        card_layout.addWidget(self.spacing_params_row)
 
         parent_layout.addWidget(card)
 
@@ -625,7 +640,7 @@ class IntegratedTextPanelBase(object):
         card_layout.addLayout(self._make_param_row("透明度", self.opacity_slider, self.opacity_label, stretch_last=False))
 
         self.gradient_controls, gradient_controls_layout = self._make_subpanel()
-        self.gradient_enable_check = QCheckBox("启用渐变")
+        self.gradient_enable_check = A2Switch()
         self.gradient_enable_check.hide()
         self.gradient_type_combo = QComboBox()
         self.gradient_type_combo.addItems(["线性", "径向", "角度"])
@@ -684,7 +699,7 @@ class IntegratedTextPanelBase(object):
         card_layout.addLayout(background_layout)
 
         self.background_controls, bg_layout = self._make_subpanel()
-        self.bg_enable_check = QCheckBox("启用背景")
+        self.bg_enable_check = A2Switch()
         self.bg_enable_check.hide()
         self.bg_enable_check.stateChanged.connect(self.on_background_enabled_changed)
         self.bg_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)

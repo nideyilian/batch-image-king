@@ -9,6 +9,7 @@ import time
 import hashlib
 import itertools
 import json
+import threading
 from typing import Dict, List, Set, Tuple, Optional
 from collections import defaultdict, Counter
 from app.utils.print_utils import safe_print as _safe_print
@@ -22,6 +23,7 @@ from app.utils.text_layer_virtual_path import (
 print = _safe_print
 
 _BINDING_VERBOSE = os.environ.get("BTPW_BINDING_VERBOSE", "0") == "1"
+_BINDING_RESTRICT_CACHE_VERBOSE = os.environ.get("BTPW_BINDING_RESTRICT_CACHE", "0") == "1"
 
 # 🔧 导入100%准确绑定修复系统
 try:
@@ -51,6 +53,11 @@ class LayerBindingManager:
         self.global_enabled = True  # 全局绑定开关
         self.layer_file_restrictions: Dict = {}  # 图层文件限制：{layer_id: [allowed_files]}
         self.global_combination_manager = GlobalCombinationManager()  # 全局组合管理器
+        # 文件限制分析会话缓存：绑定配置与文件夹内容不变时跨图复用，避免每张图重复 listdir/嵌套遍历
+        self._file_restrictions_session_cache: Dict = {}
+        self._file_restriction_lock = threading.RLock() if 'threading' in globals() else None
+        self._max_file_restrictions_cache_entries = 16
+        self._file_restriction_force_recompute = False
         self._debug_trace_enabled = (os.environ.get("BTPW_BINDING_DEBUG_PANEL", "0") == "1")
         self._debug_traces: List[str] = []
         self._debug_trace_max = 300
@@ -278,7 +285,7 @@ class LayerBindingManager:
                                 text_virtual_files.append(line_str)
                                 print(f"[直接匹配] 提取文字行作为虚拟文件名: '{line_str}'")
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in layer_binding_manager.py")
+                        logger.warning("静默异常已忽略: except Exception: in layer_binding_manager.py", exc_info=True)
                         pass
             
             # 提取图像图层的文件名（不含路径）
@@ -449,7 +456,7 @@ class LayerBindingManager:
             try:
                 group.last_selected_category = selected_category
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in layer_binding_manager.py")
+                logger.warning("静默异常已忽略: except Exception: in layer_binding_manager.py", exc_info=True)
                 pass
             random.seed()  # 恢复随机状态
 
@@ -470,7 +477,7 @@ class LayerBindingManager:
                     trace_rows.append((layer_name, file_path))
                 self.append_debug_trace("preview_randomize", group.name, selected_category, trace_rows)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in layer_binding_manager.py")
+                logger.warning("静默异常已忽略: except Exception: in layer_binding_manager.py", exc_info=True)
                 pass
             
             # 🔧 100%准确率验证：确保绑定结果的语义正确性
@@ -815,8 +822,22 @@ class LayerBindingManager:
         self.global_enabled = enabled
         print(f"全局绑定功能: {'启用' if enabled else '禁用'}")
 
-    def analyze_and_restrict_layer_files(self, all_layers: List):
-        """分析所有图层的文件并设置限制，防止非绑定图层使用其他图层的文件"""
+    def analyze_and_restrict_layer_files(self, all_layers: List, force: bool = False):
+        """分析所有图层的文件并设置限制，防止非绑定图层使用其他图层的文件。
+
+        分析结果只依赖：全局开关、绑定组配置、绑定图层当前图路径、各文件夹内容（mtime）。
+        批量导出时同一批次内这些输入恒定，故按内容寻址做会话级缓存，跳过重复的 listdir/嵌套遍历。
+        """
+        cache_key = self._compute_restriction_cache_key(all_layers)
+        if cache_key is not None and not force and not self._file_restriction_force_recompute:
+            with self._file_restriction_lock:
+                cached = self._file_restrictions_session_cache.get(cache_key)
+            if cached is not None:
+                self._restore_file_restrictions_from_cache(cached, all_layers)
+                if _BINDING_RESTRICT_CACHE_VERBOSE:
+                    print(f"[绑定管理器] 命中文件限制分析缓存，跳过重复计算（{len(cached)} 个图层）")
+                return
+
         print(f"[绑定管理器] 开始分析图层文件限制...")
 
         # 清除之前的限制
@@ -886,6 +907,72 @@ class LayerBindingManager:
                 print(f"[绑定管理器] 跳过绑定图层: {layer.name}")
 
         print(f"[绑定管理器] 文件限制分析完成，限制了 {len(self.layer_file_restrictions)} 个非绑定图层")
+
+        # 写入会话缓存（按图层名存储，兼容文档重载后对象 id 变化）
+        self._store_file_restrictions_to_cache(cache_key, all_layers)
+
+    def _compute_restriction_cache_key(self, all_layers: List):
+        """生成文件限制分析的输入指纹：全局开关 + 绑定组配置 + 绑定层当前图 + 文件夹 mtime。"""
+        try:
+            key_parts = [('ge', bool(self.global_enabled))]
+            groups_sorted = sorted(self.binding_groups.items(), key=lambda kv: kv[0])
+            g_parts = []
+            for gid, group in groups_sorted:
+                members = tuple(sorted(getattr(gl, 'name', '') for gl in group.layers))
+                g_parts.append((gid, getattr(group, 'name', ''), members))
+            key_parts.append(('g', tuple(g_parts)))
+            name_to_layer = {getattr(l, 'name', ''): l for l in all_layers}
+            bound = []
+            for gid, group in self.binding_groups.items():
+                for gl in group.layers:
+                    dl = name_to_layer.get(getattr(gl, 'name', ''))
+                    if dl is not None:
+                        bound.append((getattr(gl, 'name', ''), str(getattr(dl, 'current_image_path', None) or '')))
+            bound.sort()
+            key_parts.append(('b', tuple(bound)))
+            folders = []
+            for l in all_layers:
+                src = getattr(l, 'image_source', None)
+                if src and os.path.isdir(src):
+                    try:
+                        mtime = os.stat(src).st_mtime_ns
+                    except Exception:
+                        mtime = -1
+                    folders.append((getattr(l, 'name', ''), src, mtime))
+            folders.sort()
+            key_parts.append(('f', tuple(folders)))
+            raw = repr(key_parts)
+            return hashlib.md5(raw.encode('utf-8')).hexdigest()
+        except Exception:
+            return None
+
+    def _store_file_restrictions_to_cache(self, cache_key, all_layers: List):
+        """把当前 layer_file_restrictions 转为图层名键存入会话缓存（LRU）。"""
+        if cache_key is None:
+            return
+        id_to_name = {id(l): getattr(l, 'name', '') for l in all_layers}
+        name_to_files = {}
+        for lid, files in self.layer_file_restrictions.items():
+            nm = id_to_name.get(lid, '')
+            if nm:
+                name_to_files[nm] = list(files)
+        with self._file_restriction_lock:
+            self._file_restrictions_session_cache[cache_key] = name_to_files
+            self._file_restrictions_session_cache.move_to_end(cache_key) if hasattr(self._file_restrictions_session_cache, 'move_to_end') else None
+            while len(self._file_restrictions_session_cache) > self._max_file_restrictions_cache_entries:
+                self._file_restrictions_session_cache.popitem(last=False)
+
+    def _restore_file_restrictions_from_cache(self, cached: Dict, all_layers: List):
+        """从图层名键的缓存恢复 layer_file_restrictions（按当前图层对象 id 重建）。"""
+        self.layer_file_restrictions = {
+            id(l): list(cached[nm]) for l in all_layers
+            if (nm := getattr(l, 'name', '')) in cached
+        }
+
+    def _invalidate_file_restriction_cache(self):
+        """显式清空文件限制分析缓存（如绑定配置或文件夹发生外部变更时调用）。"""
+        with self._file_restriction_lock:
+            self._file_restrictions_session_cache.clear()
 
     def get_layer_file_restrictions(self, layer) -> List[str]:
         """获取图层的文件限制列表"""
@@ -958,6 +1045,7 @@ class LayerBindingManager:
             self.binding_groups.clear()
             self.layer_to_group.clear()
             self.layer_file_restrictions.clear()  # 清空文件限制
+            self._invalidate_file_restriction_cache()  # 文档重载后失效文件限制分析缓存
             self.global_combination_manager = GlobalCombinationManager()  # 重新初始化
 
             # 重建绑定组（如果有数据）

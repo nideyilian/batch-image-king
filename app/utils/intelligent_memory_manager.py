@@ -211,8 +211,8 @@ class ImageMemoryTracker:
                             # 这里不能直接删除，但可以清理引用
                             del image_ref
                             cleanup_count += 1
-                        except:
-                            logger.debug("静默异常已忽略: except in utils/intelligent_memory_manager.py")
+                        except Exception:
+                            logger.warning("静默异常已忽略: except in utils/intelligent_memory_manager.py", exc_info=True)
                             pass
         
         if cleanup_count > 0:
@@ -479,7 +479,7 @@ class IntelligentMemoryManager:
         try:
             process = psutil.Process()
             return process.memory_info().rss / (1024 * 1024)
-        except:
+        except Exception:
             return 0.0
     
     def register_image(self, image: Image.Image, source: str = "unknown"):

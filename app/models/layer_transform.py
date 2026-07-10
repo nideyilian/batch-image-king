@@ -277,7 +277,7 @@ class LayerTransform(object):
             self._cached_image_path = None
 
         except Exception as e:
-            logger.debug("静默异常已忽略: except in models/layer_transform.py")
+            logger.warning("静默异常已忽略: except in models/layer_transform.py", exc_info=True)
             pass
 
     def serialize(self):

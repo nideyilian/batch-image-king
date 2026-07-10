@@ -135,7 +135,7 @@ class FastRendererSurface(object):
                     layer.width = target_w
                     layer.height = target_h
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                    logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                     pass
 
             if rotation_override is not None:
@@ -153,7 +153,7 @@ class FastRendererSurface(object):
                     try:
                         layer.rotation = rot
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                        logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                         pass
 
             raw_image = self._get_layer_image(layer, document, was_just_loaded)
@@ -178,7 +178,7 @@ class FastRendererSurface(object):
                         layer.width = original_w
                         layer.height = original_h
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                        logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                         pass
 
                 if rotation_override is not None:
@@ -192,10 +192,10 @@ class FastRendererSurface(object):
                         try:
                             layer.rotation = original_rotation
                         except Exception:
-                            logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                            logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                             pass
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                 pass
 
         if layer_image is not None:
@@ -591,14 +591,14 @@ class FastRendererSurface(object):
             try:
                 builtins.print(line)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                 pass
             if export_trace_file:
                 try:
                     with open(export_trace_file, 'a', encoding='utf-8') as f:
                         f.write(line + "\n")
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                    logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                     pass
 
         manager = getattr(document, 'layer_size_match_manager', None)
@@ -1013,7 +1013,7 @@ class FastRendererSurface(object):
                     opaque = self._close_opaque_mask(opaque)
                     transparent = ~opaque
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+                logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
                 pass
 
             h, w = transparent.shape
@@ -1254,7 +1254,7 @@ class FastRendererSurface(object):
             return holes or []
 
     def _build_layer_positions_key(self, layer, document) -> str:
-        """?????????????????/????????"""
+        """构建图层位置缓存键（仅包含影响分身/填充位置的参数）"""
         try:
             return build_layer_positions_key(layer, document)
         except Exception:
@@ -1802,7 +1802,7 @@ class FastRendererSurface(object):
                     image = image.resize((target_w, target_h), Image.Resampling.BILINEAR)
             return image
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in fast_renderer_surface.py")
+            logger.warning("静默异常已忽略: except Exception: in fast_renderer_surface.py", exc_info=True)
             return None
 
     def _get_batch_preloaded_raw_image(self, document, image_path: str):
@@ -1884,4 +1884,3 @@ class FastRendererSurface(object):
             keys_to_remove = [k for k in self._layer_positions_cache.keys() if str(k).startswith(doc_prefix)]
             for k in keys_to_remove:
                 self._layer_positions_cache.pop(k, None)
-

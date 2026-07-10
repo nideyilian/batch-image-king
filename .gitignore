@@ -33,6 +33,7 @@ presets_backup/
 # IDE
 .vscode/
 .idea/
+.codebuddy/
 *.swp
 *.swo
 *~
@@ -51,6 +52,10 @@ settings.ini
 .DS_Store
 Thumbs.db
 tmp_*.json
+diff.txt
+_show_buckets.py
+_test_timeout.py
+_timeout_result.txt
 Quicker_*.png
 ab_real_export_benchmark.py
 benchmark_outputs/

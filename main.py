@@ -1,3 +1,4 @@
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 import sys
 import traceback
 import logging
@@ -401,10 +402,6 @@ def main() -> int:
             logger.info("智能线程池管理器已关闭")
             
             # 关闭其他全局资源
-            from app.utils.advanced_image_cache import shutdown_advanced_image_cache
-            shutdown_advanced_image_cache()
-            logger.info("高级图像缓存已关闭")
-            
             from app.utils.advanced_task_queue import shutdown_task_queue
             shutdown_task_queue()
             logger.info("高级任务队列已关闭")
@@ -426,7 +423,7 @@ def main() -> int:
             msg.setText("程序缺少必要的依赖模块")
             msg.setDetailedText(f"错误信息: {str(e)}\n\n请确保已安装所有依赖包:\npip install -r requirements.txt")
             msg.exec()
-        except:
+        except Exception:
             pass
         return finish_crash_session(crash_session_id, 2, logger)
     except (OSError, PermissionError) as e:

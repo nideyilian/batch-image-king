@@ -6,6 +6,12 @@ Photoshop级图像合成引擎
 3. 边缘保护和抗锯齿
 4. 颜色空间管理
 5. 内存优化
+
+职责边界（R6 收敛说明）：
+本模块**仅**经 ``AdvancedCompositorManager`` 在 quality 模式被调用
+（``_advanced_composite`` 路径），不对外直接暴露。默认渲染/导出主链路
+已统一收敛到 ``app.utils.unified_alpha_compositor``，二者形成「平衡/默认
+走 unified、quality 走本引擎」的双链路，禁止在预览/导出默认路径直接调用。
 """
 
 import numpy as np
@@ -24,7 +30,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             safe_print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             # 最后的备选方案
             safe_print("[DEBUG] Message encoding failed")
 
@@ -118,7 +124,7 @@ class PhotoshopCompositor:
                 safe_print("[INFO] 未检测到CUDA设备，使用CPU处理")
                 self.gpu_available = False
                 self.enable_gpu = False
-        except:
+        except Exception:
             safe_print("[INFO] OpenCV未编译CUDA支持，使用CPU处理")
             self.gpu_available = False
             self.enable_gpu = False

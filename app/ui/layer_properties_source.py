@@ -266,7 +266,7 @@ class LayerPropertiesSource(object):
                 try:
                     self.document.layers_selection_changed.disconnect(self._on_layers_selection_changed)
                 except Exception:
-                    logger.debug("静默异常已忽略: except in ui/layer_properties_source.py")
+                    logger.warning("静默异常已忽略: except in ui/layer_properties_source.py", exc_info=True)
                     pass
             self.document.document_changed.disconnect(self.delayed_update_panel)
 
@@ -661,16 +661,16 @@ class LayerPropertiesSource(object):
 
         try:
             # 同步名称 - 添加调试信息
-            print(f"[调试] 图层对象: {self.current_layer}")
-            print(f"[调试] 图层name属性: {self.current_layer.name}")
-            print(f"[调试] name属性类型: {type(self.current_layer.name)}")
+            safe_print(f"[调试] 图层对象: {self.current_layer}")
+            safe_print(f"[调试] 图层name属性: {self.current_layer.name}")
+            safe_print(f"[调试] name属性类型: {type(self.current_layer.name)}")
 
             # 同步名称
             layer_name = self.current_layer.name
             if isinstance(layer_name, str):
                 self.name_edit.setText(layer_name)
             else:
-                print(f"[错误] 图层名称不是字符串，而是: {type(layer_name)}")
+                safe_print(f"[错误] 图层名称不是字符串，而是: {type(layer_name)}")
                 # 尝试获取字符串表示
                 self.name_edit.setText(str(layer_name))
 
@@ -733,7 +733,7 @@ class LayerPropertiesSource(object):
                     shape_type_value = shape_type.value
                 else:
                     shape_type_value = str(shape_type)
-                print(f"同步形状参数可见性: {shape_type_value}")
+                safe_print(f"同步形状参数可见性: {shape_type_value}")
 
                 # 同步形状类型下拉框
                 shape_type_map = {
@@ -761,4 +761,3 @@ class LayerPropertiesSource(object):
         finally:
             # 恢复信号
             self.blockSignals(False)
-

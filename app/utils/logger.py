@@ -7,10 +7,66 @@
 - logging_setup.py - 日志设置模块
 """
 
+import contextlib
 import logging
 import os
+import sys
 import time
 from datetime import datetime
+
+
+__all__ = [
+    "get_logger",
+    "Logger",
+    "log_suppressed",
+    "swallow",
+]
+
+# ---------------------------------------------------------------------------
+# 统一日志使用规范（P0：收敛异常 swallowing / 统一日志）
+# ---------------------------------------------------------------------------
+# 1. 业务模块统一通过 ``get_logger(__name__)`` 获取 logger，不要散用 ``print``。
+# 2. 记录错误请用 ``logger.error("...", exc_info=True)`` 或 ``Logger.error(msg, exception=e)``，
+#    务必带上 ``exc_info`` 才能看到完整 traceback。
+# 3. 必须吞掉（继续运行）的异常，使用 ``log_suppressed`` 上下文管理器，
+#    它会以 WARNING 记录完整异常，避免“静默吞异常导致排障无据”：
+#
+#        with log_suppressed(logger, "加载预设失败"):
+#            load_preset(path)
+#
+#    老的写法 ``logger.debug("静默异常已忽略: ...")`` 已统一收敛为带 ``exc_info`` 的 WARNING。
+# ---------------------------------------------------------------------------
+
+
+def log_suppressed(logger, context="", level=logging.WARNING):
+    """上下文管理器：吞掉异常但记录完整 traceback，便于排障。
+
+    典型用途是防御性清理/降级逻辑（关文件、清缓存、线程钩子等），
+    这些异常不应中断主流程，但过去被完全静默，导致出错时无从排查。
+
+    Args:
+        logger: 任意 ``logging.Logger`` 实例。
+        context: 上下文说明，会拼进日志消息。
+        level: 记录级别，默认 ``logging.WARNING``；高频热路径可传 ``logging.DEBUG`` 降噪。
+
+    用法::
+
+        with log_suppressed(logger, "释放图层缓存"):
+            cache.release(layer_id)
+    """
+
+    @contextlib.contextmanager
+    def _context():
+        try:
+            yield
+        except Exception:
+            logger.log(level, "静默异常已忽略: %s", context, exc_info=sys.exc_info())
+
+    return _context()
+
+
+# 兼容别名
+swallow = log_suppressed
 
 
 def get_logger(name="app", log_file="app_log.txt", level=logging.INFO):
@@ -95,11 +151,11 @@ class Logger:
             # 如果无法创建指定目录，使用临时目录
             import tempfile
             log_dir = tempfile.gettempdir()
-            print(f"[警告] 无法创建日志目录，使用临时目录: {log_dir}")
+            logging.error("[警告] 无法创建日志目录，使用临时目录: %s", log_dir)
         except Exception as e:
             # 其他异常，使用当前目录
             log_dir = '.'
-            print(f"[警告] 创建日志目录时出错，使用当前目录: {e}")
+            logging.error("[警告] 创建日志目录时出错，使用当前目录: %s", e)
         
         # 设置日志文件名，使用当前日期和时间
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -119,17 +175,17 @@ class Logger:
             file_handler.setLevel(log_level)
         except (OSError, PermissionError) as e:
             # 如果无法创建日志文件，使用备用方案
-            print(f"[警告] 无法创建日志文件 {log_file}: {e}")
+            logging.error("[警告] 无法创建日志文件 %s: %s", log_file, e)
             # 尝试使用临时文件
             import tempfile
             temp_log = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log', encoding='utf-8')
             temp_log.close()
             file_handler = logging.FileHandler(temp_log.name, encoding='utf-8')
             file_handler.setLevel(log_level)
-            print(f"[警告] 使用临时日志文件: {temp_log.name}")
+            logging.error("[警告] 使用临时日志文件: %s", temp_log.name)
         except Exception as e:
             # 最后的备选方案：禁用文件日志
-            print(f"[警告] 创建文件处理器失败，禁用文件日志: {e}")
+            logging.error("[警告] 创建文件处理器失败，禁用文件日志: %s", e)
             file_handler = None
         
         # 创建日志格式（与main.py保持一致）

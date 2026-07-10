@@ -53,7 +53,7 @@ class DocumentLayers:
                 elif os.path.isdir(src_norm):
                     is_folder = True
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in document_layers.py")
+            logger.warning("静默异常已忽略: except Exception: in document_layers.py", exc_info=True)
             pass
 
         layer = NewLayer(name, x, y, width, height, image_source, use_original_size, is_folder)
@@ -61,7 +61,7 @@ class DocumentLayers:
             if hasattr(layer, 'changed') and hasattr(layer.changed, 'connect'):
                 layer.changed.connect(self.document_changed.emit)
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in document_layers.py")
+            logger.warning("静默异常已忽略: except Exception: in document_layers.py", exc_info=True)
             pass
         self.layers.append(layer)
         self.selected_layer_index = len(self.layers) - 1
@@ -309,7 +309,7 @@ class DocumentLayers:
             try:
                 new_idx = self.layers.index(selected)
             except ValueError:
-                logger.debug("静默异常已忽略: except ValueError: in document_layers.py")
+                logger.warning("静默异常已忽略: except ValueError: in document_layers.py", exc_info=True)
                 continue
             if new_idx not in self.selected_layer_indices:
                 self.selected_layer_indices.append(new_idx)
@@ -341,7 +341,7 @@ class DocumentLayers:
             try:
                 idx = int(idx)
             except (TypeError, ValueError):
-                logger.debug("静默异常已忽略: except (TypeError, ValueError): in document_layers.py")
+                logger.warning("静默异常已忽略: except (TypeError, ValueError): in document_layers.py", exc_info=True)
                 continue
             if 0 <= idx < len(self.layers) and idx not in valid_indices:
                 valid_indices.append(idx)

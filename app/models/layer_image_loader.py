@@ -290,3 +290,4 @@ if __name__ == "__main__":
             resized = loader.resize_image(image, 200, 200, fit_mode=0)
             print(f"调整后尺寸: {resized.size}")
 
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print

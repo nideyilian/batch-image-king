@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """
 整合的文字图层参数模块 - 专业UI设计
 遵循现代设计原则，将所有参数整合到一个紧凑的界面中

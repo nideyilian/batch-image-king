@@ -22,6 +22,7 @@ from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
+from app.ui.design_tokens import Tokens
 from app.utils.layer_tree import is_layer_group
 from app.services.ai_asset_service import (
     AIAssetRequest,
@@ -36,104 +37,25 @@ class LayerPropertiesBase(object):
     """Mixin for layer_properties_base (split from LayerPropertiesPanel)."""
 
     def _layer_panel_stylesheet(self):
-        """图层属性面板的局部样式，贴近参考图的暗色卡片界面。"""
-        return f"""
-            QWidget#layerPropertiesContent {{
-                background-color: #181818;
+        """图层属性面板局部样式——与普通文字图层面板共用同一套 Tokens 控件样式。"""
+        base = Tokens.control_qss("#layerPropertiesContent")
+        extra = f"""
+            #layerPropertiesContent QWidget#layerPropertiesContent {{
+                background-color: {Tokens.BG_PRIMARY};
             }}
-            QLabel {{
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                font-size: 13px;
-                background: transparent;
-            }}
-            QLabel#fieldLabel {{
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                font-weight: 500;
-            }}
-            QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
-                min-height: 24px;
-                background-color: #111214;
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                border: 1px solid #34363A;
-                border-radius: 5px;
-                padding: 3px 6px;
-                selection-background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-            }}
-            QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{
-                border-color: {CursorDarkTheme.ACCENT_PRIMARY};
-            }}
-            QSpinBox::up-button, QDoubleSpinBox::up-button,
-            QSpinBox::down-button, QDoubleSpinBox::down-button {{
+            #layerPropertiesContent QLineEdit::up-button,
+            #layerPropertiesContent QDoubleSpinBox::up-button,
+            #layerPropertiesContent QSpinBox::down-button,
+            #layerPropertiesContent QDoubleSpinBox::down-button {{
                 width: 18px;
                 border: none;
                 background: transparent;
             }}
-            QComboBox::drop-down {{
+            #layerPropertiesContent QComboBox::drop-down {{
                 width: 18px;
                 border: none;
             }}
-            QPushButton {{
-                min-height: 24px;
-                background-color: #202226;
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                border: 1px solid #34363A;
-                border-radius: 5px;
-                padding: 3px 6px;
-            }}
-            QPushButton:hover {{
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-                background-color: #292C31;
-            }}
-            QPushButton:checked {{
-                background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-                color: #FFFFFF;
-            }}
-            QCheckBox, QRadioButton {{
-                color: {CursorDarkTheme.TEXT_PRIMARY};
-                spacing: 8px;
-                font-size: 13px;
-            }}
-            QCheckBox::indicator {{
-                width: 18px;
-                height: 18px;
-                border-radius: 4px;
-                border: 1px solid #52555B;
-                background-color: #151618;
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-            }}
-            QRadioButton::indicator {{
-                width: 15px;
-                height: 15px;
-                border-radius: 8px;
-                border: 1px solid #52555B;
-                background-color: #151618;
-            }}
-            QRadioButton::indicator:checked {{
-                background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
-            }}
-            QSlider::groove:horizontal {{
-                height: 5px;
-                background: #34363A;
-                border-radius: 2px;
-            }}
-            QSlider::sub-page:horizontal {{
-                background: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-radius: 2px;
-            }}
-            QSlider::handle:horizontal {{
-                width: 17px;
-                height: 17px;
-                margin: -6px 0;
-                border-radius: 9px;
-                background: {CursorDarkTheme.ACCENT_HOVER};
-                border: 1px solid {CursorDarkTheme.ACCENT_PRIMARY};
-            }}
-            QPushButton#aspectLockButton {{
+            #layerPropertiesContent QPushButton#aspectLockButton {{
                 min-width: 26px;
                 max-width: 26px;
                 min-height: 26px;
@@ -141,40 +63,41 @@ class LayerPropertiesBase(object):
                 padding: 0;
                 font-size: 14px;
             }}
-            QPushButton#colorSwatchButton {{
-                min-height: 27px;
+            #layerPropertiesContent QPushButton#colorSwatchButton {{
+                min-height: {Tokens.CONTROL_HEIGHT}px;
                 text-align: center;
                 font-weight: 600;
             }}
-            QPushButton[segmentButton="true"] {{
-                min-height: 26px;
+            #layerPropertiesContent QPushButton[segmentButton="true"] {{
+                min-height: {Tokens.CONTROL_HEIGHT}px;
                 padding: 3px 4px;
                 font-size: 12px;
             }}
-            QPushButton[segmentButton="true"]:checked {{
-                background-color: {CursorDarkTheme.ACCENT_PRIMARY};
-                border-color: {CursorDarkTheme.ACCENT_HOVER};
+            #layerPropertiesContent QPushButton[segmentButton="true"]:checked {{
+                background-color: {Tokens.ACCENT};
+                border-color: {Tokens.ACCENT_HOVER};
                 color: #FFFFFF;
                 font-weight: 700;
             }}
-            QLabel#propertySectionLabel {{
-                color: #8E95A3;
-                font-size: 11px;
+            #layerPropertiesContent QLabel#propertySectionLabel {{
+                color: {Tokens.TEXT_MUTED};
+                font-size: {Tokens.FONT_SIZE_SMALL}px;
                 font-weight: 700;
                 padding-top: 2px;
             }}
-            QFrame#propertyDivider {{
-                background-color: #34363A;
+            #layerPropertiesContent QFrame#propertyDivider {{
+                background-color: {Tokens.BORDER_SOFT};
                 min-height: 1px;
                 max-height: 1px;
                 border: none;
             }}
-            QFrame#shapePreviewContainer {{
-                background-color: #202226;
-                border: 1px solid #34363A;
+            #layerPropertiesContent QFrame#shapePreviewContainer {{
+                background-color: {Tokens.BG_CONTROL_ALT};
+                border: 1px solid {Tokens.BORDER_SOFT};
                 border-radius: 6px;
             }}
         """
+        return base + extra
 
     def _label(self, text):
         label = QLabel(text)

@@ -108,7 +108,7 @@ class FastRendererCache(object):
             if image is not None and hasattr(image, "close"):
                 image.close()
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in fast_renderer_cache.py")
+            logger.warning("静默异常已忽略: except Exception: in fast_renderer_cache.py", exc_info=True)
             pass
 
     def _cache_value_bytes(self, value) -> int:

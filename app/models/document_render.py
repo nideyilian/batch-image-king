@@ -721,7 +721,7 @@ class DocumentRender:
                             if auto_blend == 'normal' and sample_a > 0.01 and neutral and (near_black or max(r, g, b) < 48):
                                 auto_blend = 'multiply'
                         except Exception:
-                            logger.debug("静默异常已忽略: except Exception: in document_render.py")
+                            logger.warning("静默异常已忽略: except Exception: in document_render.py", exc_info=True)
                             pass
 
                         if is_batch_mode:
@@ -924,9 +924,9 @@ class DocumentRender:
             print(f"[文档] 清除快速渲染器缓存失败: {e}")
 
         try:
-            from app.utils.intelligent_cache_system import get_intelligent_cache
+            from app.utils.intelligent_render_cache import get_intelligent_cache
             intelligent_cache = get_intelligent_cache()
-            intelligent_cache.clear_all_caches()
+            intelligent_cache.clear()
             print("[文档] 智能缓存系统已清除")
         except Exception as e:
             print(f"[文档] 清除智能缓存系统失败: {e}")

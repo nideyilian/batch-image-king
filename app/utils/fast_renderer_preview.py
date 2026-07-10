@@ -143,7 +143,9 @@ class FastRendererPreview(object):
             if self._verbose_logging:
                 print(f"[快速渲染] 预览渲染失败: {e}")
             # 回退到标准渲染
-            return document.render_composition()
+            from app.services.render_service import render_document_legacy_fallback
+
+            return render_document_legacy_fallback(document)
 
     @_serialized_preview
     def render_preview_incremental(
@@ -234,7 +236,7 @@ class FastRendererPreview(object):
                 self._last_preview_snapshot = composition.copy()
             return composition
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in fast_renderer_preview.py")
+            logger.warning("静默异常已忽略: except Exception: in fast_renderer_preview.py", exc_info=True)
             return None
 
     def render_batch(self, document) -> Optional[Image.Image]:
@@ -309,32 +311,18 @@ class FastRendererPreview(object):
             try:
                 builtins.print(line)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in fast_renderer_preview.py")
+                logger.warning("静默异常已忽略: except Exception: in fast_renderer_preview.py", exc_info=True)
                 pass
             if export_trace_file:
                 try:
                     with open(export_trace_file, 'a', encoding='utf-8') as f:
                         f.write(line + "\n")
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_preview.py")
+                    logger.warning("静默异常已忽略: except Exception: in fast_renderer_preview.py", exc_info=True)
                     pass
         
-        # 获取可见图层
-        try:
-            from app.utils.layer_tree import is_layer_group, is_effectively_visible
-            visible_layers = []
-            for idx, layer in enumerate(document.layers):
-                if idx == skip_layer_index or layer is None or is_layer_group(layer):
-                    continue
-                if is_effectively_visible(layer, document.layers):
-                    visible_layers.append(layer)
-        except Exception:
-            visible_layers = []
-            for idx, layer in enumerate(document.layers):
-                if idx == skip_layer_index:
-                    continue
-                if layer is not None and getattr(layer, 'visible', True):
-                    visible_layers.append(layer)
+        # 获取可见图层（会话缓存，避免每张图重复 O(N^2) 的组可见性展开）
+        visible_layers = self._get_visible_layers_cached(document, skip_layer_index)
         if not visible_layers:
             return composition
 
@@ -454,4 +442,3 @@ class FastRendererPreview(object):
             return image.resize(target_size, Image.Resampling.BILINEAR)
         except Exception:
             return image
-

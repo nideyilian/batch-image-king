@@ -134,7 +134,7 @@ class PerformanceOptimizer:
                 'cpu_count': cpu_count,
                 'performance_level': cls._determine_performance_level(memory_gb, cpu_count)
             }
-        except:
+        except Exception:
             return {
                 'memory_gb': 8.0,
                 'cpu_count': 4,
@@ -454,7 +454,7 @@ class PerformanceOptimizer:
                 'cache_size': len(cls._performance_cache),
                 'system_performance_level': cls._system_info['performance_level'] if cls._system_info else 'unknown'
             }
-        except:
+        except Exception:
             return {
                 'memory_used_percent': 0,
                 'memory_available_gb': 0,
@@ -481,8 +481,8 @@ class PerformanceOptimizer:
                 # 系统负载过高时使用快速模式
                 if memory.percent > 85 or cpu_percent > 80:
                     return True
-        except:
-            logger.debug("静默异常已忽略: except in utils/performance_optimizer.py")
+        except Exception:
+            logger.warning("静默异常已忽略: except in utils/performance_optimizer.py", exc_info=True)
             pass
         
         # 大图像或多图层时在批量模式下使用快速模式

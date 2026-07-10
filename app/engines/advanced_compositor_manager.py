@@ -50,7 +50,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             print("[DEBUG] Message encoding failed")
 
 
@@ -415,8 +415,8 @@ class AdvancedCompositorManager:
         if LEGACY_BLENDER_AVAILABLE:
             try:
                 return LegacyBlender.apply_blend_mode(base, overlay, mode, 1.0)
-            except:
-                logger.debug("静默异常已忽略: except in engines/advanced_compositor_manager.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in engines/advanced_compositor_manager.py", exc_info=True)
                 pass
         
         # 最简单的alpha合成
@@ -469,7 +469,7 @@ class AdvancedCompositorManager:
                 str(self.quality.value)
             ]
             return '_'.join(key_parts)
-        except:
+        except Exception:
             return None
     
     def _add_to_cache(self, key: str, image: Image.Image):

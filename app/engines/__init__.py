@@ -17,8 +17,8 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
-        except:
-            logger.debug("静默异常已忽略: except in engines/__init__.py")
+        except Exception:
+            logger.warning("静默异常已忽略: except in engines/__init__.py", exc_info=True)
             print("[DEBUG] Message encoding failed")
 
 
@@ -59,7 +59,7 @@ def get_advanced_compositor():
     if ENGINES_AVAILABLE:
         try:
             return AdvancedCompositorManager, CompositeQuality
-        except:
-            logger.debug("静默异常已忽略: except in engines/__init__.py")
+        except Exception:
+            logger.warning("静默异常已忽略: except in engines/__init__.py", exc_info=True)
             pass
     return None, None

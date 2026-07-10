@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                            QFileDialog, QDialogButtonBox, QCheckBox, QRadioButton, QButtonGroup, QComboBox)
 from PySide6.QtCore import Qt
 import os
-from app.models.document import Layer
+from app.models.layer_new import Layer
 
 class AddLayerDialog(QDialog):
     """添加图层对话框"""
@@ -72,10 +72,15 @@ class AddLayerDialog(QDialog):
         form_layout.addRow("", self.use_original_size)
 
         # 适配模式
+        # 索引定义（与 Layer.FIT_* 保持一致）：
+        #   0 = 智能缩放裁剪 (FIT_SMART_CROP)
+        #   1 = 智能缩放不裁剪 (FIT_SMART_FIT)
+        #   2 = 智能适配不缩放 (FIT_NO_SCALE) - 保持原图尺寸，避免拉伸变形
         fit_layout = QHBoxLayout()
         self.fit_mode_combo = QComboBox()
         self.fit_mode_combo.addItem("智能缩放裁剪")
         self.fit_mode_combo.addItem("智能缩放不裁剪")
+        self.fit_mode_combo.addItem("智能适配不缩放")
         fit_layout.addWidget(self.fit_mode_combo)
         form_layout.addRow("适配模式:", fit_layout)
 
@@ -149,7 +154,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             safe_print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             # 最后的备选方案
             safe_print("[DEBUG] Message encoding failed")
 

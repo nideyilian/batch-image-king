@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Layer 子 mixin 5: 渲染管线（_apply_effects + 描边 + 形状 + 蒙版 + 颜色/渐变 + resize/rotate 工具）
 
 从原 layer_new.py 拆分。涵盖：
@@ -208,7 +209,7 @@ class LayerRenderingMixin:
                 final_result.info["vector_offset_x"] = vector_offset_x
                 final_result.info["vector_offset_y"] = vector_offset_y
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in layer_new.py")
+                logger.warning("静默异常已忽略: except Exception: in layer_new.py", exc_info=True)
                 pass
             self._set_effects_stage_cache(stage3_key, final_result)
 

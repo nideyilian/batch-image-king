@@ -131,7 +131,7 @@ def normalize_vector_path_points(points: Any) -> List[List[float]]:
         try:
             normalized.append([float(x), float(y)])
         except (TypeError, ValueError):
-            logger.debug("静默异常已忽略: except in utils/vector_layer_geometry.py")
+            logger.warning("静默异常已忽略: except in utils/vector_layer_geometry.py", exc_info=True)
             continue
     return normalized
 
@@ -151,7 +151,7 @@ def normalize_vector_bezier_nodes(nodes: Any) -> List[Dict[str, Any]]:
             out_x = float(n.get("out_x", x))
             out_y = float(n.get("out_y", y))
         except (TypeError, ValueError):
-            logger.debug("静默异常已忽略: except in utils/vector_layer_geometry.py")
+            logger.warning("静默异常已忽略: except in utils/vector_layer_geometry.py", exc_info=True)
             continue
         nt = str(n.get("node_type", "corner")).lower()
         if nt not in {"corner", "smooth", "symmetric"}:

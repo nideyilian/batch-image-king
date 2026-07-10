@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from app.utils.print_utils import safe_print as print
 
 logger = logging.getLogger(__name__)
 
@@ -116,25 +117,25 @@ class OptimizedBatchExecutorMemoryGuard(object):
                 self._clear_preload_cache()
                 cleared = True
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
         try:
             if getattr(self, '_render_cache', None):
                 self._render_cache.clear()
                 cleared = True
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
         try:
             if self._clear_registered_worker_renderer_caches() > 0:
                 cleared = True
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
         try:
             gc.collect()
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
         if cleared:
             with self._lock:
@@ -156,7 +157,7 @@ class OptimizedBatchExecutorMemoryGuard(object):
             with self._lock:
                 self.stats['worker_renderer_count'] = int(renderer_count)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
         return renderer
 
@@ -177,7 +178,7 @@ class OptimizedBatchExecutorMemoryGuard(object):
                     renderer.clear_cache()
                     cleared_count += 1
             except Exception:
-                logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+                logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
                 pass
 
         if cleared_count > 0 and count_event:
@@ -191,14 +192,14 @@ class OptimizedBatchExecutorMemoryGuard(object):
         try:
             self._clear_registered_worker_renderer_caches(count_event=False)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
         try:
             with self._worker_renderers_lock:
                 self._worker_renderers.clear()
                 self._worker_renderer_ids.clear()
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
 
     def _enforce_memory_budget(
@@ -242,7 +243,7 @@ class OptimizedBatchExecutorMemoryGuard(object):
             try:
                 gc.collect()
             except Exception:
-                logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+                logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
                 pass
 
         waited = time.time() - wait_started
@@ -286,7 +287,7 @@ class OptimizedBatchExecutorMemoryGuard(object):
             with open(self._export_trace_file, 'a', encoding='utf-8') as f:
                 f.write(line + "\n")
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_memory_guard.py")
+            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
             pass
 
     def _optimize_memory_usage(self):

@@ -2,6 +2,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QSpinBox, QDoubleSpinBox, QCheckBox,
                            QGroupBox, QSlider, QFormLayout, QButtonGroup)
 from PySide6.QtCore import Qt, Signal
+from app.ui.design_tokens import Tokens
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
 
 class LayerTransformWidget(QWidget):
@@ -68,31 +69,6 @@ class LayerTransformWidget(QWidget):
 
         transform_layout.addLayout(rotation_layout)
 
-        # 快速旋转按钮
-        quick_rotation_layout = QHBoxLayout()
-        quick_rotation_layout.addWidget(QLabel("快速旋转:"))
-
-        # 旋转按钮组
-        self.rotation_buttons = QButtonGroup(self)
-
-        rotate_90_btn = QPushButton("90°")
-        rotate_90_btn.setToolTip("顺时针旋转90度")
-        rotate_90_btn.clicked.connect(lambda: self.apply_rotation_preset(90))
-        quick_rotation_layout.addWidget(rotate_90_btn)
-
-        rotate_180_btn = QPushButton("180°")
-        rotate_180_btn.setToolTip("旋转180度")
-        rotate_180_btn.clicked.connect(lambda: self.apply_rotation_preset(180))
-        quick_rotation_layout.addWidget(rotate_180_btn)
-
-        rotate_270_btn = QPushButton("270°")
-        rotate_270_btn.setToolTip("顺时针旋转270度（逆时针90度）")
-        rotate_270_btn.clicked.connect(lambda: self.apply_rotation_preset(270))
-        quick_rotation_layout.addWidget(rotate_270_btn)
-
-        quick_rotation_layout.addStretch()
-        transform_layout.addLayout(quick_rotation_layout)
-
         # 翻转控制
         flip_layout = QHBoxLayout()
         flip_layout.addWidget(QLabel("翻转:"))
@@ -123,7 +99,7 @@ class LayerTransformWidget(QWidget):
 
         # 变换信息显示
         self.transform_info_label = QLabel("当前: 无变换")
-        self.transform_info_label.setStyleSheet("color: #606064; font-size: 11px;")
+        self.transform_info_label.setStyleSheet(f"color: {Tokens.TEXT_DISABLED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
         global_controls_layout.addWidget(self.transform_info_label)
 
         transform_layout.addLayout(global_controls_layout)
@@ -234,21 +210,6 @@ class LayerTransformWidget(QWidget):
             return
 
         self.flip_vertical_changed.emit(checked)
-        self.update_transform_info()
-
-    def apply_rotation_preset(self, angle):
-        """应用旋转预设"""
-        if not self.current_layer:
-            return
-
-        self._updating = True
-        try:
-            self.rotation_spinbox.setValue(float(angle))
-            self.rotation_slider.setValue(angle)
-        finally:
-            self._updating = False
-
-        self.rotation_changed.emit(float(angle))
         self.update_transform_info()
 
     def reset_rotation(self):

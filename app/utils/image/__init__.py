@@ -7,7 +7,6 @@
 from ..image_quality import *
 from ..image_optimizer import *
 from ..image_quality_fixer import *
-from ..advanced_blending import *
 from ..fast_renderer import *
 from ..super_antialiasing import *
 from ..enhanced_corner_renderer import *

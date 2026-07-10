@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Main window components."""
 
 import logging
@@ -33,7 +34,7 @@ class MainWindowTabs(object):
                 if hasattr(self.document, 'layer_selected'):
                     self.document.layer_selected.disconnect(self.update_copy_paste_actions)
             except Exception:
-                logger.debug("静默异常已忽略: except in main_window_tabs.py")
+                logger.warning("静默异常已忽略: except in main_window_tabs.py", exc_info=True)
                 pass
     
         # 更新document引用
@@ -95,8 +96,10 @@ class MainWindowTabs(object):
             else:
                 print(f"[主窗口] 直接设置图层面板document为None")
                 self.layer_panel.document = None
-                # 手动清空列表
-                if hasattr(self.layer_panel, 'layer_list'):
+                # 手动清空列表（使用安全清空，规避 clear() 的 native 崩溃）
+                if hasattr(self.layer_panel, '_clear_layer_list'):
+                    self.layer_panel._clear_layer_list()
+                elif hasattr(self.layer_panel, 'layer_list'):
                     self.layer_panel.layer_list.clear()
         
             if hasattr(self.properties_panel, 'set_document'):

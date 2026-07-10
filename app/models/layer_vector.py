@@ -215,7 +215,7 @@ class LayerVector(object):
             try:
                 normalized.append([float(x), float(y)])
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in layer_vector.py")
+                logger.warning("静默异常已忽略: except Exception: in layer_vector.py", exc_info=True)
                 continue
         return normalized
 
@@ -235,7 +235,7 @@ class LayerVector(object):
                 out_x = float(n.get('out_x', x))
                 out_y = float(n.get('out_y', y))
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in layer_vector.py")
+                logger.warning("静默异常已忽略: except Exception: in layer_vector.py", exc_info=True)
                 continue
             normalized.append({
                 'x': x,

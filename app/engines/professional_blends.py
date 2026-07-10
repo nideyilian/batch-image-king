@@ -6,6 +6,12 @@
 3. 高精度计算
 4. HSV/HSL混合模式
 5. 特殊效果混合
+
+职责边界（R6 收敛说明）：
+本模块**仅**经 ``AdvancedCompositorManager._standard_composite`` 在 quality
+模式被调用（``ProfessionalBlender.blend``），不对外直接暴露。普通混合模式
+入口 ``document_blend.Blender`` 现已委托 ``unified_alpha_compositor.blend_with_mode``，
+请勿在默认渲染/导出路径直接调用本模块。
 """
 
 import numpy as np

@@ -391,15 +391,15 @@ class PresetPanel(QWidget):
             try:
                 # 简化ISO格式时间显示
                 created_at = created_at.split("T")[0]
-            except:
-                logger.debug("静默异常已忽略: except in ui/preset_panel.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/preset_panel.py", exc_info=True)
                 pass
 
         if modified_at:
             try:
                 modified_at = modified_at.split("T")[0]
-            except:
-                logger.debug("静默异常已忽略: except in ui/preset_panel.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/preset_panel.py", exc_info=True)
                 pass
 
         # 构建HTML内容
@@ -504,7 +504,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             print("[DEBUG] Message encoding failed")
 
 

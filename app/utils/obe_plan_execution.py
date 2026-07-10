@@ -17,6 +17,7 @@ import gc
 import io
 import math
 import logging
+from app.utils.print_utils import safe_print as print
 
 logger = logging.getLogger(__name__)
 class OptimizedBatchExecutorPlanExecution(object):
@@ -70,7 +71,7 @@ class OptimizedBatchExecutorPlanExecution(object):
             from app.utils.fast_renderer import FastRenderer
             FastRenderer.reset_batch_metrics()
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+            logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
             pass
     
         print(f"[] : {self.total_tasks} ")
@@ -168,7 +169,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                 try:
                     setattr(self.document, '_last_export_error', self.last_error_message or '导出失败')
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                     pass
             main_doc_changes = self._detect_main_document_runtime_mutation(main_doc_runtime_before)
             if main_doc_changes:
@@ -178,7 +179,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                 try:
                     setattr(self.document, '_last_export_snapshot_warning', warning)
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                     pass
                 if self.is_batch_mode:
                     print(f"[批处理] ⚠️ {warning}")
@@ -186,7 +187,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                 try:
                     setattr(self.document, '_last_export_snapshot_warning', "")
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                     pass
             return success
         
@@ -203,7 +204,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                 if hasattr(self.document, '_batch_preloaded_images'):
                     delattr(self.document, '_batch_preloaded_images')
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                 pass
             self._clear_preload_cache()
             # 批处理模式下执行额外的内存优化
@@ -444,7 +445,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                         if isinstance(value, str):
                             value = ShapeType(value)
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                        logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                         pass
                 if key in properties and isinstance(properties[key], dict) and 'value' in properties[key]:
                     properties[key]['value'] = value
@@ -453,7 +454,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                     try:
                         setattr(layer, key, value)
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                        logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                         pass
 
             if used_fast_path:
@@ -466,7 +467,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                             else:
                                 setattr(layer, attr, None)
                         except Exception:
-                            logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                            logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                             pass
                 return
 
@@ -481,11 +482,11 @@ class OptimizedBatchExecutorPlanExecution(object):
                             if isinstance(value, str):
                                 value = ShapeType(value)
                         except Exception:
-                            logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                            logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                             pass
                     setattr(layer, key, value)
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
                     pass
 
     def _is_cancel_requested(
@@ -524,8 +525,8 @@ class OptimizedBatchExecutorPlanExecution(object):
         try:
             import gc
             gc.collect()
-        except:
-            logger.debug("静默异常已忽略: except: in obe_plan_execution.py")
+        except Exception:
+            logger.warning("静默异常已忽略: except: in obe_plan_execution.py", exc_info=True)
             pass
 
     def _emit_export_trace(self, message: str):
@@ -536,5 +537,5 @@ class OptimizedBatchExecutorPlanExecution(object):
         try:
             print(line)
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in obe_plan_execution.py")
+            logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
             pass

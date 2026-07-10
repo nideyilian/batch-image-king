@@ -9,34 +9,45 @@
 注意：``export_image`` 用到 ``os`` 用于文件扩展名处理，所以模块顶层需 import。
 """
 from __future__ import annotations
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
+import logging
 import os
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentExportRender:
     """Document 导出相关：渲染 + 单图导出子 mixin。"""
 
     def render_document(self):
-        """渲染文档为PIL图像"""
+        """渲染文档为PIL图像。
+
+        统一经由 ``RenderService``（FastRenderer）这一唯一渲染出口，
+        保证预览与导出一致的所见即所得效果。仅在渲染服务失败时才回退到
+        兼容路径，确保功能可用。
+        """
         if self.canvas_width <= 0 or self.canvas_height <= 0:
             return None
-        # 使用新的渲染器实现，保持与导出一致
         try:
-            from app.models.document_renderer import DocumentRenderer
-            renderer = DocumentRenderer()
-            image = renderer.render_document(
-                canvas_width=self.canvas_width,
-                canvas_height=self.canvas_height,
-                layers=self.layers,
-                background_color=(0, 0, 0, 0),
-                force_opaque=False
+            from app.services.render_service import render_document_to_image
+
+            result = render_document_to_image(self, mode="preview")
+            if result.image is not None:
+                return result.image
+            logger.warning(
+                "静默异常已忽略: render_document_to_image 返回空图像，回退兼容渲染",
+                exc_info=True,
             )
-            return image
         except Exception:
-            # 回退到兼容渲染逻辑，以确保功能可用
-            return self._render_document_legacy()
+            logger.warning(
+                "静默异常已忽略: except Exception: in document_export_render.render_document",
+                exc_info=True,
+            )
+        # 渲染服务失败时回退到兼容渲染逻辑，确保功能可用
+        return self._render_document_legacy()
 
     def export_image(self, file_path: str) -> bool:
         """导出单张图像 - 使用与预览一致的渲染方式"""

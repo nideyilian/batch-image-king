@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Layer 子 mixin 2: 所有 @property getter/setter（基础属性 + 克隆 + 描边 + 圆角 + 形状 + 绑定 + 渐变）
 
 从原 layer_new.py 拆分。涵盖：

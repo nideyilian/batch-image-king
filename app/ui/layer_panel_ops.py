@@ -614,8 +614,8 @@ class LayerPanelOps(object):
             print(f"[图层面板] 文档设置完成，图层数量: {len(self.document.layers)}")
         else:
             print(f"[图层面板] 清空图层列表")
-            # 清空列表
-            self.layer_list.clear()
+            # 清空列表（使用安全清空，规避 clear() 的 native 崩溃）
+            self._clear_layer_list()
             self._selected_layer_indices = []
             # 禁用控件
             self._set_controls_enabled(False)

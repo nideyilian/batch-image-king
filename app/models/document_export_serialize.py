@@ -11,6 +11,7 @@
 ``self._clear_layer_temporary_states`` —— 这些都跨 mixin 存在。
 """
 from __future__ import annotations
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import logging
 import os
@@ -69,7 +70,7 @@ class DocumentExportSerialize:
                     setattr(layer, 'parent_group_id', str(parent_group_id))
                     setattr(layer, '_parent_group_id', str(parent_group_id))
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in document_export_serialize.py")
+                    logger.warning("静默异常已忽略: except Exception: in document_export_serialize.py", exc_info=True)
                     pass
             return layer
 
@@ -151,7 +152,7 @@ class DocumentExportSerialize:
                 logger = logging.getLogger('批图王')
                 logger.error(f"保存文档失败: {e}", exc_info=True)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in document_export_serialize.py")
+                logger.warning("静默异常已忽略: except Exception: in document_export_serialize.py", exc_info=True)
                 pass
             print(f"保存文档失败: {e}")
             return False
@@ -265,7 +266,7 @@ class DocumentExportSerialize:
                 logger = logging.getLogger('批图王')
                 logger.error(error_msg, exc_info=True)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in document_export_serialize.py")
+                logger.warning("静默异常已忽略: except Exception: in document_export_serialize.py", exc_info=True)
                 pass
             print(error_msg)
 

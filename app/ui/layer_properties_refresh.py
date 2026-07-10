@@ -224,8 +224,8 @@ class LayerPropertiesRefresh(object):
 
         # 设置当前图层并更新面板
         self.current_layer = self.document.layers[layer_index]
-        print(f"图层已选中: {self.current_layer.name}")
-        print(f"图层形状类型: {getattr(self.current_layer, 'shape_type', '无')}")
+        safe_print(f"图层已选中: {self.current_layer.name}")
+        safe_print(f"图层形状类型: {getattr(self.current_layer, 'shape_type', '无')}")
 
         if is_layer_group(self.current_layer):
             self.text_layer_panel.hide()
@@ -450,12 +450,12 @@ class LayerPropertiesRefresh(object):
             self._sync_shape_segment_buttons(shape_type_text)
 
             # 更新形状参数控件的可见性
-            print(f"准备更新形状参数可见性: shape_type={shape_type}")
-            print(f"形状参数容器是否可见: {self.shape_params_widget.isVisible()}")
+            safe_print(f"准备更新形状参数可见性: shape_type={shape_type}")
+            safe_print(f"形状参数容器是否可见: {self.shape_params_widget.isVisible()}")
 
             # 确保形状参数容器是可见的
             self.shape_params_widget.setVisible(True)
-            print(f"设置形状参数容器为可见")
+            safe_print(f"设置形状参数容器为可见")
 
             self.update_shape_params_visibility(shape_type)
 
@@ -534,7 +534,7 @@ class LayerPropertiesRefresh(object):
                     self.shape_preview.set_polygon_params(layer.polygon_rotation, sides)
                 self.shape_preview.update()
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/layer_properties_refresh.py")
+                logger.warning("静默异常已忽略: except in ui/layer_properties_refresh.py", exc_info=True)
                 pass
 
             # 图像源类型
@@ -686,4 +686,3 @@ class LayerPropertiesRefresh(object):
                 self.random_transform_widget.set_layer(None)
         finally:
             self._block_all_signals(False)
-

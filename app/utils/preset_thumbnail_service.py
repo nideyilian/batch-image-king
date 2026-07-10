@@ -30,7 +30,7 @@ class PresetThumbnailService:
             if os.path.exists(thumb_path) and os.path.getmtime(thumb_path) >= os.path.getmtime(preset_path):
                 return thumb_path
         except OSError:
-            logger.debug("静默异常已忽略: except in utils/preset_thumbnail_service.py")
+            logger.warning("静默异常已忽略: except in utils/preset_thumbnail_service.py", exc_info=True)
             pass
 
         try:
@@ -111,5 +111,5 @@ class PresetThumbnailService:
                 self.preset_manager.presets_index[preset_id]['thumbnail_path'] = thumb_path
                 self.preset_manager._save_index()
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/preset_thumbnail_service.py")
+            logger.warning("静默异常已忽略: except in utils/preset_thumbnail_service.py", exc_info=True)
             pass

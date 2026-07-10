@@ -17,6 +17,7 @@ import gc
 import io
 import math
 import logging
+from app.utils.print_utils import safe_print as print
 
 from app.utils.text_layer_virtual_path import (
     is_text_layer_virtual_path,
@@ -119,7 +120,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         int(render_backlog + save_backlog)
                     )
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
 
         def _rebalance_in_flight_limit():
@@ -343,12 +344,12 @@ class OptimizedBatchExecutorTaskRender(object):
                 try:
                     render_executor.shutdown(wait=False)
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
                 try:
                     io_executor.shutdown(wait=False)
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
     
         success_rate = completed_count / self.total_tasks if self.total_tasks > 0 else 0
@@ -434,12 +435,12 @@ class OptimizedBatchExecutorTaskRender(object):
                 if hasattr(canvas, 'close'):
                     canvas.close()
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
             try:
                 del canvas
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
 
     def _execute_single_task(self, task: ExportTask, cancel_event: Optional[threading.Event] = None,
@@ -469,14 +470,14 @@ class OptimizedBatchExecutorTaskRender(object):
                 try:
                     del canvas
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
                 return False
             if self._is_cancel_requested(cancel_event, cancel_callback):
                 try:
                     del canvas
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
                 return False
 
@@ -504,13 +505,13 @@ class OptimizedBatchExecutorTaskRender(object):
                 if 'canvas' in locals() and hasattr(canvas, 'close'):
                     canvas.close()
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
             try:
                 if 'canvas' in locals():
                     del canvas
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
 
     def _apply_layer_combination(self, combination):
@@ -685,14 +686,14 @@ class OptimizedBatchExecutorTaskRender(object):
                             try:
                                 layer.current_image_path = None
                             except Exception:
-                                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                                 pass
                         for attr in ('cached_image', '_cached_image', '_cached_image_path', '_current_image_cache'):
                             if hasattr(layer, attr):
                                 try:
                                     setattr(layer, attr, None)
                                 except Exception:
-                                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                                     pass
 
                 # 🔧 强化预计算：应用预计算的完整参数
@@ -834,7 +835,7 @@ class OptimizedBatchExecutorTaskRender(object):
                                 if getattr(layer, 'visible', True) and isinstance(layer, TextLayer) and i not in combo_text_doc_indices:
                                     layer.randomize_text()
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
 
                 # 🔧 关键修复：使用与预览一致的渲染方式，避免颜色偏差
@@ -855,7 +856,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         setattr(target_document, '_export_debug_trace_layer_paths', dict(debug_layer_path_by_id))
                         setattr(target_document, '_export_debug_trace_file', self._export_trace_file)
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                        logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                         pass
                 if self._preload_enabled:
                     setattr(target_document, '_batch_preloaded_images', self._image_preload_cache)
@@ -864,7 +865,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         if hasattr(target_document, '_batch_preloaded_images'):
                             delattr(target_document, '_batch_preloaded_images')
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                        logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                         pass
             
                 if self._is_cancel_requested(None, cancel_callback):
@@ -917,13 +918,13 @@ class OptimizedBatchExecutorTaskRender(object):
                     if hasattr(target_document, '_export_debug_trace_layer_paths'):
                         delattr(target_document, '_export_debug_trace_layer_paths')
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
                 try:
                     if hasattr(target_document, '_batch_preloaded_images'):
                         delattr(target_document, '_batch_preloaded_images')
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                    logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                     pass
                 # 🔧 关键修复：只恢复用户配置的属性，不恢复临时工作变量
                 for layer_idx, original_state in original_states.items():
@@ -1068,19 +1069,7 @@ class OptimizedBatchExecutorTaskRender(object):
                 from app.utils.intelligent_render_cache import clear_global_cache as _irc_clear
                 _irc_clear()
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
-                pass
-            try:
-                from app.utils.intelligent_cache_system import get_intelligent_cache as _get_ics
-                _get_ics().clear_all_caches()
-            except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
-                pass
-            try:
-                from app.utils.advanced_image_cache import get_advanced_image_cache as _get_aic
-                _get_aic().clear_cache()
-            except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_task_render.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
         
             # 批导任务使用 worker 文档，结束时不再清理主 UI 文档，避免污染预览状态。
@@ -1145,7 +1134,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         try:
                             basename = os_module.path.basename(old_path) if isinstance(old_path, str) else str(old_path)
                             print(f"[批处理] 清理图层 '{layer.name}' 的临时路径: {basename}")
-                        except:
+                        except Exception:
                             print(f"[批处理] 清理图层 '{layer.name}' 的临时路径")
                     layer.current_image_path = None  # 使用setter正确清理
             
@@ -1160,8 +1149,8 @@ class OptimizedBatchExecutorTaskRender(object):
                     try:
                         # 对于有setter的cached_image属性
                         layer.cached_image = None
-                    except:
-                        logger.debug("静默异常已忽略: except: in obe_task_render.py")
+                    except Exception:
+                        logger.warning("静默异常已忽略: except: in obe_task_render.py", exc_info=True)
                         pass
         
             if cleared_count > 0:

@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QRect, QEasingCurve, QTimer
 from PySide6.QtGui import QFont
 from app.ui.dark_theme import CursorDarkTheme
+from app.ui.design_tokens import Tokens
 
 class CollapsibleGroupBox(QFrame):
     """可折叠的分组控件"""
@@ -20,13 +21,13 @@ class CollapsibleGroupBox(QFrame):
         self.setFrameStyle(QFrame.Box)
         self.setStyleSheet(f"""
             CollapsibleGroupBox {{
-                border: 1px solid #3A3A3D;
-                border-radius: 6px;
+                border: 1px solid {Tokens.BORDER_PRIMARY};
+                border-radius: {Tokens.CARD_RADIUS}px;
                 margin-top: 3px;
-                background-color: #202123;
+                background-color: {Tokens.BG_SECONDARY};
             }}
             CollapsibleGroupBox[collapsed="true"] {{
-                background-color: #202123;
+                background-color: {Tokens.BG_SECONDARY};
             }}
         """)
 
@@ -37,16 +38,16 @@ class CollapsibleGroupBox(QFrame):
 
         # 标题栏
         self.title_frame = QFrame()
-        self.title_frame.setFixedHeight(32)
+        self.title_frame.setFixedHeight(Tokens.HEADER_HEIGHT)
         self.title_frame.setStyleSheet(f"""
             QFrame {{
-                background-color: #2A2A2C;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                border-bottom: 1px solid #34363A;
+                background-color: {Tokens.BG_TERTIARY};
+                border-top-left-radius: {Tokens.CARD_RADIUS}px;
+                border-top-right-radius: {Tokens.CARD_RADIUS}px;
+                border-bottom: 1px solid {Tokens.BORDER_SOFT};
             }}
             QFrame:hover {{
-                background-color: #303034;
+                background-color: {Tokens.BG_HOVER};
             }}
         """)
 
@@ -60,7 +61,7 @@ class CollapsibleGroupBox(QFrame):
             f"color: {CursorDarkTheme.TEXT_PRIMARY}; font-weight: 700; background: transparent;"
         )
         font = self.title_label.font()
-        font.setPointSize(10)
+        font.setPointSize(Tokens.FONT_SIZE_BASE)
         self.title_label.setFont(font)
 
         title_layout.addWidget(self.title_label)
@@ -83,7 +84,7 @@ class CollapsibleGroupBox(QFrame):
         self.content_container = QFrame()
         self.content_container.setStyleSheet(f"""
             QFrame {{
-                background-color: #202123;
+                background-color: {Tokens.BG_SECONDARY};
                 border: none;
                 border-radius: 0px;
             }}
@@ -103,6 +104,13 @@ class CollapsibleGroupBox(QFrame):
             self.setProperty("collapsed", "false")
 
         self.update_toggle_button()
+
+        # 让标题栏上的文字标签、摘要等子控件鼠标事件穿透到标题栏本身，
+        # 否则点击标题文字区域时 QLabel 会消费鼠标事件且不向父标题栏冒泡，
+        # 导致只有最右侧箭头按钮能折叠/展开（用户点击标题栏主体无反应）。
+        for child in self.title_frame.findChildren(QWidget):
+            if child is not self.toggle_button:
+                child.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
     def set_content_widget(self, widget):
         """设置内容控件"""

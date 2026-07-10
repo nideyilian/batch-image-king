@@ -6,6 +6,13 @@
 3. 边缘抗锯齿
 4. 子像素精度处理
 5. 颜色出血控制
+
+职责边界（R6 收敛说明）：
+本模块**仅**经 ``AdvancedCompositorManager`` 在 quality 模式被调用，
+实际活跃入口只有 ``AlphaCompositor.enhance_alpha_edges``
+（见 ``advanced_compositor_manager.py``）。其余 Porter-Duff / 预乘相关方法
+为历史残留，默认渲染/导出主链路已统一收敛到
+``app.utils.unified_alpha_compositor``，请勿在预览/导出默认路径直接调用本模块。
 """
 
 import numpy as np
@@ -29,7 +36,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             # 最后的备选方案
             print("[DEBUG] Message encoding failed")
 

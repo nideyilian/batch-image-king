@@ -177,7 +177,7 @@ class LayerPropertiesShape(object):
         self._sync_shape_segment_buttons(shape_type_text)
 
         # 更新形状参数控件的可见性
-        print(f"形状类型变更: {shape_type_value.value}")
+        safe_print(f"形状类型变更: {shape_type_value.value}")
         self.update_shape_params_visibility(shape_type_value.value)
 
         # 更新形状预览
@@ -195,7 +195,7 @@ class LayerPropertiesShape(object):
             self.shape_preview.set_polygon_params(self.polygon_rotation_spin.value(), sides)
             self.shape_preview.update()
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/layer_properties_shape.py")
+            logger.warning("静默异常已忽略: except in ui/layer_properties_shape.py", exc_info=True)
             pass
 
         # 通知文档已更改
@@ -229,7 +229,7 @@ class LayerPropertiesShape(object):
             )
             self.shape_preview.update()
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/layer_properties_shape.py")
+            logger.warning("静默异常已忽略: except in ui/layer_properties_shape.py", exc_info=True)
             pass
 
         # 高频参数调整采用节流刷新与延迟历史保存
@@ -253,7 +253,7 @@ class LayerPropertiesShape(object):
             self.shape_preview.set_polygon_params(self.polygon_rotation_spin.value(), sides)
             self.shape_preview.update()
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/layer_properties_shape.py")
+            logger.warning("静默异常已忽略: except in ui/layer_properties_shape.py", exc_info=True)
             pass
 
         # 高频参数调整采用节流刷新与延迟历史保存
@@ -526,60 +526,60 @@ class LayerPropertiesShape(object):
 
     def update_shape_params_visibility(self, shape_type):
         """根据形状类型更新参数控件的可见性"""
-        print(f"更新形状参数可见性: shape_type={shape_type}")
-        print(f"布局行数: {self.shape_params_layout.rowCount()}")
+        safe_print(f"更新形状参数可见性: shape_type={shape_type}")
+        safe_print(f"布局行数: {self.shape_params_layout.rowCount()}")
 
         # 隐藏所有形状参数控件
         for i in range(self.shape_params_layout.rowCount()):
             item = self.shape_params_layout.itemAt(i, QFormLayout.LabelRole)
             if item:
-                print(f"隐藏标签行 {i}: {item.widget()}")
+                safe_print(f"隐藏标签行 {i}: {item.widget()}")
                 item.widget().hide()
             item = self.shape_params_layout.itemAt(i, QFormLayout.FieldRole)
             if item:
-                print(f"隐藏字段行 {i}: {item.widget()}")
+                safe_print(f"隐藏字段行 {i}: {item.widget()}")
                 item.widget().hide()
 
         # 根据形状类型显示相应的参数控件
-        print(f"处理形状类型: {shape_type}")
+        safe_print(f"处理形状类型: {shape_type}")
         if shape_type == "right_trapezoid":
             # 显示梯形参数
-            print("显示梯形参数")
+            safe_print("显示梯形参数")
             self._show_shape_param_rows([0, 1, 2])  # 上底宽度, 下底宽度, 斜边方向
         elif shape_type in ["pentagon", "hexagon"]:
             # 显示多边形参数
-            print("显示多边形参数")
+            safe_print("显示多边形参数")
             self._show_shape_param_rows([3, 4])  # 旋转角度, 圆角半径
         elif shape_type == "circle":
             # 圆形不需要额外参数
-            print("圆形无额外参数")
+            safe_print("圆形无额外参数")
             pass
         elif shape_type == "rectangle":
             # 矩形不需要额外参数
-            print("矩形无额外参数")
+            safe_print("矩形无额外参数")
             pass
         else:
             # 未识别的形状类型，不显示额外参数
-            print(f"未识别的形状类型: {shape_type}")
+            safe_print(f"未识别的形状类型: {shape_type}")
             pass
 
     def _show_shape_param_rows(self, row_indices):
         """显示指定的形状参数行"""
-        print(f"显示形状参数行: {row_indices}")
+        safe_print(f"显示形状参数行: {row_indices}")
         for row_index in row_indices:
-            print(f"处理行 {row_index}")
+            safe_print(f"处理行 {row_index}")
             if row_index < self.shape_params_layout.rowCount():
                 label_item = self.shape_params_layout.itemAt(row_index, QFormLayout.LabelRole)
                 field_item = self.shape_params_layout.itemAt(row_index, QFormLayout.FieldRole)
-                print(f"标签项: {label_item}, 字段项: {field_item}")
+                safe_print(f"标签项: {label_item}, 字段项: {field_item}")
                 if label_item and label_item.widget():
-                    print(f"显示标签行 {row_index}")
+                    safe_print(f"显示标签行 {row_index}")
                     label_item.widget().show()
                 if field_item and field_item.widget():
-                    print(f"显示字段行 {row_index}")
+                    safe_print(f"显示字段行 {row_index}")
                     field_item.widget().show()
             else:
-                print(f"行 {row_index} 超出范围，总行数: {self.shape_params_layout.rowCount()}")
+                safe_print(f"行 {row_index} 超出范围，总行数: {self.shape_params_layout.rowCount()}")
 
 
     def update_fill_enabled(self, enabled):

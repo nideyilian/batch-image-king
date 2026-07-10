@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class StreamLogWriter:
             self._handle.write(str(message))
             self._handle.flush()
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/stream_redirector.py")
+            logger.warning("静默异常已忽略: except in utils/stream_redirector.py", exc_info=True)
             pass
 
     def flush(self):
@@ -45,7 +46,7 @@ class StreamLogWriter:
             if self._handle is not None:
                 self._handle.flush()
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/stream_redirector.py")
+            logger.warning("静默异常已忽略: except in utils/stream_redirector.py", exc_info=True)
             pass
 
     def isatty(self):

@@ -1,5 +1,6 @@
 """Helpers for loading preset data into temporary or visible documents."""
 
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 from app.models.document import Document
 
 

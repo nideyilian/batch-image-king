@@ -30,7 +30,7 @@ class ModernStyleRenderer:
             else:
                 safe_print("[现代样式] GPU加速不可用，使用CPU处理")
                 return False
-        except:
+        except Exception:
             safe_print("[现代样式] GPU检查失败，使用CPU处理")
             return False
     

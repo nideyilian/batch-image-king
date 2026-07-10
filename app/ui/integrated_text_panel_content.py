@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """
 整合的文字图层参数模块 - 专业UI设计
 遵循现代设计原则，将所有参数整合到一个紧凑的界面中
@@ -25,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.property_panel_a2 import PropertyPanelA2
+from app.ui.property_widgets import switch_row
 
 
 from app.ui.text_panel_widgets import (
@@ -44,6 +46,9 @@ class IntegratedTextPanelContent(object):
             if container is None:
                 continue
             grid = container.layout()
+            # 单排多参数（间距/字距/边距）容器：保持始终一行，不拆成竖排
+            if getattr(container, "_responsive_single", False):
+                continue
             second_label = getattr(container, "_responsive_second_label", None)
             second_control = getattr(container, "_responsive_second_control", None)
             if not isinstance(grid, QGridLayout) or second_label is None or second_control is None:
@@ -69,6 +74,8 @@ class IntegratedTextPanelContent(object):
         title_layout = self.pos_group.title_frame.layout()
         if title_layout:
             title_layout.insertWidget(1, self.position_summary_label)
+            # 摘要标签同样需鼠标穿透，使整条标题栏均可点击折叠
+            self.position_summary_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
         pos_layout = QVBoxLayout()
         pos_layout.setContentsMargins(0, 0, 0, 0)
@@ -131,13 +138,8 @@ class IntegratedTextPanelContent(object):
         effects_layout.setSpacing(8)
 
         # 阴影效果
-        shadow_row = QHBoxLayout()
-        shadow_row.addWidget(QLabel("阴影:"))
-        self.shadow_check = QCheckBox("启用阴影")
-        self.shadow_check.setStyleSheet("color: #F4F4F5;")
+        shadow_row, self.shadow_check = switch_row("阴影")
         self.shadow_check.stateChanged.connect(self.on_shadow_enabled_changed)  # 连接信号
-        shadow_row.addWidget(self.shadow_check)
-        shadow_row.addStretch()
         effects_layout.addLayout(shadow_row)
 
         # 阴影参数
@@ -181,13 +183,8 @@ class IntegratedTextPanelContent(object):
         effects_layout.addLayout(shadow_color_layout)
 
         # 发光效果
-        glow_row = QHBoxLayout()
-        glow_row.addWidget(QLabel("发光:"))
-        self.glow_check = QCheckBox("启用发光")
-        self.glow_check.setStyleSheet("color: #F4F4F5;")
+        glow_row, self.glow_check = switch_row("发光")
         self.glow_check.stateChanged.connect(self.on_glow_enabled_changed)  # 连接信号
-        glow_row.addWidget(self.glow_check)
-        glow_row.addStretch()
         effects_layout.addLayout(glow_row)
 
         # 发光参数
@@ -224,12 +221,8 @@ class IntegratedTextPanelContent(object):
         bg_layout.setSpacing(8)
 
         # 背景启用
-        bg_enable_layout = QHBoxLayout()
-        self.bg_enable_check = QCheckBox("启用背景")
-        self.bg_enable_check.setStyleSheet("color: #F4F4F5;")
+        bg_enable_layout, self.bg_enable_check = switch_row("背景")
         self.bg_enable_check.stateChanged.connect(self.on_background_enabled_changed)  # 连接信号
-        bg_enable_layout.addWidget(self.bg_enable_check)
-        bg_enable_layout.addStretch()
         bg_layout.addLayout(bg_enable_layout)
 
         # 背景颜色
@@ -308,12 +301,8 @@ class IntegratedTextPanelContent(object):
         gradient_layout.setSpacing(6)
 
         # 渐变启用
-        gradient_enable_layout = QHBoxLayout()
-        self.gradient_enable_check = QCheckBox("启用渐变")
-        self.gradient_enable_check.setStyleSheet("color: #F4F4F5;")
+        gradient_enable_layout, self.gradient_enable_check = switch_row("渐变")
         self.gradient_enable_check.stateChanged.connect(self.on_gradient_enabled_changed)  # 连接信号
-        gradient_enable_layout.addWidget(self.gradient_enable_check)
-        gradient_enable_layout.addStretch()
         gradient_layout.addLayout(gradient_enable_layout)
 
         # 渐变类型
@@ -456,7 +445,7 @@ class IntegratedTextPanelContent(object):
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump({"recent": self._recent_fonts[:self._recent_font_limit]}, f, ensure_ascii=False, indent=2)
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/integrated_text_panel_content.py")
+            logger.warning("静默异常已忽略: except in ui/integrated_text_panel_content.py", exc_info=True)
             pass
 
     def _clear_layout_widgets(self, layout: QHBoxLayout):
@@ -608,4 +597,3 @@ class IntegratedTextPanelContent(object):
         """更新预览 - 由于预览卡片已移除，此方法目前为空实现"""
         # 预览功能已移除，因为预览窗口已经可以查看文字效果
         pass
-

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """BatchExportDialog 方法 mixin：由拆分脚本生成，方法原属于 BatchExportDialog。"""
 import logging
 
@@ -130,7 +131,7 @@ class BatchExportDialogProgressMixin:
                 if status_bar is not None:
                     status_bar.showMessage(str(message), int(timeout_ms))
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
     def _get_main_window(self):
@@ -263,7 +264,7 @@ class BatchExportDialogProgressMixin:
                     self._notify_non_blocking(f"导出调试日志: {trace_file}", 7000)
                     self._export_trace_path_announced = True
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
     def minimize_to_tab(self):
@@ -274,7 +275,7 @@ class BatchExportDialogProgressMixin:
         try:
             print(message)
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
     def start_export(self):
@@ -338,7 +339,7 @@ class BatchExportDialogProgressMixin:
             if hasattr(self.document, '_last_export_adjustment'):
                 self.document._last_export_adjustment = None
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
         # 设置导出中的UI状态（内嵌进度区）
@@ -455,27 +456,27 @@ class BatchExportDialogProgressMixin:
                 self._build_progress_text(self.progress_bar.value(), total)
             )
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
         # 断开文档的进度信号连接
         if hasattr(self.document, 'export_progress_updated'):
             try:
                 self.document.export_progress_updated.disconnect(self.update_progress)
-            except:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
         if hasattr(self.document, 'file_exported'):
             try:
                 self.document.file_exported.disconnect(self.update_progress_text)
-            except:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
         if hasattr(self.document, 'export_stage_updated'):
             try:
                 self.document.export_stage_updated.disconnect(self.update_export_stage)
-            except:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
 
     @Slot(int)
@@ -497,7 +498,7 @@ class BatchExportDialogProgressMixin:
                 self._build_progress_text(self.progress_bar.value(), total)
             )
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
     @Slot(str)
@@ -514,7 +515,7 @@ class BatchExportDialogProgressMixin:
                     self._build_progress_text(self.progress_bar.value(), total)
                 )
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
 
     @Slot(str)
@@ -534,7 +535,7 @@ class BatchExportDialogProgressMixin:
             if stage in ("汇总统计", "导出完成"):
                 self._update_performance_diagnostics(clear_only=False)
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
     def _update_performance_diagnostics(self, clear_only=False):
@@ -677,27 +678,27 @@ class BatchExportDialogProgressMixin:
         if hasattr(self.document, 'export_progress_updated'):
             try:
                 self.document.export_progress_updated.disconnect(self.update_progress)
-            except:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
         if hasattr(self.document, 'file_exported'):
             try:
                 self.document.file_exported.disconnect(self.update_progress_text)
-            except:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
         if hasattr(self.document, 'export_stage_updated'):
             try:
                 self.document.export_stage_updated.disconnect(self.update_export_stage)
-            except:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
         self._set_export_running_ui(False)
         self._update_performance_diagnostics(clear_only=False)
         try:
             self.recommend_dynamic_budget_params()
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
             pass
 
         # 启用按钮
@@ -728,7 +729,7 @@ class BatchExportDialogProgressMixin:
                         f"预计算/渲染/写盘耗时请查看下方诊断面板"
                     )
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
             message = f"导出完成：{self.path_edit.text()}"
             try:
@@ -746,7 +747,7 @@ class BatchExportDialogProgressMixin:
                     if reasons:
                         message += f"；原因：{'；'.join(reasons[:2])}"
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
 
             try:
@@ -758,7 +759,7 @@ class BatchExportDialogProgressMixin:
                     io = float(perf.get('io_time', 0.0) or 0.0)
                     message += f" | 吞吐 {tp:.2f}张/秒（预计算{pre:.2f}s 渲染{rnd:.2f}s 写盘{io:.2f}s）"
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_progress.py")
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
 
             self._notify_non_blocking(message, 8000)

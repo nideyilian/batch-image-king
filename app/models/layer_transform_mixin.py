@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """Layer 子 mixin 3: 变换属性 + 变换操作 + 随机变换 + 图像变换渲染
 
 从原 layer_new.py 拆分。涵盖：

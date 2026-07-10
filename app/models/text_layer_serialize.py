@@ -97,7 +97,7 @@ class TextLayerSerializeMixin:
                 start = max(0, min(text_len, int(item.get("start", 0))))
                 end = max(0, min(text_len, int(item.get("end", 0))))
             except (TypeError, ValueError):
-                logger.debug("静默异常已忽略: except (TypeError, ValueError): in text_layer_serialize.py")
+                logger.warning("静默异常已忽略: except (TypeError, ValueError): in text_layer_serialize.py", exc_info=True)
                 continue
             if end <= start:
                 continue

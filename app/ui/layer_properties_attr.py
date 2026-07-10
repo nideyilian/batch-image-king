@@ -222,7 +222,7 @@ class LayerPropertiesAttr(object):
         self.current_layer.fit_mode = mode
 
         # 更新裁剪方向控件的启用状态
-        from app.models.document import Layer
+        from app.models.layer_new import Layer
         self.crop_direction_combo.setEnabled(mode == Layer.FIT_SMART_CROP)
 
         # 清除缓存图像以强制重新加载

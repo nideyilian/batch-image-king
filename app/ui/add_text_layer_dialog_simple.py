@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """
 简化的添加文字图层对话框
 只包含最基本的文字内容输入，其他参数在属性面板设置

@@ -303,7 +303,7 @@ class BindingGroupCategorySelection:
                                 text_virtual_files.append(virtual_filename)
                                 print(f"[直接匹配] 文字虚拟文件: '{virtual_filename}'")
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in binding_group.py")
+                        logger.warning("静默异常已忽略: except Exception: in binding_group.py", exc_info=True)
                         pass
 
                 # 也检查current_text

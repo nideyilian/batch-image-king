@@ -17,6 +17,7 @@ import gc
 import io
 import math
 import logging
+from app.utils.print_utils import safe_print as print
 
 from app.utils.text_layer_virtual_path import is_text_layer_virtual_path
 
@@ -58,7 +59,7 @@ class OptimizedBatchExecutorIoExport(object):
                     max_preload = min(max_preload, 64)
                     max_bytes = min(max_bytes, 160 * 1024 * 1024)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_io_export.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_io_export.py", exc_info=True)
                 pass
         memory_limit_mb = self._refresh_memory_budget()
         if self.is_batch_mode and memory_limit_mb > 0:
@@ -69,7 +70,7 @@ class OptimizedBatchExecutorIoExport(object):
             available_bytes = int(psutil.virtual_memory().available)
             max_bytes = min(max_bytes, max(32 * 1024 * 1024, int(available_bytes * 0.18)))
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in obe_io_export.py")
+            logger.warning("静默异常已忽略: except Exception: in obe_io_export.py", exc_info=True)
             pass
         preload_candidates = sorted(
             unique_images,
@@ -115,7 +116,7 @@ class OptimizedBatchExecutorIoExport(object):
             try:
                 self._image_preload_cache.move_to_end(image_path)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_io_export.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_io_export.py", exc_info=True)
                 pass
             with self._lock:
                 self.stats['preload_hits'] += 1
@@ -188,7 +189,7 @@ class OptimizedBatchExecutorIoExport(object):
             if profile in ('quality', 'balanced', 'speed', 'size'):
                 return profile
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in obe_io_export.py")
+            logger.warning("静默异常已忽略: except Exception: in obe_io_export.py", exc_info=True)
             pass
 
         io_profile = str(getattr(self, '_io_profile', 'balanced') or 'balanced').strip().lower()
@@ -280,7 +281,7 @@ class OptimizedBatchExecutorIoExport(object):
                                     self.stats['written_bytes'] += max(0, current_size)
                                     self.stats['vips_save_count'] += 1
                             except Exception:
-                                logger.debug("静默异常已忽略: except Exception: in obe_io_export.py")
+                                logger.warning("静默异常已忽略: except Exception: in obe_io_export.py", exc_info=True)
                                 pass
                             return True
                     else:
@@ -393,7 +394,7 @@ class OptimizedBatchExecutorIoExport(object):
                 with self._lock:
                     self.stats['written_bytes'] += max(0, written)
             except Exception:
-                logger.debug("静默异常已忽略: except Exception: in obe_io_export.py")
+                logger.warning("静默异常已忽略: except Exception: in obe_io_export.py", exc_info=True)
                 pass
 
             return True

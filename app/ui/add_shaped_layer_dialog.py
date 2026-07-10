@@ -1,3 +1,4 @@
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QComboBox, QSpinBox, QPushButton, QGroupBox,
                                QGridLayout, QLineEdit, QFileDialog, QCheckBox,

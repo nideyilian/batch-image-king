@@ -1,8 +1,18 @@
-"""Unified rendering service facade.
+"""唯一渲染出口（Single Render Exit Point）。
 
-The project still has several historical rendering entry points. This service
-gives new code a single request/result API while delegating to the existing
-renderer implementations underneath.
+架构约定（P1 收敛）：
+- 全项目**所有**文档渲染（预览 / 导出 / 缩略图）都必须经由本模块的
+  ``RenderService``（底层引擎为 ``FastRenderer``），禁止再散用
+  ``document.render_composition`` 等历史实现，避免"预览≠导出"的不一致。
+- 新代码统一调用便捷函数 :func:`render_document_to_image`；需要更细控制时直接构造
+  ``RenderRequest`` 交给 :meth:`RenderService.render`。
+- ``RenderService.render`` 内部已自带兜底：FastRenderer 失败时回退到
+  ``document.render_composition``，保证功能不中断。
+
+历史实现现状：
+- 旧的 ``app.models.document_renderer.DocumentRenderer`` 已于 R5 删除（P2 收敛），
+  所有渲染统一收敛到本 ``RenderService`` 单一路出口。
+- ``Document.render_composition`` 仅作为 ``RenderService`` 的兜底路径存在。
 """
 
 from __future__ import annotations
@@ -122,3 +132,36 @@ def get_render_service() -> RenderService:
     if _render_service is None:
         _render_service = RenderService()
     return _render_service
+
+
+def render_document_to_image(
+    document: object,
+    mode: str = "preview",
+    quality_profile: str = "quality",
+    batch_mode: bool = False,
+    force_refresh: bool = False,
+    cancel_callback: CancelCallback = None,
+) -> "RenderResult":
+    """唯一渲染出口的便捷函数：把文档渲染成 PIL 图像。
+
+    所有预览 / 导出 / 缩略图渲染都应调用本函数，而不是自行 new 一个渲染器。
+    返回的 ``RenderResult.image`` 为渲染结果（失败/取消时为 ``None``）。
+
+    Args:
+        document: 实现了渲染所需属性的文档对象（``canvas_width/height``、``layers`` 等）。
+        mode: ``"preview"`` 或 ``"export"``。
+        quality_profile: ``quality`` / ``balanced`` / ``speed`` / ``size``。
+        batch_mode: 是否批量模式（影响缓存与内存策略）。
+        force_refresh: 是否强制重渲染（跳过预览缓存）。
+        cancel_callback: 可调用对象，返回 ``True`` 时中止渲染。
+    """
+    return get_render_service().render(
+        RenderRequest(
+            document=document,
+            mode=mode,
+            quality_profile=quality_profile,
+            batch_mode=batch_mode,
+            force_refresh=force_refresh,
+            cancel_callback=cancel_callback,
+        )
+    )

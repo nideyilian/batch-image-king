@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """
 图像质量管理器
 提供高质量的图像保存和处理功能
@@ -47,7 +48,7 @@ class ImageQualityManager:
                 print(f"保存图像失败: {report.error}")
             return bool(report.success)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/image_quality.py")
+            logger.warning("静默异常已忽略: except in utils/image_quality.py", exc_info=True)
             pass
 
         try:
@@ -78,7 +79,7 @@ class ImageQualityManager:
 
                 image = prepare_image_for_export(image, format_name, get_quality_policy("quality"))
             except Exception:
-                logger.debug("静默异常已忽略: except in utils/image_quality.py")
+                logger.warning("静默异常已忽略: except in utils/image_quality.py", exc_info=True)
                 pass
 
             # 处理不同格式

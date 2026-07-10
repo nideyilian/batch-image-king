@@ -98,8 +98,9 @@ class Layer(
     _effects_stage_cache_max_entries = 1024
 
     # 图像适配方式常量（与LegacyLayer兼容）
-    FIT_SMART_CROP = 0
-    FIT_SMART_FIT = 1
+    FIT_SMART_CROP = 0     # 智能缩放裁剪（按目标尺寸等比缩放并居中裁剪）
+    FIT_SMART_FIT = 1      # 智能缩放不裁剪（等比缩放到完全显示，居中放置）
+    FIT_NO_SCALE = 2       # 智能适配不缩放（保持原图尺寸，避免拉伸变形）
 
     # 裁剪方向常量（与LegacyLayer兼容）
     CROP_CENTER = 0

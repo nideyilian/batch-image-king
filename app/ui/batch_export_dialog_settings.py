@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """BatchExportDialog 方法 mixin：由拆分脚本生成，方法原属于 BatchExportDialog。"""
 import logging
 
@@ -217,7 +218,7 @@ class BatchExportDialogSettingsMixin:
                 else:
                     self.document.is_modified = True
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/batch_export_dialog_settings.py")
+                logger.warning("静默异常已忽略: except in ui/batch_export_dialog_settings.py", exc_info=True)
                 pass
 
     def save_config(self):
@@ -228,7 +229,7 @@ class BatchExportDialogSettingsMixin:
             if hasattr(self.document, 'save_state'):
                 self.document.save_state("保存批量导出设置")
         except Exception:
-            logger.debug("静默异常已忽略: except in ui/batch_export_dialog_settings.py")
+            logger.warning("静默异常已忽略: except in ui/batch_export_dialog_settings.py", exc_info=True)
             pass
 
         # 显示简短的保存成功提示

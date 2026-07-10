@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from app.models.document import Document
 from app.models.binding_manager import BindingGroup
 from app.models.text_layer import TextLayer
-from app.utils.batch_export_precomputer import get_batch_precomputer_v2
+from app.utils.batch_export_precomputer_v2 import get_batch_precomputer_v2
 
 
 def _touch_images(directory, prefix, extensions):

@@ -2,6 +2,7 @@
 智能线程池管理器
 根据系统资源动态调整线程池配置，统一管理全局线程池资源
 """
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import os
 import psutil
@@ -277,7 +278,7 @@ class IntelligentThreadPoolManager:
                 # 从队列获取任务（阻塞等待）
                 try:
                     task_info = queue.get(timeout=1.0)
-                except:
+                except Exception:
                     continue  # 超时继续循环
                 
                 if task_info is None:  # 停止信号
@@ -605,8 +606,8 @@ class IntelligentThreadPoolManager:
             for queue in self._task_queues.values():
                 try:
                     queue.put(None, block=False)
-                except:
-                    logger.debug("静默异常已忽略: except in utils/intelligent_thread_pool_manager.py")
+                except Exception:
+                    logger.warning("静默异常已忽略: except in utils/intelligent_thread_pool_manager.py", exc_info=True)
                     pass
             
             # 等待调度线程结束

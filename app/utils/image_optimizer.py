@@ -6,6 +6,7 @@
 - image_optimizer.py - 图像处理性能优化器
 - image_process_optimizer.py - 图像处理优化器
 """
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import os
 import time
@@ -274,7 +275,7 @@ class ProcessCache:
             param_str = "|".join(f"{k}:{v}" for k, v in sorted(params.items()))
             key_string = f"{operation}:{image_id}:{param_str}"
             return hashlib.md5(key_string.encode()).hexdigest()[:16]
-        except:
+        except Exception:
             return f"{operation}_{time.time()}"
 
     def get(self, operation: str, image_id: str, params: Dict) -> Optional[Any]:
@@ -375,7 +376,7 @@ class ImageProcessOptimizer:
             img_array = np.array(image)
             img_hash = hashlib.md5(img_array.tobytes()).hexdigest()[:16]
             return f"{image.size[0]}x{image.size[1]}_{img_hash}"
-        except:
+        except Exception:
             return f"{id(image)}_{time.time()}"
 
     @time_it

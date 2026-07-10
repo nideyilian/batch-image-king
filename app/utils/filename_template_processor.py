@@ -2,6 +2,7 @@
 统一的文件名模板处理器
 消除文件名模板处理相关的代码重复，提供标准化的模板处理接口
 """
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import re
 import os

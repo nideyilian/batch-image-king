@@ -77,7 +77,7 @@ class BindingGroupCache:
                     'files': normalized_files
                 }
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in binding_group.py")
+            logger.warning("静默异常已忽略: except Exception: in binding_group.py", exc_info=True)
             pass
         finally:
             # 分类索引加载后尝试落盘（兼容旧缓存结构）
@@ -104,7 +104,7 @@ class BindingGroupCache:
             cls._folder_category_index_dirty = False
             cls._folder_category_index_last_save_time = now
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in binding_group.py")
+            logger.warning("静默异常已忽略: except Exception: in binding_group.py", exc_info=True)
             pass
 
     @staticmethod
@@ -131,7 +131,7 @@ class BindingGroupCache:
                         categories = sorted(self._extract_categories_for_filename(filename_without_ext))
                         entries.append({'path': file_path, 'categories': categories})
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in binding_group.py")
+                        logger.warning("静默异常已忽略: except Exception: in binding_group.py", exc_info=True)
                         continue
         except Exception:
             return []

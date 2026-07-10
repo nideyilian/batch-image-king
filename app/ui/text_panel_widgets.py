@@ -22,54 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.property_panel_a2 import PropertyPanelA2
+from app.ui.property_widgets import PropertySwitch
 
 
 
-class A2Switch(QCheckBox):
-    """A v2 switch control used for high-level enable/disable rows."""
-
-    def __init__(self, parent=None):
-        super().__init__("", parent)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setProperty("role", "switch")
-        self.setFixedSize(*PropertyPanelA2.SWITCH_SIZE)
-        self.setFocusPolicy(Qt.StrongFocus)
-
-    def hitButton(self, pos):
-        return self.rect().contains(pos)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-
-        width, height = PropertyPanelA2.SWITCH_SIZE
-        margin = PropertyPanelA2.SWITCH_TRACK_MARGIN
-        knob_size = PropertyPanelA2.SWITCH_KNOB_SIZE
-        track_rect = QRectF(
-            margin,
-            margin + 1,
-            width - margin * 2,
-            height - margin * 2 - 2,
-        )
-
-        if self.isEnabled():
-            track_color = PropertyPanelA2.ACCENT if self.isChecked() else "#3A3C3F"
-            knob_color = "#FFFFFF"
-            border_color = PropertyPanelA2.ACCENT_HOVER if self.isChecked() else "#45484C"
-        else:
-            track_color = "#25272A"
-            knob_color = "#8E95A3"
-            border_color = "#2E3033"
-
-        painter.setPen(QColor(border_color))
-        painter.setBrush(QColor(track_color))
-        painter.drawRoundedRect(track_rect, track_rect.height() / 2, track_rect.height() / 2)
-
-        knob_y = (height - knob_size) / 2
-        knob_x = width - knob_size - margin - 2 if self.isChecked() else margin + 2
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(knob_color))
-        painter.drawEllipse(QRectF(knob_x, knob_y, knob_size, knob_size))
+class A2Switch(PropertySwitch):
+    """文字图层开关控件——统一为 PropertySwitch 实现（保留类名兼容既有调用点）。"""
+    pass
 
 
 class ToggleButton(QToolButton):

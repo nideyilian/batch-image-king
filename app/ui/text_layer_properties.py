@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """
 文字图层属性面板 - 使用整合的专业UI设计
 将所有参数整合到一个紧凑、专业的界面中
@@ -58,8 +59,8 @@ class TextLayerPropertiesPanel(QWidget):
             try:
                 self.text_layer.changed.disconnect()
                 self.text_layer.text_changed.disconnect()
-            except:
-                logger.debug("静默异常已忽略: except in ui/text_layer_properties.py")
+            except Exception:
+                logger.warning("静默异常已忽略: except in ui/text_layer_properties.py", exc_info=True)
                 pass
 
         self.text_layer = text_layer
@@ -184,7 +185,7 @@ class TextLayerPropertiesPanel(QWidget):
                     self.document.layer_changed.emit()
                     self.document.document_changed.emit()
                 except Exception:
-                    logger.debug("静默异常已忽略: except in ui/text_layer_properties.py")
+                    logger.warning("静默异常已忽略: except in ui/text_layer_properties.py", exc_info=True)
                     pass
 
     def on_create_text_requested(self, text_content):

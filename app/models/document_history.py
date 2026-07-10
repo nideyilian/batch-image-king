@@ -3,6 +3,7 @@
 
 负责文档的撤销/重做功能
 """
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 from typing import Any, List, Optional
 from PySide6.QtCore import QObject, Signal

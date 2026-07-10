@@ -26,6 +26,8 @@ from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
+from app.ui.design_tokens import Tokens
+from app.ui.property_widgets import PropertySwitch, switch_row
 from app.utils.layer_tree import is_layer_group
 from app.services.ai_asset_service import (
     AIAssetRequest,
@@ -54,7 +56,7 @@ class LayerPropertiesLayout(object):
                             if self.current_layer is self.document.layers[selected_index]:
                                 return
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/layer_properties_layout.py")
+                logger.warning("静默异常已忽略: except in ui/layer_properties_layout.py", exc_info=True)
                 pass
         # 本地参数编辑期间，避免 document_changed 回流触发全量 update_panel
         # 仅在当前仍是同一选中图层时抑制，防止图层切换被误拦截
@@ -65,7 +67,7 @@ class LayerPropertiesLayout(object):
                     if self.current_layer is self.document.layers[idx]:
                         return
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/layer_properties_layout.py")
+                logger.warning("静默异常已忽略: except in ui/layer_properties_layout.py", exc_info=True)
                 pass
 
         # 更新的前提是已经选择了图层
@@ -90,29 +92,29 @@ class LayerPropertiesLayout(object):
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         # 应用暗色主题样式到滚动区域
-        scroll_area.setStyleSheet("""
-            QScrollArea {
+        scroll_area.setStyleSheet(f"""
+            QScrollArea {{
                 border: none;
-                background-color: #181818;
-            }
-            QScrollBar:vertical {
-                background-color: #181818;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #3A3A3D;
+                background-color: {Tokens.BG_PRIMARY};
+            }}
+            QScrollBar:vertical {{
+                background-color: {Tokens.BG_PRIMARY};
+                width: 9px;
+                border-radius: 4px;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: {Tokens.BORDER_CONTROL};
                 border-radius: 6px;
                 min-height: 20px;
                 margin: 2px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #8E8E93;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: {Tokens.TEXT_MUTED};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 border: none;
                 background: none;
-            }
+            }}
         """)
 
         # 滚动内容控件
@@ -193,7 +195,7 @@ class LayerPropertiesLayout(object):
         self.opacity_label = QLabel("100%")
         self.opacity_label.setAlignment(Qt.AlignCenter)
         self.opacity_label.setMinimumWidth(48)
-        self.opacity_label.setStyleSheet("background-color: #111214; border: 1px solid #34363A; border-radius: 5px; padding: 3px 8px;")
+        self.opacity_label.setStyleSheet(f"background-color: {Tokens.BG_ELEVATED}; border: 1px solid {Tokens.BORDER_CONTROL}; border-radius: {Tokens.CONTROL_RADIUS}px; padding: 3px 8px;")
         opacity_layout.addWidget(self.opacity_slider)
         opacity_layout.addWidget(self.opacity_label)
         basic_form.addRow(self._label("不透明度:"), opacity_layout)
@@ -219,7 +221,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("basic", "基本属性", self.basic_group)
 
         # 形状（几何参数优先，减少默认认知负担）
-        self.shape_group = CollapsibleGroupBox("形状", collapsed=False)
+        self.shape_group = CollapsibleGroupBox("形状", collapsed=True)
         shape_layout = QVBoxLayout()
         shape_layout.setSpacing(6)
 
@@ -351,7 +353,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("shape", "形状", self.shape_group)
 
         # 外观：填充模式与描边按开关渐进展开
-        self.appearance_group = CollapsibleGroupBox("外观", collapsed=False)
+        self.appearance_group = CollapsibleGroupBox("外观", collapsed=True)
         appearance_layout = QVBoxLayout()
         appearance_layout.setSpacing(8)
 
@@ -370,7 +372,7 @@ class LayerPropertiesLayout(object):
             fill_mode_layout.addWidget(button)
         appearance_layout.addLayout(fill_mode_layout)
 
-        self.fill_solid_enabled_checkbox = QCheckBox("启用纯色填充")
+        self.fill_solid_enabled_checkbox = PropertySwitch()
         self.fill_solid_enabled_checkbox.clicked.connect(self.update_fill_solid_enabled)
         self.fill_solid_enabled_checkbox.hide()
 
@@ -384,7 +386,7 @@ class LayerPropertiesLayout(object):
         fill_solid_controls_layout.addLayout(fill_solid_form)
         appearance_layout.addWidget(self.fill_solid_controls_widget)
 
-        self.fill_gradient_enabled_checkbox = QCheckBox("启用渐变填充")
+        self.fill_gradient_enabled_checkbox = PropertySwitch()
         self.fill_gradient_enabled_checkbox.clicked.connect(self.update_fill_gradient_enabled)
         self.fill_gradient_enabled_checkbox.hide()
 
@@ -419,9 +421,9 @@ class LayerPropertiesLayout(object):
         appearance_layout.addWidget(self._divider())
         appearance_layout.addWidget(self._section_label("描边"))
 
-        self.stroke_enabled_checkbox = QCheckBox("启用描边")
+        stroke_toggle_row, self.stroke_enabled_checkbox = switch_row("启用描边")
         self.stroke_enabled_checkbox.clicked.connect(self.update_stroke_enabled)
-        appearance_layout.addWidget(self.stroke_enabled_checkbox)
+        appearance_layout.addLayout(stroke_toggle_row)
 
         self.stroke_controls_widget, stroke_controls_layout = self._make_control_group()
 
@@ -526,7 +528,7 @@ class LayerPropertiesLayout(object):
 
         # 当前图像预览
         self.current_image_label = QLabel("当前图像: 无")
-        self.current_image_label.setStyleSheet("color: #8E8E93; font-size: 8pt;")
+        self.current_image_label.setStyleSheet(f"color: {Tokens.TEXT_MUTED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
         source_layout.addWidget(self.current_image_label)
 
         self.source_group.add_content_layout(source_layout)
@@ -573,7 +575,7 @@ class LayerPropertiesLayout(object):
             "QProgressBar::chunk { background: #3B82F6; border-radius: 2px; }"
         )
         self.ai_status_label = QLabel("使用工具栏的 AI接口设置 作为全局 API 参数")
-        self.ai_status_label.setStyleSheet("color: #8E8E93; font-size: 8pt;")
+        self.ai_status_label.setStyleSheet(f"color: {Tokens.TEXT_MUTED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
 
         ai_layout.addRow("提示词:", self.ai_prompt_edit)
         ai_layout.addRow("反向提示词:", self.ai_negative_prompt_edit)
@@ -589,18 +591,23 @@ class LayerPropertiesLayout(object):
         self._register_module_group("ai_generation", "AI生图", self.ai_generation_group)
 
         # 3. 高级设置组 (默认收起)
-        self.advanced_group = CollapsibleGroupBox("高级设置", collapsed=True)
+        self.advanced_group = CollapsibleGroupBox("高级设置", collapsed=False)
         advanced_form = QFormLayout()
 
         # 使用原始尺寸
-        self.use_original_size_checkbox = QCheckBox("智能裁剪")
+        self.use_original_size_checkbox = PropertySwitch()
         self.use_original_size_checkbox.clicked.connect(self.update_use_original_size)
-        advanced_form.addRow("", self.use_original_size_checkbox)
+        advanced_form.addRow(QLabel("智能裁剪"), self.use_original_size_checkbox)
 
         # 图像适配模式
+        # 索引定义（与 Layer.FIT_* 保持一致）：
+        #   0 = 智能缩放裁剪 (FIT_SMART_CROP)
+        #   1 = 智能缩放不裁剪 (FIT_SMART_FIT)
+        #   2 = 智能适配不缩放 (FIT_NO_SCALE) - 保持原图尺寸，避免拉伸变形
         self.fit_mode_combo = QComboBox()
         self.fit_mode_combo.addItem("智能缩放裁剪")
         self.fit_mode_combo.addItem("智能缩放不裁剪")
+        self.fit_mode_combo.addItem("智能适配不缩放")
         self.fit_mode_combo.currentIndexChanged.connect(self.update_fit_mode)
         advanced_form.addRow("适配模式:", self.fit_mode_combo)
 
@@ -742,7 +749,7 @@ class LayerPropertiesLayout(object):
         # 5.（已移除）右侧栏“图层绑定/图层大小匹配”入口
         # 用户从左侧图层面板入口统一管理，避免重复入口造成混淆。
         self.bind_status_label = QLabel("未绑定")
-        self.bind_status_label.setStyleSheet("color: #606064; font-size: 9pt;")
+        self.bind_status_label.setStyleSheet(f"color: {Tokens.TEXT_DISABLED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
 
         # 6. 图层变换组 (默认收起)
         self.transform_group = CollapsibleGroupBox("图层变换", collapsed=True)
@@ -771,6 +778,9 @@ class LayerPropertiesLayout(object):
         self.random_transform_group.set_content_widget(self.random_transform_widget)
         self.scroll_layout.addWidget(self.random_transform_group)
         self._register_module_group("random_transform", "随机变换", self.random_transform_group)
+
+        # 按目标顺序重排模块：基本属性/图像源设置/高级设置默认展开，其余默认折叠
+        self._reorder_layer_property_modules()
 
         # 8. 异形图层属性面板（初始隐藏）- 移入滚动区域以避免覆盖问题
         from app.ui.shaped_layer_panel import ShapedLayerPanel
@@ -883,6 +893,31 @@ class LayerPropertiesLayout(object):
             lambda pos, k=module_key, g=group: self._show_module_context_menu(k, g.title_frame.mapToGlobal(pos))
         )
         group.title_frame.setToolTip("右键可拆分/组合模块")
+
+    def _reorder_layer_property_modules(self):
+        """按固定目标顺序重排图层属性模块在滚动布局中的位置。
+
+        目标顺序（从上到下）：
+            基本属性 -> 图像源设置 -> 高级设置 -> 形状 -> 外观
+            -> AI生图 -> 图层分身 -> 图层变换 -> 随机变换
+        基本属性、图像源设置、高级设置默认展开，其余模块默认折叠。
+        """
+        desired_order = [
+            "basic", "source", "advanced", "shape", "appearance",
+            "ai_generation", "clone", "transform", "random_transform",
+        ]
+        # 先从滚动布局中移除所有目标模块组
+        for key in desired_order:
+            group = self._module_groups.get(key)
+            if group is not None:
+                self.scroll_layout.removeWidget(group)
+        # 再按目标顺序重新添加
+        for key in desired_order:
+            group = self._module_groups.get(key)
+            if group is not None:
+                self.scroll_layout.addWidget(group)
+        # 同步模块顺序，保证拆分/组合逻辑顺序一致
+        self._module_order = [k for k in desired_order if k in self._module_groups]
 
     def _show_module_context_menu(self, module_key: str, global_pos):
         """显示模块拆分/组合菜单。"""
@@ -1080,7 +1115,7 @@ class LayerPropertiesLayout(object):
                         try:
                             dock.restoreGeometry(geometry)
                         except Exception:
-                            logger.debug("静默异常已忽略: except in ui/layer_properties_layout.py")
+                            logger.warning("静默异常已忽略: except in ui/layer_properties_layout.py", exc_info=True)
                             pass
                 else:
                     dock.setFloating(False)
@@ -1100,50 +1135,50 @@ class LayerPropertiesLayout(object):
         if self.aspect_lock_btn.isChecked():
             # 锁定状态 - 使用图标管理器的链接图标
             IconManager.apply_icon_to_button(self.aspect_lock_btn, 'link', 'primary')
-            self.aspect_lock_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #2F9CF4;
+            self.aspect_lock_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Tokens.ACCENT};
                     color: #ffffff;
-                    border: 1px solid #55B2FF;
-                    border-radius: 5px;
+                    border: 1px solid {Tokens.ACCENT_HOVER};
+                    border-radius: {Tokens.BUTTON_RADIUS}px;
                     font-size: 13px;
                     font-weight: normal;
                     padding: 0px;
                     margin: 0px;
-                }
-                QPushButton:hover {
-                    background-color: #55B2FF;
-                    border-color: #7DC4FF;
-                }
-                QPushButton:pressed {
-                    background-color: #1F7EC8;
-                    border-color: #2F9CF4;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {Tokens.ACCENT_HOVER};
+                    border-color: {Tokens.ACCENT_HOVER};
+                }}
+                QPushButton:pressed {{
+                    background-color: {Tokens.ACCENT_PRESSED};
+                    border-color: {Tokens.ACCENT};
+                }}
             """)
             self.aspect_lock_btn.setToolTip("已锁定宽高比例 - 点击解锁")
         else:
             # 解锁状态 - 使用图标管理器的解锁图标
             IconManager.apply_icon_to_button(self.aspect_lock_btn, 'unlink', 'secondary')
-            self.aspect_lock_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #202226;
-                    color: #8E8E93;
-                    border: 1px solid #34363A;
-                    border-radius: 5px;
+            self.aspect_lock_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Tokens.BG_CONTROL_ALT};
+                    color: {Tokens.TEXT_MUTED};
+                    border: 1px solid {Tokens.BORDER_CONTROL};
+                    border-radius: {Tokens.BUTTON_RADIUS}px;
                     font-size: 13px;
                     font-weight: normal;
                     padding: 0px;
                     margin: 0px;
-                }
-                QPushButton:hover {
-                    background-color: #292C31;
-                    color: #C7C7C9;
-                    border-color: #55B2FF;
-                }
-                QPushButton:pressed {
-                    background-color: #1F7EC8;
-                    border-color: #2F9CF4;
-                }
+                }}
+                QPushButton:hover {{
+                    background-color: {Tokens.BG_HOVER};
+                    color: {Tokens.TEXT_SECONDARY};
+                    border-color: {Tokens.ACCENT_HOVER};
+                }}
+                QPushButton:pressed {{
+                    background-color: {Tokens.ACCENT_PRESSED};
+                    border-color: {Tokens.ACCENT};
+                }}
             """)
             self.aspect_lock_btn.setToolTip("宽高比例未锁定 - 点击锁定")
 
@@ -1190,4 +1225,3 @@ class LayerPropertiesLayout(object):
             return max(1, new_width)  # 确保宽度至少为1
 
         return None
-

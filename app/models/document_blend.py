@@ -313,5 +313,5 @@ def safe_print(message: str):
         try:
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             print("[DEBUG] Message encoding failed")

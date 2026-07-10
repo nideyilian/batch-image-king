@@ -218,14 +218,14 @@ class FastRendererComposite(object):
                 try:
                     builtins.print(line)
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in fast_renderer_composite.py")
+                    logger.warning("静默异常已忽略: except Exception: in fast_renderer_composite.py", exc_info=True)
                     pass
                 if export_trace_file:
                     try:
                         with open(export_trace_file, 'a', encoding='utf-8') as f:
                             f.write(line + "\n")
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in fast_renderer_composite.py")
+                        logger.warning("静默异常已忽略: except Exception: in fast_renderer_composite.py", exc_info=True)
                         pass
 
             # 处理文字图层
@@ -451,7 +451,7 @@ class FastRendererComposite(object):
                 # 尝试使用默认字体
                 try:
                     font = ImageFont.load_default()
-                except:
+                except Exception:
                     font = None
 
                 # 绘制图层名称
@@ -777,4 +777,3 @@ class FastRendererComposite(object):
             'cache': self.intelligent_cache.get_stats(),
             'last_render_times': self._last_render_time.copy()
         }
-

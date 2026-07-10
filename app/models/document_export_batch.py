@@ -12,6 +12,7 @@
 ``batch_export`` 一起迁移。
 """
 from __future__ import annotations
+from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 
 import logging
 
@@ -102,7 +103,7 @@ class DocumentExportBatch:
                     try:
                         self._cleanup_layers_after_export()
                     except Exception:
-                        logger.debug("静默异常已忽略: except Exception: in document_export_batch.py")
+                        logger.warning("静默异常已忽略: except Exception: in document_export_batch.py", exc_info=True)
                         pass
                     if worker_result.success:
                         if hasattr(self, 'export_stage_updated'):
@@ -321,7 +322,7 @@ class DocumentExportBatch:
                 cleared_count += 1
             print(f"[批量导出] ✅ 清理了 {cleared_count} 个图层的临时状态")
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in document_export_batch.py")
+            logger.warning("静默异常已忽略: except Exception: in document_export_batch.py", exc_info=True)
             pass
 
     def _cleanup_layers_after_export(self):
@@ -353,7 +354,7 @@ class DocumentExportBatch:
 
             print(f"[批量导出] ✅ 导出后清理 {cleared_count} 个图层的临时状态")
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in document_export_batch.py")
+            logger.warning("静默异常已忽略: except Exception: in document_export_batch.py", exc_info=True)
             pass
 
     def cancel_export(self):
@@ -366,14 +367,14 @@ class DocumentExportBatch:
                 try:
                     coordinator.cancel()
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in document_export_batch.py")
+                    logger.warning("静默异常已忽略: except Exception: in document_export_batch.py", exc_info=True)
             precomputer = getattr(self, '_batch_precomputer_v2', None)
             if precomputer is not None and hasattr(precomputer, 'cancel'):
                 try:
                     precomputer.cancel()
                 except Exception:
-                    logger.debug("静默异常已忽略: except Exception: in document_export_batch.py")
+                    logger.warning("静默异常已忽略: except Exception: in document_export_batch.py", exc_info=True)
             print("[批量导出] 🛑 收到取消信号")
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in document_export_batch.py")
+            logger.warning("静默异常已忽略: except Exception: in document_export_batch.py", exc_info=True)
             pass

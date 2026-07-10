@@ -74,7 +74,7 @@ def dump_current_traceback(label: str = "manual dump") -> None:
         _write_line(f"[traceback dump] {label}")
         faulthandler.dump_traceback(file=_CRASH_FILE, all_threads=True)
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+        logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
         pass
 
 
@@ -99,7 +99,7 @@ def _install_threading_hook(logger: Optional[logging.Logger]) -> None:
         try:
             _ORIGINAL_THREADING_EXCEPTHOOK(args)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+            logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
             pass
 
     threading.excepthook = _threading_hook
@@ -129,7 +129,7 @@ def _install_unraisable_hook(logger: Optional[logging.Logger]) -> None:
         try:
             _ORIGINAL_UNRAISABLEHOOK(unraisable)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+            logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
             pass
 
     sys.unraisablehook = _unraisable_hook
@@ -163,7 +163,7 @@ def _install_qt_message_handler(logger: Optional[logging.Logger]) -> None:
                     level = logging.WARNING
                 logger.log(level, detail)
             except Exception:
-                logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+                logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
                 pass
 
     _QT_MESSAGE_HANDLER = _qt_handler
@@ -186,7 +186,7 @@ def _qt_level_name(qt_msg_type, mode) -> str:
         if mode == qt_msg_type.QtFatalMsg:
             return "fatal"
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+        logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
         pass
     return str(mode)
 
@@ -202,7 +202,7 @@ def _log_exception(logger, title, exc_type, exc_value, exc_traceback) -> None:
         try:
             logger.error(title, exc_info=(exc_type, exc_value, exc_traceback))
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+            logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
             pass
 
 
@@ -212,7 +212,7 @@ def _log_warning(logger, message: str) -> None:
         try:
             logger.warning(message)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+            logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
             pass
 
 
@@ -223,5 +223,5 @@ def _write_line(message: str) -> None:
         _CRASH_FILE.write(str(message) + "\n")
         _CRASH_FILE.flush()
     except Exception:
-        logger.debug("静默异常已忽略: except in utils/crash_reporter.py")
+        logger.warning("静默异常已忽略: except in utils/crash_reporter.py", exc_info=True)
         pass

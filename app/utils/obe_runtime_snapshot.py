@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from app.utils.print_utils import safe_print as print
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class OptimizedBatchExecutorRuntimeSnapshot(object):
                 for key in runtime_keys:
                     layer_data.pop(key, None)
         except Exception:
-            logger.debug("静默异常已忽略: except in utils/obe_runtime_snapshot.py")
+            logger.warning("静默异常已忽略: except in utils/obe_runtime_snapshot.py", exc_info=True)
             pass
 
     def _build_visible_doc_indices(self, document) -> List[int]:

@@ -19,7 +19,7 @@ def safe_print(message: str):
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
             builtins.print(f"[DEBUG] {ascii_message}")
-        except:
+        except Exception:
             # 最后的备选方案
             builtins.print("[DEBUG] Message encoding failed")
 

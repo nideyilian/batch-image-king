@@ -66,13 +66,13 @@ class LayerPanelSelection(object):
         # 如果没有文档，清空列表并禁用控件
         if not self.document:
             print("[图层面板] update_layers: 文档为None，清空列表")
-            self.layer_list.clear()
+            self._clear_layer_list()
             self._set_controls_enabled(False)
             return
 
         if not self.document.layers:
             print("[图层面板] update_layers: 文档无图层，清空列表")
-            self.layer_list.clear()
+            self._clear_layer_list()
             self._set_controls_enabled(False)
             return
 
@@ -86,7 +86,7 @@ class LayerPanelSelection(object):
                 if hasattr(self.document, 'select_layers'):
                     self.document.select_layers(ui_selected, primary_index=ui_selected[0])
             except Exception:
-                logger.debug("静默异常已忽略: except in ui/layer_panel_selection.py")
+                logger.warning("静默异常已忽略: except in ui/layer_panel_selection.py", exc_info=True)
                 pass
         selected_indices = self._sanitize_selected_indices()
         selected_index = selected_indices[0] if selected_indices else -1
@@ -165,6 +165,46 @@ class LayerPanelSelection(object):
         finally:
             self._selection_sync_in_progress = False
 
+    def _clear_layer_list(self):
+        """安全清空图层列表。
+
+        直接用 QListWidget.clear() 销毁通过 setItemWidget 设置的自定义
+        LayerItem（含自定义 paintEvent）时，Qt 会在释放 widget 的 C++ 对象
+        过程中访问已失效的 Python 对象，导致 native access violation 并让
+        程序闪退。更危险的是，用 shiboken6.delete 强制立即释放这些 widget
+        会留下悬空指针，造成"延迟型"堆损坏——崩溃会在之后的任意 GUI 操作
+        （例如再打开一个对话框）中才突然爆发，极难定位。
+
+        安全做法（业界标准）：
+        1. 对每个 item 先调用 setItemWidget(item, None)，解除 Qt 内部对
+           widget 的引用，使随后的 clear() 不会重复释放该 widget；
+        2. 用 deleteLater() 让 Qt 在事件循环中按自己的节奏安全销毁 widget，
+           绝不手动立即 delete；
+        3. 最后 takeItem 移除 item，并以 clear() 兜底。
+        """
+        while self.layer_list.count() > 0:
+            item = self.layer_list.item(0)
+            if item is None:
+                break
+            widget = self.layer_list.itemWidget(item)
+            if widget is not None:
+                try:
+                    # 关键：解除 Qt 对 widget 的内部引用，避免 clear() 时重复释放
+                    self.layer_list.setItemWidget(item, None)
+                except Exception:
+                    pass
+                try:
+                    # 让 Qt 在事件循环中安全销毁，不要立即强制 delete
+                    widget.deleteLater()
+                except Exception:
+                    pass
+            self.layer_list.takeItem(0)
+        # 兜底：此时 itemWidgets 已清空，clear() 不会再触碰已释放的 widget
+        try:
+            self.layer_list.clear()
+        except Exception:
+            pass
+
     def _full_rebuild(self, selected_indices, primary_index):
         """完整重建图层列表"""
         print(f"[图层面板] _full_rebuild: 开始重建，图层数={len(self.document.layers)}")
@@ -174,7 +214,8 @@ class LayerPanelSelection(object):
         self._selection_sync_in_progress = True
         try:
             # 清空列表会触发 itemSelectionChanged，必须在同步保护内执行。
-            self.layer_list.clear()
+            # 用安全清空方法替代 QListWidget.clear()，规避 native 崩溃。
+            self._clear_layer_list()
             print(f"[图层面板] _full_rebuild: 已清空列表")
 
             for i, (real_index, layer, depth) in enumerate(display_entries(self.document.layers)):
@@ -700,4 +741,3 @@ class LayerPanelSelection(object):
                         widget.visibility_btn.setChecked(widget.layer.visible)
         except Exception as e:
             print(f"刷新所有图标时出错: {e}")
-

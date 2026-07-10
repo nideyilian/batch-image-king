@@ -493,7 +493,7 @@ class BindingGroupMatching:
         process_factor = os.getpid() % 10000
         try:
             thread_factor = hash(threading.current_thread().name) % 10000
-        except:
+        except Exception:
             thread_factor = 0
         prime_factor = 7919  # 质数因子
 
@@ -527,7 +527,7 @@ class BindingGroupMatching:
         process_factor = os.getpid() % 10000
         try:
             thread_factor = hash(threading.current_thread().name) % 10000
-        except:
+        except Exception:
             thread_factor = 0
         prime_factor = 7919  # 质数因子
 
@@ -662,5 +662,5 @@ class BindingGroupMatching:
                             if vpath not in self.file_categories[category_name][idx]:
                                 self.file_categories[category_name][idx].append(vpath)
         except Exception:
-            logger.debug("静默异常已忽略: except Exception: in binding_group.py")
+            logger.warning("静默异常已忽略: except Exception: in binding_group.py", exc_info=True)
             pass
