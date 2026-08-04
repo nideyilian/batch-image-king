@@ -140,9 +140,9 @@ QPushButton[variant="link"], QToolButton[variant="link"] {
 QPushButton[variant="link"]:hover, QToolButton[variant="link"]:hover { color: %%primary-hover%%; }
 
 /* 尺寸 */
-QPushButton[size="sm"], QToolButton[size="sm"] { height: 30px; padding: 0 12px; font-size: %%fs-sm%%px; }
-QPushButton[size="lg"], QToolButton[size="lg"] { height: 40px; padding: 0 22px; font-size: %%fs-lg%%px; }
-QPushButton[size="icon"], QToolButton[size="icon"] {
+QPushButton[uiSize="sm"], QToolButton[uiSize="sm"] { height: 30px; padding: 0 12px; font-size: %%fs-sm%%px; }
+QPushButton[uiSize="lg"], QToolButton[uiSize="lg"] { height: 40px; padding: 0 22px; font-size: %%fs-lg%%px; }
+QPushButton[uiSize="icon"], QToolButton[uiSize="icon"] {
     height: %%icon-btn%%px; width: %%icon-btn%%px; padding: 0;
 }
 
@@ -419,6 +419,62 @@ QLabel[role="kbd"] {
     border: 1px solid %%border%%; border-radius: 4px; padding: 1px 7px;
     font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
     font-size: %%fs-xs%%px;
+}
+
+/* ---------- Action groups / toggles ---------- */
+QFrame[role="button-group"], QFrame[role="toggle-group"],
+QFrame[role="segmented-control"], QFrame[role="radio-group"] {
+    background: transparent; border: none;
+}
+QToolButton[role="toggle"] {
+    min-height: %%control-h%%px; padding: 0 10px;
+    border: 1px solid %%border%%; border-radius: %%radius%%px;
+}
+QToolButton[role="toggle"]:checked {
+    background: %%accent%%; color: %%accent-foreground%%;
+    border-color: %%ring%%;
+}
+QFrame[role="segmented-control"] {
+    background: %%muted%%; border: 1px solid %%border%%;
+    border-radius: %%radius%%px; padding: 2px;
+}
+QFrame[role="segmented-control"] QToolButton[role="toggle"] {
+    border-color: transparent; background: transparent;
+}
+QFrame[role="segmented-control"] QToolButton[role="toggle"]:checked {
+    background: %%card%%; border-color: %%border%%;
+}
+
+/* ---------- Form composition / validation ---------- */
+QFrame[role="field"] { background: transparent; border: none; }
+QLabel[role="field-error"] { color: %%destructive%%; font-size: %%fs-sm%%px; }
+QLineEdit[invalid="true"], QSpinBox[invalid="true"],
+QDoubleSpinBox[invalid="true"], QComboBox[invalid="true"],
+QTextEdit[invalid="true"], QPlainTextEdit[invalid="true"] {
+    border: 1px solid %%destructive%%;
+}
+QFrame[role="input-group"] {
+    min-height: %%control-h%%px; background: %%popover%%;
+    border: 1px solid %%input%%; border-radius: %%radius%%px;
+}
+QFrame[role="input-group"]:focus-within { border-color: %%ring%%; }
+QFrame[role="input-group"] QLineEdit,
+QFrame[role="input-group"] QSpinBox,
+QFrame[role="input-group"] QDoubleSpinBox {
+    background: transparent; border: none; padding-left: 2px; padding-right: 2px;
+}
+QPushButton[role="color-swatch"] {
+    border: 1px solid %%border%%; border-radius: %%radius%%px; padding: 0;
+}
+QPushButton[role="color-swatch"]:focus { border-color: %%ring%%; }
+
+/* ---------- Legacy semantic containers ---------- */
+QGroupBox[role="section"] {
+    background: %%card%%; border: 1px solid %%border%%;
+    border-radius: %%radius-lg%%px; margin-top: 10px; padding: 10px;
+}
+QGroupBox[role="section"]::title {
+    color: %%foreground%%; subcontrol-origin: margin; left: 10px; padding: 0 4px;
 }
 
 /* ---------- Icon 图标组件 ---------- */

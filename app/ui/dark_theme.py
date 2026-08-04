@@ -21,6 +21,7 @@ from PySide6.QtCore import Qt
 
 from app.ui.design_tokens import Tokens
 from app.ui.theme.provider import build_global_stylesheet
+from app.ui.theme.polisher import install_semantic_polisher
 
 
 class CursorDarkTheme:
@@ -73,6 +74,7 @@ class CursorDarkTheme:
         app.setStyle("Fusion")
         app.setStyleSheet(cls.get_complete_style())
         app.setPalette(cls.create_fixed_palette())
+        install_semantic_polisher(app)
 
     @classmethod
     def create_fixed_palette(cls):

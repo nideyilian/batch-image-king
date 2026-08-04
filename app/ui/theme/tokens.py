@@ -5,8 +5,8 @@ shadcn/ui 规范设计令牌（Design Tokens）
     background / foreground / card / popover / primary / secondary /
     muted / accent / destructive / border / input / ring / radius
 
-暗色主题色值直接复用 app/ui/design_tokens.py（现有画布与控件的运行期真值），
-亮色主题为标准的 shadcn zinc 亮色规范。两套主题通过 ``Theme.mode`` 切换。
+暗色主题色值直接复用 app/ui/design_tokens.py（现有画布与控件的运行期真值）。
+主题通过可扩展皮肤注册表管理；``Theme.mode`` 作为历史兼容别名保留。
 
 用法：
     from app.ui.theme import Theme
@@ -101,6 +101,15 @@ _THEMES = {
     },
 }
 
+_REQUIRED_SEMANTIC_COLORS = frozenset({
+    "background", "foreground", "card", "card-foreground", "popover",
+    "popover-foreground", "primary", "primary-foreground", "secondary",
+    "secondary-foreground", "muted", "muted-foreground", "accent",
+    "accent-foreground", "destructive", "destructive-foreground", "border",
+    "input", "ring", "primary-hover", "primary-pressed", "hover", "success",
+    "warning", "info",
+})
+
 # shadcn 默认图表配色（用于统计/预览/批量导出报告等可视化）
 _CHART_COLORS = [
     _T.ACCENT,      # blue
@@ -165,45 +174,94 @@ def hsl_to_qcolor(h: float, s: float, l: float, a: float = 1.0) -> QColor:
 
 
 class Theme:
-    """全局主题访问器。所有颜色/尺寸都必须经由此处获取，禁止在业务代码写死色值。"""
+    """全局主题访问器和皮肤注册表。"""
 
-    _mode = "dark"
+    DEFAULT_SKIN = "dark"
+    _skin = DEFAULT_SKIN
     _on_change = []
 
-    # ---- 模式 ----
+    # ---- 皮肤 / 历史 mode 兼容层 ----
     @classmethod
-    def mode(cls) -> str:
-        return cls._mode
+    def skin(cls) -> str:
+        return cls._skin
 
     @classmethod
-    def set_mode(cls, mode: str) -> None:
-        if mode not in _THEMES:
-            mode = "dark"
-        if mode != cls._mode:
-            cls._mode = mode
-            for cb in cls._on_change:
+    def available_skins(cls):
+        return tuple(_THEMES.keys())
+
+    @classmethod
+    def register_skin(cls, name: str, colors: dict, overwrite: bool = False) -> None:
+        normalized = str(name).strip()
+        if not normalized:
+            raise ValueError("skin name cannot be empty")
+        if normalized in _THEMES and not overwrite:
+            raise ValueError("skin already registered: %s" % normalized)
+        missing = sorted(_REQUIRED_SEMANTIC_COLORS.difference(colors))
+        if missing:
+            raise ValueError("missing semantic colors: %s" % ", ".join(missing))
+        _THEMES[normalized] = dict(colors)
+
+    @classmethod
+    def unregister_skin(cls, name: str, missing_ok: bool = False) -> None:
+        if name == cls.DEFAULT_SKIN:
+            raise ValueError("the default skin cannot be unregistered")
+        if name not in _THEMES:
+            if missing_ok:
+                return
+            raise KeyError("unknown skin: %s" % name)
+        if cls._skin == name:
+            cls.set_skin(cls.DEFAULT_SKIN)
+        del _THEMES[name]
+
+    @classmethod
+    def set_skin(cls, name: str) -> None:
+        if name not in _THEMES:
+            raise KeyError("unknown skin: %s" % name)
+        if name != cls._skin:
+            cls._skin = name
+            for cb in tuple(cls._on_change):
                 try:
-                    cb(mode)
+                    cb(name)
                 except Exception:
                     pass
 
     @classmethod
+    def mode(cls) -> str:
+        return cls.skin()
+
+    @classmethod
+    def set_mode(cls, mode: str) -> None:
+        """历史兼容入口；未知模式维持原有回退到暗色的行为。"""
+        if mode not in _THEMES:
+            mode = cls.DEFAULT_SKIN
+        cls.set_skin(mode)
+
+    @classmethod
     def toggle_mode(cls) -> str:
-        cls.set_mode("light" if cls._mode == "dark" else "dark")
-        return cls._mode
+        cls.set_mode("light" if cls._skin == "dark" and "light" in _THEMES else "dark")
+        return cls._skin
 
     @classmethod
     def on_change(cls, cb):
-        cls._on_change.append(cb)
+        if cb not in cls._on_change:
+            cls._on_change.append(cb)
+        return cb
+
+    @classmethod
+    def off_change(cls, cb):
+        try:
+            cls._on_change.remove(cb)
+        except ValueError:
+            pass
 
     # ---- 颜色 ----
     @classmethod
     def colors(cls) -> dict:
-        return _THEMES[cls._mode]
+        return dict(_THEMES[cls._skin])
 
     @classmethod
     def color(cls, name: str, default: str = "#000000") -> str:
-        return cls.colors().get(name, default)
+        return _THEMES[cls._skin].get(name, default)
 
     @classmethod
     def qc(cls, name: str, alpha: float = 1.0) -> QColor:

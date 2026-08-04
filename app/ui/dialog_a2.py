@@ -73,6 +73,12 @@ class DialogA2:
         dialog.setProperty("dialogA2", True)
 
     @classmethod
+    def stylesheet(cls):
+        """兼容旧调用，返回全局主题生成的 DialogA2 规则。"""
+        from app.ui.theme.provider import build_global_stylesheet
+        return build_global_stylesheet()
+
+    @classmethod
     def mark_primary(cls, button):
         button.setProperty("primaryButton", True)
         button.setFixedSize(cls.BUTTON_WIDTH, cls.BUTTON_HEIGHT)

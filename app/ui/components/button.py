@@ -19,7 +19,7 @@ def button(text: str = "", variant: str = "default", size: str = "default",
     """创建 shadcn 风格按钮的便捷工厂函数。"""
     b = QPushButton(text, parent)
     b.setProperty("variant", variant if variant in VARIANTS else "default")
-    b.setProperty("size", size if size in SIZES else "default")
+    b.setProperty("uiSize", size if size in SIZES else "default")
     b.setCursor(Qt.PointingHandCursor)
     if icon is not None:
         b.setIcon(icon)
@@ -48,6 +48,6 @@ class Button(QPushButton):
         return self
 
     def set_size(self, size: str) -> "Button":
-        self.setProperty("size", size if size in SIZES else "default")
+        self.setProperty("uiSize", size if size in SIZES else "default")
         self.style().polish(self)
         return self

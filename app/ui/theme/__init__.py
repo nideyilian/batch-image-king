@@ -19,6 +19,7 @@ from app.ui.theme.tokens import (
     hsl_to_qcolor,
 )
 from app.ui.theme.provider import apply_theme, build_global_stylesheet, get_palette
+from app.ui.theme.polisher import install_semantic_polisher, polish_widget_tree
 
 __all__ = [
     "Theme",
@@ -31,4 +32,6 @@ __all__ = [
     "apply_theme",
     "build_global_stylesheet",
     "get_palette",
+    "install_semantic_polisher",
+    "polish_widget_tree",
 ]
