@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QSlider, QMessageBox, QRadioButton, QButtonGroup,
                                QScrollArea, QFrame, QSizePolicy,
                                QMenu, QMainWindow, QDockWidget, QApplication, QTextEdit,
-                               QProgressBar)
+                               QProgressBar, QTabWidget)
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import QColor
 import os
@@ -27,7 +27,7 @@ from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
 from app.ui.design_tokens import Tokens
-from app.ui.property_widgets import PropertySwitch, switch_row
+from app.ui.property_widgets import PropertySection, PropertySwitch, switch_row
 from app.utils.layer_tree import is_layer_group
 from app.services.ai_asset_service import (
     AIAssetRequest,
@@ -84,27 +84,52 @@ class LayerPropertiesLayout(object):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(2)
 
-        # 创建滚动区域
-        scroll_area = QScrollArea()
-        scroll_area.setMinimumWidth(0)
-        scroll_area.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setProperty("role", "scroll-area")
+        self.property_tabs = QTabWidget()
+        self.property_tabs.setObjectName("layerPropertyTabs")
+        self.property_tabs.setDocumentMode(True)
+        self.property_tabs.tabBar().setExpanding(True)
+        self.property_tabs.tabBar().setUsesScrollButtons(False)
+        self.property_tabs.setMinimumWidth(Tokens.SIDEBAR_MIN_WIDTH)
+        self.property_tabs.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        self.property_tabs.setStyleSheet(self._layer_panel_stylesheet())
 
-        # 滚动内容控件
-        scroll_content = QWidget()
-        scroll_content.setObjectName("layerPropertiesContent")
-        scroll_content.setMinimumWidth(0)
-        scroll_content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        scroll_content.setStyleSheet(self._layer_panel_stylesheet())
-        self.scroll_layout = QVBoxLayout(scroll_content)
-        self.scroll_layout.setContentsMargins(4, 6, 4, 8)
-        self.scroll_layout.setSpacing(5)
+        def create_tab_page(label, object_name):
+            scroll_area = QScrollArea()
+            scroll_area.setObjectName(object_name)
+            scroll_area.setMinimumWidth(0)
+            scroll_area.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll_area.setProperty("role", "scroll-area")
+
+            content = QWidget()
+            content.setObjectName("layerPropertiesContent")
+            content.setMinimumWidth(0)
+            content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            content.setStyleSheet(self._layer_panel_stylesheet())
+            content_layout = QVBoxLayout(content)
+            content_layout.setContentsMargins(
+                Tokens.SIDEBAR_PADDING,
+                0,
+                Tokens.SIDEBAR_PADDING,
+                Tokens.SIDEBAR_PADDING,
+            )
+            content_layout.setSpacing(Tokens.SIDEBAR_SECTION_GAP)
+            scroll_area.setWidget(content)
+            self.property_tabs.addTab(scroll_area, label)
+            return scroll_area, content, content_layout
+
+        self.basic_scroll_area, self.basic_tab_content, self.scroll_layout = create_tab_page(
+            "基本参数", "basicParametersScroll"
+        )
+        self.more_scroll_area, self.more_tab_content, self.more_scroll_layout = create_tab_page(
+            "更多参数", "moreParametersScroll"
+        )
+        main_layout.addWidget(self.property_tabs)
 
         # 1. 基本属性组 (默认展开)
-        self.basic_group = CollapsibleGroupBox("基本属性", collapsed=False)
+        self.basic_group = PropertySection("基本属性")
         basic_form = QFormLayout()
 
         # 图层名称
@@ -200,7 +225,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("basic", "基本属性", self.basic_group)
 
         # 形状（几何参数优先，减少默认认知负担）
-        self.shape_group = CollapsibleGroupBox("形状", collapsed=True)
+        self.shape_group = PropertySection("形状")
         shape_layout = QVBoxLayout()
         shape_layout.setSpacing(6)
 
@@ -332,7 +357,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("shape", "形状", self.shape_group)
 
         # 外观：填充模式与描边按开关渐进展开
-        self.appearance_group = CollapsibleGroupBox("外观", collapsed=True)
+        self.appearance_group = PropertySection("外观")
         appearance_layout = QVBoxLayout()
         appearance_layout.setSpacing(8)
 
@@ -469,7 +494,7 @@ class LayerPropertiesLayout(object):
         self._sync_appearance_visibility()
 
         # 2. 图像源设置组 (默认展开)
-        self.source_group = CollapsibleGroupBox("图像源设置", collapsed=False)
+        self.source_group = PropertySection("图像源")
         source_layout = QVBoxLayout()
 
         # 图像源类型选择
@@ -516,7 +541,7 @@ class LayerPropertiesLayout(object):
         self.scroll_layout.addWidget(self.source_group)
         self._register_module_group("source", "图像源设置", self.source_group)
 
-        self.ai_generation_group = CollapsibleGroupBox("AI生图", collapsed=True)
+        self.ai_generation_group = PropertySection("AI生图")
         ai_layout = QFormLayout()
 
         self.ai_prompt_edit = QTextEdit()
@@ -561,7 +586,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("ai_generation", "AI生图", self.ai_generation_group)
 
         # 3. 高级设置组 (默认收起)
-        self.advanced_group = CollapsibleGroupBox("高级设置", collapsed=False)
+        self.advanced_group = PropertySection("高级设置")
         advanced_form = QFormLayout()
 
         # 使用原始尺寸
@@ -609,7 +634,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("advanced", "高级设置", self.advanced_group)
 
         # 4. 图层分身组 (默认收起)
-        self.clone_group = CollapsibleGroupBox("图层分身", collapsed=True)
+        self.clone_group = PropertySection("图层分身")
         clone_layout = QFormLayout()
 
         # 启用分身
@@ -722,7 +747,7 @@ class LayerPropertiesLayout(object):
         self.bind_status_label.setProperty("role", "muted")
 
         # 6. 图层变换组 (默认收起)
-        self.transform_group = CollapsibleGroupBox("图层变换", collapsed=True)
+        self.transform_group = PropertySection("图层变换")
         self.transform_widget = LayerTransformWidget()
         self.transform_widget.rotation_changed.connect(self.update_layer_rotation)
         self.transform_widget.flip_horizontal_changed.connect(self.update_layer_flip_horizontal)
@@ -733,7 +758,7 @@ class LayerPropertiesLayout(object):
         self._register_module_group("transform", "图层变换", self.transform_group)
 
         # 7. 随机变换组 (默认收起)
-        self.random_transform_group = CollapsibleGroupBox("随机变换", collapsed=True)
+        self.random_transform_group = PropertySection("随机变换")
         from app.ui.layer_random_transform_widget import LayerRandomTransformWidget
         self.random_transform_widget = LayerRandomTransformWidget()
         self.random_transform_widget.random_position_enabled_changed.connect(self.update_random_position_enabled)
@@ -749,7 +774,7 @@ class LayerPropertiesLayout(object):
         self.scroll_layout.addWidget(self.random_transform_group)
         self._register_module_group("random_transform", "随机变换", self.random_transform_group)
 
-        # 按目标顺序重排模块：基本属性/图像源设置/高级设置默认展开，其余默认折叠
+        # 按任务频率分配到两个顶层参数页，页内分区始终完整展示。
         self._reorder_layer_property_modules()
 
         # 8. 异形图层属性面板（初始隐藏）- 移入滚动区域以避免覆盖问题
@@ -761,13 +786,10 @@ class LayerPropertiesLayout(object):
         # 添加一个拉伸项，使控件集中在顶部
         self._scroll_stretch_index = self.scroll_layout.count()
         self.scroll_layout.addStretch(1)
-
-        # 设置滚动区域
-        scroll_area.setWidget(scroll_content)
-        main_layout.addWidget(scroll_area)
+        self.more_scroll_layout.addStretch(1)
 
         # 保存对普通图层面板的引用
-        self.normal_layer_panel = scroll_area
+        self.normal_layer_panel = self.property_tabs
 
         # 创建文字图层属性面板（初始隐藏）
         from app.ui.text_layer_properties import TextLayerPropertiesPanel
@@ -792,15 +814,15 @@ class LayerPropertiesLayout(object):
             if layout is None:
                 return
             if isinstance(layout, QFormLayout):
-                layout.setHorizontalSpacing(5)
-                layout.setVerticalSpacing(3)
+                layout.setHorizontalSpacing(Tokens.ROW_GAP)
+                layout.setVerticalSpacing(Tokens.ROW_GAP)
                 layout.setContentsMargins(0, 0, 0, 0)
                 layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 layout.setFormAlignment(Qt.AlignTop)
                 layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
                 layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
             else:
-                layout.setSpacing(min(layout.spacing() if layout.spacing() >= 0 else 4, 4))
+                layout.setSpacing(Tokens.ROW_GAP)
 
             for i in range(layout.count()):
                 item = layout.itemAt(i)
@@ -811,6 +833,7 @@ class LayerPropertiesLayout(object):
 
         compact(self.layout())
         compact(getattr(self, "scroll_layout", None))
+        compact(getattr(self, "more_scroll_layout", None))
         self._apply_adaptive_widths()
 
     def _apply_adaptive_widths(self):
@@ -852,41 +875,30 @@ class LayerPropertiesLayout(object):
             group.setMinimumWidth(0)
             group.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
-    def _register_module_group(self, module_key: str, title: str, group: CollapsibleGroupBox):
-        """注册可拆分模块，并为标题栏添加右键菜单。"""
+    def _register_module_group(self, module_key: str, title: str, group):
+        """注册侧边栏分区；新版完整侧边栏不再提供模块拆分入口。"""
         self._module_groups[module_key] = group
         self._module_group_titles[module_key] = title
         self._module_order.append(module_key)
 
-        group.title_frame.setContextMenuPolicy(Qt.CustomContextMenu)
-        group.title_frame.customContextMenuRequested.connect(
-            lambda pos, k=module_key, g=group: self._show_module_context_menu(k, g.title_frame.mapToGlobal(pos))
-        )
-        group.title_frame.setToolTip("右键可拆分/组合模块")
-
     def _reorder_layer_property_modules(self):
-        """按固定目标顺序重排图层属性模块在滚动布局中的位置。
-
-        目标顺序（从上到下）：
-            基本属性 -> 图像源设置 -> 高级设置 -> 形状 -> 外观
-            -> AI生图 -> 图层分身 -> 图层变换 -> 随机变换
-        基本属性、图像源设置、高级设置默认展开，其余模块默认折叠。
-        """
-        desired_order = [
-            "basic", "source", "advanced", "shape", "appearance",
-            "ai_generation", "clone", "transform", "random_transform",
-        ]
-        # 先从滚动布局中移除所有目标模块组
+        """把属性分区分配到“基本参数”和“更多参数”两个页面。"""
+        basic_order = ["basic", "source", "advanced", "shape", "appearance"]
+        more_order = ["ai_generation", "clone", "transform", "random_transform"]
+        desired_order = basic_order + more_order
         for key in desired_order:
             group = self._module_groups.get(key)
             if group is not None:
                 self.scroll_layout.removeWidget(group)
-        # 再按目标顺序重新添加
-        for key in desired_order:
+                self.more_scroll_layout.removeWidget(group)
+        for key in basic_order:
             group = self._module_groups.get(key)
             if group is not None:
                 self.scroll_layout.addWidget(group)
-        # 同步模块顺序，保证拆分/组合逻辑顺序一致
+        for key in more_order:
+            group = self._module_groups.get(key)
+            if group is not None:
+                self.more_scroll_layout.addWidget(group)
         self._module_order = [k for k in desired_order if k in self._module_groups]
 
     def _show_module_context_menu(self, module_key: str, global_pos):
@@ -1047,52 +1059,8 @@ class LayerPropertiesLayout(object):
             self._attach_module_group(key)
 
     def restore_module_layout(self):
-        """恢复模块拆分/组合状态和停靠布局。"""
-        settings = self._get_module_settings()
-        settings.beginGroup("layer_properties_modules")
-        detached_keys = settings.value("detached_keys", [])
-        settings.endGroup()
-
-        if isinstance(detached_keys, str):
-            detached_keys = [detached_keys]
-        detached_keys = [k for k in detached_keys if k in self._module_groups]
-        if not detached_keys:
-            return
-
-        main_window = self._get_main_window()
-        if main_window is None:
-            return
-
-        self._restoring_module_layout = True
-        try:
-            for module_key in detached_keys:
-                self._detach_module_group(module_key)
-                dock = self._module_docks.get(module_key)
-                if dock is None:
-                    continue
-
-                settings.beginGroup("layer_properties_modules")
-                settings.beginGroup(module_key)
-                floating = settings.value("floating", True, type=bool)
-                dock_area = settings.value("dock_area", self._dock_area_to_int(Qt.RightDockWidgetArea), type=int)
-                geometry = settings.value("geometry")
-                settings.endGroup()
-                settings.endGroup()
-
-                if floating:
-                    dock.setFloating(True)
-                    if geometry is not None:
-                        try:
-                            dock.restoreGeometry(geometry)
-                        except Exception:
-                            logger.warning("静默异常已忽略: except in ui/layer_properties_layout.py", exc_info=True)
-                            pass
-                else:
-                    dock.setFloating(False)
-                    main_window.addDockWidget(self._int_to_dock_area(dock_area), dock)
-        finally:
-            self._restoring_module_layout = False
-            self._persist_module_layout()
+        """完整侧边栏模式下不再恢复旧版模块拆分状态。"""
+        return None
 
     def save_module_layout(self):
         """对外保存接口，供主窗口关闭时调用。"""

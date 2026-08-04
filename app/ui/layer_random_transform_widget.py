@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QSpinBox, QDoubleSpinBox, QCheckBox,
-                           QGroupBox, QSlider, QFormLayout)
+                           QFrame, QSlider, QFormLayout)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
+from app.ui.design_tokens import Tokens
 
 class LayerRandomTransformWidget(QWidget):
     """图层随机变换控制组件"""
@@ -31,11 +32,7 @@ class LayerRandomTransformWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        # 随机变换组
-        random_group = QGroupBox("随机变换")
-        random_layout = QVBoxLayout(random_group)
-        random_layout.setContentsMargins(6, 6, 6, 6)
-        random_layout.setSpacing(4)
+        random_layout = layout
 
         # 随机位置抖动
         position_layout = QFormLayout()
@@ -146,21 +143,20 @@ class LayerRandomTransformWidget(QWidget):
 
         # 当前状态显示
         self.status_label = QLabel("当前: 无随机变换")
-        self.status_label.setStyleSheet("color: #606064; font-size: 10px; padding: 3px;")
+        self.status_label.setProperty("role", "mutedLabel")
         self.status_label.setWordWrap(True)
         random_layout.addWidget(self.status_label)
-
-        layout.addWidget(random_group)
-        layout.addStretch()
 
         # 初始状态设置为禁用
         self.set_controls_enabled(False)
 
     def create_separator(self):
         """创建分隔线"""
-        separator = QLabel()
+        separator = QFrame()
+        separator.setProperty("role", "sectionDivider")
+        separator.setFrameShape(QFrame.HLine)
         separator.setFixedHeight(1)
-        separator.setStyleSheet("background-color: #303033; margin: 2px 0;")
+        separator.setStyleSheet(f"background-color: {Tokens.BORDER_SOFT}; margin: 2px 0;")
         return separator
 
     def set_layer(self, layer):

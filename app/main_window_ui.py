@@ -16,6 +16,7 @@ from app.models.document_manager import DocumentManager
 from app.ui.document_tab import DocumentTab
 from app.ui.new_canvas_dialog import NewCanvasDialog
 from app.ui.layer_properties import LayerPropertiesPanel
+from app.ui.design_tokens import Tokens
 from app.utils.preset_manager import PresetManager
 from app.ui.status_indicators import status_manager
 from app.ui.visual_hierarchy import VisualHierarchy
@@ -25,9 +26,9 @@ import pickle
 # 模块级 UI 布局常量（原 main_window.py 顶层常量，随 UI 职责归入本 mixin 文件）
 ICON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "app", "resources")
 COMPACT_LAYER_DOCK_WIDTH = 180
-COMPACT_PROPERTIES_DOCK_WIDTH = 220
+COMPACT_PROPERTIES_DOCK_WIDTH = Tokens.SIDEBAR_PREFERRED_WIDTH
 COMPACT_LAYER_DOCK_MIN_WIDTH = 145
-COMPACT_PROPERTIES_DOCK_MIN_WIDTH = 180
+COMPACT_PROPERTIES_DOCK_MIN_WIDTH = Tokens.SIDEBAR_MIN_WIDTH + 14
 
 class MainWindowUi(object):
     def setup_ui(self):

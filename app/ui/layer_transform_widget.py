@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QSpinBox, QDoubleSpinBox, QCheckBox,
-                           QGroupBox, QSlider, QFormLayout, QButtonGroup)
+                           QSlider, QFormLayout, QButtonGroup)
 from PySide6.QtCore import Qt, Signal
 from app.ui.design_tokens import Tokens
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
@@ -27,11 +27,7 @@ class LayerTransformWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        # 变换组
-        transform_group = QGroupBox("图层变换")
-        transform_layout = QVBoxLayout(transform_group)
-        transform_layout.setContentsMargins(6, 6, 6, 6)
-        transform_layout.setSpacing(4)
+        transform_layout = layout
 
         # 旋转控制
         rotation_layout = QFormLayout()
@@ -103,9 +99,6 @@ class LayerTransformWidget(QWidget):
         global_controls_layout.addWidget(self.transform_info_label)
 
         transform_layout.addLayout(global_controls_layout)
-
-        layout.addWidget(transform_group)
-        layout.addStretch()
 
         # 初始状态设置为禁用
         self.set_controls_enabled(False)

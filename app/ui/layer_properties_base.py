@@ -40,8 +40,85 @@ class LayerPropertiesBase(object):
         """图层属性面板局部样式——与普通文字图层面板共用同一套 Tokens 控件样式。"""
         base = Tokens.control_qss("#layerPropertiesContent")
         extra = f"""
+            QTabWidget#layerPropertyTabs {{
+                background-color: {Tokens.BG_PRIMARY};
+                border: none;
+            }}
+            QTabWidget#layerPropertyTabs::pane {{
+                background-color: {Tokens.BG_PRIMARY};
+                border: none;
+                border-top: {Tokens.SIDEBAR_BORDER_WIDTH}px solid {Tokens.BORDER_SUBTLE};
+            }}
+            QTabWidget#layerPropertyTabs QTabBar::tab {{
+                min-height: {Tokens.SIDEBAR_TAB_HEIGHT}px;
+                max-height: {Tokens.SIDEBAR_TAB_HEIGHT}px;
+                margin: 0;
+                padding: 0 16px;
+                background-color: {Tokens.BG_SECONDARY};
+                color: {Tokens.TEXT_MUTED};
+                border: none;
+                border-bottom: 2px solid transparent;
+                border-radius: {Tokens.SIDEBAR_NAV_RADIUS}px;
+                font-size: {Tokens.SIDEBAR_BODY_FONT_SIZE}px;
+                font-weight: {Tokens.FONT_WEIGHT_MEDIUM};
+            }}
+            QTabWidget#layerPropertyTabs QTabBar::tab:hover {{
+                color: {Tokens.TEXT_PRIMARY};
+                background-color: {Tokens.BG_HOVER};
+            }}
+            QTabWidget#layerPropertyTabs QTabBar::tab:selected {{
+                color: {Tokens.TEXT_PRIMARY};
+                background-color: {Tokens.BG_PRIMARY};
+                border-bottom-color: {Tokens.ACCENT};
+                font-weight: {Tokens.FONT_WEIGHT_BOLD};
+            }}
             #layerPropertiesContent QWidget#layerPropertiesContent {{
                 background-color: {Tokens.BG_PRIMARY};
+            }}
+            #layerPropertiesContent QFrame[role="propertySection"] {{
+                background: transparent;
+                border: none;
+                border-radius: {Tokens.SIDEBAR_SECTION_RADIUS}px;
+            }}
+            #layerPropertiesContent QFrame[role="propertySectionHeader"] {{
+                background: transparent;
+                border: none;
+                border-bottom: {Tokens.SIDEBAR_BORDER_WIDTH}px solid {Tokens.BORDER_SOFT};
+                border-radius: {Tokens.SIDEBAR_SECTION_RADIUS}px;
+            }}
+            #layerPropertiesContent QFrame[role="propertySectionBody"] {{
+                background: transparent;
+                border: none;
+                border-radius: {Tokens.SIDEBAR_SECTION_RADIUS}px;
+            }}
+            #layerPropertiesContent QLabel[role="propertySectionTitle"] {{
+                color: {Tokens.TEXT_PRIMARY};
+                font-size: {Tokens.SIDEBAR_TITLE_FONT_SIZE}px;
+                font-weight: {Tokens.SIDEBAR_TITLE_FONT_WEIGHT};
+                background: transparent;
+                padding: 0;
+            }}
+            #layerPropertiesContent QLabel {{
+                font-size: {Tokens.SIDEBAR_BODY_FONT_SIZE}px;
+                min-height: {Tokens.SIDEBAR_BODY_LINE_HEIGHT}px;
+            }}
+            #layerPropertiesContent QLabel[role="fieldLabel"],
+            #layerPropertiesContent QLabel#fieldLabel {{
+                font-weight: {Tokens.FONT_WEIGHT_MEDIUM};
+            }}
+            #layerPropertiesContent QProgressBar {{
+                min-height: {Tokens.CONTROL_HEIGHT}px;
+                max-height: {Tokens.CONTROL_HEIGHT}px;
+                color: {Tokens.TEXT_SECONDARY};
+                background-color: {Tokens.BG_CONTROL_ALT};
+                border: 1px solid {Tokens.BORDER_CONTROL};
+                border-radius: {Tokens.CONTROL_RADIUS}px;
+                text-align: center;
+                font-size: {Tokens.FONT_SIZE_SMALL}px;
+            }}
+            #layerPropertiesContent QProgressBar::chunk {{
+                background-color: {Tokens.ACCENT};
+                border-radius: {max(Tokens.CONTROL_RADIUS - 1, 0)}px;
             }}
             #layerPropertiesContent QLineEdit::up-button,
             #layerPropertiesContent QDoubleSpinBox::up-button,
@@ -368,4 +445,3 @@ class LayerPropertiesBase(object):
         if hasattr(self, 'transform_widget'):
             # 阻断变换控件内部的信号
             self.transform_widget.blockSignals(block)
-

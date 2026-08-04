@@ -64,13 +64,22 @@ class Tokens:
     DISABLED_CTL_BG = "#20252B"   # 禁用按钮底
 
     # ===================== 字体（统一使用 px，禁止 pt） =====================
-    FONT_FAMILY = "Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif"
+    FONT_FAMILY = "Microsoft YaHei UI, Segoe UI, sans-serif"
     FONT_SIZE_BASE = 13
     FONT_SIZE_SMALL = 11
     FONT_SIZE_TITLE = 13
     FONT_WEIGHT_REGULAR = 400
     FONT_WEIGHT_MEDIUM = 600
     FONT_WEIGHT_BOLD = 700
+
+    # ===================== 图层属性侧边栏排版 =====================
+    # Qt QSS 不支持 line-height；行高通过标题栏/控件高度与布局间距落实。
+    SIDEBAR_TITLE_FONT_SIZE = 14
+    SIDEBAR_TITLE_FONT_WEIGHT = FONT_WEIGHT_MEDIUM
+    SIDEBAR_TITLE_LINE_HEIGHT = 20
+    SIDEBAR_BODY_FONT_SIZE = 13
+    SIDEBAR_BODY_FONT_WEIGHT = FONT_WEIGHT_REGULAR
+    SIDEBAR_BODY_LINE_HEIGHT = 20
 
     # ===================== 尺寸 / 间距 / 圆角 =====================
     CONTROL_HEIGHT = 30           # 所有输入框 / 按钮 / 下拉统一高度
@@ -99,6 +108,22 @@ class Tokens:
     BUTTON_RADIUS = 5
     INDICATOR_RADIUS = 4
     SUBPANEL_RADIUS = 6
+    SIDEBAR_PADDING = 12
+    SIDEBAR_SECTION_PADDING_TOP = 14
+    SIDEBAR_SECTION_PADDING_BOTTOM = 16
+    SIDEBAR_SECTION_GAP = 0
+    SIDEBAR_TAB_HEIGHT = 38
+    SIDEBAR_MIN_WIDTH = 320
+    SIDEBAR_PREFERRED_WIDTH = 360
+    SIDEBAR_SECTION_RADIUS = 0
+    SIDEBAR_NAV_RADIUS = 0
+    SIDEBAR_BORDER_WIDTH = 1
+
+    # 侧边栏四色规范：主色 / 辅助色 / 背景色 / 文字色。
+    SIDEBAR_COLOR_PRIMARY = ACCENT
+    SIDEBAR_COLOR_SECONDARY = BG_TERTIARY
+    SIDEBAR_COLOR_BACKGROUND = BG_PRIMARY
+    SIDEBAR_COLOR_TEXT = TEXT_PRIMARY
 
     SECTION_TITLE_FONT_SIZE = 13
     FIELD_LABEL_FONT_SIZE = 12
