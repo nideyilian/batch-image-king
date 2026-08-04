@@ -420,7 +420,7 @@ class LayerPanelBase(object):
         label_style = f"""
         QLabel {{
             color: {vh.get_color('text', 'primary')};
-            font-size: {vh.FONTS['body']['size']}px;
+            font-size: {vh.get_font('body').pointSize()}px;
             font-weight: 700;
             margin: {vh.get_spacing('sm')}px 0px;
             background: transparent;

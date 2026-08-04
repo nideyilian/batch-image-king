@@ -97,7 +97,7 @@ class VisualHierarchy:
         cls._tokens = {k: v for k, v in vars(Tokens).items() if not k.startswith("_") and k.isupper()}
 
     @classmethod
-    def get_spacing(cls, group, key):
+    def get_spacing(cls, key):
         cls._ensure()
         return cls.SPACING.get(key, 8)
 
