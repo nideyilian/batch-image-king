@@ -241,20 +241,7 @@ class IntegratedTextPanelContent(object):
         self.bg_opacity_slider.setRange(0, 100)
         self.bg_opacity_slider.setValue(100)  # 默认100%透明度
         self.bg_opacity_slider.setFixedHeight(20)
-        self.bg_opacity_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 4px;
-                background: #2F2F2F;
-                border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-                background: #2F9CF4;
-                width: 16px;
-                height: 16px;
-                margin: -6px 0;
-                border-radius: 8px;
-            }
-        """)
+        # 滑块样式由 panel_qss 的 QSlider 角色统一提供（与全局主题一致）
         self.bg_opacity_slider.valueChanged.connect(self.on_background_opacity_changed)  # 连接信号
         self.bg_opacity_label = QLabel("100%")
         self.bg_opacity_label.setFixedWidth(35)
@@ -272,20 +259,7 @@ class IntegratedTextPanelContent(object):
         self.bg_size_slider.setRange(-50, 50)  # 支持负值（背景小于文字）到正值（背景大于文字）
         self.bg_size_slider.setValue(5)  # 默认5像素内边距
         self.bg_size_slider.setFixedHeight(20)
-        self.bg_size_slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                height: 4px;
-                background: #2F2F2F;
-                border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-                background: #2F9CF4;
-                width: 16px;
-                height: 16px;
-                margin: -6px 0;
-                border-radius: 8px;
-            }
-        """)
+        # 滑块样式由 panel_qss 的 QSlider 角色统一提供
         self.bg_size_slider.valueChanged.connect(self.on_background_size_changed)  # 连接信号
         self.bg_size_label = QLabel("+5")
         self.bg_size_label.setFixedWidth(35)
@@ -311,15 +285,7 @@ class IntegratedTextPanelContent(object):
         self.gradient_type_combo = QComboBox()
         self.gradient_type_combo.addItems(["线性", "径向", "角度"])
         self.gradient_type_combo.setFixedWidth(80)
-        self.gradient_type_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #2F2F2F;
-                color: #F4F4F5;
-                border: 1px solid #5A5A5A;
-                border-radius: 3px;
-                padding: 4px;
-            }
-        """)
+        # 下拉样式由 panel_qss 的 QComboBox 角色统一提供
         self.gradient_type_combo.currentTextChanged.connect(self.on_gradient_type_changed)  # 连接信号
         gradient_type_layout.addWidget(self.gradient_type_combo)
         gradient_type_layout.addStretch()

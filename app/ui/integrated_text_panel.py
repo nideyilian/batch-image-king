@@ -164,7 +164,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)  # 减少间距
         label = QLabel(label_text)
-        label.setStyleSheet("font-size: 12px; font-weight: 600; color: #F4F4F5;")  # 减少字体
+        label.setProperty("role", "fieldLabel")  # 字号/字重/颜色统一由 panel_qss 提供
         layout.addWidget(label)
         layout.addWidget(widget)
         return group
@@ -172,21 +172,21 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
     def _style_core_button(self, button, radius=8):
         button.setStyleSheet(f"""
             QToolButton, QPushButton {{
-                background-color: #2C2D2E;
-                color: #F4F4F5;
-                border: 1px solid #55585C;
+                background-color: {PropertyPanelA2.CONTROL_BG_ALT};
+                color: {PropertyPanelA2.TEXT_PRIMARY};
+                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
                 border-radius: {radius}px;
                 padding: 4px 10px;
-                min-height: 34px;
+                min-height: {PropertyPanelA2.CONTROL_HEIGHT}px;
             }}
             QToolButton:hover, QPushButton:hover {{
-                background-color: #343638;
-                border-color: #6A6D72;
+                background-color: {PropertyPanelA2.CONTROL_BG_HOVER};
+                border-color: {PropertyPanelA2.BORDER_CONTROL};
             }}
             QToolButton:checked, QPushButton:checked {{
-                background-color: #2F9CF4;
-                border-color: #55B2FF;
-                color: #FFFFFF;
+                background-color: {PropertyPanelA2.ACCENT};
+                border-color: {PropertyPanelA2.ACCENT_HOVER};
+                color: {PropertyPanelA2.TEXT_INVERTED};
             }}
         """)
 
@@ -328,19 +328,19 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
     def _style_core_spinbox(self, spin, width=112):
         spin.setFixedWidth(width)
         spin.setFixedHeight(32)  # 减少高度
-        spin.setStyleSheet("""
-            QSpinBox {
-                background-color: #2C2D2E;
-                color: #F4F4F5;
-                border: 1px solid #55585C;
-                border-radius: 8px;
+        spin.setStyleSheet(f"""
+            QSpinBox {{
+                background-color: {PropertyPanelA2.CONTROL_BG_ALT};
+                color: {PropertyPanelA2.TEXT_PRIMARY};
+                border: 1px solid {PropertyPanelA2.BORDER_CONTROL};
+                border-radius: {PropertyPanelA2.CONTROL_RADIUS}px;
                 padding: 4px 8px;
-                font-size: 13px;
-            }
-            QSpinBox:disabled {
-                background-color: #242526;
-                color: #8E8E93;
-            }
+                font-size: {PropertyPanelA2.FONT_SIZE_BASE}px;
+            }}
+            QSpinBox:disabled {{
+                background-color: {PropertyPanelA2.CARD_BG};
+                color: {PropertyPanelA2.TEXT_MUTED};
+            }}
         """)
 
     def _style_switch_checkbox(self, checkbox):
@@ -351,17 +351,10 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         checkbox.setFixedSize(*PropertyPanelA2.SWITCH_SIZE)
 
     def create_preview_card(self, parent_layout):
-        """创建文字预览卡片"""
+        """创建文字预览卡片（样式由 panel_qss 的 previewCard / previewTitle / previewArea 角色统一提供）"""
         card = QFrame()
         card.setFrameStyle(QFrame.StyledPanel)
-        card.setStyleSheet("""
-            QFrame {
-                background-color: #1E1E1E;
-                border: 1px solid #303033;
-                border-radius: 6px;
-                padding: 8px;
-            }
-        """)
+        card.setProperty("role", "previewCard")
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(8, 8, 8, 8)
@@ -369,23 +362,14 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         # 预览标题
         title = QLabel("文字预览")
-        title.setStyleSheet("font-weight: bold; font-size: 12px; color: #FFFFFF;")
+        title.setProperty("role", "previewTitle")
         card_layout.addWidget(title)
 
         # 预览区域
         self.preview_label = QLabel("示例文字")
         self.preview_label.setMinimumHeight(50)
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("""
-            QLabel {
-                background-color: #2F2F2F;
-                border: 1px solid #3A3A3D;
-                border-radius: 4px;
-                padding: 12px;
-                font-size: 18px;
-                color: #FFFFFF;
-            }
-        """)
+        self.preview_label.setProperty("role", "previewArea")
         card_layout.addWidget(self.preview_label)
 
         parent_layout.addWidget(card)
@@ -932,7 +916,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
             widget.setFixedWidth(58)
             widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            widget.setStyleSheet("font-size: 12px; font-weight: 700; color: #F4F4F5;")
+            widget.setProperty("role", "fieldLabel")
             return widget
 
         def row(title, *widgets, stretch_last=True):
@@ -953,7 +937,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
                 widget.setFixedWidth(width)
             widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-            widget.setStyleSheet("font-size: 12px; font-weight: 700; color: #F4F4F5;")
+            widget.setProperty("role", "fieldLabel")
             return widget
 
         def parameter_grid(*pairs):
@@ -1033,7 +1017,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         quick_layout = QVBoxLayout()
         quick_layout.setSpacing(6)
         quick_title = QLabel("常用")
-        quick_title.setStyleSheet("font-size: 12px; font-weight: 600; color: #F4F4F5;")
+        quick_title.setProperty("role", "fieldLabel")
         quick_layout.addWidget(quick_title)
         quick_buttons_row = QGridLayout()
         quick_buttons_row.setHorizontalSpacing(8)
@@ -1052,7 +1036,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         recent_layout = QVBoxLayout()
         recent_layout.setSpacing(6)
         recent_title = QLabel("最近")
-        recent_title.setStyleSheet("font-size: 12px; font-weight: 600; color: #F4F4F5;")
+        recent_title.setProperty("role", "fieldLabel")
         recent_layout.addWidget(recent_title)
         self.recent_fonts_layout = QHBoxLayout()
         self.recent_fonts_layout.setSpacing(8)
@@ -1067,14 +1051,14 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.font_size_spin.setValue(24)
         self.font_size_spin.setSuffix("px")
         self.bold_btn = ToggleButton("B")
-        self.bold_btn.setFixedSize(42, 30)
+        self.bold_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.italic_btn = ToggleButton("I")
-        self.italic_btn.setFixedSize(42, 30)
+        self.italic_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         row("大小", self.font_size_spin, self.bold_btn, self.italic_btn, stretch_last=False)
 
         self.align_group = AlignButtonGroup()
         for button in (self.align_group.left_btn, self.align_group.center_btn, self.align_group.right_btn):
-            button.setFixedSize(42, 30)
+            button.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.vertical_layout_check = QCheckBox("竖排")
         row("对齐", self.align_group, self.vertical_layout_check, stretch_last=False)
 

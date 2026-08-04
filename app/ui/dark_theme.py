@@ -55,6 +55,17 @@ class CursorDarkTheme:
     PRESSED_OVERLAY = Tokens.OVERLAY_PRESSED
     SELECTED_BG = Tokens.BG_SELECTED
 
+    # ---- 控件尺寸 / 输入文本 / 选择背景（供 SpinBox 等全局控件复用） ----
+    CONTROL_HEIGHT = Tokens.CONTROL_HEIGHT
+    CONTROL_RADIUS = Tokens.CONTROL_RADIUS
+    TEXT_INPUT = Tokens.TEXT_INPUT
+    SELECTION_BG = Tokens.SELECTION_BG
+
+    # ---- 字重 / 字号（与属性面板共用同一套令牌，单一真源） ----
+    FONT_WEIGHT_BOLD = Tokens.FONT_WEIGHT_BOLD
+    FONT_WEIGHT_MEDIUM = Tokens.FONT_WEIGHT_MEDIUM
+    FONT_SIZE_BASE = Tokens.FONT_SIZE_BASE
+
     @classmethod
     def apply_to_application(cls, app):
         """应用全局 QSS 与调色板到 QApplication。"""
@@ -90,7 +101,7 @@ class CursorDarkTheme:
             background-color: {cls.BACKGROUND_PRIMARY};
             color: {cls.TEXT_PRIMARY};
             font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
-            font-size: 13px;
+            font-size: {cls.FONT_SIZE_BASE}px;
             outline: none;
         }}
         QMainWindow, QDialog, QDockWidget, QWidget#central {{
@@ -104,7 +115,7 @@ class CursorDarkTheme:
         }}
         QMenuBar::item:selected {{
             background-color: {cls.SELECTED_BG};
-            border-radius: 5px;
+            border-radius: {cls.CONTROL_RADIUS}px;
         }}
         QMenu {{
             background-color: {cls.BACKGROUND_ELEVATED};
@@ -115,7 +126,7 @@ class CursorDarkTheme:
         }}
         QMenu::item {{
             padding: 6px 22px 6px 12px;
-            border-radius: 5px;
+            border-radius: {cls.CONTROL_RADIUS}px;
         }}
         QMenu::item:selected {{
             background-color: {cls.SELECTED_BG};
@@ -139,7 +150,7 @@ class CursorDarkTheme:
         QToolButton {{
             background-color: transparent;
             border: 1px solid transparent;
-            border-radius: 5px;
+            border-radius: {cls.CONTROL_RADIUS}px;
             color: {cls.TEXT_PRIMARY};
             padding: 4px 8px;
         }}
@@ -153,6 +164,39 @@ class CursorDarkTheme:
         QToolButton:checked {{
             background-color: {cls.SELECTED_BG};
             border: 1px solid {cls.ACCENT_PRIMARY};
+        }}
+        QToolButton[variant="primary"] {{
+            background-color: {cls.ACCENT_PRIMARY};
+            border: 1px solid {cls.ACCENT_PRIMARY};
+            color: {cls.TEXT_INVERTED};
+            font-weight: {cls.FONT_WEIGHT_BOLD};
+        }}
+        QToolButton[variant="primary"]:hover {{
+            background-color: {cls.ACCENT_HOVER};
+            border-color: {cls.ACCENT_HOVER};
+        }}
+        QToolButton[variant="primary"]:pressed {{
+            background-color: {cls.ACCENT_PRESSED};
+            border-color: {cls.ACCENT_PRESSED};
+        }}
+        QToolButton[variant="secondary"] {{
+            background-color: {cls.BACKGROUND_TERTIARY};
+            border: 1px solid {cls.BORDER_SECONDARY};
+            color: {cls.TEXT_PRIMARY};
+        }}
+        QToolButton[variant="secondary"]:hover {{
+            background-color: {cls.BACKGROUND_SECONDARY};
+            border-color: {cls.BORDER_FOCUS};
+        }}
+        QToolButton[variant="ghost"] {{
+            background: transparent;
+            border: 1px solid {cls.BORDER_SECONDARY};
+            color: {cls.TEXT_SECONDARY};
+        }}
+        QToolButton[variant="ghost"]:hover {{
+            background-color: {cls.BACKGROUND_SECONDARY};
+            border-color: {cls.BORDER_FOCUS};
+            color: {cls.TEXT_PRIMARY};
         }}
         QStatusBar {{
             background-color: {cls.BACKGROUND_TITLEBAR};
@@ -172,13 +216,13 @@ class CursorDarkTheme:
             padding: 6px 12px;
             border-bottom: 1px solid {cls.BORDER_PRIMARY};
             color: {cls.TEXT_PRIMARY};
-            font-weight: 600;
+            font-weight: {cls.FONT_WEIGHT_MEDIUM};
         }}
         QTabBar::tab {{
             background-color: {cls.BACKGROUND_SECONDARY};
             color: {cls.TEXT_MUTED};
             border: 1px solid {cls.BORDER_PRIMARY};
-            border-bottom: none;
+            border-bottom: 2px solid transparent;
             border-top-left-radius: 7px;
             border-top-right-radius: 7px;
             padding: 7px 14px;
@@ -188,9 +232,21 @@ class CursorDarkTheme:
             background-color: {cls.BACKGROUND_TERTIARY};
             color: {cls.TEXT_PRIMARY};
             border-color: {cls.BORDER_FOCUS};
+            border-bottom-color: {cls.ACCENT_PRIMARY};
         }}
         QTabBar::tab:hover {{
             color: {cls.TEXT_SECONDARY};
+            background-color: {cls.BACKGROUND_TERTIARY};
+        }}
+        QTabBar::close-button {{
+            border: none;
+            background: transparent;
+            border-radius: 4px;
+            margin: 2px;
+            padding: 2px;
+        }}
+        QTabBar::close-button:hover {{
+            background: {cls.HOVER_OVERLAY};
         }}
         QTabWidget::pane {{
             border: 1px solid {cls.BORDER_PRIMARY};
@@ -237,6 +293,28 @@ class CursorDarkTheme:
             color: {cls.TEXT_PRIMARY};
             border: 1px solid {cls.BORDER_PRIMARY};
             selection-background-color: {cls.SELECTED_BG};
+        }}
+        QAbstractSpinBox, QSpinBox, QDoubleSpinBox {{
+            min-height: {cls.CONTROL_HEIGHT}px;
+            max-height: {cls.CONTROL_HEIGHT}px;
+            background-color: {cls.BACKGROUND_ELEVATED};
+            color: {cls.TEXT_INPUT};
+            border: 1px solid {cls.BORDER_SECONDARY};
+            border-radius: {cls.CONTROL_RADIUS}px;
+            selection-background-color: {cls.SELECTION_BG};
+            padding: 3px 6px;
+        }}
+        QAbstractSpinBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
+            border-color: {cls.ACCENT_PRIMARY};
+        }}
+        QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{
+            subcontrol-origin: border;
+            width: 18px;
+            background: transparent;
+            border: none;
+        }}
+        QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover {{
+            background: {cls.HOVER_OVERLAY};
         }}
         QToolTip {{
             background-color: {cls.BACKGROUND_ELEVATED};

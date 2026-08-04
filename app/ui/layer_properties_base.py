@@ -76,7 +76,7 @@ class LayerPropertiesBase(object):
             #layerPropertiesContent QPushButton[segmentButton="true"]:checked {{
                 background-color: {Tokens.ACCENT};
                 border-color: {Tokens.ACCENT_HOVER};
-                color: #FFFFFF;
+                color: {Tokens.TEXT_INVERTED};
                 font-weight: 700;
             }}
             #layerPropertiesContent QLabel#propertySectionLabel {{

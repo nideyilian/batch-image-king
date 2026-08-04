@@ -322,6 +322,10 @@ class MainWindowUi(object):
         self.main_toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
     
         self.main_toolbar.addAction(self.new_action)
+        # “新建”为主操作，使用设计系统的 primary 变体（accent 实心）以突出 CTA
+        _new_btn = self.main_toolbar.widgetForAction(self.new_action)
+        if _new_btn is not None:
+            _new_btn.setProperty("variant", "primary")
         self.main_toolbar.addAction(self.open_action)
         self.main_toolbar.addAction(self.save_action)
         self.main_toolbar.addSeparator()
@@ -378,17 +382,15 @@ class MainWindowUi(object):
     
         # 应用状态栏样式
         vh = VisualHierarchy
-        statusbar_style = f"""
-        QStatusBar {{
-            background-color: {vh.get_color('background', 'secondary')};
-            border-top: 1px solid {vh.get_color('border', 'divider')};
-            color: {vh.get_color('text', 'secondary')};
-            font-size: {vh.FONTS['small']['size']}px;
+        # 颜色 / 边框 / 字体由全局主题（dark_theme.CursorDarkTheme）统一提供，
+        # 此处仅保留布局相关的最小覆盖，避免与主窗口壳层主题产生第二份样式真值。
+        statusbar_style = """
+        QStatusBar {
             min-height: 20px;
-        }}
-        QStatusBar::item {{
+        }
+        QStatusBar::item {
             border: none;
-        }}
+        }
         """
         self.statusbar.setStyleSheet(statusbar_style)
     
@@ -419,17 +421,15 @@ class MainWindowUi(object):
         self.zoom_spinbox.valueChanged.connect(self.zoom_value_changed)
     
         # 设置缩放控件样式
-        spinbox_style = f"""
-        QSpinBox {{
-            background-color: {vh.get_color('background', 'surface')};
-            border: 1px solid {vh.get_color('border', 'secondary')};
-            color: {vh.get_color('text', 'primary')};
-            border-radius: {vh.get_radius('sm')}px;
-            padding: 1px 4px;
-        }}
-        QSpinBox:focus {{
-            border: 1px solid {vh.get_color('border', 'focus')};
-        }}
+        # 颜色 / 边框 / 焦点态由全局主题（dark_theme）统一提供，
+        # 此处仅保留紧凑尺寸与小字号，避免与主窗口壳层主题重复。
+        spinbox_style = """
+        QSpinBox {
+            min-height: 22px;
+            max-height: 22px;
+            min-width: 56px;
+            font-size: 11px;
+        }
         """
         self.zoom_spinbox.setStyleSheet(spinbox_style)
     

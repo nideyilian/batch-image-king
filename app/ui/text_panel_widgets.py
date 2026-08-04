@@ -32,7 +32,7 @@ class A2Switch(PropertySwitch):
 
 
 class ToggleButton(QToolButton):
-    """切换按钮 - 用于粗体、斜体等样式切换"""
+    """切换按钮 - 用于粗体、斜体等样式切换（字形自身即暗示功能：B 加粗、I 斜体）"""
     def __init__(self, text="", checkable=True):
         super().__init__()
         self.setText(text)
@@ -40,6 +40,15 @@ class ToggleButton(QToolButton):
         self.setAutoRaise(False)
         self.setProperty("actionButton", True)
         self.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
+        # 字形即图标：B 渲染为加粗、I 渲染为斜体，强化功能暗示（图标/字重一致性）
+        if text == "B":
+            glyph = self.font()
+            glyph.setWeight(QFont.Weight.Bold)
+            self.setFont(glyph)
+        elif text == "I":
+            glyph = self.font()
+            glyph.setItalic(True)
+            self.setFont(glyph)
 
 
 class AlignButtonGroup(QWidget):

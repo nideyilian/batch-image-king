@@ -41,6 +41,17 @@ class DialogA2:
     ACCENT_HOVER = "#55B2FF"
     ACCENT_PRESSED = "#1F7EC8"
 
+    # 与 property_panel_a2 / design_tokens 对齐的语义别名（单一真源）
+    TEXT_INVERTED = "#FFFFFF"
+    TEXT_INPUT = "#E9EEF3"
+    SELECTION_BG = "#0E76D8"
+    DISABLED_CTL_BG = "#20252B"
+    BORDER_SUBTLE = "#252528"
+    BORDER_INDICATOR = "#52555B"
+    BG_ELEVATED = "#2F2F2F"
+    FONT_WEIGHT_BOLD = 700
+    FONT_WEIGHT_MEDIUM = 600
+
     @classmethod
     def apply(cls, dialog):
         dialog.setProperty("dialogA2", True)
@@ -83,19 +94,19 @@ class DialogA2:
                 border: none;
             }}
             QDialog[dialogA2="true"] QLabel[role="dialogTitle"] {{
-                color: #FFFFFF;
+                color: {cls.TEXT_INVERTED};
                 font-size: {cls.TITLE_FONT_SIZE}px;
-                font-weight: 700;
+                font-weight: {cls.FONT_WEIGHT_BOLD};
             }}
             QDialog[dialogA2="true"] QLabel[role="sectionTitle"] {{
-                color: #FFFFFF;
+                color: {cls.TEXT_INVERTED};
                 font-size: {cls.SECTION_TITLE_FONT_SIZE}px;
-                font-weight: 700;
+                font-weight: {cls.FONT_WEIGHT_BOLD};
             }}
             QDialog[dialogA2="true"] QLabel[role="fieldLabel"] {{
                 color: {cls.TEXT_PRIMARY};
                 font-size: {cls.FIELD_FONT_SIZE}px;
-                font-weight: 700;
+                font-weight: {cls.FONT_WEIGHT_BOLD};
             }}
             QDialog[dialogA2="true"] QLabel[role="hint"] {{
                 color: {cls.TEXT_MUTED};
@@ -108,10 +119,10 @@ class DialogA2:
             QDialog[dialogA2="true"] QTextEdit {{
                 min-height: {cls.CONTROL_HEIGHT}px;
                 background-color: {cls.CONTROL_BG};
-                color: #E9EEF3;
+                color: {cls.TEXT_INPUT};
                 border: 1px solid {cls.BORDER_CONTROL};
                 border-radius: 4px;
-                selection-background-color: #0E76D8;
+                selection-background-color: {cls.SELECTION_BG};
                 padding: 3px 6px;
             }}
             QDialog[dialogA2="true"] QListWidget::item {{
@@ -121,7 +132,7 @@ class DialogA2:
             }}
             QDialog[dialogA2="true"] QListWidget::item:selected {{
                 background-color: {cls.ACCENT};
-                color: #FFFFFF;
+                color: {cls.TEXT_INVERTED};
             }}
             QDialog[dialogA2="true"] QSplitter::handle {{
                 background-color: {cls.BORDER};
@@ -141,7 +152,7 @@ class DialogA2:
                 background-color: {cls.CONTROL_BG_ALT};
                 color: {cls.TEXT_PRIMARY};
                 font-size: {cls.FIELD_FONT_SIZE}px;
-                font-weight: 600;
+                font-weight: {cls.FONT_WEIGHT_MEDIUM};
                 padding: 3px 10px;
             }}
             QDialog[dialogA2="true"] QPushButton:hover,
@@ -157,16 +168,16 @@ class DialogA2:
             QDialog[dialogA2="true"] QPushButton:disabled,
             QDialog[dialogA2="true"] QToolButton:disabled {{
                 color: {cls.TEXT_DISABLED};
-                background-color: #20252B;
-                border-color: #252528;
+                background-color: {cls.DISABLED_CTL_BG};
+                border-color: {cls.BORDER_SUBTLE};
             }}
             QDialog[dialogA2="true"] QPushButton[primaryButton="true"] {{
                 min-width: {cls.BUTTON_WIDTH}px;
                 min-height: {cls.BUTTON_HEIGHT}px;
                 background-color: {cls.ACCENT};
                 border-color: {cls.ACCENT_HOVER};
-                color: #FFFFFF;
-                font-weight: 700;
+                color: {cls.TEXT_INVERTED};
+                font-weight: {cls.FONT_WEIGHT_BOLD};
             }}
             QDialog[dialogA2="true"] QPushButton[primaryButton="true"]:hover {{
                 background-color: {cls.ACCENT_HOVER};
@@ -186,8 +197,8 @@ class DialogA2:
                 width: 15px;
                 height: 15px;
                 border-radius: 3px;
-                border: 1px solid #58636F;
-                background: #2F2F2F;
+                border: 1px solid {cls.BORDER_INDICATOR};
+                background: {cls.BG_ELEVATED};
             }}
             QDialog[dialogA2="true"] QCheckBox::indicator:checked {{
                 background: {cls.ACCENT};
@@ -209,7 +220,7 @@ class DialogA2:
             }}
             QDialog[dialogA2="true"] QTabBar::tab:selected {{
                 background-color: {cls.ACCENT};
-                color: #FFFFFF;
-                font-weight: 700;
+                color: {cls.TEXT_INVERTED};
+                font-weight: {cls.FONT_WEIGHT_BOLD};
             }}
         """

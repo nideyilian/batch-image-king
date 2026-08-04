@@ -65,6 +65,7 @@ class PropertyPanelA2:
     ACCENT = Tokens.ACCENT
     ACCENT_HOVER = Tokens.ACCENT_HOVER
     ACCENT_PRESSED = Tokens.ACCENT_PRESSED
+    TEXT_INVERTED = Tokens.TEXT_INVERTED
 
     @classmethod
     def stylesheet(cls, root_selector="#IntegratedTextPanel"):

@@ -70,7 +70,7 @@ class InlineAlert(QFrame):
             QLabel[role="inlineAlertText"] {{
                 color: {Tokens.TEXT_PRIMARY};
                 background: transparent;
-                font-size: 12px;
+                font-size: {Tokens.FIELD_LABEL_FONT_SIZE}px;
             }}
         """)
 
@@ -120,12 +120,12 @@ class EmptyState(QFrame):
             }}
             QLabel[role="featureTitle"] {{
                 color: {Tokens.TEXT_PRIMARY};
-                font-size: 15px;
-                font-weight: 700;
+                font-size: {Tokens.FEATURE_TITLE_FONT_SIZE}px;
+                font-weight: {Tokens.FONT_WEIGHT_BOLD};
             }}
             QLabel[role="summaryLabel"] {{
                 color: {Tokens.TEXT_MUTED};
-                font-size: 12px;
+                font-size: {Tokens.FIELD_LABEL_FONT_SIZE}px;
             }}
         """)
 
@@ -179,8 +179,8 @@ class _ToastCard(QFrame):
             QLabel[role="toastText"] {{
                 color: {Tokens.TEXT_PRIMARY};
                 background: transparent;
-                font-size: 13px;
-                font-weight: 600;
+                font-size: {Tokens.FONT_SIZE_BASE}px;
+                font-weight: {Tokens.FONT_WEIGHT_MEDIUM};
             }}
         """)
 

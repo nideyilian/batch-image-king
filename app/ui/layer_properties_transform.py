@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QProgressBar)
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import QColor
+from app.ui.design_tokens import Tokens
 import os
 import time
 from PIL import Image
@@ -194,10 +195,10 @@ class LayerPropertiesTransform(object):
             if binding_info:
                 group_id, group_name = binding_info
                 self.bind_status_label.setText(f"已绑定到: {group_name}")
-                self.bind_status_label.setStyleSheet("color: #2F9CF4; font-weight: bold; font-size: 9pt;")
+                self.bind_status_label.setStyleSheet(f"color: {Tokens.ACCENT}; font-weight: {Tokens.FONT_WEIGHT_BOLD}; font-size: {Tokens.FIELD_LABEL_FONT_SIZE}px;")
             else:
                 self.bind_status_label.setText("未绑定")
-                self.bind_status_label.setStyleSheet("color: #606064; font-size: 9pt;")
+                self.bind_status_label.setStyleSheet(f"color: {Tokens.TEXT_DISABLED}; font-size: {Tokens.FIELD_LABEL_FONT_SIZE}px;")
         except Exception as e:
             safe_print(f"更新绑定状态时出错: {e}")
             self.bind_status_label.setText("未绑定")

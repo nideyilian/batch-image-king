@@ -167,22 +167,22 @@ class Tokens:
         {selector} QLabel[role="sectionTitle"] {{
             color: {cls.TEXT_INVERTED};
             font-size: {cls.SECTION_TITLE_FONT_SIZE}px;
-            font-weight: 700;
+            font-weight: {cls.FONT_WEIGHT_BOLD};
         }}
         {selector} QLabel[role="fieldLabel"], {selector} QLabel#fieldLabel {{
             color: {cls.TEXT_PRIMARY};
             font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
-            font-weight: 700;
+            font-weight: {cls.FONT_WEIGHT_BOLD};
         }}
         {selector} QLabel[role="mutedLabel"], {selector} QLabel[role="summaryLabel"] {{
             color: {cls.TEXT_MUTED};
             font-size: {cls.SUMMARY_FONT_SIZE}px;
-            font-weight: 700;
+            font-weight: {cls.FONT_WEIGHT_BOLD};
         }}
         {selector} QLabel[role="featureTitle"] {{
             color: {cls.TEXT_PRIMARY};
             font-size: {cls.FEATURE_TITLE_FONT_SIZE}px;
-            font-weight: 700;
+            font-weight: {cls.FONT_WEIGHT_BOLD};
         }}
         {selector} QPushButton, {selector} QToolButton {{
             min-height: {cls.CONTROL_HEIGHT}px;
@@ -192,7 +192,7 @@ class Tokens:
             background-color: {cls.BG_CONTROL_ALT};
             color: {cls.TEXT_PRIMARY};
             font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
-            font-weight: 600;
+            font-weight: {cls.FONT_WEIGHT_MEDIUM};
             padding: 3px 8px;
         }}
         {selector} QAbstractButton[actionButton="true"] {{
@@ -203,7 +203,7 @@ class Tokens:
             background-color: {cls.BG_CONTROL_ALT};
             color: {cls.TEXT_PRIMARY};
             font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
-            font-weight: 600;
+            font-weight: {cls.FONT_WEIGHT_MEDIUM};
             padding: 3px 8px;
         }}
         {selector} QPushButton:hover, {selector} QToolButton:hover {{
@@ -225,20 +225,20 @@ class Tokens:
             padding: 3px 6px;
             background-color: {cls.BG_CONTROL_ALT};
             font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
-            font-weight: 600;
+            font-weight: {cls.FONT_WEIGHT_MEDIUM};
         }}
         {selector} QPushButton[segmentButton="true"]:checked, {selector} QToolButton[segmentButton="true"]:checked {{
             background-color: {cls.ACCENT};
             border-color: {cls.ACCENT_HOVER};
             color: {cls.TEXT_INVERTED};
-            font-weight: 700;
+            font-weight: {cls.FONT_WEIGHT_BOLD};
         }}
         {selector} QPushButton[compactValue="true"] {{
             min-height: {cls.CONTROL_HEIGHT}px;
             max-height: {cls.CONTROL_HEIGHT}px;
             background-color: {cls.BG_ELEVATED};
             border-color: {cls.BORDER_SOFT};
-            font-weight: 700;
+            font-weight: {cls.FONT_WEIGHT_BOLD};
         }}
         {selector} QLineEdit, {selector} QComboBox, {selector} QSpinBox, {selector} QDoubleSpinBox {{
             min-height: {cls.CONTROL_HEIGHT}px;
@@ -271,7 +271,7 @@ class Tokens:
             min-height: {cls.CONTROL_HEIGHT}px;
             max-height: {cls.CONTROL_HEIGHT}px;
             font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
-            font-weight: 600;
+            font-weight: {cls.FONT_WEIGHT_MEDIUM};
         }}
         {selector} QCheckBox[role="switch"] {{
             min-width: {cls.SWITCH_W}px;
@@ -320,6 +320,39 @@ class Tokens:
             margin: -6px 0;
             border-radius: 8px;
         }}
+        {selector} QPushButton[variant="primary"], {selector} QToolButton[variant="primary"] {{
+            background-color: {cls.ACCENT};
+            border: 1px solid {cls.ACCENT};
+            color: {cls.TEXT_INVERTED};
+            font-weight: {cls.FONT_WEIGHT_BOLD};
+        }}
+        {selector} QPushButton[variant="primary"]:hover, {selector} QToolButton[variant="primary"]:hover {{
+            background-color: {cls.ACCENT_HOVER};
+            border-color: {cls.ACCENT_HOVER};
+        }}
+        {selector} QPushButton[variant="primary"]:pressed, {selector} QToolButton[variant="primary"]:pressed {{
+            background-color: {cls.ACCENT_PRESSED};
+            border-color: {cls.ACCENT_PRESSED};
+        }}
+        {selector} QPushButton[variant="secondary"], {selector} QToolButton[variant="secondary"] {{
+            background-color: {cls.BG_TERTIARY};
+            border: 1px solid {cls.BORDER_CONTROL};
+            color: {cls.TEXT_PRIMARY};
+        }}
+        {selector} QPushButton[variant="secondary"]:hover, {selector} QToolButton[variant="secondary"]:hover {{
+            background-color: {cls.BG_HOVER};
+            border-color: {cls.BORDER_FOCUS};
+        }}
+        {selector} QPushButton[variant="ghost"], {selector} QToolButton[variant="ghost"] {{
+            background: transparent;
+            border: 1px solid {cls.BORDER_CONTROL};
+            color: {cls.TEXT_SECONDARY};
+        }}
+        {selector} QPushButton[variant="ghost"]:hover, {selector} QToolButton[variant="ghost"]:hover {{
+            background-color: {cls.BG_HOVER};
+            border-color: {cls.BORDER_FOCUS};
+            color: {cls.TEXT_PRIMARY};
+        }}
         """
 
     @classmethod
@@ -354,5 +387,24 @@ class Tokens:
         {selector} QFrame[role="coreDivider"] {{
             background-color: {cls.BORDER_SOFT};
             border: none;
+        }}
+        {selector} QFrame[role="previewCard"] {{
+            background-color: {cls.BG_SECONDARY};
+            border: 1px solid {cls.BORDER_PRIMARY};
+            border-radius: {cls.SUBPANEL_RADIUS}px;
+            padding: 8px;
+        }}
+        {selector} QLabel[role="previewTitle"] {{
+            color: {cls.TEXT_INVERTED};
+            font-weight: {cls.FONT_WEIGHT_BOLD};
+            font-size: {cls.FIELD_LABEL_FONT_SIZE}px;
+        }}
+        {selector} QLabel[role="previewArea"] {{
+            background-color: {cls.BG_ELEVATED};
+            border: 1px solid {cls.BORDER_CONTROL};
+            border-radius: {cls.CONTROL_RADIUS}px;
+            padding: 12px;
+            color: {cls.TEXT_INVERTED};
+            font-size: 18px;
         }}
         """
