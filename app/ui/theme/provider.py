@@ -457,7 +457,6 @@ QFrame[role="input-group"] {
     min-height: %%control-h%%px; background: %%popover%%;
     border: 1px solid %%input%%; border-radius: %%radius%%px;
 }
-QFrame[role="input-group"]:focus-within { border-color: %%ring%%; }
 QFrame[role="input-group"] QLineEdit,
 QFrame[role="input-group"] QSpinBox,
 QFrame[role="input-group"] QDoubleSpinBox {
@@ -475,6 +474,81 @@ QGroupBox[role="section"] {
 }
 QGroupBox[role="section"]::title {
     color: %%foreground%%; subcontrol-origin: margin; left: 10px; padding: 0 4px;
+}
+
+/* ---------- Layout / navigation ---------- */
+QScrollArea[role="scroll-area"] { background: transparent; border: none; }
+QFrame[role="sidebar"] {
+    background: %%card%%; border-right: 1px solid %%border%%;
+}
+QSplitter[role="resizable"]::handle {
+    background: %%border%%; width: 1px; height: 1px;
+}
+QSplitter[role="resizable"]::handle:hover { background: %%ring%%; }
+QFrame[role="aspect-ratio"] { background: transparent; border: none; }
+QFrame[role="accordion"], QFrame[role="accordion-item"] {
+    background: transparent; border: none;
+}
+QFrame[role="accordion-item"] {
+    border-bottom: 1px solid %%border%%;
+}
+QToolButton[role="accordion-trigger"] {
+    min-height: 36px; padding: 0 8px; text-align: left;
+    color: %%foreground%%; font-weight: %%fw-medium%%;
+    background: transparent; border: none;
+}
+QToolButton[role="accordion-trigger"]:hover { background: %%accent%%; }
+QWidget[role="accordion-content"] { background: transparent; }
+
+/* ---------- Overlay / command ---------- */
+QDialog[role="alert-dialog"], QDialog[role="command-palette"] {
+    background: %%background%%; color: %%foreground%%;
+}
+QLabel[role="dialog-title"] {
+    color: %%foreground%%; font-size: %%fs-lg%%px; font-weight: %%fw-bold%%;
+}
+QListWidget[role="command-list"] {
+    background: %%background%%; border: none; padding: 4px;
+}
+QListWidget[role="command-list"]::item {
+    min-height: 34px; padding: 0 10px; border-radius: %%radius%%px;
+}
+QListWidget[role="command-list"]::item:selected { background: %%accent%%; }
+
+/* ---------- Feedback / data ---------- */
+QFrame[role="toast"] {
+    background: %%popover%%; border: 1px solid %%border%%;
+    border-radius: %%radius-lg%%px;
+}
+QFrame[role="toast"][variant="success"] { border-left: 3px solid %%success%%; }
+QFrame[role="toast"][variant="warning"] { border-left: 3px solid %%warning%%; }
+QFrame[role="toast"][variant="destructive"] { border-left: 3px solid %%destructive%%; }
+QFrame[role="toast"][variant="info"] { border-left: 3px solid %%info%%; }
+QLabel[role="toast-message"] { color: %%foreground%%; }
+QProgressBar[role="spinner"] {
+    min-height: 4px; max-height: 4px; border: none; background: %%muted%%;
+}
+QProgressBar[role="spinner"]::chunk { background: %%primary%%; border-radius: 2px; }
+QFrame[role="skeleton"] { background: %%muted%%; border-radius: %%radius%%px; }
+QFrame[role="empty-state"] { background: transparent; border: none; }
+QLabel[role="empty-title"] {
+    color: %%foreground%%; font-size: %%fs-lg%%px; font-weight: %%fw-medium%%;
+}
+QTableWidget[role="table"] {
+    background: %%background%%; alternate-background-color: %%card%%;
+    border: 1px solid %%border%%; gridline-color: %%border%%;
+    selection-background-color: %%accent%%;
+}
+QTableWidget[role="table"] QHeaderView::section {
+    background: %%secondary%%; color: %%foreground%%;
+    border: none; border-bottom: 1px solid %%border%%; padding: 7px 9px;
+}
+QFrame[role="file-drop-zone"] {
+    background: %%card%%; border: 1px dashed %%input%%;
+    border-radius: %%radius-lg%%px;
+}
+QFrame[role="file-drop-zone"][dragActive="true"] {
+    background: %%accent%%; border-color: %%ring%%;
 }
 
 /* ---------- Icon 图标组件 ---------- */
