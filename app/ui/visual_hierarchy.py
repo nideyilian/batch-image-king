@@ -48,6 +48,13 @@ class VisualHierarchy:
             'error': "ERROR",
             'info': "INFO",
         },
+        # 兼容旧调用方（ToastMessage 等）使用的 'state' 语义组
+        'state': {
+            'success': "SUCCESS",
+            'warning': "WARNING",
+            'error': "ERROR",
+            'info': "INFO",
+        },
         'overlay': {
             'hover': "OVERLAY_HOVER",
             'active': "OVERLAY_PRESSED",

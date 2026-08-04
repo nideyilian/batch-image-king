@@ -47,13 +47,13 @@ class PropertySwitch(QCheckBox):
         )
 
         if self.isEnabled():
-            track_color = Tokens.ACCENT if self.isChecked() else "#3A3C3F"
-            knob_color = "#FFFFFF"
-            border_color = Tokens.ACCENT_HOVER if self.isChecked() else "#45484C"
+            track_color = Tokens.ACCENT if self.isChecked() else Tokens.BORDER_CONTROL
+            knob_color = Tokens.TEXT_INVERTED
+            border_color = Tokens.ACCENT_HOVER if self.isChecked() else Tokens.BORDER_SOFT
         else:
-            track_color = "#25272A"
-            knob_color = "#8E95A3"
-            border_color = "#2E3033"
+            track_color = Tokens.BG_SELECTED
+            knob_color = Tokens.TEXT_MUTED
+            border_color = Tokens.BORDER_SUBTLE
 
         painter.setPen(QColor(border_color))
         painter.setBrush(QColor(track_color))
