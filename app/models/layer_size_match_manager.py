@@ -6,8 +6,45 @@
 """
 
 from PySide6.QtCore import QObject, Signal
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import uuid
+
+
+# 自动遮罩默认配置：默认关闭，兼容旧模板（旧文件加载后自动遮罩不生效）。
+AUTO_MASK_DEFAULTS = {
+    "auto_mask_enabled": False,
+    "auto_mask_mode": "black_placeholder",
+    "auto_mask_threshold": 32,
+    "auto_mask_tolerance": 18,
+    "auto_mask_min_area_ratio": 0.002,
+    "auto_mask_max_area_ratio": 0.75,
+    "auto_mask_keep_border": True,
+    "auto_mask_edge_refine": True,
+}
+
+
+def merge_auto_mask(relation: Dict[str, Any], src: Optional[Dict[str, Any]]):
+    """把自动遮罩参数并入 relation；缺省时回退默认值，保证旧文件兼容。
+
+    auto_mask 参数为 None 或空字典时，relation 仍会补齐全部默认字段，
+    使序列化/反序列化稳定，且旧模板默认关闭自动遮罩。
+    """
+    src = src or {}
+    relation["auto_mask_enabled"] = bool(src.get("auto_mask_enabled", False))
+    relation["auto_mask_mode"] = str(src.get("auto_mask_mode", "black_placeholder"))
+    relation["auto_mask_threshold"] = max(0, int(src.get("auto_mask_threshold", 32)))
+    relation["auto_mask_tolerance"] = max(0, int(src.get("auto_mask_tolerance", 18)))
+    try:
+        relation["auto_mask_min_area_ratio"] = float(src.get("auto_mask_min_area_ratio", 0.002))
+    except (TypeError, ValueError):
+        relation["auto_mask_min_area_ratio"] = 0.002
+    try:
+        relation["auto_mask_max_area_ratio"] = float(src.get("auto_mask_max_area_ratio", 0.75))
+    except (TypeError, ValueError):
+        relation["auto_mask_max_area_ratio"] = 0.75
+    relation["auto_mask_keep_border"] = bool(src.get("auto_mask_keep_border", True))
+    relation["auto_mask_edge_refine"] = bool(src.get("auto_mask_edge_refine", True))
+    return relation
 
 
 class LayerSizeMatchManager(QObject):
@@ -52,6 +89,7 @@ class LayerSizeMatchManager(QObject):
         padding: int = 1,
         one_to_many: bool = False,
         auto_rotate: bool = False,
+        auto_mask: Optional[Dict[str, Any]] = None,
     ) -> str:
         source_name = str(source_layer_name or "").strip()
         targets = self._normalize_targets(source_name, target_layer_names)
@@ -66,11 +104,12 @@ class LayerSizeMatchManager(QObject):
                 relation["one_to_many"] = bool(one_to_many)
                 relation["auto_rotate"] = bool(auto_rotate)
                 relation["target_layer_name"] = targets[0]
+                merge_auto_mask(relation, auto_mask)
                 self.changed.emit()
                 return str(relation.get("id", ""))
 
         relation_id = str(uuid.uuid4())
-        self.relations.append({
+        relation = {
             "id": relation_id,
             "source_layer_name": source_name,
             "target_layer_name": targets[0],  # 向后兼容
@@ -79,7 +118,9 @@ class LayerSizeMatchManager(QObject):
             "padding": max(0, int(padding)),
             "one_to_many": bool(one_to_many),
             "auto_rotate": bool(auto_rotate),
-        })
+        }
+        merge_auto_mask(relation, auto_mask)
+        self.relations.append(relation)
         self.changed.emit()
         return relation_id
 
@@ -103,6 +144,7 @@ class LayerSizeMatchManager(QObject):
         padding: int,
         one_to_many: bool = False,
         auto_rotate: bool = False,
+        auto_mask: Optional[Dict[str, Any]] = None,
     ):
         rid = str(relation_id or "")
         source_name = str(source_layer_name or "").strip()
@@ -118,6 +160,7 @@ class LayerSizeMatchManager(QObject):
                 relation["padding"] = max(0, int(padding))
                 relation["one_to_many"] = bool(one_to_many)
                 relation["auto_rotate"] = bool(auto_rotate)
+                merge_auto_mask(relation, auto_mask)
                 self.changed.emit()
                 return True
         return False
@@ -146,6 +189,14 @@ class LayerSizeMatchManager(QObject):
                 "padding": max(0, int(relation.get("padding", 1))),
                 "one_to_many": bool(relation.get("one_to_many", False)),
                 "auto_rotate": bool(relation.get("auto_rotate", False)),
+                "auto_mask_enabled": bool(relation.get("auto_mask_enabled", False)),
+                "auto_mask_mode": str(relation.get("auto_mask_mode", "black_placeholder")),
+                "auto_mask_threshold": max(0, int(relation.get("auto_mask_threshold", 32))),
+                "auto_mask_tolerance": max(0, int(relation.get("auto_mask_tolerance", 18))),
+                "auto_mask_min_area_ratio": float(relation.get("auto_mask_min_area_ratio", 0.002)),
+                "auto_mask_max_area_ratio": float(relation.get("auto_mask_max_area_ratio", 0.75)),
+                "auto_mask_keep_border": bool(relation.get("auto_mask_keep_border", True)),
+                "auto_mask_edge_refine": bool(relation.get("auto_mask_edge_refine", True)),
             })
         return active
 
@@ -162,6 +213,14 @@ class LayerSizeMatchManager(QObject):
                     "padding": max(0, int(r.get("padding", 1))),
                     "one_to_many": bool(r.get("one_to_many", False)),
                     "auto_rotate": bool(r.get("auto_rotate", False)),
+                    "auto_mask_enabled": bool(r.get("auto_mask_enabled", False)),
+                    "auto_mask_mode": str(r.get("auto_mask_mode", "black_placeholder")),
+                    "auto_mask_threshold": max(0, int(r.get("auto_mask_threshold", 32))),
+                    "auto_mask_tolerance": max(0, int(r.get("auto_mask_tolerance", 18))),
+                    "auto_mask_min_area_ratio": float(r.get("auto_mask_min_area_ratio", 0.002)),
+                    "auto_mask_max_area_ratio": float(r.get("auto_mask_max_area_ratio", 0.75)),
+                    "auto_mask_keep_border": bool(r.get("auto_mask_keep_border", True)),
+                    "auto_mask_edge_refine": bool(r.get("auto_mask_edge_refine", True)),
                 }
                 for r in self.relations
             ],
@@ -184,7 +243,7 @@ class LayerSizeMatchManager(QObject):
                 targets = self._normalize_targets(source_name, raw_targets)
                 if not source_name or not targets:
                     continue
-                self.relations.append({
+                relation = {
                     "id": str(item.get("id", "")) or str(uuid.uuid4()),
                     "source_layer_name": source_name,
                     "target_layer_name": targets[0],
@@ -193,5 +252,7 @@ class LayerSizeMatchManager(QObject):
                     "padding": max(0, int(item.get("padding", 1))),
                     "one_to_many": bool(item.get("one_to_many", False)),
                     "auto_rotate": bool(item.get("auto_rotate", False)),
-                })
+                }
+                merge_auto_mask(relation, item)
+                self.relations.append(relation)
         self.changed.emit()

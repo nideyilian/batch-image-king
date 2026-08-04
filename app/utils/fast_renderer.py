@@ -270,6 +270,10 @@ class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, 
         self._size_match_holes_cache = OrderedDict()
         self._size_match_holes_lock = threading.RLock()
         self._max_size_match_holes_entries = 96
+        # 自动遮罩缓存：源图层 surface 经自动遮罩处理后的临时副本，源图与参数不变时复用
+        self._size_match_auto_mask_cache = OrderedDict()
+        self._size_match_auto_mask_lock = threading.RLock()
+        self._max_size_match_auto_mask_entries = 96
         self._size_override_surface_cache = OrderedDict()
         self._size_override_surface_lock = threading.RLock()
         self._max_size_override_surface_entries = 192

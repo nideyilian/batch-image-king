@@ -18,6 +18,13 @@ import numpy as np
 import weakref
 import gc
 
+try:
+    import cv2
+    _CV2_AVAILABLE = True
+except Exception:  # pragma: no cover - cv2 为可选加速依赖
+    cv2 = None
+    _CV2_AVAILABLE = False
+
 # 默认关闭快速渲染器调试输出，避免预览阶段高频 I/O 导致掉帧
 _FAST_RENDERER_DEBUG = os.environ.get("BTPW_FAST_RENDERER_DEBUG", "0") == "1"
 # 默认关闭批量渲染高频日志，避免导出阶段控制台 I/O 成为瓶颈
@@ -27,9 +34,47 @@ try:
 except Exception:
     _INTERACTIVE_PREVIEW_MAX_EDGE = 1200
 # 内孔检测算法版本号：用于缓存键，避免算法升级后命中旧检测结果
-_SIZE_MATCH_HOLE_DETECT_VER = "v10"
+_SIZE_MATCH_HOLE_DETECT_VER = "v11"  # v11 起默认走 OpenCV 加速检测路径
 # 自动倾斜最小触发角（度）：小于该值视为不倾斜，减少误判抖动
 _AUTO_ROTATE_MIN_DEG = 4.0
+# 内孔检测默认参数（同时纳入缓存键，参数变化即失效，避免命中旧结果）
+_HOLE_DETECT_ALPHA_THRESHOLD = 6
+_HOLE_DETECT_MORPH_KERNEL = 3
+_HOLE_DETECT_NOISE_FILTER_AREA = 24
+
+
+def _make_hole_cache_key(document_id, layer_id, source_surface_key, auto_mask_part=""):
+    """构建内孔检测缓存键：纳入算法版本与全部检测参数，确保参数变化即失效。
+
+    auto_mask_part 来自 `_auto_mask_key_part`，在启用自动遮罩时包含自动遮罩参数，
+    以免命中“未遮罩版本”的孔位结果。
+    """
+    return (
+        f"{document_id}:{layer_id}:{source_surface_key}:"
+        f"{_SIZE_MATCH_HOLE_DETECT_VER}:"
+        f"th{_HOLE_DETECT_ALPHA_THRESHOLD}:mk{_HOLE_DETECT_MORPH_KERNEL}:"
+        f"nf{_HOLE_DETECT_NOISE_FILTER_AREA}:ar{_AUTO_ROTATE_MIN_DEG}"
+        f"{auto_mask_part}"
+    )
+
+
+def _auto_mask_key_part(relation):
+    """从 relation 中构建自动遮罩缓存键片段；未启用或非 black_placeholder 时返回空串。"""
+    if not relation:
+        return ""
+    if not bool(relation.get("auto_mask_enabled", False)):
+        return ""
+    if str(relation.get("auto_mask_mode", "black_placeholder")) != "black_placeholder":
+        return ""
+    return (
+        f":am1:mode{relation.get('auto_mask_mode', 'black_placeholder')}"
+        f":th{int(relation.get('auto_mask_threshold', 32))}"
+        f":tol{int(relation.get('auto_mask_tolerance', 18))}"
+        f":min{float(relation.get('auto_mask_min_area_ratio', 0.002))}"
+        f":max{float(relation.get('auto_mask_max_area_ratio', 0.75))}"
+        f":kb{int(bool(relation.get('auto_mask_keep_border', True)))}"
+        f":er{int(bool(relation.get('auto_mask_edge_refine', True)))}"
+    )
 
 
 def print(*args, **kwargs):
@@ -627,7 +672,7 @@ class FastRendererSurface(object):
                 )
                 continue
 
-            holes = self._get_inner_holes_cached(source_layer, document, was_just_loaded)
+            holes = self._get_inner_holes_cached(source_layer, document, was_just_loaded, relation=relation)
             _emit_size_match_trace(
                 f"任务={export_trace_task} 匹配关系 source={source_name} 孔位数量={len(holes)}"
             )
@@ -821,6 +866,7 @@ class FastRendererSurface(object):
                     int(r.get('padding', 1)),
                     bool(r.get('one_to_many', False)),
                     bool(r.get('auto_rotate', False)),
+                    _auto_mask_key_part(r),
                 ))
             parts.sort(key=lambda x: x[0])
             return tuple(parts)
@@ -973,7 +1019,194 @@ class FastRendererSurface(object):
                 self._visible_layers_session_cache.popitem(last=False)
         return visible_layers
 
-    def _detect_inner_holes(self, image: Image.Image, alpha_threshold: int = 6):
+    def _detect_inner_holes(
+        self,
+        image: Image.Image,
+        alpha_threshold: int = _HOLE_DETECT_ALPHA_THRESHOLD,
+        morph_kernel: int = _HOLE_DETECT_MORPH_KERNEL,
+        noise_filter_area: int = _HOLE_DETECT_NOISE_FILTER_AREA,
+    ):
+        """内孔检测入口。
+
+        优先使用 OpenCV 加速路径（形态学闭运算 + flood fill + 轮廓/最小外接矩形），
+        遇到 cv2 不可用或异常时回退到纯 Python BFS 实现，保证功能不退化。
+        """
+        if _CV2_AVAILABLE:
+            try:
+                return self._detect_inner_holes_cv(
+                    image, int(alpha_threshold), int(morph_kernel), int(noise_filter_area)
+                )
+            except Exception:
+                logger.warning("静默异常已忽略: OpenCV 内孔检测失败，回退纯 Python 实现", exc_info=True)
+        return self._detect_inner_holes_fallback(image, int(alpha_threshold))
+
+    @staticmethod
+    def _normalize_min_area_rect_angle(raw_angle: float, rw: float, rh: float):
+        """将 cv2.minAreaRect 结果转换为“主轴角度 + 主轴对齐尺寸”。
+
+        OpenCV 返回的 width/height 不保证 w>=h；这里统一成以“长轴”为方向，
+        便于与现有倾角归一逻辑（_to_small_tilt_by_axis）对齐。
+        """
+        if float(rw) >= float(rh):
+            major_angle = float(raw_angle)
+            ow = max(1, int(round(float(rw))))
+            oh = max(1, int(round(float(rh))))
+        else:
+            major_angle = float(raw_angle) + 90.0
+            ow = max(1, int(round(float(rh))))
+            oh = max(1, int(round(float(rw))))
+        return float(major_angle), ow, oh
+
+    def _compute_hole_tilt_cv(self, contour, bbox_w: int, bbox_h: int, area: int, source_area: int):
+        """基于 cv2.minAreaRect 估计孔位倾角，返回 (angle_deg, oriented_w, oriented_h, valid)。
+
+        防误判策略与历史 PCA 路径一致：
+        - 近正方形（aspect<1.10）不启用倾斜；
+        - 旋转收益不足（area_gain<0.015）不启用；
+        - 角度小于 _AUTO_ROTATE_MIN_DEG 死区不启用；
+        - 面积过小不启用。
+        """
+        try:
+            pts = contour.reshape(-1, 2).astype(np.float32)
+            if pts.shape[0] < 5:
+                return 0.0, max(1, int(bbox_w)), max(1, int(bbox_h)), False
+            rect = cv2.minAreaRect(pts)
+            (rx, ry), (rw, rh), raw_angle = rect
+            major_angle, ow, oh = self._normalize_min_area_rect_angle(raw_angle, rw, rh)
+            tilt = self._to_small_tilt_by_axis(major_angle, bbox_w, bbox_h)
+            axis_area = max(1, int(bbox_w) * int(bbox_h))
+            oriented_area = max(1, ow * oh)
+            area_gain = max(0.0, (axis_area - oriented_area) / float(axis_area))
+            aspect = max(float(bbox_w), float(bbox_h)) / max(1.0, min(float(bbox_w), float(bbox_h)))
+            if aspect < 1.10:
+                return 0.0, max(1, int(bbox_w)), max(1, int(bbox_h)), False
+            if abs(float(tilt)) < float(_AUTO_ROTATE_MIN_DEG):
+                return 0.0, max(1, int(bbox_w)), max(1, int(bbox_h)), False
+            if area_gain < 0.015:
+                return 0.0, max(1, int(bbox_w)), max(1, int(bbox_h)), False
+            if int(area) < 20:
+                return 0.0, max(1, int(bbox_w)), max(1, int(bbox_h)), False
+            return float(tilt), int(ow), int(oh), True
+        except Exception:
+            return 0.0, max(1, int(bbox_w)), max(1, int(bbox_h)), False
+
+    def _detect_inner_holes_cv(self, image, alpha_threshold=6, morph_kernel=3, noise_filter_area=24):
+        """OpenCV 加速版内孔检测。
+
+        流程：
+        1) 取 alpha 通道并据阈值生成透明 mask；
+        2) 对不透明区域做 close，修补细小裂缝；
+        3) flood fill 区分“与画布边界连通的透明背景”与“内部孔”；
+        4) findContours 获取每个内孔的 bbox/area/center/contour/fill_ratio；
+        5) cv2.minAreaRect 估计倾斜角与最小外接尺寸。
+        """
+        if cv2 is None:
+            raise RuntimeError("cv2 unavailable")
+        try:
+            if image.mode != 'RGBA':
+                image = image.convert('RGBA')
+            alpha = np.array(image.split()[3])
+            if alpha.size == 0:
+                return []
+            h, w = alpha.shape
+
+            transparent = alpha <= int(alpha_threshold)
+            if not transparent.any():
+                return []
+
+            # 闭运算修补细小裂缝（先膨胀后腐蚀，基于不透明区域）
+            opaque = (alpha > int(alpha_threshold)).astype(np.uint8)
+            if int(morph_kernel) > 1:
+                kernel = cv2.getStructuringElement(
+                    cv2.MORPH_RECT, (int(morph_kernel), int(morph_kernel))
+                )
+                opaque = cv2.morphologyEx(opaque, cv2.MORPH_CLOSE, kernel)
+            transparent = opaque == 0
+
+            # flood fill：从画布外填充所有“与边界连通的透明区域”（即外部背景），与内部孔区分开。
+            # flood_img 约定：0 = 可填充透明区（含外部 padding），255 = 障碍/不透明区。
+            # 外部 padding 必须是可填充的透明值（0），这样种子点 (0,0) 才能经由 padding 进入
+            # 与画布边界连通的透明背景；被不透明区域包裹的内部孔无法到达，从而被保留为孔。
+            # mask 比被填充图像大 2 像素，floodFill 要求 mask 尺寸 = 图像尺寸 + 2。
+            flood_img = np.full((h + 2, w + 2), 0, dtype=np.uint8)
+            flood_img[1:h + 1, 1:w + 1] = np.where(transparent, 0, 255).astype(np.uint8)
+            fill_mask = np.zeros((h + 4, w + 4), dtype=np.uint8)
+            cv2.floodFill(flood_img, fill_mask, (0, 0), 128)
+            # 用被 floodFill 改写后的 flood_img 判定外部透明区，避免 mask 偏移问题
+            external_transparent = flood_img[1:h + 1, 1:w + 1] == 128
+
+            holes = transparent & (~external_transparent)
+            if not holes.any():
+                return []
+
+            holes_uint8 = holes.astype(np.uint8) * 255
+            found = cv2.findContours(holes_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if len(found) == 3:
+                contours = found[1]
+            else:
+                contours = found[0]
+            if not contours:
+                return []
+
+            source_area = max(1, w * h)
+            result = []
+            for contour in contours:
+                area = int(cv2.contourArea(contour))
+                if area < int(noise_filter_area):
+                    continue
+                x, y, bw, bh = cv2.boundingRect(contour)
+                if bw < 1 or bh < 1:
+                    continue
+                cx_bbox = float(x + bw * 0.5)
+                cy_bbox = float(y + bh * 0.5)
+                bbox_area = max(1, bw * bh)
+                fill_ratio = float(area) / float(bbox_area)
+
+                m = cv2.moments(contour)
+                if m.get('m00', 0.0) > 0:
+                    center_x = float(m['m10'] / m['m00'])
+                    center_y = float(m['m01'] / m['m00'])
+                else:
+                    center_x, center_y = cx_bbox, cy_bbox
+
+                rect_like = (fill_ratio >= 0.55 and area >= 30 and bw >= 8 and bh >= 8)
+                angle_deg = 0.0
+                angle_valid = False
+                oriented_w = max(1, int(bw))
+                oriented_h = max(1, int(bh))
+
+                if area >= 20 and bw >= 6 and bh >= 6:
+                    angle_deg, oriented_w, oriented_h, angle_valid = self._compute_hole_tilt_cv(
+                        contour, bw, bh, area, source_area
+                    )
+                    if not angle_valid:
+                        angle_deg = 0.0
+                        oriented_w = max(1, int(bw))
+                        oriented_h = max(1, int(bh))
+
+                result.append({
+                    'bbox': (int(x), int(y), int(x + bw), int(y + bh)),
+                    'area': int(area),
+                    'bbox_w': int(bw),
+                    'bbox_h': int(bh),
+                    'shape_type': self._classify_hole_shape(bw, bh),
+                    'center_x': float(center_x),
+                    'center_y': float(center_y),
+                    'bbox_center_x': float(cx_bbox),
+                    'bbox_center_y': float(cy_bbox),
+                    'rect_like': bool(rect_like),
+                    'angle_valid': bool(angle_valid),
+                    'angle_deg': float(angle_deg),
+                    'oriented_w': int(oriented_w),
+                    'oriented_h': int(oriented_h),
+                    'fill_ratio': float(fill_ratio),
+                })
+            return result
+        except Exception:
+            # 上抛异常，由 _detect_inner_holes 统一回退到纯 Python 实现
+            raise
+
+    def _detect_inner_holes_fallback(self, image: Image.Image, alpha_threshold: int = 6):
         """检测所有内孔并返回边界、面积与角度信息。"""
         try:
             if image.mode != 'RGBA':
@@ -1157,19 +1390,28 @@ class FastRendererSurface(object):
                     'angle_deg': float(angle_deg),
                     'oriented_w': int(oriented_w),
                     'oriented_h': int(oriented_h),
+                    'fill_ratio': float(fill_ratio),
                 })
+
 
             return result
         except Exception:
             return []
 
-    def _get_inner_holes_cached(self, source_layer, document, was_just_loaded: bool = False):
-        """获取内孔检测结果缓存，降低预览时重复连通域分析开销。"""
+    def _get_inner_holes_cached(self, source_layer, document, was_just_loaded: bool = False, relation=None):
+        """获取内孔检测结果缓存，降低预览时重复连通域分析开销。
+
+        relation 含自动遮罩配置时，会先对 source_image 应用临时自动遮罩（仅影响孔位检测，
+        不改写原图层与最终渲染），并将自动遮罩参数纳入缓存键，避免命中未遮罩版本的孔位结果。
+        """
         try:
             source_surface_key = self._build_layer_surface_key(source_layer, document, was_just_loaded)
         except Exception:
             source_surface_key = f"fallback_{id(source_layer)}"
-        cache_key = f"{id(document)}:{id(source_layer)}:{source_surface_key}:{_SIZE_MATCH_HOLE_DETECT_VER}"
+        auto_mask_part = _auto_mask_key_part(relation)
+        # 缓存键纳入：源图层 surface 键、算法版本、透明阈值、形态学参数、噪点过滤、
+        # 自动倾斜阈值、自动遮罩参数。任一参数变化即失效；源图不变时跨导出任务复用。
+        cache_key = _make_hole_cache_key(id(document), id(source_layer), source_surface_key, auto_mask_part)
 
         with self._size_match_holes_lock:
             cached = self._size_match_holes_cache.get(cache_key)
@@ -1180,6 +1422,14 @@ class FastRendererSurface(object):
         source_image = self._get_layer_surface_cached(source_layer, document, was_just_loaded)
         if source_image is None:
             return []
+        if auto_mask_part:
+            source_image = self._get_auto_masked_surface_cached(
+                document=document,
+                source_layer=source_layer,
+                source_surface_key=source_surface_key,
+                source_image=source_image,
+                relation=relation,
+            )
         holes = self._detect_inner_holes(source_image)
         holes = self._refine_holes_with_adaptive_alpha_threshold(source_image, holes)
 
@@ -1189,6 +1439,122 @@ class FastRendererSurface(object):
             while len(self._size_match_holes_cache) > self._max_size_match_holes_entries:
                 self._size_match_holes_cache.popitem(last=False)
         return holes
+
+    def _get_auto_masked_surface_cached(
+        self, document, source_layer, source_surface_key, source_image, relation
+    ):
+        """返回对源图层 surface 临时应用自动遮罩后的副本，并缓存复用。
+
+        仅用于孔位检测，不影响最终源图层渲染，不写回 layer。
+        """
+        mask_key = (
+            f"{id(document)}:{id(source_layer)}:{source_surface_key}"
+            f"{_auto_mask_key_part(relation)}"
+        )
+        with self._size_match_auto_mask_lock:
+            cached = self._size_match_auto_mask_cache.get(mask_key)
+            if cached is not None:
+                self._size_match_auto_mask_cache.move_to_end(mask_key)
+                return cached.copy()
+        masked = self._apply_auto_mask(source_image, relation)
+        with self._size_match_auto_mask_lock:
+            self._size_match_auto_mask_cache[mask_key] = masked.copy()
+            self._size_match_auto_mask_cache.move_to_end(mask_key)
+            while len(self._size_match_auto_mask_cache) > self._max_size_match_auto_mask_entries:
+                self._size_match_auto_mask_cache.popitem(last=False)
+        return masked
+
+    def _apply_auto_mask(self, image: Image.Image, relation) -> Image.Image:
+        """自动遮罩：在源图 surface 上把“近黑色占位块”临时挖成透明孔。
+
+        默认不修改原图层、不覆盖原文件；性能由 `_get_auto_masked_surface_cached` 缓存解决。
+        当前仅支持 `black_placeholder` 模式；cv2 不可用时直接返回原图（降级为不做遮罩）。
+        """
+        if not relation or not bool(relation.get("auto_mask_enabled", False)):
+            return image
+        if str(relation.get("auto_mask_mode", "black_placeholder")) != "black_placeholder":
+            return image
+        if cv2 is None:
+            return image
+        try:
+            threshold = max(0, int(relation.get("auto_mask_threshold", 32)))
+            tolerance = max(0, int(relation.get("auto_mask_tolerance", 18)))
+            try:
+                min_area_ratio = float(relation.get("auto_mask_min_area_ratio", 0.002))
+            except (TypeError, ValueError):
+                min_area_ratio = 0.002
+            try:
+                max_area_ratio = float(relation.get("auto_mask_max_area_ratio", 0.75))
+            except (TypeError, ValueError):
+                max_area_ratio = 0.75
+            keep_border = bool(relation.get("auto_mask_keep_border", True))
+            edge_refine = bool(relation.get("auto_mask_edge_refine", True))
+
+            if image.mode != 'RGBA':
+                image = image.convert('RGBA')
+            arr = np.array(image)
+            rgb = arr[..., :3].astype(np.int16)
+            alpha = arr[..., 3].astype(np.int16)
+            max_rgb = rgb.max(axis=2)
+            min_rgb = rgb.min(axis=2)
+            spread = max_rgb - min_rgb
+
+            black_mask = (
+                (alpha > 0)
+                & (max_rgb <= threshold)
+                & (spread <= tolerance)
+            )
+            mask = black_mask.astype(np.uint8)
+            if not mask.any():
+                return image
+
+            # 形态学：close 补黑色区域小缝；open 去小噪点
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+            if not mask.any():
+                return image
+
+            # 连通域筛选：面积、细线、填充率
+            source_area = max(1, int(mask.shape[0]) * int(mask.shape[1]))
+            num_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(mask, 8, cv2.CV_32S)
+            final = np.zeros_like(mask)
+            for i in range(1, num_labels):
+                x, y, w, h, area = stats[i]
+                if area < int(source_area * min_area_ratio):
+                    continue
+                if area > int(source_area * max_area_ratio):
+                    continue
+                if min(int(w), int(h)) < 3:
+                    # 过滤过细线条（小黑字/描边）
+                    continue
+                fill_ratio = float(area) / float(max(1, w * h))
+                if fill_ratio < 0.30:
+                    # 过滤填充率低的小图标/文字
+                    continue
+                final[labels == i] = 1
+            mask = final.astype(np.uint8)
+            if not mask.any():
+                return image
+
+            # 保留白色边框：轻微腐蚀黑色 mask，避免吞掉描边
+            if keep_border:
+                mask = cv2.erode(mask, np.ones((3, 3), np.uint8), iterations=1)
+
+            # 边缘柔化：轻微 blur，alpha = alpha * (1 - mask)，减少黑边锯齿
+            if edge_refine:
+                soft = cv2.GaussianBlur(mask.astype(np.float32), (3, 3), 0)
+                soft = np.clip(soft, 0.0, 1.0)
+            else:
+                soft = mask.astype(np.float32)
+
+            new_alpha = alpha.astype(np.float32) * (1.0 - soft)
+            out = arr.copy()
+            out[..., 3] = np.clip(new_alpha, 0, 255).astype(np.uint8)
+            return Image.fromarray(out, 'RGBA')
+        except Exception:
+            logger.warning("静默异常已忽略: 自动遮罩失败，降级为不遮罩", exc_info=True)
+            return image
 
     def _refine_holes_with_adaptive_alpha_threshold(self, source_image: Image.Image, holes):
         """
@@ -1553,6 +1919,8 @@ class FastRendererSurface(object):
         """清空大小匹配相关缓存。"""
         with self._size_match_holes_lock:
             self._size_match_holes_cache.clear()
+        with self._size_match_auto_mask_lock:
+            self._size_match_auto_mask_cache.clear()
         with self._size_override_surface_lock:
             self._size_override_surface_cache.clear()
         with self._size_match_override_session_lock:
@@ -1587,6 +1955,10 @@ class FastRendererSurface(object):
             keys_to_remove = [k for k in self._size_match_holes_cache.keys() if str(k).startswith(doc_prefix)]
             for k in keys_to_remove:
                 self._size_match_holes_cache.pop(k, None)
+        with self._size_match_auto_mask_lock:
+            keys_to_remove = [k for k in self._size_match_auto_mask_cache.keys() if str(k).startswith(doc_prefix)]
+            for k in keys_to_remove:
+                self._size_match_auto_mask_cache.pop(k, None)
         with self._size_override_surface_lock:
             keys_to_remove = [k for k in self._size_override_surface_cache.keys() if str(k).startswith(doc_prefix)]
             for k in keys_to_remove:

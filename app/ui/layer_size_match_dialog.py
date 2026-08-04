@@ -6,13 +6,14 @@
 
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QListWidget,
-    QListWidgetItem, QFrame, QCheckBox, QComboBox, QSpinBox,
-    QMessageBox, QSplitter, QAbstractItemView
+    QListWidgetItem, QFrame, QCheckBox, QComboBox, QSpinBox, QDoubleSpinBox,
+    QMessageBox, QSplitter, QAbstractItemView, QGridLayout, QSizePolicy
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
 from app.ui.dialog_a2 import DialogA2
+from app.ui.collapsible_group import CollapsibleGroupBox
 
 
 class LayerSizeMatchDialog(QDialog):
@@ -66,7 +67,13 @@ class LayerSizeMatchDialog(QDialog):
 
         self.relations_list = QListWidget()
         self.relations_list.currentItemChanged.connect(self._on_relation_selected)
+        self.relations_list.setMinimumHeight(220)
         left_layout.addWidget(self.relations_list, 1)
+
+        # 自动遮罩区：关系级辅助设置，置于关系列表与全局设置之间。
+        # 不给 stretch，避免挤压下方全局设置。
+        self.auto_mask_group = self._build_auto_mask_group()
+        left_layout.addWidget(self.auto_mask_group)
 
         global_panel = QFrame()
         global_panel.setProperty("role", "dialogSubPanel")
@@ -209,6 +216,252 @@ class LayerSizeMatchDialog(QDialog):
         row.addWidget(widget, 1)
         return row
 
+    def _build_auto_mask_group(self):
+        """构建自动遮罩折叠区（左侧关系级辅助设置，默认收起）。
+
+        结构：启用 / 遮罩类型 / 黑色阈值 常显；
+        颜色容差、区域范围、保留边框、边缘优化、生成遮罩副本 收入
+        独立的“高级设置”折叠区，保持整体紧凑。
+        """
+        group = CollapsibleGroupBox("自动遮罩（可选前置）", collapsed=True)
+
+        basic = QVBoxLayout()
+        basic.setSpacing(8)
+
+        self.auto_mask_enabled_cb = QCheckBox("启用自动遮罩")
+        self.auto_mask_enabled_cb.setChecked(False)
+        self.auto_mask_enabled_cb.toggled.connect(self._on_auto_mask_toggled)
+        basic.addWidget(self.auto_mask_enabled_cb)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(DialogA2.CONTENT_GAP)
+        mode_row.addWidget(self._field_label("遮罩类型"))
+        self.auto_mask_mode_combo = QComboBox()
+        self.auto_mask_mode_combo.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        self.auto_mask_mode_combo.addItem("黑色占位块", "black_placeholder")
+        self.auto_mask_mode_combo.setCurrentIndex(0)
+        self.auto_mask_mode_combo.setEnabled(False)  # 当前仅支持黑色占位块
+        mode_row.addWidget(self.auto_mask_mode_combo, 1)
+        basic.addLayout(mode_row)
+
+        thr_row = QHBoxLayout()
+        thr_row.setSpacing(DialogA2.CONTENT_GAP)
+        thr_row.addWidget(self._field_label("黑色阈值"))
+        self.auto_mask_threshold_spin = QSpinBox()
+        self.auto_mask_threshold_spin.setRange(0, 128)
+        self.auto_mask_threshold_spin.setValue(32)
+        self.auto_mask_threshold_spin.setSuffix(" 亮度")
+        self.auto_mask_threshold_spin.setFixedSize(110, DialogA2.CONTROL_HEIGHT)
+        self.auto_mask_threshold_spin.setToolTip("RGB 任一通道亮度 <= 该值即视为黑色。")
+        thr_row.addWidget(self.auto_mask_threshold_spin)
+        thr_row.addStretch()
+        basic.addLayout(thr_row)
+
+        # 高级设置：不要在自动遮罩折叠组里再嵌套 CollapsibleGroupBox。
+        # 嵌套折叠容器在左侧窄栏里容易出现 sizeHint 未及时上抬，导致控件堆叠/裁剪。
+        adv_frame = QFrame()
+        adv_frame.setProperty("role", "dialogSubPanel")
+        adv = QVBoxLayout(adv_frame)
+        adv.setContentsMargins(10, 8, 10, 8)
+        adv.setSpacing(8)
+
+        adv_title = QLabel("高级设置")
+        adv_title.setProperty("role", "fieldLabel")
+        adv.addWidget(adv_title)
+
+        adv_grid = QGridLayout()
+        adv_grid.setContentsMargins(0, 0, 0, 0)
+        adv_grid.setHorizontalSpacing(8)
+        adv_grid.setVerticalSpacing(8)
+
+        def _compact_label(text):
+            label = QLabel(text)
+            label.setProperty("role", "fieldLabel")
+            label.setMinimumWidth(68)
+            label.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            return label
+
+        def _compact_spin(spin):
+            spin.setMinimumHeight(DialogA2.CONTROL_HEIGHT)
+            spin.setMinimumWidth(86)
+            spin.setMaximumWidth(112)
+            spin.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            return spin
+
+        self.auto_mask_tolerance_spin = QSpinBox()
+        self.auto_mask_tolerance_spin.setRange(0, 64)
+        self.auto_mask_tolerance_spin.setValue(18)
+        self.auto_mask_tolerance_spin.setToolTip("RGB 通道最大差异 <= 该值才视为纯色块，抑制彩色噪点。")
+        adv_grid.addWidget(_compact_label("颜色容差"), 0, 0)
+        adv_grid.addWidget(_compact_spin(self.auto_mask_tolerance_spin), 0, 1, Qt.AlignLeft)
+
+        self.auto_mask_min_area_spin = QDoubleSpinBox()
+        self.auto_mask_min_area_spin.setRange(0.1, 5.0)
+        self.auto_mask_min_area_spin.setDecimals(1)
+        self.auto_mask_min_area_spin.setValue(0.2)
+        self.auto_mask_min_area_spin.setSuffix(" %")
+        self.auto_mask_min_area_spin.setToolTip("小于该占比的黑色区不挖（过滤小黑字/小噪点）。")
+        adv_grid.addWidget(_compact_label("最小区域"), 1, 0)
+        adv_grid.addWidget(_compact_spin(self.auto_mask_min_area_spin), 1, 1, Qt.AlignLeft)
+
+        self.auto_mask_max_area_spin = QDoubleSpinBox()
+        self.auto_mask_max_area_spin.setRange(10.0, 100.0)
+        self.auto_mask_max_area_spin.setDecimals(1)
+        self.auto_mask_max_area_spin.setValue(75.0)
+        self.auto_mask_max_area_spin.setSuffix(" %")
+        self.auto_mask_max_area_spin.setToolTip("大于该占比的黑色区不挖（防止整张黑底被误挖）。")
+        adv_grid.addWidget(_compact_label("最大区域"), 2, 0)
+        adv_grid.addWidget(_compact_spin(self.auto_mask_max_area_spin), 2, 1, Qt.AlignLeft)
+        adv_grid.setColumnStretch(2, 1)
+        adv.addLayout(adv_grid)
+
+        self.auto_mask_keep_border_cb = QCheckBox("保留边框")
+        self.auto_mask_keep_border_cb.setChecked(True)
+        self.auto_mask_keep_border_cb.setToolTip("腐蚀 1px 黑色 mask，避免吞掉白色描边。")
+        self.auto_mask_edge_refine_cb = QCheckBox("边缘优化")
+        self.auto_mask_edge_refine_cb.setChecked(True)
+        self.auto_mask_edge_refine_cb.setToolTip("轻微模糊 mask 边缘，减少黑边锯齿。")
+        adv_flags = QHBoxLayout()
+        adv_flags.setSpacing(DialogA2.CONTENT_GAP)
+        adv_flags.addWidget(self.auto_mask_keep_border_cb)
+        adv_flags.addWidget(self.auto_mask_edge_refine_cb)
+        adv_flags.addStretch()
+        adv.addLayout(adv_flags)
+
+        self.bake_mask_btn = QPushButton("生成遮罩副本")
+        DialogA2.mark_secondary(self.bake_mask_btn)
+        self.bake_mask_btn.setFixedHeight(DialogA2.CONTROL_HEIGHT)
+        self.bake_mask_btn.setMaximumWidth(132)
+        self.bake_mask_btn.setToolTip("复制当前源图层并永久应用透明挖孔，原图层保持不变。")
+        self.bake_mask_btn.clicked.connect(self._bake_auto_mask_copy)
+        adv.addWidget(self.bake_mask_btn)
+        adv_frame.setMinimumHeight(176)
+        basic.addWidget(adv_frame)
+
+        content = QFrame()
+        content.setLayout(basic)
+        group.set_content_widget(content)
+        self._sync_auto_mask_enabled_state()
+        return group
+
+    def _sync_auto_mask_enabled_state(self):
+        enabled = self.auto_mask_enabled_cb.isChecked()
+        self.auto_mask_mode_combo.setEnabled(enabled)
+        self.auto_mask_threshold_spin.setEnabled(enabled)
+        self.auto_mask_tolerance_spin.setEnabled(enabled)
+        self.auto_mask_min_area_spin.setEnabled(enabled)
+        self.auto_mask_max_area_spin.setEnabled(enabled)
+        self.auto_mask_keep_border_cb.setEnabled(enabled)
+        self.auto_mask_edge_refine_cb.setEnabled(enabled)
+
+    def _on_auto_mask_toggled(self, _checked):
+        self._sync_auto_mask_enabled_state()
+        self._update_action_buttons()
+
+    def _collect_auto_mask(self):
+        """从 UI 收集自动遮罩参数为 dict。"""
+        return {
+            "auto_mask_enabled": bool(self.auto_mask_enabled_cb.isChecked()),
+            "auto_mask_mode": str(self.auto_mask_mode_combo.currentData() or "black_placeholder"),
+            "auto_mask_threshold": int(self.auto_mask_threshold_spin.value()),
+            "auto_mask_tolerance": int(self.auto_mask_tolerance_spin.value()),
+            "auto_mask_min_area_ratio": float(self.auto_mask_min_area_spin.value()) / 100.0,
+            "auto_mask_max_area_ratio": float(self.auto_mask_max_area_spin.value()) / 100.0,
+            "auto_mask_keep_border": bool(self.auto_mask_keep_border_cb.isChecked()),
+            "auto_mask_edge_refine": bool(self.auto_mask_edge_refine_cb.isChecked()),
+        }
+
+    def _apply_auto_mask_to_ui(self, data):
+        """用 relation 数据回填自动遮罩 UI。"""
+        self.auto_mask_enabled_cb.setChecked(bool(data.get("auto_mask_enabled", False)))
+        mode = str(data.get("auto_mask_mode", "black_placeholder"))
+        idx = self.auto_mask_mode_combo.findData(mode)
+        if idx >= 0:
+            self.auto_mask_mode_combo.setCurrentIndex(idx)
+        else:
+            self.auto_mask_mode_combo.setCurrentIndex(0)
+        self.auto_mask_threshold_spin.setValue(max(0, int(data.get("auto_mask_threshold", 32))))
+        self.auto_mask_tolerance_spin.setValue(max(0, int(data.get("auto_mask_tolerance", 18))))
+        self.auto_mask_min_area_spin.setValue(float(data.get("auto_mask_min_area_ratio", 0.002)) * 100.0)
+        self.auto_mask_max_area_spin.setValue(float(data.get("auto_mask_max_area_ratio", 0.75)) * 100.0)
+        self.auto_mask_keep_border_cb.setChecked(bool(data.get("auto_mask_keep_border", True)))
+        self.auto_mask_edge_refine_cb.setChecked(bool(data.get("auto_mask_edge_refine", True)))
+        self._sync_auto_mask_enabled_state()
+
+    def _bake_auto_mask_copy(self):
+        """可选烘焙：复制当前源图层并永久应用透明挖孔，原图层保持不变。"""
+        if not self.manager or not hasattr(self.document, "add_layer"):
+            QMessageBox.information(self, "提示", "当前文档不支持生成遮罩副本。")
+            return
+        src = self.source_combo.currentText().strip()
+        if not src:
+            QMessageBox.information(self, "提示", "请先选择上层图层(A)。")
+            return
+        layer = None
+        for l in getattr(self.document, "layers", []) or []:
+            if str(getattr(l, "name", "")).strip() == src and not hasattr(l, "get_text_lines"):
+                layer = l
+                break
+        if layer is None:
+            QMessageBox.information(self, "提示", "未找到对应的图像源图层。")
+            return
+        # 取源图层 surface 并应用自动遮罩
+        try:
+            fr = getattr(self.document, "fast_renderer", None) or getattr(self.document, "renderer", None)
+            if fr is None and hasattr(self.document, "_renderer"):
+                fr = self.document._renderer
+            if fr is None:
+                from app.utils.fast_renderer import get_global_fast_renderer
+                try:
+                    fr = get_global_fast_renderer()
+                except Exception:
+                    fr = None
+            if fr is None:
+                QMessageBox.information(self, "提示", "无法访问渲染器，无法生成遮罩副本。")
+                return
+            surface = fr._get_layer_surface_cached(layer, self.document, False)
+            if surface is None:
+                QMessageBox.information(self, "提示", "源图层渲染失败。")
+                return
+            relation = self._collect_auto_mask()
+            masked = fr._apply_auto_mask(surface, relation)
+        except Exception as exc:  # pragma: no cover - 防御性
+            QMessageBox.warning(self, "错误", f"生成遮罩副本失败: {exc}")
+            return
+        # 保存为 PNG 副本
+        import os
+        base_name = f"{src}_自动遮罩"
+        doc_path = getattr(self.document, "current_file_path", None) or getattr(self.document, "file_path", None)
+        out_dir = os.path.dirname(doc_path) if doc_path else os.getcwd()
+        if not os.path.isdir(out_dir):
+            out_dir = os.getcwd()
+        out_path = os.path.join(out_dir, f"{base_name}.png")
+        n = 1
+        while os.path.exists(out_path):
+            out_path = os.path.join(out_dir, f"{base_name}_{n}.png")
+            n += 1
+        try:
+            masked.save(out_path, "PNG")
+        except Exception as exc:  # pragma: no cover
+            QMessageBox.warning(self, "错误", f"保存遮罩副本失败: {exc}")
+            return
+        w = int(getattr(masked, "width", 1) or 1)
+        h = int(getattr(masked, "height", 1) or 1)
+        self.document.add_layer(
+            name=base_name,
+            x=int(getattr(layer, "x", 0) or 0),
+            y=int(getattr(layer, "y", 0) or 0),
+            width=w,
+            height=h,
+            image_source=out_path,
+            use_original_size=True,
+            is_folder=False,
+        )
+        QMessageBox.information(self, "完成", f"已生成遮罩副本：\n{out_path}")
+        self._invalidate_document_render()
+        if hasattr(self, "refresh_layers"):
+            self.refresh_layers()
+
     def refresh_layers(self):
         self.source_combo.clear()
         self.target_list.clear()
@@ -247,8 +500,9 @@ class LayerSizeMatchDialog(QDialog):
             auto_rotate = bool(relation.get("auto_rotate", False))
             mode_text = "一对多" if one_to_many else "一对一"
             tilt_text = "自动倾斜" if auto_rotate else "不倾斜"
+            mask_text = "自动遮罩" if bool(relation.get("auto_mask_enabled", False)) else "无遮罩"
             dst_text = ", ".join([str(t) for t in targets]) if targets else "无目标"
-            text = f"{src} -> [{dst_text}]  ({mode_text}, {tilt_text}, {enabled}, 外扩{padding}px)"
+            text = f"{src} -> [{dst_text}]  ({mode_text}, {tilt_text}, {mask_text}, {enabled}, 外扩{padding}px)"
             item = QListWidgetItem(text)
             item.setData(Qt.UserRole, dict(relation))
             self.relations_list.addItem(item)
@@ -400,6 +654,7 @@ class LayerSizeMatchDialog(QDialog):
             padding=self.padding_spin.value(),
             one_to_many=self.one_to_many_cb.isChecked(),
             auto_rotate=self.auto_rotate_cb.isChecked(),
+            auto_mask=self._collect_auto_mask(),
         )
         self.refresh_relations()
         self._invalidate_document_render()
@@ -430,6 +685,7 @@ class LayerSizeMatchDialog(QDialog):
             padding=self.padding_spin.value(),
             one_to_many=self.one_to_many_cb.isChecked(),
             auto_rotate=self.auto_rotate_cb.isChecked(),
+            auto_mask=self._collect_auto_mask(),
         )
         self.refresh_relations()
         self._invalidate_document_render()
@@ -476,6 +732,7 @@ class LayerSizeMatchDialog(QDialog):
         self.one_to_many_cb.setChecked(one_to_many)
         self.auto_rotate_cb.setChecked(auto_rotate)
         self.padding_spin.setValue(max(0, padding))
+        self._apply_auto_mask_to_ui(data)
         self._update_action_buttons()
 
     def _refresh_all(self):
