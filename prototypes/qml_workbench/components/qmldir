@@ -1,0 +1,7 @@
+module BatchImageKing.Prototype.Components
+singleton Theme 1.0 Theme.qml
+AppIcon 1.0 AppIcon.qml
+IconButton 1.0 IconButton.qml
+PropertySection 1.0 PropertySection.qml
+ValueBox 1.0 ValueBox.qml
+ToggleSwitch 1.0 ToggleSwitch.qml
