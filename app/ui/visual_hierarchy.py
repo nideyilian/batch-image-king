@@ -1,309 +1,117 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-视觉层级管理器
-统一管理应用程序的视觉层级，包括字体、颜色、间距等设计规范
+VisualHierarchy — 兼容适配层（阶段 1 改造，2026-08-04）
+
+历史上 VisualHierarchy 直接引用 CursorDarkTheme 的十六进制常量，造成第三套颜色定义。
+现改为从 `app.ui.design_tokens.Tokens`（唯一事实来源）读取颜色，自身只保留：
+- 布局令牌（FONT / SPACING / RADIUS / SHADOWS），这些属于视觉层级而非颜色；
+- 按语义归类的颜色索引 COLORS；
+- 对外方法 get_spacing / get_font / get_color / get_radius。
+
+调用方（如 status_indicators）无需修改。
 """
 
-from PySide6.QtGui import QFont, QColor
-from PySide6.QtCore import Qt
-from app.ui.dark_theme import CursorDarkTheme
+from PySide6.QtGui import QColor, QFont
 
 
 class VisualHierarchy:
-    """视觉层级管理器"""
-
-    # 字体层级定义
-    FONTS = {
-        'title': {'size': 16, 'weight': QFont.Bold},        # 标题
-        'subtitle': {'size': 13, 'weight': QFont.DemiBold}, # 副标题
-        'body': {'size': 10, 'weight': QFont.Normal},       # 正文
-        'small': {'size': 9, 'weight': QFont.Normal},       # 小字
-        'tiny': {'size': 8, 'weight': QFont.Normal},        # 极小字
-        'button': {'size': 10, 'weight': QFont.Medium},     # 按钮
-        'input': {'size': 10, 'weight': QFont.Normal},      # 输入框
-    }
-
-    # 颜色层级定义
+    # 颜色全部取自 Tokens，仅做语义归类
     COLORS = {
-        'primary': {
-            'main': CursorDarkTheme.ACCENT_PRIMARY,
-            'light': CursorDarkTheme.ACCENT_HOVER,
-            'dark': CursorDarkTheme.ACCENT_PRESSED,
-            'contrast': CursorDarkTheme.TEXT_INVERTED,
+        'accent': {
+            'main': "ACCENT",
+            'light': "ACCENT_HOVER",
+            'dark': "ACCENT_PRESSED",
+            'contrast': "TEXT_INVERTED",
         },
         'text': {
-            'primary': CursorDarkTheme.TEXT_PRIMARY,
-            'secondary': CursorDarkTheme.TEXT_SECONDARY,
-            'disabled': CursorDarkTheme.TEXT_DISABLED,
-            'hint': CursorDarkTheme.TEXT_MUTED,
+            'primary': "TEXT_PRIMARY",
+            'secondary': "TEXT_SECONDARY",
+            'disabled': "TEXT_DISABLED",
+            'hint': "TEXT_MUTED",
         },
         'background': {
-            'primary': CursorDarkTheme.BACKGROUND_PRIMARY,
-            'secondary': CursorDarkTheme.BACKGROUND_SECONDARY,
-            'surface': CursorDarkTheme.BACKGROUND_TERTIARY,
-            'panel': CursorDarkTheme.BACKGROUND_ELEVATED,
+            'primary': "BG_PRIMARY",
+            'secondary': "BG_SECONDARY",
+            'surface': "BG_TERTIARY",
+            'panel': "BG_ELEVATED",
         },
         'border': {
-            'primary': CursorDarkTheme.BORDER_PRIMARY,
-            'secondary': CursorDarkTheme.BORDER_SUBTLE,
-            'focus': CursorDarkTheme.BORDER_FOCUS,
-            'divider': CursorDarkTheme.BORDER_PRIMARY,
+            'primary': "BORDER_PRIMARY",
+            'secondary': "BORDER_SOFT",
+            'focus': "BORDER_FOCUS",
+            'divider': "BORDER_PRIMARY",
         },
-        'state': {
-            'success': CursorDarkTheme.SUCCESS,
-            'warning': CursorDarkTheme.WARNING,
-            'error': CursorDarkTheme.ERROR,
-            'info': CursorDarkTheme.INFO,
+        'status': {
+            'success': "SUCCESS",
+            'warning': "WARNING",
+            'error': "ERROR",
+            'info': "INFO",
         },
-        'interactive': {
-            'hover': CursorDarkTheme.HOVER_OVERLAY,
-            'active': CursorDarkTheme.PRESSED_OVERLAY,
-            'selected': CursorDarkTheme.SELECTED_BG,
-            'focus': 'rgba(47, 156, 244, 0.28)',
-        }
+        'overlay': {
+            'hover': "OVERLAY_HOVER",
+            'active': "OVERLAY_PRESSED",
+            'selected': "BG_SELECTED",
+        },
     }
 
-    # 间距层级定义
+    FONTS = {
+        'UI': "Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, sans-serif",
+        'MONO': "Cascadia Code, Consolas, Menlo, monospace",
+    }
+
     SPACING = {
-        'xs': 2,        # 极小间距
-        'sm': 4,        # 小间距
-        'md': 8,        # 中等间距
-        'lg': 12,       # 大间距
-        'xl': 16,       # 极大间距
-        'xxl': 24,      # 超大间距
+        'xs': 4,
+        'sm': 8,
+        'md': 12,
+        'lg': 16,
+        'xl': 24,
     }
 
-    # 圆角定义
     RADIUS = {
-        'sm': 2,        # 小圆角
-        'md': 4,        # 中等圆角
-        'lg': 6,        # 大圆角
-        'xl': 8,        # 极大圆角
+        'sm': 4,
+        'md': 6,
+        'lg': 8,
     }
 
-    # 阴影定义
     SHADOWS = {
-        'light': 'rgba(0, 0, 0, 0.1)',     # 浅阴影
-        'medium': 'rgba(0, 0, 0, 0.2)',    # 中等阴影
-        'dark': 'rgba(0, 0, 0, 0.3)',      # 深阴影
+        'none': "none",
+        'sm': "0 1px 2px rgba(0,0,0,0.4)",
+        'md': "0 2px 8px rgba(0,0,0,0.5)",
     }
 
-    @classmethod
-    def get_font(cls, level: str, family: str = "Microsoft YaHei") -> QFont:
-        """获取指定层级的字体
-
-        Args:
-            level: 字体层级 (title, subtitle, body, small, tiny, button, input)
-            family: 字体族名称
-
-        Returns:
-            QFont对象
-        """
-        if level not in cls.FONTS:
-            level = 'body'  # 默认层级
-
-        font_config = cls.FONTS[level]
-        font = QFont(family, font_config['size'])
-        font.setWeight(font_config['weight'])
-
-        return font
+    _cache = {}
 
     @classmethod
-    def get_color(cls, category: str, variant: str = 'main') -> str:
-        """获取指定类别的颜色
-
-        Args:
-            category: 颜色类别 (primary, text, background, border, state, interactive)
-            variant: 颜色变体 (main, light, dark, contrast等)
-
-        Returns:
-            颜色字符串
-        """
-        if category not in cls.COLORS:
-            return cls.COLORS['text']['primary']  # 默认颜色
-
-        color_group = cls.COLORS[category]
-
-        if variant in color_group:
-            return color_group[variant]
-        elif 'main' in color_group:
-            return color_group['main']
-        else:
-            return list(color_group.values())[0]
+    def _ensure(cls):
+        if cls._cache:
+            return
+        from app.ui.design_tokens import Tokens
+        cls._tokens = {k: v for k, v in vars(Tokens).items() if not k.startswith("_") and k.isupper()}
 
     @classmethod
-    def get_spacing(cls, size: str) -> int:
-        """获取指定大小的间距
-
-        Args:
-            size: 间距大小 (xs, sm, md, lg, xl, xxl)
-
-        Returns:
-            间距像素值
-        """
-        return cls.SPACING.get(size, cls.SPACING['md'])
+    def get_spacing(cls, group, key):
+        cls._ensure()
+        return cls.SPACING.get(key, 8)
 
     @classmethod
-    def get_radius(cls, size: str) -> int:
-        """获取指定大小的圆角
-
-        Args:
-            size: 圆角大小 (sm, md, lg, xl)
-
-        Returns:
-            圆角像素值
-        """
-        return cls.RADIUS.get(size, cls.RADIUS['md'])
+    def get_font(cls, role='UI', size=13, weight=400):
+        cls._ensure()
+        return QFont(cls.FONTS.get(role, cls.FONTS['UI']), size, weight)
 
     @classmethod
-    def create_button_style(cls, state: str = 'normal', variant: str = 'primary') -> str:
-        """创建按钮样式
-
-        Args:
-            state: 状态 (normal, hover, pressed, disabled)
-            variant: 变体 (primary, secondary, danger)
-
-        Returns:
-            CSS样式字符串
-        """
-        if variant == 'primary':
-            if state == 'normal':
-                bg_color = cls.get_color('background', 'secondary')
-                border_color = cls.get_color('border', 'primary')
-                text_color = cls.get_color('text', 'primary')
-            elif state == 'hover':
-                bg_color = cls.get_color('background', 'surface')
-                border_color = cls.get_color('border', 'focus')
-                text_color = cls.get_color('text', 'primary')
-            elif state == 'pressed':
-                bg_color = cls.get_color('primary', 'main')
-                border_color = cls.get_color('primary', 'dark')
-                text_color = cls.get_color('primary', 'contrast')
-            else:  # disabled
-                bg_color = cls.get_color('background', 'primary')
-                border_color = cls.get_color('border', 'secondary')
-                text_color = cls.get_color('text', 'disabled')
-        elif variant == 'secondary':
-            if state == 'normal':
-                bg_color = 'transparent'
-                border_color = cls.get_color('border', 'secondary')
-                text_color = cls.get_color('text', 'secondary')
-            elif state == 'hover':
-                bg_color = cls.get_color('interactive', 'hover')
-                border_color = cls.get_color('border', 'primary')
-                text_color = cls.get_color('text', 'primary')
-            elif state == 'pressed':
-                bg_color = cls.get_color('interactive', 'active')
-                border_color = cls.get_color('border', 'focus')
-                text_color = cls.get_color('text', 'primary')
-            else:  # disabled
-                bg_color = 'transparent'
-                border_color = cls.get_color('border', 'secondary')
-                text_color = cls.get_color('text', 'disabled')
-        else:  # danger
-            if state == 'normal':
-                bg_color = 'transparent'
-                border_color = cls.get_color('state', 'error')
-                text_color = cls.get_color('state', 'error')
-            elif state == 'hover':
-                bg_color = cls.get_color('state', 'error')
-                border_color = cls.get_color('state', 'error')
-                text_color = cls.get_color('primary', 'contrast')
-            elif state == 'pressed':
-                bg_color = '#D32F2F'  # 更深的红色
-                border_color = '#D32F2F'
-                text_color = cls.get_color('primary', 'contrast')
-            else:  # disabled
-                bg_color = 'transparent'
-                border_color = cls.get_color('border', 'secondary')
-                text_color = cls.get_color('text', 'disabled')
-
-        return f"""
-            background-color: {bg_color};
-            border: 1px solid {border_color};
-            color: {text_color};
-            border-radius: {cls.get_radius('md')}px;
-            padding: {cls.get_spacing('sm')}px {cls.get_spacing('md')}px;
-        """
+    def get_color(cls, group, key, fallback='#888888'):
+        cls._ensure()
+        token_name = cls.COLORS.get(group, {}).get(key)
+        if not token_name:
+            return QColor(fallback)
+        value = cls._tokens.get(token_name, fallback)
+        try:
+            return QColor(value)
+        except Exception:
+            return QColor(fallback)
 
     @classmethod
-    def create_panel_style(cls, level: int = 1) -> str:
-        """创建面板样式
-
-        Args:
-            level: 面板层级 (1=主面板, 2=次面板, 3=内容面板)
-
-        Returns:
-            CSS样式字符串
-        """
-        if level == 1:
-            bg_color = cls.get_color('background', 'primary')
-            border_color = cls.get_color('border', 'secondary')
-        elif level == 2:
-            bg_color = cls.get_color('background', 'secondary')
-            border_color = cls.get_color('border', 'primary')
-        else:  # level 3
-            bg_color = cls.get_color('background', 'surface')
-            border_color = cls.get_color('border', 'primary')
-
-        return f"""
-            background-color: {bg_color};
-            border: 1px solid {border_color};
-            border-radius: {cls.get_radius('lg')}px;
-            padding: {cls.get_spacing('md')}px;
-        """
-
-    @classmethod
-    def create_input_style(cls, state: str = 'normal') -> str:
-        """创建输入框样式
-
-        Args:
-            state: 状态 (normal, focus, error, disabled)
-
-        Returns:
-            CSS样式字符串
-        """
-        bg_color = cls.get_color('background', 'surface')
-        text_color = cls.get_color('text', 'primary')
-
-        if state == 'normal':
-            border_color = cls.get_color('border', 'secondary')
-        elif state == 'focus':
-            border_color = cls.get_color('border', 'focus')
-        elif state == 'error':
-            border_color = cls.get_color('state', 'error')
-        else:  # disabled
-            bg_color = cls.get_color('background', 'primary')
-            border_color = cls.get_color('border', 'secondary')
-            text_color = cls.get_color('text', 'disabled')
-
-        return f"""
-            background-color: {bg_color};
-            border: 1px solid {border_color};
-            color: {text_color};
-            border-radius: {cls.get_radius('sm')}px;
-            padding: {cls.get_spacing('sm')}px {cls.get_spacing('md')}px;
-            selection-background-color: {cls.get_color('primary', 'light')};
-        """
-
-    @classmethod
-    def create_divider_style(cls, orientation: str = 'horizontal') -> str:
-        """创建分割线样式
-
-        Args:
-            orientation: 方向 (horizontal, vertical)
-
-        Returns:
-            CSS样式字符串
-        """
-        if orientation == 'horizontal':
-            return f"""
-                border-top: 1px solid {cls.get_color('border', 'divider')};
-                margin: {cls.get_spacing('md')}px 0;
-            """
-        else:  # vertical
-            return f"""
-                border-left: 1px solid {cls.get_color('border', 'divider')};
-                margin: 0 {cls.get_spacing('md')}px;
-            """
+    def get_radius(cls, key='md'):
+        cls._ensure()
+        return cls.RADIUS.get(key, 6)

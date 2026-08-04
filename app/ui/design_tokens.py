@@ -6,34 +6,64 @@
 所有颜色 / 字体 / 尺寸 / 间距 / 圆角 / 动效的取值都必须从这里引用，
 禁止在业务文件里写死色值或像素。普通图层属性面板与文字图层属性面板
 共用本模块生成的控件 QSS，从而保证两套界面视觉一致。
+
+阶段 1 改造说明（2026-08-04）：
+- 本模块现为唯一事实来源；`dark_theme.CursorDarkTheme` 与 `visual_hierarchy.VisualHierarchy`
+  均已改为从这里取值，不再各自维护重复的十六进制字面量。
+- 共享基础值（BG_SECONDARY / BG_TERTIARY / BG_ELEVATED / TEXT_MUTED）已对齐到全局主题，
+  消除令牌系统与全局主题长期存在的颜色漂移。
+- 新增 Foundation 补充令牌（画布 / 标题栏 / 反转文本 / 覆盖层 / 指示器等）与 Semantic 语义别名层。
 """
 
 from PySide6.QtGui import QColor  # noqa: F401  预留给需要 QColor 的调用方
 
 
 class Tokens:
-    # ---------------- 色彩 ----------------
-    BG_PRIMARY = "#181818"        # 主背景 / 面板背景
-    BG_SECONDARY = "#202123"      # 卡片 / 分组背景
-    BG_TERTIARY = "#2A2B2E"       # 分组标题 / 表头
-    BG_ELEVATED = "#111315"       # 输入框 / 下拉背景
+    # ===================== Foundation · 基础灰阶 =====================
+    BG_PRIMARY = "#181818"        # 应用主背景 / 面板背景
+    BG_SECONDARY = "#1F1F1F"      # 侧栏 / 停靠区 / 卡片背景（已对齐全局主题）
+    BG_TERTIARY = "#2A2A2A"       # 普通控件背景（已对齐全局主题）
+    BG_ELEVATED = "#2F2F2F"       # 输入框 / 下拉 / 弹层背景（已对齐全局主题）
     BG_CONTROL_ALT = "#242526"    # 按钮默认底
     BG_HOVER = "#303236"          # 控件 hover 底
-    BORDER_PRIMARY = "#303033"    # 卡片 / 面板描边
-    BORDER_SOFT = "#34383B"       # 次级描边 / 分割线
-    BORDER_CONTROL = "#3A3A3D"    # 输入框 / 按钮描边
-    TEXT_PRIMARY = "#F4F4F5"      # 主文本
-    TEXT_MUTED = "#8E95A3"        # 次要 / 提示文本
-    TEXT_DISABLED = "#606064"     # 禁用文本
-    TEXT_SECONDARY = "#C7C7C9"    # 次级文本（hover 等）
+    BG_CANVAS = "#151515"         # 中央画布工作区背景
+    BG_TITLEBAR = "#202024"       # 菜单栏 / 工具栏背景
+    BG_SELECTED = "#242B33"       # 列表选中底
+
+    # ===================== Foundation · 蓝色 =====================
     ACCENT = "#2F9CF4"            # 主强调（选中 / 激活）
     ACCENT_HOVER = "#55B2FF"      # 强调 hover
     ACCENT_PRESSED = "#1F7EC8"    # 强调 pressed
+
+    # ===================== Foundation · 红 / 黄 / 绿 =====================
     SUCCESS = "#30D158"
     WARNING = "#FF8A3D"
     ERROR = "#FF453A"
+    INFO = "#38A5FF"
 
-    # ---------------- 字体（统一使用 px，禁止 pt） ----------------
+    # ===================== Foundation · 边框 =====================
+    BORDER_PRIMARY = "#303033"    # 卡片 / 面板描边
+    BORDER_SOFT = "#34383B"       # 次级描边 / 分割线
+    BORDER_CONTROL = "#3A3A3D"    # 输入框 / 按钮描边
+    BORDER_SUBTLE = "#252528"     # 弱分割线 / 禁用描边
+    BORDER_FOCUS = "#2F9CF4"      # 焦点边框
+    BORDER_INDICATOR = "#52555B"  # 复选 / 单选指示器描边
+
+    # ===================== Foundation · 字体与文本 =====================
+    TEXT_PRIMARY = "#F4F4F5"      # 主文本
+    TEXT_SECONDARY = "#C7C7C9"    # 次级文本（hover 等）
+    TEXT_MUTED = "#8E8E93"        # 次要 / 提示文本（已对齐全局主题）
+    TEXT_DISABLED = "#606064"     # 禁用文本
+    TEXT_INVERTED = "#FFFFFF"     # 反转文本（主操作按钮文字等）
+    TEXT_INPUT = "#E9EEF3"        # 输入框内文本
+
+    # ===================== Foundation · 交互覆盖层 =====================
+    OVERLAY_HOVER = "rgba(255, 255, 255, 0.07)"
+    OVERLAY_PRESSED = "rgba(255, 255, 255, 0.11)"
+    SELECTION_BG = "#0E76D8"      # 文本选择背景
+    DISABLED_CTL_BG = "#20252B"   # 禁用按钮底
+
+    # ===================== 字体（统一使用 px，禁止 pt） =====================
     FONT_FAMILY = "Segoe UI, -apple-system, BlinkMacSystemFont, sans-serif"
     FONT_SIZE_BASE = 13
     FONT_SIZE_SMALL = 11
@@ -42,7 +72,7 @@ class Tokens:
     FONT_WEIGHT_MEDIUM = 600
     FONT_WEIGHT_BOLD = 700
 
-    # ---------------- 尺寸 / 间距 / 圆角 ----------------
+    # ===================== 尺寸 / 间距 / 圆角 =====================
     CONTROL_HEIGHT = 30           # 所有输入框 / 按钮 / 下拉统一高度
     CONTROL_RADIUS = 5
     CARD_RADIUS = 7
@@ -77,14 +107,44 @@ class Tokens:
     TEXT_AREA_HEIGHT = 96
     INDICATOR = 16                 # 复选 / 单选指示器边长
 
-    # ---------------- 开关 ----------------
+    # ===================== 开关 =====================
     SWITCH_W = 52
     SWITCH_H = 30
     SWITCH_TRACK_MARGIN = 3
     SWITCH_KNOB = 22
 
-    # ---------------- 动效 ----------------
+    # ===================== 动效 =====================
     MOTION_MS = 150
+
+    # ===================== Semantic · 语义别名层 =====================
+    # 业务代码优先使用语义键，而非具体灰阶，便于后续统一调整层级。
+    SEMANTIC = {
+        "surface.app": BG_PRIMARY,
+        "surface.panel": BG_SECONDARY,
+        "surface.control": BG_CONTROL_ALT,
+        "surface.elevated": BG_ELEVATED,
+        "surface.canvas": BG_CANVAS,
+        "surface.titlebar": BG_TITLEBAR,
+        "text.primary": TEXT_PRIMARY,
+        "text.secondary": TEXT_SECONDARY,
+        "text.muted": TEXT_MUTED,
+        "text.disabled": TEXT_DISABLED,
+        "border.default": BORDER_PRIMARY,
+        "border.soft": BORDER_SOFT,
+        "border.focus": BORDER_FOCUS,
+        "action.primary": ACCENT,
+        "action.primary.hover": ACCENT_HOVER,
+        "action.primary.pressed": ACCENT_PRESSED,
+        "status.success": SUCCESS,
+        "status.warning": WARNING,
+        "status.error": ERROR,
+        "status.info": INFO,
+    }
+
+    @classmethod
+    def semantic(cls, key: str) -> str:
+        """按语义键取色，未知键回退到主文本色。"""
+        return cls.SEMANTIC.get(key, cls.TEXT_PRIMARY)
 
     # ------------------------------------------------------------------
     # QSS 生成器：两套属性面板共用，保证控件外观完全一致
@@ -105,7 +165,7 @@ class Tokens:
             font-size: {cls.FONT_SIZE_BASE}px;
         }}
         {selector} QLabel[role="sectionTitle"] {{
-            color: #FFFFFF;
+            color: {cls.TEXT_INVERTED};
             font-size: {cls.SECTION_TITLE_FONT_SIZE}px;
             font-weight: 700;
         }}
@@ -156,8 +216,8 @@ class Tokens:
         }}
         {selector} QPushButton:disabled, {selector} QToolButton:disabled {{
             color: {cls.TEXT_DISABLED};
-            background-color: #20252B;
-            border-color: #252528;
+            background-color: {cls.DISABLED_CTL_BG};
+            border-color: {cls.BORDER_SUBTLE};
         }}
         {selector} QPushButton[segmentButton="true"], {selector} QToolButton[segmentButton="true"] {{
             min-height: {cls.CONTROL_HEIGHT}px;
@@ -170,7 +230,7 @@ class Tokens:
         {selector} QPushButton[segmentButton="true"]:checked, {selector} QToolButton[segmentButton="true"]:checked {{
             background-color: {cls.ACCENT};
             border-color: {cls.ACCENT_HOVER};
-            color: #FFFFFF;
+            color: {cls.TEXT_INVERTED};
             font-weight: 700;
         }}
         {selector} QPushButton[compactValue="true"] {{
@@ -184,18 +244,18 @@ class Tokens:
             min-height: {cls.CONTROL_HEIGHT}px;
             max-height: {cls.CONTROL_HEIGHT}px;
             background-color: {cls.BG_ELEVATED};
-            color: #E9EEF3;
+            color: {cls.TEXT_INPUT};
             border: 1px solid {cls.BORDER_CONTROL};
             border-radius: {cls.BUTTON_RADIUS}px;
-            selection-background-color: #0E76D8;
+            selection-background-color: {cls.SELECTION_BG};
             padding: 3px 6px;
         }}
         {selector} QTextEdit, {selector} QPlainTextEdit {{
             background-color: {cls.BG_ELEVATED};
-            color: #E9EEF3;
+            color: {cls.TEXT_INPUT};
             border: 1px solid {cls.BORDER_CONTROL};
             border-radius: {cls.BUTTON_RADIUS}px;
-            selection-background-color: #0E76D8;
+            selection-background-color: {cls.SELECTION_BG};
             padding: 3px 6px;
         }}
         {selector} QLineEdit:focus, {selector} QTextEdit:focus, {selector} QComboBox:focus,
@@ -224,14 +284,14 @@ class Tokens:
             width: {cls.INDICATOR}px;
             height: {cls.INDICATOR}px;
             border-radius: 4px;
-            border: 1px solid #52555B;
+            border: 1px solid {cls.BORDER_INDICATOR};
             background: {cls.BG_ELEVATED};
         }}
         {selector} QRadioButton::indicator {{
             width: 15px;
             height: 15px;
             border-radius: 8px;
-            border: 1px solid #52555B;
+            border: 1px solid {cls.BORDER_INDICATOR};
             background: {cls.BG_ELEVATED};
         }}
         {selector} QCheckBox::indicator:checked, {selector} QRadioButton::indicator:checked {{
