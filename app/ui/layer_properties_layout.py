@@ -91,31 +91,7 @@ class LayerPropertiesLayout(object):
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        # 应用暗色主题样式到滚动区域
-        scroll_area.setStyleSheet(f"""
-            QScrollArea {{
-                border: none;
-                background-color: {Tokens.BG_PRIMARY};
-            }}
-            QScrollBar:vertical {{
-                background-color: {Tokens.BG_PRIMARY};
-                width: 9px;
-                border-radius: 4px;
-            }}
-            QScrollBar::handle:vertical {{
-                background-color: {Tokens.BORDER_CONTROL};
-                border-radius: 6px;
-                min-height: 20px;
-                margin: 2px;
-            }}
-            QScrollBar::handle:vertical:hover {{
-                background-color: {Tokens.TEXT_MUTED};
-            }}
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
-                border: none;
-                background: none;
-            }}
-        """)
+        scroll_area.setProperty("role", "scroll-area")
 
         # 滚动内容控件
         scroll_content = QWidget()
@@ -168,6 +144,8 @@ class LayerPropertiesLayout(object):
         self.aspect_lock_btn.setObjectName("aspectLockButton")
         self.aspect_lock_btn.setFixedSize(26, 26)
         self.aspect_lock_btn.setCheckable(True)
+        self.aspect_lock_btn.setProperty("role", "toggle")
+        self.aspect_lock_btn.setProperty("uiSize", "icon")
         self.aspect_lock_btn.setChecked(False)
         self.aspect_lock_btn.setToolTip("锁定宽高比例")
         self.aspect_lock_btn.clicked.connect(self.toggle_aspect_ratio_lock)
@@ -193,9 +171,10 @@ class LayerPropertiesLayout(object):
         self.opacity_slider.setValue(100)
         self.opacity_slider.valueChanged.connect(self.update_layer_opacity)
         self.opacity_label = QLabel("100%")
+        self.opacity_label.setProperty("role", "badge")
+        self.opacity_label.setProperty("variant", "outline")
         self.opacity_label.setAlignment(Qt.AlignCenter)
         self.opacity_label.setMinimumWidth(48)
-        self.opacity_label.setStyleSheet(f"background-color: {Tokens.BG_ELEVATED}; border: 1px solid {Tokens.BORDER_CONTROL}; border-radius: {Tokens.CONTROL_RADIUS}px; padding: 3px 8px;")
         opacity_layout.addWidget(self.opacity_slider)
         opacity_layout.addWidget(self.opacity_label)
         basic_form.addRow(self._label("不透明度:"), opacity_layout)
@@ -516,6 +495,7 @@ class LayerPropertiesLayout(object):
         self.source_path_edit.setReadOnly(False)  # 允许输入
         self.source_path_edit.returnPressed.connect(self.handle_path_input)  # 添加回车处理
         self.browse_btn = QPushButton("浏览...")
+        self.browse_btn.setProperty("variant", "outline")
         self.browse_btn.clicked.connect(self.browse_image)
         source_path_layout.addWidget(self.source_path_edit)
         source_path_layout.addWidget(self.browse_btn)
@@ -523,12 +503,13 @@ class LayerPropertiesLayout(object):
 
         # 随机按钮
         self.random_btn = QPushButton("随机选择")
+        self.random_btn.setProperty("variant", "secondary")
         self.random_btn.clicked.connect(self.randomize_image)
         source_layout.addWidget(self.random_btn)
 
         # 当前图像预览
         self.current_image_label = QLabel("当前图像: 无")
-        self.current_image_label.setStyleSheet(f"color: {Tokens.TEXT_MUTED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
+        self.current_image_label.setProperty("role", "muted")
         source_layout.addWidget(self.current_image_label)
 
         self.source_group.add_content_layout(source_layout)
@@ -542,18 +523,10 @@ class LayerPropertiesLayout(object):
         self.ai_prompt_edit.setAcceptRichText(False)
         self.ai_prompt_edit.setFixedHeight(76)
         self.ai_prompt_edit.setPlaceholderText("输入当前图层的生图提示词")
-        self.ai_prompt_edit.setStyleSheet(
-            "QTextEdit { background: #111214; border: 1px solid #3A3B3E; "
-            "border-radius: 4px; padding: 6px; }"
-        )
         self.ai_negative_prompt_edit = QTextEdit()
         self.ai_negative_prompt_edit.setAcceptRichText(False)
         self.ai_negative_prompt_edit.setFixedHeight(48)
         self.ai_negative_prompt_edit.setPlaceholderText("可选：输入不希望出现的内容")
-        self.ai_negative_prompt_edit.setStyleSheet(
-            "QTextEdit { background: #111214; border: 1px solid #3A3B3E; "
-            "border-radius: 4px; padding: 6px; }"
-        )
         self.ai_count_spin = QSpinBox()
         self.ai_count_spin.setRange(1, 20)
         self.ai_count_spin.setValue(1)
@@ -564,18 +537,15 @@ class LayerPropertiesLayout(object):
         self.ai_mode_combo.addItem("生成后基础抠图", "cutout")
         self.ai_mode_combo.addItem("生成后基础抠图并自动分割", "segments")
         self.ai_generate_btn = QPushButton("生成到当前图层")
+        self.ai_generate_btn.setProperty("variant", "default")
         self.ai_generate_btn.clicked.connect(self.start_ai_generation_for_current_layer)
         self.ai_progress_bar = QProgressBar()
+        self.ai_progress_bar.setProperty("role", "progress")
         self.ai_progress_bar.setRange(0, 100)
         self.ai_progress_bar.setValue(0)
         self.ai_progress_bar.setFormat("等待生成")
-        self.ai_progress_bar.setStyleSheet(
-            "QProgressBar { background: #111214; border: 1px solid #3A3B3E; "
-            "border-radius: 3px; color: #D7D7D9; text-align: center; min-height: 18px; } "
-            "QProgressBar::chunk { background: #3B82F6; border-radius: 2px; }"
-        )
         self.ai_status_label = QLabel("使用工具栏的 AI接口设置 作为全局 API 参数")
-        self.ai_status_label.setStyleSheet(f"color: {Tokens.TEXT_MUTED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
+        self.ai_status_label.setProperty("role", "muted")
 
         ai_layout.addRow("提示词:", self.ai_prompt_edit)
         ai_layout.addRow("反向提示词:", self.ai_negative_prompt_edit)
@@ -749,7 +719,7 @@ class LayerPropertiesLayout(object):
         # 5.（已移除）右侧栏“图层绑定/图层大小匹配”入口
         # 用户从左侧图层面板入口统一管理，避免重复入口造成混淆。
         self.bind_status_label = QLabel("未绑定")
-        self.bind_status_label.setStyleSheet(f"color: {Tokens.TEXT_DISABLED}; font-size: {Tokens.FONT_SIZE_SMALL}px;")
+        self.bind_status_label.setProperty("role", "muted")
 
         # 6. 图层变换组 (默认收起)
         self.transform_group = CollapsibleGroupBox("图层变换", collapsed=True)
@@ -1135,52 +1105,15 @@ class LayerPropertiesLayout(object):
         if self.aspect_lock_btn.isChecked():
             # 锁定状态 - 使用图标管理器的链接图标
             IconManager.apply_icon_to_button(self.aspect_lock_btn, 'link', 'primary')
-            self.aspect_lock_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {Tokens.ACCENT};
-                    color: #ffffff;
-                    border: 1px solid {Tokens.ACCENT_HOVER};
-                    border-radius: {Tokens.BUTTON_RADIUS}px;
-                    font-size: 13px;
-                    font-weight: normal;
-                    padding: 0px;
-                    margin: 0px;
-                }}
-                QPushButton:hover {{
-                    background-color: {Tokens.ACCENT_HOVER};
-                    border-color: {Tokens.ACCENT_HOVER};
-                }}
-                QPushButton:pressed {{
-                    background-color: {Tokens.ACCENT_PRESSED};
-                    border-color: {Tokens.ACCENT};
-                }}
-            """)
+            self.aspect_lock_btn.setProperty("variant", "default")
             self.aspect_lock_btn.setToolTip("已锁定宽高比例 - 点击解锁")
         else:
             # 解锁状态 - 使用图标管理器的解锁图标
             IconManager.apply_icon_to_button(self.aspect_lock_btn, 'unlink', 'secondary')
-            self.aspect_lock_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {Tokens.BG_CONTROL_ALT};
-                    color: {Tokens.TEXT_MUTED};
-                    border: 1px solid {Tokens.BORDER_CONTROL};
-                    border-radius: {Tokens.BUTTON_RADIUS}px;
-                    font-size: 13px;
-                    font-weight: normal;
-                    padding: 0px;
-                    margin: 0px;
-                }}
-                QPushButton:hover {{
-                    background-color: {Tokens.BG_HOVER};
-                    color: {Tokens.TEXT_SECONDARY};
-                    border-color: {Tokens.ACCENT_HOVER};
-                }}
-                QPushButton:pressed {{
-                    background-color: {Tokens.ACCENT_PRESSED};
-                    border-color: {Tokens.ACCENT};
-                }}
-            """)
+            self.aspect_lock_btn.setProperty("variant", "secondary")
             self.aspect_lock_btn.setToolTip("宽高比例未锁定 - 点击锁定")
+        self.aspect_lock_btn.style().unpolish(self.aspect_lock_btn)
+        self.aspect_lock_btn.style().polish(self.aspect_lock_btn)
 
     def toggle_aspect_ratio_lock(self):
         """切换锁定比例状态"""

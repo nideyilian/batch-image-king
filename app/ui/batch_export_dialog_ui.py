@@ -18,10 +18,17 @@ import json
 import time
 
 
+def _set_semantic_status(widget, status=None):
+    widget.setProperty("status", status)
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
+
+
 class BatchExportDialogUiMixin:
 
 
     def setup_ui(self):
+        self.setProperty("role", "dialog")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
@@ -42,7 +49,8 @@ class BatchExportDialogUiMixin:
         basic_export_layout.addWidget(self.count_spin)
 
         self.calculated_count_label = QLabel("")
-        self.calculated_count_label.setStyleSheet("color: #2F9CF4; font-weight: bold; margin-left: 10px;")
+        self.calculated_count_label.setProperty("role", "status-value")
+        _set_semantic_status(self.calculated_count_label, "info")
         basic_export_layout.addWidget(self.calculated_count_label)
 
         basic_export_layout.addSpacing(8)
@@ -62,7 +70,7 @@ class BatchExportDialogUiMixin:
         self.max_file_size_spin.setToolTip("导出图片的最大文件大小（单位KB，0表示不限制）")
         basic_export_layout.addWidget(self.max_file_size_spin)
         hint = QLabel("0 表示不限制")
-        hint.setStyleSheet("color: #8E8E93;")
+        hint.setProperty("role", "muted")
         basic_export_layout.addWidget(hint)
 
         basic_export_layout.addSpacing(8)
@@ -217,7 +225,7 @@ class BatchExportDialogUiMixin:
         dynamic_layout.addWidget(self.dynamic_budget_params_container)
 
         dynamic_hint = QLabel("说明：动态预算只影响预计算尝试次数，不改变绑定规则或去重语义。")
-        dynamic_hint.setStyleSheet("color: #8E8E93; font-size: 11px;")
+        dynamic_hint.setProperty("role", "muted")
         dynamic_hint.setWordWrap(True)
         dynamic_layout.addWidget(dynamic_hint)
 
@@ -230,9 +238,11 @@ class BatchExportDialogUiMixin:
         self.dynamic_budget_recent_n_spin.setValue(12)
         auto_tune_row.addWidget(self.dynamic_budget_recent_n_spin)
         self.dynamic_budget_recommend_btn = QPushButton("生成推荐参数")
+        self.dynamic_budget_recommend_btn.setProperty("variant", "secondary")
         self.dynamic_budget_recommend_btn.clicked.connect(self.recommend_dynamic_budget_params)
         auto_tune_row.addWidget(self.dynamic_budget_recommend_btn)
         self.dynamic_budget_apply_btn = QPushButton("一键应用推荐")
+        self.dynamic_budget_apply_btn.setProperty("variant", "default")
         self.dynamic_budget_apply_btn.setEnabled(False)
         self.dynamic_budget_apply_btn.clicked.connect(self.apply_recommended_dynamic_budget_params)
         auto_tune_row.addWidget(self.dynamic_budget_apply_btn)
@@ -241,7 +251,7 @@ class BatchExportDialogUiMixin:
 
         self.dynamic_budget_recommend_label = QLabel("自动调参：暂无推荐。可在完成多次导出后生成。")
         self.dynamic_budget_recommend_label.setWordWrap(True)
-        self.dynamic_budget_recommend_label.setStyleSheet("color: #8E8E93; font-size: 11px;")
+        self.dynamic_budget_recommend_label.setProperty("role", "muted")
         dynamic_layout.addWidget(self.dynamic_budget_recommend_label)
 
         self.dynamic_budget_enabled_check.toggled.connect(self._set_dynamic_budget_controls_enabled)
@@ -257,7 +267,7 @@ class BatchExportDialogUiMixin:
 
         # 格式说明
         format_label = QLabel("格式: 日期-自定义文本-图层文件名-序号")
-        format_label.setStyleSheet("font-weight: bold;")
+        format_label.setProperty("role", "label")
         name_layout.addWidget(format_label)
 
         # 当前日期设置
@@ -300,7 +310,7 @@ class BatchExportDialogUiMixin:
 
         # 提示标签，解释图层文件名将使用实际随机选择的图像文件名
         layer_info_label = QLabel("导出时将使用实际随机选择的图像文件名，而不是固定的图层名称")
-        layer_info_label.setStyleSheet("color: #30D158; font-style: italic;")
+        layer_info_label.setProperty("role", "success")
         name_layout.addWidget(layer_info_label)
 
         name_layout.addLayout(layer_layout)
@@ -320,7 +330,7 @@ class BatchExportDialogUiMixin:
         preview_layout = QHBoxLayout()
         preview_layout.addWidget(QLabel("文件名预览:"))
         self.filename_preview = QLabel()
-        self.filename_preview.setStyleSheet("font-weight: bold; color: #2F9CF4;")
+        self.filename_preview.setProperty("role", "status-value")
         preview_layout.addWidget(self.filename_preview)
         name_layout.addLayout(preview_layout)
 
@@ -365,7 +375,7 @@ class BatchExportDialogUiMixin:
 
         # 添加说明文字
         mode_description_label = QLabel("• 随机：按数量生成；遍历：导出全部组合（数量自动计算）；智能采样：尽量均匀使用图片")
-        mode_description_label.setStyleSheet("color: #8E8E93; font-size: 11px; margin-top: 5px;")
+        mode_description_label.setProperty("role", "muted")
         mode_description_label.setWordWrap(True)
         mode_layout.addWidget(mode_description_label)
 
@@ -403,7 +413,7 @@ class BatchExportDialogUiMixin:
         self.unique_use_enabled.toggled.connect(self._set_unique_checks_enabled)
 
         hint_unique = QLabel("说明：若选择多个图层，则导出张数将受限于这些图层图片数量的最小值。")
-        hint_unique.setStyleSheet("color: #8E8E93; font-size: 11px;")
+        hint_unique.setProperty("role", "muted")
         unique_layout.addWidget(hint_unique)
 
         unique_group.setLayout(unique_layout)
@@ -441,6 +451,7 @@ class BatchExportDialogUiMixin:
         self.path_edit.textChanged.connect(self.update_directory)
 
         self.browse_btn = QPushButton("浏览...")
+        self.browse_btn.setProperty("variant", "outline")
         self.browse_btn.clicked.connect(self.browse_directory)
 
         path_layout.addWidget(self.path_edit)
@@ -457,7 +468,7 @@ class BatchExportDialogUiMixin:
         self.use_current_time_for_path.toggled.connect(self._on_use_current_time_for_path_toggled)
         current_time_layout.addWidget(self.use_current_time_for_path)
         self.current_time_path_hint = QLabel("路径中的 YYYYMMDD 日期会在导出时替换为当天")
-        self.current_time_path_hint.setStyleSheet("color: #8E8E93;")
+        self.current_time_path_hint.setProperty("role", "muted")
         current_time_layout.addWidget(self.current_time_path_hint)
         current_time_layout.addStretch()
         form_layout.addRow("", current_time_layout)
@@ -468,12 +479,14 @@ class BatchExportDialogUiMixin:
         settings_layout = QHBoxLayout()
 
         self.save_config_btn = QPushButton("保存")
+        self.save_config_btn.setProperty("variant", "secondary")
         self.save_config_btn.setToolTip("保存当前设置到当前标签页")
         self.save_config_btn.clicked.connect(self.save_config)
         settings_layout.addWidget(self.save_config_btn)
 
         # 添加打开输出文件夹按钮
         self.open_dir_btn = QPushButton("打开输出文件夹")
+        self.open_dir_btn.setProperty("variant", "secondary")
         self.open_dir_btn.setToolTip("打开当前设置的导出目录")
         self.open_dir_btn.clicked.connect(self.open_output_directory)
         # 初始状态下禁用，直到选择了有效目录
@@ -488,10 +501,12 @@ class BatchExportDialogUiMixin:
         # 批量导出需要在后台线程启动后保持对话框打开以显示进度。
         self.button_box = QDialogButtonBox(QDialogButtonBox.Cancel)
         self.ok_btn = QPushButton("确定")
+        self.ok_btn.setProperty("variant", "default")
         self.button_box.addButton(self.ok_btn, QDialogButtonBox.ActionRole)
         self.ok_btn.clicked.connect(self._on_export_confirmed)
         self.button_box.rejected.connect(self.reject)
         self.minimize_btn = QPushButton("缩小到标签")
+        self.minimize_btn.setProperty("variant", "ghost")
         self.minimize_btn.setToolTip("隐藏导出窗口，任务继续在后台运行")
         self.minimize_btn.clicked.connect(self.minimize_to_tab)
         self.minimize_btn.setEnabled(False)
@@ -512,12 +527,14 @@ class BatchExportDialogUiMixin:
         self.progress_status_label = QLabel("准备导出...")
         progress_layout.addWidget(self.progress_status_label)
         self.progress_bar = QProgressBar()
+        self.progress_bar.setProperty("role", "progress")
         self.progress_bar.setRange(0, 1)
         self.progress_bar.setValue(0)
         progress_layout.addWidget(self.progress_bar)
         progress_btn_layout = QHBoxLayout()
         progress_btn_layout.addStretch()
         self.progress_cancel_btn = QPushButton("取消导出")
+        self.progress_cancel_btn.setProperty("variant", "destructive")
         self.progress_cancel_btn.clicked.connect(self.cancel_export)
         self.progress_cancel_btn.setEnabled(False)
         progress_btn_layout.addWidget(self.progress_cancel_btn)
@@ -557,7 +574,7 @@ class BatchExportDialogUiMixin:
             self.diag_error_label,
         ]
         for lb in diag_labels:
-            lb.setStyleSheet("color: #8E8E93;")
+            lb.setProperty("role", "muted")
             lb.setWordWrap(True)
         for row, lb in enumerate(diag_labels):
             diag_grid.addWidget(lb, row // 2, row % 2)
@@ -855,13 +872,13 @@ class BatchExportDialogUiMixin:
 
             # 如果目录不存在，添加提示信息
             if not os.path.isdir(path):
-                self.path_edit.setStyleSheet("color: #FF8A3D;")  # 橙色提示
+                _set_semantic_status(self.path_edit, "warning")
                 self.path_edit.setToolTip("目录不存在，将在导出时自动创建")
                 # 目录不存在时禁用打开目录按钮
                 if hasattr(self, 'open_dir_btn'):
                     self.open_dir_btn.setEnabled(False)
             else:
-                self.path_edit.setStyleSheet("")
+                _set_semantic_status(self.path_edit)
                 self.path_edit.setToolTip("")
                 # 目录存在时启用打开目录按钮
                 if hasattr(self, 'open_dir_btn'):
@@ -872,7 +889,7 @@ class BatchExportDialogUiMixin:
             self.ok_btn.setEnabled(False)
             if hasattr(self, 'open_dir_btn'):
                 self.open_dir_btn.setEnabled(False)
-            self.path_edit.setStyleSheet("")
+            _set_semantic_status(self.path_edit)
             self.path_edit.setToolTip("")
 
     def _on_use_current_time_for_path_toggled(self, checked):
@@ -916,7 +933,7 @@ class BatchExportDialogUiMixin:
         if directory:
             self.directory = directory
             self.path_edit.setText(directory)
-            self.path_edit.setStyleSheet("")  # 清除可能的样式
+            _set_semantic_status(self.path_edit)
             self.path_edit.setToolTip("")     # 清除可能的提示
             self.ok_btn.setEnabled(True)
             # 启用打开目录按钮
@@ -981,19 +998,19 @@ class BatchExportDialogUiMixin:
                 self.count_spin.setToolTip("遍历模式下将自动导出所有可能的组合")
 
                 # 如果组合数量很大，给出警告
-                if total_combinations > 1000:
-                    self.calculated_count_label.setStyleSheet("color: #FF8A3D; font-weight: bold; margin-left: 10px;")
-                    self.calculated_count_label.setText(f"(将导出 {total_combinations} 个组合 - 数量较大)")
-                elif total_combinations > 10000:
-                    self.calculated_count_label.setStyleSheet("color: #FF453A; font-weight: bold; margin-left: 10px;")
+                if total_combinations > 10000:
+                    _set_semantic_status(self.calculated_count_label, "destructive")
                     self.calculated_count_label.setText(f"(将导出 {total_combinations} 个组合 - 注意数量很大!)")
+                elif total_combinations > 1000:
+                    _set_semantic_status(self.calculated_count_label, "warning")
+                    self.calculated_count_label.setText(f"(将导出 {total_combinations} 个组合 - 数量较大)")
                 else:
-                    self.calculated_count_label.setStyleSheet("color: #2F9CF4; font-weight: bold; margin-left: 10px;")
+                    _set_semantic_status(self.calculated_count_label, "info")
 
             except Exception as e:
                 print(f"计算组合数量失败: {e}")
                 self.calculated_count_label.setText("(无法计算组合数)")
-                self.calculated_count_label.setStyleSheet("color: #8E8E93; font-weight: bold; margin-left: 10px;")
+                _set_semantic_status(self.calculated_count_label, "muted")
 
                 # 仍然禁用数量输入框
                 self.count_spin.setEnabled(False)
@@ -1001,5 +1018,6 @@ class BatchExportDialogUiMixin:
         else:
             # 随机模式：恢复正常状态
             self.calculated_count_label.setText("")
+            _set_semantic_status(self.calculated_count_label, "info")
             self.count_spin.setEnabled(True)
             self.count_spin.setToolTip("要导出的图像数量")

@@ -33,6 +33,7 @@ class MainWindowUi(object):
     def setup_ui(self):
         """设置主界面UI"""
         self.central_widget = QWidget()
+        self.central_widget.setProperty("role", "workspace")
         self.setCentralWidget(self.central_widget)
     
         # 创建主布局
@@ -325,7 +326,7 @@ class MainWindowUi(object):
         # “新建”为主操作，使用设计系统的 primary 变体（accent 实心）以突出 CTA
         _new_btn = self.main_toolbar.widgetForAction(self.new_action)
         if _new_btn is not None:
-            _new_btn.setProperty("variant", "primary")
+            _new_btn.setProperty("variant", "default")
         self.main_toolbar.addAction(self.open_action)
         self.main_toolbar.addAction(self.save_action)
         self.main_toolbar.addSeparator()
@@ -400,7 +401,7 @@ class MainWindowUi(object):
     
         # 添加分隔符
         separator1 = QLabel("|")
-        separator1.setStyleSheet(f"color: {vh.get_color('border', 'divider')}; margin: 0 4px;")
+        separator1.setProperty("role", "status-separator")
         self.statusbar.addPermanentWidget(separator1)
     
         # 添加缩放控件
@@ -410,7 +411,7 @@ class MainWindowUi(object):
     
         zoom_label = QLabel("缩放:")
         zoom_label.setFont(vh.get_font('small'))
-        zoom_label.setStyleSheet(f"color: {vh.get_color('text', 'secondary')};")
+        zoom_label.setProperty("role", "muted")
     
         self.zoom_spinbox = QSpinBox()
         self.zoom_spinbox.setRange(10, 500)
@@ -443,30 +444,30 @@ class MainWindowUi(object):
     
         # 添加分隔符
         separator2 = QLabel("|")
-        separator2.setStyleSheet(f"color: {vh.get_color('border', 'divider')}; margin: 0 4px;")
+        separator2.setProperty("role", "status-separator")
         self.statusbar.addPermanentWidget(separator2)
     
         # 添加坐标显示
         self.position_label = QLabel("坐标: 0, 0")
         self.position_label.setFont(vh.get_font('small'))
-        self.position_label.setStyleSheet(f"color: {vh.get_color('text', 'secondary')};")
+        self.position_label.setProperty("role", "muted")
         self.statusbar.addPermanentWidget(self.position_label)
     
         # 添加分隔符
         separator3 = QLabel("|")
-        separator3.setStyleSheet(f"color: {vh.get_color('border', 'divider')}; margin: 0 4px;")
+        separator3.setProperty("role", "status-separator")
         self.statusbar.addPermanentWidget(separator3)
     
         # 添加文档大小显示
         self.size_label = QLabel("大小: 0 x 0")
         self.size_label.setFont(vh.get_font('small'))
-        self.size_label.setStyleSheet(f"color: {vh.get_color('text', 'secondary')};")
+        self.size_label.setProperty("role", "muted")
         self.statusbar.addPermanentWidget(self.size_label)
     
         # 添加Alt键提示
         self.alt_tip_label = QLabel("提示: 按住Alt键点击图层可避免切换选中图层")
         self.alt_tip_label.setFont(vh.get_font('tiny'))
-        self.alt_tip_label.setStyleSheet(f"color: {vh.get_color('text', 'hint')}; font-style: italic; margin-left: 8px;")
+        self.alt_tip_label.setProperty("role", "muted")
         self.statusbar.addWidget(self.alt_tip_label)
 
     def create_dock_widgets(self):

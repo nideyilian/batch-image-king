@@ -113,14 +113,17 @@ class PresetDetailWidget(QWidget):
         button_layout = QHBoxLayout()
 
         self.edit_button = QPushButton("编辑信息")
+        self.edit_button.setProperty("variant", "secondary")
         self.edit_button.clicked.connect(self.edit_preset)
         button_layout.addWidget(self.edit_button)
 
         self.export_button = QPushButton("导出预设")
+        self.export_button.setProperty("variant", "secondary")
         self.export_button.clicked.connect(self.export_preset)
         button_layout.addWidget(self.export_button)
 
         self.delete_button = QPushButton("删除预设")
+        self.delete_button.setProperty("variant", "destructive")
         self.delete_button.clicked.connect(self.delete_preset)
         button_layout.addWidget(self.delete_button)
 
@@ -130,7 +133,7 @@ class PresetDetailWidget(QWidget):
         apply_layout = QHBoxLayout()
 
         self.apply_button = QPushButton("应用预设")
-        self.apply_button.setStyleSheet("background-color: #4CAF50; color: #FFFFFF; font-weight: bold;")
+        self.apply_button.setProperty("variant", "default")
         self.apply_button.clicked.connect(lambda: self.preset_applied.emit(self.current_preset_id))
         apply_layout.addWidget(self.apply_button)
 
@@ -386,10 +389,12 @@ class PresetSaveDialog(QDialog):
         button_layout = QHBoxLayout()
 
         self.select_all_button = QPushButton("全选")
+        self.select_all_button.setProperty("variant", "secondary")
         self.select_all_button.clicked.connect(self.select_all_tabs)
         button_layout.addWidget(self.select_all_button)
 
         self.select_none_button = QPushButton("取消全选")
+        self.select_none_button.setProperty("variant", "secondary")
         self.select_none_button.clicked.connect(self.select_none_tabs)
         button_layout.addWidget(self.select_none_button)
 
@@ -476,15 +481,18 @@ class PresetManagerDialog(QDialog):
         toolbar_layout = QHBoxLayout()
 
         self.new_preset_button = QPushButton("保存当前标签页为预设")
+        self.new_preset_button.setProperty("variant", "default")
         self.new_preset_button.clicked.connect(self.save_current_tabs)
         toolbar_layout.addWidget(self.new_preset_button)
 
         self.import_button = QPushButton("导入预设")
+        self.import_button.setProperty("variant", "secondary")
         self.import_button.clicked.connect(self.import_preset)
         toolbar_layout.addWidget(self.import_button)
 
         # 添加导出所有预设按钮
         self.export_all_button = QPushButton("导出所有预设")
+        self.export_all_button.setProperty("variant", "secondary")
         self.export_all_button.clicked.connect(self.export_all_presets)
         self.export_all_button.setToolTip("将所有预设导出为一个合集文件")
         toolbar_layout.addWidget(self.export_all_button)
@@ -493,6 +501,7 @@ class PresetManagerDialog(QDialog):
 
         # 内容区域 - 使用分割器让用户可以调整大小
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setProperty("role", "resizable")
 
         # 左侧 - 预设列表
         left_panel = QWidget()
@@ -554,14 +563,17 @@ class PresetManagerDialog(QDialog):
         edit_delete_layout = QHBoxLayout()
 
         self.rename_button = QPushButton("重命名")
+        self.rename_button.setProperty("variant", "secondary")
         self.rename_button.clicked.connect(self.rename_preset)
         edit_delete_layout.addWidget(self.rename_button)
 
         self.export_button = QPushButton("导出预设")
+        self.export_button.setProperty("variant", "secondary")
         self.export_button.clicked.connect(self.export_preset)
         edit_delete_layout.addWidget(self.export_button)
 
         self.delete_button = QPushButton("删除预设")
+        self.delete_button.setProperty("variant", "destructive")
         self.delete_button.clicked.connect(self.delete_preset)
         edit_delete_layout.addWidget(self.delete_button)
 
@@ -569,7 +581,7 @@ class PresetManagerDialog(QDialog):
 
         # 应用预设按钮
         self.apply_button = QPushButton("应用预设")
-        self.apply_button.setStyleSheet("background-color: #4CAF50; color: #FFFFFF; font-weight: bold; padding: 6px;")
+        self.apply_button.setProperty("variant", "default")
         self.apply_button.clicked.connect(self.apply_preset)
         buttons_layout.addWidget(self.apply_button)
 
@@ -587,6 +599,7 @@ class PresetManagerDialog(QDialog):
         bottom_layout.addStretch()
 
         self.close_button = QPushButton("关闭")
+        self.close_button.setProperty("variant", "outline")
         self.close_button.clicked.connect(self.reject)
         bottom_layout.addWidget(self.close_button)
 
@@ -930,4 +943,4 @@ class PresetManagerDialog(QDialog):
         if success:
             QMessageBox.information(self, "导出成功", f"所有预设已导出至 {file_path}")
         else:
-            QMessageBox.warning(self, "导出失败", "无法导出所有预设。") 
+            QMessageBox.warning(self, "导出失败", "无法导出所有预设。")

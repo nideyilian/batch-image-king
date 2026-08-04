@@ -31,12 +31,16 @@ _BUTTON_BOX_VARIANTS = {
 def _set_if_missing(widget, name, value):
     if widget.property(name) is None:
         widget.setProperty(name, value)
+        return True
+    return False
 
 
 def _polish_button_box(box):
+    changed = False
     for button in box.buttons():
         variant = _BUTTON_BOX_VARIANTS.get(box.buttonRole(button), "secondary")
-        _set_if_missing(button, "variant", variant)
+        changed = _set_if_missing(button, "variant", variant) or changed
+    return changed
 
 
 def _polish_button(button):
@@ -44,7 +48,7 @@ def _polish_button(button):
         button.setAccessibleName(button.text().replace("&", ""))
 
     if button.property("variant") is not None:
-        return
+        return False
     if button.property("primaryButton") is True:
         button.setProperty("variant", "default")
     elif button.property("secondaryButton") is True:
@@ -55,22 +59,27 @@ def _polish_button(button):
         button.setProperty("variant", "ghost")
     else:
         button.setProperty("variant", "secondary")
+    return True
 
 
 def _polish_one(widget):
+    changed = False
     if isinstance(widget, QDialog):
-        _set_if_missing(widget, "role", "dialog")
+        changed = _set_if_missing(widget, "role", "dialog") or changed
     if isinstance(widget, QDialogButtonBox):
-        _polish_button_box(widget)
+        changed = _polish_button_box(widget) or changed
     if isinstance(widget, QAbstractButton):
-        _polish_button(widget)
+        changed = _polish_button(widget) or changed
     if isinstance(widget, QProgressBar):
-        _set_if_missing(widget, "role", "progress")
+        changed = _set_if_missing(widget, "role", "progress") or changed
     if isinstance(widget, QGroupBox):
-        _set_if_missing(widget, "role", "section")
+        changed = _set_if_missing(widget, "role", "section") or changed
     if isinstance(widget, QTabWidget):
-        _set_if_missing(widget, "role", "tabs")
+        changed = _set_if_missing(widget, "role", "tabs") or changed
     widget.setProperty("semanticPolished", True)
+    if changed:
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
 
 
 def polish_widget_tree(root):

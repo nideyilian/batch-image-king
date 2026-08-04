@@ -90,16 +90,19 @@ QPushButton[variant]:pressed, QToolButton[variant]:pressed { background: %%muted
 QPushButton[variant]:disabled, QToolButton[variant]:disabled {
     opacity: 0.5;
 }
-QPushButton[variant]:focus-visible, QToolButton[variant]:focus-visible {
+QPushButton[variant]:focus, QToolButton[variant]:focus {
     border: 1px solid %%ring%%; outline: none;
 }
 
 /* default / primary */
-QPushButton[variant="default"], QToolButton[variant="default"] {
+QPushButton[variant="default"], QToolButton[variant="default"],
+QPushButton[variant="primary"], QToolButton[variant="primary"] {
     background: %%primary%%; color: %%primary-foreground%%;
 }
-QPushButton[variant="default"]:hover, QToolButton[variant="default"]:hover { background: %%primary-hover%%; }
-QPushButton[variant="default"]:pressed, QToolButton[variant="default"]:pressed { background: %%primary-pressed%%; }
+QPushButton[variant="default"]:hover, QToolButton[variant="default"]:hover,
+QPushButton[variant="primary"]:hover, QToolButton[variant="primary"]:hover { background: %%primary-hover%%; }
+QPushButton[variant="default"]:pressed, QToolButton[variant="default"]:pressed,
+QPushButton[variant="primary"]:pressed, QToolButton[variant="primary"]:pressed { background: %%primary-pressed%%; }
 
 /* secondary */
 QPushButton[variant="secondary"], QToolButton[variant="secondary"] {
@@ -180,6 +183,45 @@ QLabel[role="label"] {
     color: %%foreground%%; font-weight: %%fw-medium%%; font-size: %%fs-sm%%px;
 }
 QLabel[role="muted"] { color: %%muted-foreground%%; }
+QLabel[role="status-value"] { color: %%info%%; font-weight: %%fw-bold%%; }
+QLabel[role="status-value"][status="warning"] { color: %%warning%%; }
+QLabel[role="status-value"][status="destructive"] { color: %%destructive%%; }
+QLabel[role="status-value"][status="muted"] { color: %%muted-foreground%%; }
+QLabel[role="success"] { color: %%success%%; }
+QLabel[role="status-separator"] { color: %%border%%; padding: 0 4px; }
+QLineEdit[status="warning"] { color: %%warning%%; border-color: %%warning%%; }
+QLineEdit[status="destructive"] { color: %%destructive%%; border-color: %%destructive%%; }
+
+/* ---------- Native selection controls ---------- */
+QCheckBox, QRadioButton {
+    color: %%foreground%%; spacing: 7px; min-height: %%control-h%%px;
+}
+QCheckBox:disabled, QRadioButton:disabled { color: %%muted-foreground%%; }
+QCheckBox::indicator, QRadioButton::indicator {
+    width: %%indicator%%px; height: %%indicator%%px;
+    border: 1px solid %%input%%; background: %%popover%%;
+}
+QCheckBox::indicator { border-radius: 4px; }
+QRadioButton::indicator { border-radius: 8px; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: %%ring%%; }
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {
+    background: %%primary%%; border-color: %%primary%%;
+}
+QSlider::groove:horizontal {
+    height: 4px; background: %%muted%%; border-radius: 2px;
+}
+QSlider::sub-page:horizontal { background: %%primary%%; border-radius: 2px; }
+QSlider::handle:horizontal {
+    width: 14px; height: 14px; margin: -5px 0;
+    background: %%foreground%%; border: 2px solid %%primary%%; border-radius: 7px;
+}
+QSlider::handle:horizontal:hover { border-color: %%primary-hover%%; }
+QListWidget, QTreeWidget {
+    background: %%background%%; color: %%foreground%%;
+    border: 1px solid %%border%%; border-radius: %%radius%%px;
+    selection-background-color: %%accent%%;
+}
+QListWidget::item, QTreeWidget::item { min-height: 30px; padding: 2px 7px; }
 
 /* ---------- Badge ---------- */
 QLabel[role="badge"] {

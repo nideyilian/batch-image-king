@@ -2,7 +2,8 @@
 组件库可视化画廊（Component Showcase）
 
 集中展示 app/ui/components 下全部 shadcn/ui 风格组件，以及 Theme 令牌的实际取值，
-用于设计评审、组件验收与开发参考。支持暗 / 亮主题实时切换。
+用于设计评审、组件验收与开发参考。运行时固定使用深色工作台，皮肤通过
+``Theme.register_skin`` 扩展。
 
 用法：
     1) 独立预览（不启动主程序）：
@@ -30,6 +31,11 @@ from app.ui.components import (
     CardContent, CardFooter, Input, Label, field, Tabs, Select,
     Checkbox, RadioButton, Slider, Switch, Badge, Alert, Separator, ProgressBar,
     IconLabel, Heading, H1, H2, H3, Text, Lead, Muted, Small, Code, Blockquote, Kbd,
+    Accordion, AlertDialog, AspectRatio, ButtonGroup, ColorSwatch, ComboBox,
+    CommandPalette, EmptyState, Field, FileDropZone, IconButton, InputGroup,
+    MultiSelect, NumberInput, RadioGroup, Resizable, SegmentedControl, Sidebar,
+    Skeleton, Spinner, Table, Textarea, Toast, Toggle, ToggleGroup,
+    DropdownMenu,
 )
 from app.ui.components.button import VARIANTS, SIZES
 
@@ -81,8 +87,12 @@ class ComponentShowcase(QMainWindow):
         content_layout.addWidget(self._section_buttons())
         content_layout.addWidget(self._section_cards())
         content_layout.addWidget(self._section_inputs())
+        content_layout.addWidget(self._section_advanced_inputs())
         content_layout.addWidget(self._section_controls())
+        content_layout.addWidget(self._section_layout())
+        content_layout.addWidget(self._section_overlays())
         content_layout.addWidget(self._section_feedback())
+        content_layout.addWidget(self._section_data())
         content_layout.addWidget(self._section_tabs())
         content_layout.addWidget(self._section_icons())
         content_layout.addWidget(self._section_typography())
@@ -104,9 +114,7 @@ class ComponentShowcase(QMainWindow):
         h.addWidget(title)
         h.addStretch(1)
 
-        self.theme_btn = Button("切换到亮色", variant="outline", size="sm")
-        self.theme_btn.clicked.connect(self._toggle_theme)
-        h.addWidget(self.theme_btn)
+        h.addWidget(Badge("dark workspace", variant="primary"))
         return bar
 
     # ------------------------------------------------------------------ 区块
@@ -115,8 +123,8 @@ class ComponentShowcase(QMainWindow):
         header = CardHeader()
         header.add_widget(CardTitle("shadcn/ui 风格组件库"))
         header.add_widget(CardDescription(
-            "所有组件均经全局 QSS 与 Theme 令牌驱动，修改 tokens.py 即可全局换肤。"
-            "上方按钮可实时切换暗 / 亮主题。"))
+            "所有组件均由全局 QSS 与语义令牌驱动。默认使用 dark 皮肤；"
+            "后续皮肤通过 Theme.register_skin() 注册，无需修改业务窗口。"))
         card.add_widget(header)
         return card
 
@@ -139,11 +147,14 @@ class ComponentShowcase(QMainWindow):
         grid.addWidget(Label("变体 \\ 尺寸", muted=True), 0, 0)
         for c, sz in enumerate(SIZES, start=1):
             grid.addWidget(Label(sz, muted=True), 0, c)
+            grid.setColumnStretch(c, 1)
         # 每个变体一行
         for r, var in enumerate(VARIANTS, start=1):
             grid.addWidget(Label(var, muted=True), r, 0)
             for c, sz in enumerate(SIZES, start=1):
-                grid.addWidget(Button(var, variant=var, size=sz), r, c)
+                button = Button("按钮", variant=var, size=sz)
+                button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                grid.addWidget(button, r, c)
 
         # 补充：禁用态 / 图标按钮 / 带图标
         extra = QHBoxLayout()
@@ -205,6 +216,43 @@ class ComponentShowcase(QMainWindow):
         body.setLayout(form)
         return self._section("Inputs & Forms 输入与表单", "Input / Select / Label / field()，统一由全局 QSS 驱动。", body)
 
+    def _section_advanced_inputs(self) -> QWidget:
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(Theme.spacing("lg"))
+        grid.setVerticalSpacing(Theme.spacing("md"))
+
+        grid.addWidget(Field("多行文案", Textarea(placeholder="输入随机文案"), "支持换行和批量候选"), 0, 0)
+        grid.addWidget(Field("导出质量", NumberInput(
+            minimum=1, maximum=100, value=92, suffix="%"), "范围 1-100"), 0, 1)
+        grid.addWidget(Field("可搜索格式", ComboBox(
+            items=["PNG", "JPG", "WEBP"], placeholder="选择格式")), 1, 0)
+        grid.addWidget(Field("多选格式", MultiSelect(
+            items=[("png", "PNG"), ("jpg", "JPG"), ("webp", "WEBP")])), 1, 1)
+
+        file_name = Input(placeholder="export")
+        grid.addWidget(Field("组合输入", InputGroup(file_name, prefix="名称", suffix=".png")), 2, 0)
+        invalid = Field("错误状态", Input(placeholder="必填"), "字段说明")
+        invalid.set_error("请输入有效名称")
+        grid.addWidget(invalid, 2, 1)
+
+        radio = RadioGroup(options=[("single", "单图"), ("batch", "批量")])
+        radio.set_value("batch")
+        swatches = QHBoxLayout()
+        for color in ("#2F9CF4", "#30D158", "#FF8A3D", "#FF453A"):
+            swatches.addWidget(ColorSwatch(color))
+        swatches.addStretch(1)
+        swatch_widget = QWidget()
+        swatch_widget.setLayout(swatches)
+        grid.addWidget(Field("导出模式", radio), 3, 0)
+        grid.addWidget(Field("颜色样本", swatch_widget), 3, 1)
+
+        body = QWidget()
+        body.setLayout(grid)
+        return self._section(
+            "Advanced Forms 组合表单",
+            "Textarea / NumberInput / ComboBox / MultiSelect / Field / InputGroup / RadioGroup / ColorSwatch。",
+            body)
+
     def _section_controls(self) -> QWidget:
         left = QVBoxLayout()
         left.setSpacing(Theme.spacing("sm"))
@@ -223,6 +271,11 @@ class ComponentShowcase(QMainWindow):
         slider.setRange(0, 100)
         slider.setValue(60)
         right.addWidget(slider)
+        right.addWidget(SegmentedControl(items=[("move", "移动"), ("resize", "缩放"), ("crop", "裁剪")]))
+        toggle_group = ToggleGroup()
+        toggle_group.add_item("grid", "网格")
+        toggle_group.add_item("guides", "参考线")
+        right.addWidget(toggle_group)
         for label in ("描边", "圆角", "绑定"):
             h = QHBoxLayout()
             h.setSpacing(Theme.spacing("sm"))
@@ -240,6 +293,77 @@ class ComponentShowcase(QMainWindow):
         h.addLayout(right)
         h.addStretch(1)
         return self._section("Controls 基础控件", "Checkbox / RadioButton / Slider / Switch（全程序统一开关）。", body)
+
+    def _section_layout(self) -> QWidget:
+        splitter = Resizable(Qt.Horizontal)
+        splitter.setFixedHeight(150)
+        sidebar = Sidebar(width=180)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.addWidget(Label("图层与预设", muted=True))
+        sidebar_layout.addWidget(Button("图层 1", variant="ghost", size="sm"))
+        sidebar_layout.addWidget(Button("图层 2", variant="ghost", size="sm"))
+        sidebar_layout.addStretch(1)
+
+        accordion = Accordion()
+        accordion.add_item("基础设置", Label("尺寸、位置、不透明度", muted=True), expanded=True)
+        accordion.add_item("高级设置", Label("混合、描边与随机变换", muted=True))
+        splitter.addWidget(sidebar)
+        splitter.addWidget(accordion)
+        splitter.setSizes([180, 620])
+
+        ratio = AspectRatio(16 / 9)
+        ratio.setFixedSize(192, 108)
+        ratio.setProperty("role", "card")
+        ratio_layout = QVBoxLayout(ratio)
+        ratio_layout.addWidget(Label("16:9 预览", muted=True), 0, Qt.AlignCenter)
+
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(Theme.spacing("md"))
+        layout.addWidget(splitter)
+        layout.addWidget(ratio, 0, Qt.AlignLeft)
+        return self._section(
+            "Layout 布局",
+            "Sidebar / Resizable / Accordion / AspectRatio，均保留 Qt 原生尺寸管理。",
+            body)
+
+    def _section_overlays(self) -> QWidget:
+        row = QHBoxLayout()
+        row.setSpacing(Theme.spacing("sm"))
+
+        confirm = Button("确认对话框", variant="outline")
+        confirm.clicked.connect(self._show_alert_dialog)
+        commands = Button("命令面板", variant="outline")
+        commands.clicked.connect(self._show_command_palette)
+        menu_button = Button("导出菜单", variant="secondary")
+        menu = DropdownMenu(parent=menu_button)
+        menu.add_item("导出 PNG", value="png")
+        menu.add_item("导出 JPG", value="jpg")
+        menu_button.setMenu(menu)
+
+        row.addWidget(confirm)
+        row.addWidget(commands)
+        row.addWidget(menu_button)
+        row.addWidget(IconButton("settings", "设置"))
+        row.addStretch(1)
+        body = QWidget()
+        body.setLayout(row)
+        return self._section(
+            "Overlays 弹层",
+            "AlertDialog / CommandPalette / DropdownMenu / IconButton 使用原生焦点与键盘导航。",
+            body)
+
+    def _show_alert_dialog(self):
+        AlertDialog("覆盖现有文件？", "此操作会替换同名导出文件。", destructive=True, parent=self).exec()
+
+    def _show_command_palette(self):
+        palette = CommandPalette(self)
+        palette.add_command("new", "新建画布")
+        palette.add_command("export", "批量导出")
+        palette.add_command("preset", "管理预设")
+        palette.show()
+        self._command_palette = palette
 
     def _section_feedback(self) -> QWidget:
         badges = QHBoxLayout()
@@ -267,6 +391,12 @@ class ComponentShowcase(QMainWindow):
         progress.addWidget(Label("65%", muted=True))
         progress.addStretch(1)
 
+        loading = QHBoxLayout()
+        loading.setSpacing(Theme.spacing("md"))
+        loading.addWidget(Spinner())
+        loading.addWidget(Skeleton(width=160, height=16))
+        loading.addWidget(Toast("导出任务已完成", variant="success"), 1)
+
         body = QVBoxLayout()
         body.setSpacing(Theme.spacing("lg"))
         body.addLayout(badges)
@@ -274,9 +404,39 @@ class ComponentShowcase(QMainWindow):
         body.addLayout(alerts)
         body.addWidget(Separator())
         body.addLayout(progress)
+        body.addLayout(loading)
         wrap = QWidget()
         wrap.setLayout(body)
-        return self._section("Feedback 反馈组件", "Badge / Alert / Separator / ProgressBar。", wrap)
+        return self._section(
+            "Feedback 反馈组件",
+            "Badge / Alert / Toast / ProgressBar / Spinner / Skeleton，覆盖结果与加载状态。",
+            wrap)
+
+    def _section_data(self) -> QWidget:
+        table = Table(headers=["文件", "格式", "状态"])
+        table.set_rows([
+            ["poster-001.png", "PNG", "成功"],
+            ["poster-002.jpg", "JPG", "等待"],
+            ["poster-003.webp", "WEBP", "失败"],
+        ])
+        table.setFixedHeight(150)
+
+        drop_zone = FileDropZone(extensions=[".png", ".jpg", ".webp"])
+        drop_zone.setFixedHeight(88)
+        empty = EmptyState("暂无预设", "保存当前标签页后，预设会显示在这里。", "新建预设")
+        empty.setFixedHeight(150)
+
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(Theme.spacing("md"))
+        layout.addWidget(table)
+        layout.addWidget(drop_zone)
+        layout.addWidget(empty)
+        return self._section(
+            "Data & Files 数据与文件",
+            "Table / FileDropZone / EmptyState，覆盖 populated、drop 和 empty 状态。",
+            body)
 
     def _section_tabs(self) -> QWidget:
         tabs = Tabs()
@@ -384,12 +544,14 @@ class ComponentShowcase(QMainWindow):
             r, c = divmod(i, cols)
             grid.addWidget(self._swatch(Theme.color(name), name), r, c)
 
-        # 图表配色（8 色）
-        chart_row = QHBoxLayout()
-        chart_row.setSpacing(Theme.spacing("sm"))
+        # 图表配色（8 色，固定四列避免紧凑窗口横向溢出）
+        chart_grid = QGridLayout()
+        chart_grid.setSpacing(Theme.spacing("sm"))
         for i in range(8):
-            chart_row.addWidget(self._swatch(Theme.chart_color(i), f"chart {i}"))
-        chart_row.addStretch(1)
+            row, column = divmod(i, 4)
+            chart_grid.addWidget(
+                self._swatch(Theme.chart_color(i), f"chart {i}"), row, column)
+            chart_grid.setColumnStretch(column, 1)
 
         body = QVBoxLayout()
         body.setSpacing(Theme.spacing("md"))
@@ -397,7 +559,7 @@ class ComponentShowcase(QMainWindow):
         body.addLayout(grid)
         body.addWidget(Separator())
         body.addWidget(Label("图表配色 Chart Colors", muted=True))
-        body.addLayout(chart_row)
+        body.addLayout(chart_grid)
         wrap = QWidget()
         wrap.setLayout(body)
         return self._section("Colors 令牌色板", "实时反映当前主题下的 Theme 取值；切换主题后此处同步刷新。", wrap)
@@ -422,15 +584,11 @@ class ComponentShowcase(QMainWindow):
         return w
 
     # ------------------------------------------------------------------ 主题
-    def _toggle_theme(self):
-        Theme.toggle_mode()
-        self._apply_theme()
-        self.theme_btn.setText("切换到暗色" if Theme.mode() == "light" else "切换到亮色")
-
     def _apply_theme(self):
         app = QApplication.instance()
         if app is None:
             return
+        Theme.set_skin("dark")
         app.setStyleSheet(CursorDarkTheme.get_complete_style())
         app.setPalette(get_palette())
         # 强制刷新所有控件以反映新配色

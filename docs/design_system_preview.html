@@ -32,31 +32,6 @@
     --radius: 6px;
     --radius-lg: 8px;
   }
-  body.light {
-    --background: #FFFFFF;
-    --foreground: #09090B;
-    --card: #FFFFFF;
-    --card-foreground: #09090B;
-    --popover: #FFFFFF;
-    --primary: #2F9CF4;
-    --primary-foreground: #FFFFFF;
-    --primary-hover: #1F7EC8;
-    --primary-pressed: #176BB0;
-    --secondary: #F4F4F5;
-    --secondary-foreground: #09090B;
-    --muted: #F4F4F5;
-    --muted-foreground: #71717A;
-    --accent: #F4F4F5;
-    --accent-foreground: #09090B;
-    --destructive: #EF4444;
-    --destructive-foreground: #FAFAFA;
-    --success: #16A34A;
-    --warning: #EA580C;
-    --border: #E4E4E7;
-    --input: #E4E4E7;
-    --ring: #2F9CF4;
-  }
-
   * { box-sizing: border-box; }
   body {
     margin: 0; padding: 0;
@@ -176,8 +151,28 @@
   .chart-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .chart-dot { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); }
 
-  .theme-toggle { background: transparent; color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit; }
-  .theme-toggle:hover { background: var(--accent); }
+  .skin-status { background: var(--primary); color: var(--primary-foreground); border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
+  .extended-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .demo-block { min-width: 0; border-top: 1px solid var(--border); padding-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .demo-title { font-weight: 600; }
+  .demo-desc { color: var(--muted-foreground); font-size: 11px; }
+  .segmented { align-self: flex-start; display: flex; padding: 2px; background: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); }
+  .segment { min-height: 28px; padding: 0 12px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--muted-foreground); }
+  .segment.active { background: var(--card); color: var(--foreground); border-color: var(--border); }
+  .input-group { display: flex; align-items: center; min-height: 32px; border: 1px solid var(--input); border-radius: var(--radius); background: var(--popover); padding: 0 10px; gap: 6px; }
+  .input-group input { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--foreground); outline: 0; }
+  .input-group span { color: var(--muted-foreground); font-size: 11px; }
+  .splitter-demo { display: grid; grid-template-columns: 150px 4px 1fr; height: 112px; border: 1px solid var(--border); overflow: hidden; }
+  .splitter-side { padding: 10px; background: var(--card); }
+  .splitter-handle { background: var(--border); }
+  .splitter-main { padding: 10px; }
+  .toast { padding: 9px 12px; background: var(--popover); border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: var(--radius-lg); }
+  .skeleton { width: 160px; height: 16px; background: var(--muted); border-radius: var(--radius); }
+  .data-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); }
+  .data-table th, .data-table td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border); }
+  .data-table th { background: var(--secondary); }
+  .drop-zone { padding: 18px; text-align: center; color: var(--muted-foreground); background: var(--card); border: 1px dashed var(--input); border-radius: var(--radius-lg); }
+  @media (max-width: 760px) { .extended-grid { grid-template-columns: 1fr; } .wrap { padding: 14px; } }
 
   /* ---- Icons ---- */
   .icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
@@ -208,13 +203,13 @@
 <body>
   <div class="topbar">
     <h1>批图王 · 组件库可视化预览</h1>
-    <button class="theme-toggle" onclick="document.body.classList.toggle('light')">切换暗 / 亮主题</button>
+    <span class="skin-status">dark workspace</span>
   </div>
 
   <div class="wrap">
     <div class="intro">
       <h2>shadcn/ui 风格设计系统</h2>
-      <p>本页是组件库的静态可视化预览，色值与 token 严格对齐 <code>app/ui/theme/tokens.py</code>。点击右上角按钮可切换暗 / 亮主题，实时核对双主题一致性。</p>
+      <p>本页是深色工作台的静态设计评审稿，色值与 <code>app/ui/theme/tokens.py</code> 对齐。后续皮肤通过 <code>Theme.register_skin()</code> 注册，不修改业务窗口。</p>
     </div>
 
     <!-- Buttons -->
@@ -286,6 +281,42 @@
       </div>
     </div>
 
+    <!-- Extended native components -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Native Extensions 原生扩展</div><div class="sec-desc">组合表单、分段控件、可调分栏、弹层、加载、表格和文件拖放</div></div>
+      <div class="extended-grid">
+        <div class="demo-block">
+          <div class="demo-title">SegmentedControl / ToggleGroup</div>
+          <div class="demo-desc">互斥模式使用分段控件，独立工具状态使用 ToggleGroup。</div>
+          <div class="segmented"><button class="segment active">移动</button><button class="segment">缩放</button><button class="segment">裁剪</button></div>
+        </div>
+        <div class="demo-block">
+          <div class="demo-title">InputGroup / Field</div>
+          <div class="demo-desc">前后缀与输入框共享一个边界；错误态必须配文字原因。</div>
+          <div class="input-group"><span>名称</span><input value="poster-001"/><span>.png</span></div>
+        </div>
+        <div class="demo-block">
+          <div class="demo-title">Sidebar / Resizable / Accordion</div>
+          <div class="splitter-demo"><div class="splitter-side">图层<br/>预设<br/>属性</div><div class="splitter-handle"></div><div class="splitter-main"><strong>基础设置</strong><p class="demo-desc">尺寸、位置、不透明度</p><hr style="border:0;border-top:1px solid var(--border)"/><strong>高级设置</strong></div></div>
+        </div>
+        <div class="demo-block">
+          <div class="demo-title">Toast / Spinner / Skeleton</div>
+          <div class="toast">导出任务已完成</div>
+          <div class="skeleton"></div>
+          <div class="demo-desc">异步状态不改变周围布局尺寸。</div>
+        </div>
+        <div class="demo-block">
+          <div class="demo-title">Table</div>
+          <table class="data-table"><thead><tr><th>文件</th><th>格式</th><th>状态</th></tr></thead><tbody><tr><td>poster-001.png</td><td>PNG</td><td style="color:var(--success)">成功</td></tr><tr><td>poster-002.jpg</td><td>JPG</td><td style="color:var(--warning)">等待</td></tr></tbody></table>
+        </div>
+        <div class="demo-block">
+          <div class="demo-title">FileDropZone / EmptyState</div>
+          <div class="drop-zone">拖放 PNG、JPG 或 WEBP 文件到这里</div>
+          <div class="demo-desc">组件只筛选并发出文件路径，不处理图层业务。</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Feedback -->
     <div class="section">
       <div class="sec-head"><div class="sec-title">Feedback 反馈组件</div><div class="sec-desc">Badge / Alert / Separator / ProgressBar</div></div>
@@ -318,7 +349,7 @@
 
     <!-- Icons -->
     <div class="section">
-      <div class="sec-head"><div class="sec-title">Icons 图标</div><div class="sec-desc">iOS / SF Symbols 线性风格内嵌 SVG（细线宽、几何对称、圆角柔和），颜色取自主题令牌，主题切换实时生效；封装于 app/ui/components/icon</div></div>
+      <div class="sec-head"><div class="sec-title">Icons 图标</div><div class="sec-desc">线性风格内嵌 SVG，颜色取自主题令牌；重新应用已注册皮肤时自动刷新</div></div>
       <div class="icon-colors">
         <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--foreground)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">foreground</div></div>
         <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--primary)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">primary</div></div>

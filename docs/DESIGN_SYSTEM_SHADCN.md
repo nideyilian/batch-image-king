@@ -1,274 +1,291 @@
-# 批图王设计系统（shadcn/ui 规范）
+# 批图王深色工作台设计系统
 
-> 本文档定义批图王（PySide6 桌面端）的**统一设计规范与组件库**。设计语言对齐
-> [shadcn/ui](https://ui.shadcn.com) 的默认规范（zinc 中性色 + 蓝色 primary），令牌命名与语义
-> 与其保持一致，便于团队理解、降低认知成本。
->
-> 相关文档：`docs/UI设计规范.md`（既有交互/布局细则，本文档在其之上把「令牌与组件」规范化）。
+> 适用范围：PySide6 桌面端主窗口、停靠面板、属性面板、弹窗、菜单、状态反馈和开发工具。
 
----
+## 1. 设计目标
 
-## 1. 架构与单一事实来源
+批图王采用安静、紧凑、适合长时间工作的深色工作台。设计语言参考 shadcn/ui 的语义令牌、组件变体和可访问状态，但所有实现均为 Qt 原生控件，不引入 React、Tailwind 或 WebView。
 
+本阶段只交付 `dark` 皮肤。后续皮肤通过注册语义令牌扩展，不修改业务窗口。
+
+核心原则：
+
+1. 业务代码表达语义，不表达具体颜色。
+2. 全局 QSS 负责一致的基础状态，公共组件负责稳定 API。
+3. 图像内容色、用户选择色和导出色值不属于界面主题色。
+4. 历史窗口可由语义适配器覆盖，新代码必须显式使用公共组件或动态属性。
+5. 深色工作台不等于单一色相；中性色、蓝色主操作、绿/橙/红状态色必须职责分明。
+
+## 2. 架构
+
+```text
+app/ui/design_tokens.py
+        |
+        v
+app/ui/theme/tokens.py        语义令牌、皮肤注册表
+        |
+        +--> provider.py      QPalette + 全局 QSS
+        +--> polisher.py      历史 Qt 控件语义适配
+        |
+        v
+app/ui/components/*           公共组件
+        |
+        v
+主窗口 / 面板 / 弹窗 / Showcase
 ```
-app/ui/design_tokens.py    运行期真值（画布色、控件尺寸）—— 暗色调色板由它派生
-app/ui/theme/tokens.py     shadcn/ui 语义令牌（背景/前景/主色/…）、间距、圆角、字体、图表色、暗/亮双主题
-app/ui/theme/provider.py   由令牌生成全局 QSS（按钮变体/尺寸、卡片、输入、徽章、警示、分割线、进度条、抽屉）
-app/ui/dark_theme.py        既有基础样式（画布色、滚动条、复选/滑块/标签页），末尾叠加 provider 的 shadcn 层
-app/ui/components/          可复用组件库（见第 4 节）
-```
 
-- **令牌是唯一的颜色/尺寸真值**。`design_tokens.py` 仍是画布绘制的权威；`theme/tokens.py` 的暗色令牌
-  直接复用它，因此两套不漂移。
-- **所有界面自动继承**：`dark_theme.py` 在 `get_complete_style()` 末尾追加 `build_global_stylesheet()`，
-  全局 QSS 经 `QApplication.setStyleSheet` 应用后，每个窗口/对话框无需逐个设置样式即可获得 shadcn 外观。
-- **零侵入**：shadcn 层全部以「属性选择器 / 角色（role）」作用，仅影响主动设置 `variant/size/role` 的控件，
-  历史对话框既有的 `variant="primary/secondary/ghost"` 按钮与现有样式完全兼容，不会被破坏。
+兼容入口：
 
----
+- `CursorDarkTheme.apply_to_application(app)`：应用默认深色主题并安装语义适配器。
+- `DialogA2`：仅保留布局常量、属性标记和兼容方法，颜色来自 `Theme`。
+- `app/ui/ui_primitives.py`：历史反馈组件，新增代码优先使用 `app.ui.components`。
 
-## 2. 设计令牌（Design Tokens）
+## 3. 皮肤契约
 
-通过 `from app.ui.theme import Theme` 访问，**禁止在业务代码写死色值**。
-
-### 2.1 语义颜色（Semantic Colors）
-
-| 令牌 | 含义 | 暗色值 | 亮色值 |
-|---|---|---|---|
-| `background` | 主背景 / 面板 | `#181818` | `#FFFFFF` |
-| `foreground` | 主文本 | `#F4F4F5` | `#09090B` |
-| `card` | 卡片 / 分组面 | `#1F1F1F` | `#FFFFFF` |
-| `card-foreground` | 卡片内文本 | `#F4F4F5` | `#09090B` |
-| `popover` | 弹层 / 下拉 | `#151515` | `#FFFFFF` |
-| `primary` | 品牌主色（蓝） | `#2F9CF4` | `#2F9CF4` |
-| `primary-foreground` | 主色上的文本 | `#FFFFFF` | `#FFFFFF` |
-| `secondary` | 次级面 | `#2A2A2A` | `#F4F4F5` |
-| `secondary-foreground` | 次级面文本 | `#F4F4F5` | `#09090B` |
-| `muted` | 弱化面 | `#2A2A2A` | `#F4F4F5` |
-| `muted-foreground` | 次要文本 | `#8E8E93` | `#71717A` |
-| `accent` | hover / 选中面 | `#242B33` | `#F4F4F5` |
-| `accent-foreground` | 选中面文本 | `#F4F4F5` | `#09090B` |
-| `destructive` | 破坏性操作 | `#FF453A` | `#EF4444` |
-| `destructive-foreground` | 破坏性文本 | `#FFFFFF` | `#FAFAFA` |
-| `border` | 卡片 / 面板描边 | `#303033` | `#E4E4E7` |
-| `input` | 输入框 / 按钮描边 | `#3A3A3D` | `#E4E4E7` |
-| `ring` | 焦点环 | `#2F9CF4` | `#2F9CF4` |
-| `success` / `warning` / `info` | 状态色 | `#30D158` / `#FF8A3D` / `#55B2FF` | 对应亮色 |
-
-辅助令牌：`primary-hover`(`#55B2FF`)、`primary-pressed`(`#1F7EC8`)、`hover`(`#303236`)。
-
-### 2.2 间距（Spacing，px）
-
-`Theme.spacing(key)`：`xs=4` `sm=8` `md=12` `lg=16` `xl=20` `2xl=24` `3xl=32`
-
-### 2.3 圆角（Radius，px）
-
-`Theme.radius(key)`：`sm=4` `md=6` `lg=8` `xl=12`；基础 `--radius=5`。
-
-### 2.4 字体（Typography）
-
-- 字体族：`Segoe UI, -apple-system, sans-serif`（Windows 下呈现 Segoe UI）
-- 字号：`xs=10` `sm=11` `base/md=13` `lg=15` `xl=18` `title=13` `2xl=22`
-- 字重：`regular=400` `medium=600` `bold=700`
-- 取用：`Theme.font_size("base")` / `Theme.font_weight("medium")`
-
-### 2.5 布局 / 控件尺寸
-
-`Theme.layout("control_height")=30`、`icon_button=36`、`switch_w=52`、`switch_h=30`、
-`indicator=16`、`label_width=58`、`motion_ms=150`、`section_gap=8`、`row_gap=6`、`panel_margin=8`。
-
-### 2.6 图表色（Chart Colors）
-
-`Theme.chart_color(i)` 循环取 8 色（蓝/绿/橙/红/灰/浅蓝/紫/黄），用于批量导出报告、统计可视化。
-
-### 2.7 暗 / 亮双主题
+### 3.1 默认皮肤
 
 ```python
 from app.ui.theme import Theme
-Theme.set_mode("dark")     # 默认
-Theme.toggle_mode()        # 暗 <-> 亮
-# 切换后需重新应用样式：
-from app.ui.theme import apply_theme
-apply_theme(app)           # 重新生成全局 QSS + Palette
+
+Theme.skin()               # "dark"
+Theme.available_skins()    # 已注册皮肤
+Theme.color("primary")
 ```
 
----
+`Theme.mode()` 和 `Theme.set_mode()` 是历史兼容别名。新增代码使用 `skin()` 和 `set_skin()`。
 
-## 3. 全局样式如何覆盖所有界面
-
-`main.py` 在启动时调用 `CursorDarkTheme().apply_to_application(app)`。该函数内部：
-
-1. 生成既有基础 QSS（`design_tokens` 派生）；
-2. **追加** `build_global_stylesheet()`（shadcn 层）；
-3. 应用 `QPalette` 与 Fusion 风格。
-
-因此任何新窗口/对话框只要使用 `QWidget` 体系，即自动获得统一字体、输入框外观、
-焦点环、以及「设置了 `variant/role` 的组件」的 shadcn 视觉——**无需逐界面写样式**。
-
----
-
-## 4. 组件库（app/ui/components）
-
-统一从 `from app.ui.components import ...` 取件。所有视觉由全局 QSS 驱动，组件本身只设置语义属性。
-
-### 4.1 Button（按钮）
-
-变体 `variant`：`default`(主色) / `secondary` / `outline` / `ghost` / `destructive` / `link`
-尺寸 `size`：`sm` / `default` / `lg` / `icon`
+### 3.2 注册新皮肤
 
 ```python
-from app.ui.components import Button, button
+from app.ui.theme import Theme, apply_theme
 
-ok = Button("确定", variant="default")                 # 或 button("确定", variant="default")
-cancel = Button("取消", variant="ghost")
-del = Button("删除", variant="destructive")
-icon = Button("", variant="ghost", size="icon", icon=QIcon(...))
+colors = Theme.colors()
+colors.update({
+    "background": "#101214",
+    "card": "#171A1D",
+    "primary": "#37A5FF",
+})
+
+Theme.register_skin("graphite", colors)
+Theme.set_skin("graphite")
+apply_theme(app)
 ```
 
-**既有对话框迁移**：原 `QPushButton(text); btn.setProperty("variant","ghost")` 可直接替换为
-`Button(text, variant="ghost")`，行为完全一致。
+注册数据会被复制，外部字典后续修改不会污染主题。缺少必需语义色时注册会失败；切换未知皮肤会抛出 `KeyError`，避免界面静默进入混合状态。
 
-### 4.2 Card（卡片）
+### 3.3 必需语义色
+
+| 类别 | 令牌 |
+| --- | --- |
+| 基础表面 | `background`、`card`、`popover` |
+| 文本 | `foreground`、`card-foreground`、`popover-foreground` |
+| 操作 | `primary`、`primary-hover`、`primary-pressed`、`primary-foreground` |
+| 次级表面 | `secondary`、`muted`、`accent` 及对应 foreground |
+| 边界 | `border`、`input`、`ring`、`hover` |
+| 状态 | `destructive`、`success`、`warning`、`info` |
+
+## 4. 结构令牌
+
+### 4.1 间距
+
+| 名称 | 像素 | 用途 |
+| --- | ---: | --- |
+| `xs` | 4 | 图标与短标签 |
+| `sm` | 8 | 紧凑控件间距 |
+| `md` | 12 | 默认内容间距 |
+| `lg` | 16 | 区块内边距 |
+| `xl` | 20 | 大区块间距 |
+| `2xl` | 24 | 页面级留白 |
+| `3xl` | 32 | 稀疏展示页 |
+
+属性面板优先使用 `xs/sm/md`；业务工作台不得使用营销页式大留白。
+
+### 4.2 圆角与尺寸
+
+| 令牌 | 值 |
+| --- | ---: |
+| `radius.sm` | 4 px |
+| `radius.md` | 6 px |
+| `radius.lg` | 8 px |
+| 默认控件高度 | 30 px |
+| 大控件高度 | 36 px |
+| 图标按钮 | 36 x 36 px |
+
+卡片圆角不得超过 8 px；徽章和状态点可使用胶囊圆角。
+
+### 4.3 排版
+
+- 正文：13 px，常规字重。
+- 辅助文字：10-11 px，仅用于状态、脚注和字段说明。
+- 紧凑面板标题：13-15 px，中等或粗体。
+- Showcase 一级标题：22 px；不得用于业务面板。
+- 字体优先使用 Segoe UI / Microsoft YaHei 系统回退。
+- 字距固定为 0，不随窗口宽度缩放字体。
+
+## 5. 组件清单
+
+组件从 `app.ui.components` 导入。包当前公开 72 个类、工厂、常量和兼容别名。
+
+### 5.1 操作
+
+| 组件 | Qt 基础 | 用途 |
+| --- | --- | --- |
+| `Button` | `QPushButton` | 明确命令 |
+| `IconButton` | `QPushButton` | 熟悉图标工具，必须有 tooltip |
+| `ButtonGroup` | `QFrame` | 相邻命令集合 |
+| `Toggle` | `QToolButton` | 单个可保持状态的工具 |
+| `ToggleGroup` | `QButtonGroup` | 多个工具状态 |
+| `SegmentedControl` | `QButtonGroup` | 互斥模式 |
+| `Kbd` | `QLabel` | 快捷键展示 |
+
+Button 变体：
+
+- `default`：当前上下文的唯一主操作。
+- `secondary`：普通次级操作。
+- `outline`：取消、返回或低强调命令。
+- `ghost`：工具栏、行内图标操作。
+- `destructive`：删除、覆盖、取消正在执行的任务。
+- `link`：跳转或文档链接。
+
+`primary` 是历史别名，新增代码使用 `default`。
+
+按钮尺寸通过 `uiSize` 动态属性实现：`sm/default/lg/icon`。不要使用 `size`，它与 Qt 内建 `QWidget.size` 冲突。
+
+### 5.2 表单
+
+`Input`、`Textarea`、`NumberInput`、`Select`、`ComboBox`、`MultiSelect`、`Checkbox`、`RadioGroup`、`Switch`、`Slider`、`Field`、`InputGroup`、`ColorSwatch`。
+
+规则：
+
+- 二元功能开关使用 `Switch`；多项独立选择使用 `Checkbox`。
+- 互斥的 2-4 个模式优先使用 `SegmentedControl`；长选项使用 `RadioGroup`。
+- 数字值使用 `NumberInput`/SpinBox，不用文本框模拟。
+- `Field.set_error()` 同时展示错误文案并设置 `invalid` 状态。
+- 颜色选择入口显示真实色样；色值属于用户内容，可以动态绘制。
+
+### 5.3 布局
+
+`Card`、`Tabs`、`Accordion`、`ScrollArea`、`Resizable`、`Sidebar`、`Separator`、`AspectRatio`、`Sheet`。
+
+- 工作台主区域使用 `Resizable/QSplitter`，允许用户调整面板宽度。
+- 属性分组使用 Accordion/Collapsible；默认只展开当前高频区块。
+- 页面区段保持无框；Card 只用于确实需要边界的独立对象。
+- 禁止 Card 内再放装饰性 Card。
+
+### 5.4 弹层与菜单
+
+`Dialog`、`AlertDialog`、`Popover`、`DropdownMenu`、`ContextMenu`、`CommandPalette`。
+
+- 不可逆操作使用 `AlertDialog`。
+- 小型上下文设置使用 `Popover`，复杂设置使用 `Dialog` 或侧边 `Sheet`。
+- 菜单和命令面板必须保留 Qt 原生键盘导航。
+- 不用弹窗展示普通成功结果；使用 Toast 或状态栏。
+
+### 5.5 反馈与数据
+
+`Badge`、`Alert`、`Toast`、`ProgressBar`、`Spinner`、`Skeleton`、`EmptyState`、`Table`、`FileDropZone`。
+
+- `Toast`：非阻塞、短暂结果。
+- `Alert`：需要留在当前上下文中的说明或错误。
+- `Spinner/Skeleton`：未知时长或内容加载。
+- `ProgressBar`：已知完成比例。
+- `EmptyState`：标题、原因和最多一个主操作。
+- `FileDropZone`：只筛选和发出文件路径，不处理图层业务。
+
+## 6. 状态规范
+
+所有交互组件必须覆盖：
+
+| 状态 | 要求 |
+| --- | --- |
+| normal | 对比清楚，不抢夺画布注意力 |
+| hover | 表面或边界发生变化，不改变布局尺寸 |
+| pressed | 比 hover 更明确 |
+| focus | 可见 `ring` 边界，支持键盘导航 |
+| disabled | 文本和表面弱化，仍可辨认用途 |
+| invalid | 使用 destructive 边界并提供文字原因 |
+| loading | 禁止重复提交，显示 Spinner/Progress |
+
+状态色不能单独承担含义。错误、警告和成功必须同时有文字、图标或上下文标签。
+
+## 7. 语义适配器
+
+`app/ui/theme/polisher.py` 在历史控件首次显示时补齐：
+
+- `QDialog -> role=dialog`
+- 默认确认按钮 -> `variant=default`
+- 取消按钮 -> `variant=outline`
+- 破坏性按钮 -> `variant=destructive`
+- 普通按钮 -> `variant=secondary`
+- 工具按钮 -> `variant=ghost`
+- `QProgressBar -> role=progress`
+- `QGroupBox -> role=section`
+- `QTabWidget -> role=tabs`
+
+显式设置的属性优先，适配器不会覆盖。适配器是迁移保障，不是新增界面继续直接使用裸控件的理由。
+
+## 8. 可访问性
+
+- 图标按钮必须设置 `toolTip` 和 `accessibleName`。
+- 表单标签必须紧邻或关联控件。
+- 默认按钮每个 Dialog 最多一个。
+- Tab 顺序应与视觉阅读顺序一致。
+- 焦点态不得被局部 QSS 删除。
+- 文本与背景以 WCAG AA 对比度为目标。
+- 最长中文标签和 125%/150% Windows 缩放下不得截断或重叠。
+
+## 9. 使用示例
 
 ```python
-from app.ui.components import Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter
+from app.ui.components import Button, Field, Input, SegmentedControl
 
-card = Card()
-card.add_widget(CardHeader().add_widget(CardTitle("导出设置"))
-                             .add_widget(CardDescription("配置批量导出的尺寸与格式")))
-card.add_widget(CardContent().add_widget(some_widget))
-card.add_widget(CardFooter().add_widget(Button("应用", variant="default")))
+name_field = Field("文档名称", Input(placeholder="未命名文档"))
+mode = SegmentedControl(items=[("fit", "适应"), ("fill", "填充")])
+
+cancel = Button("取消", variant="outline")
+save = Button("保存", variant="default")
+delete = Button("删除", variant="destructive")
 ```
 
-### 4.3 Input / Label
-
-所有 `QLineEdit / QSpinBox / QDoubleSpinBox / QComboBox / QTextEdit` 已由全局 QSS 统一外观。
-提供语义化辅助：
+动态属性迁移：
 
 ```python
-from app.ui.components import Input, Label, field, form_layout
-
-name = Input(placeholder="未命名文档")
-lbl = Label("文档名称")                 # role=label（加粗、小号）
-muted = Label("可选", muted=True)       # role=muted（弱化）
-row = field("宽度", spin_box)           # 「标签 + 控件」单行布局
-fl = form_layout()                      # 统一间距的表单布局
+legacy_button.setProperty("variant", "secondary")
+progress_bar.setProperty("role", "progress")
+hint_label.setProperty("role", "muted")
 ```
 
-### 4.4 Tabs / Select
+## 10. 禁止事项
 
-```python
-from app.ui.components import Tabs, Select
-tabs = Tabs(); tabs.add_tab(widget, "基础")
-sel = Select(items=["PNG", "JPG", "WEBP"])
-```
+- 不在业务文件写固定界面色，如 `color: #8E8E93`。
+- 不创建第四套主题或弹窗 QSS。
+- 不用绿色普通按钮代替主操作语义。
+- 不用 Checkbox 表示应当即时生效的开关。
+- 不为工具栏熟悉图标额外添加文字胶囊按钮。
+- 不把 Web 组件包安装进 Python 桌面运行时。
+- 不为了统一视觉改变信号连接、模型状态或导出行为。
 
-### 4.5 基础控件（Controls）
+## 11. 上游筛选说明
 
-```python
-from app.ui.components import Checkbox, RadioButton, Slider, Switch
+参考项目：[awesome-shadcn-ui](https://github.com/birobirobiro/awesome-shadcn-ui)。
 
-cb = Checkbox("启用随机位置")
-rb = RadioButton("居中")
-sl = Slider()                       # 滑块外观由 dark_theme 统一
-sw = Switch()                       # 全程序统一开关（复用 PropertySwitch / A2Switch）
-sw.set_checked(True)
-```
+采用的是适合桌面图像工具的交互模式，而不是源码依赖。Avatar、Calendar、Carousel、Breadcrumb、Pagination、OTP、Marquee、NavigationMenu 等组件在当前程序没有明确工作流，不进入运行时组件库。若未来出现真实需求，应先补用户流程和状态设计，再增加组件。
 
-> 开关**必须**用 `Switch`（即现有 `A2Switch` 风格），禁止用原生 `QCheckBox` 当开关，保证全程序同源。
-
-### 4.6 反馈类（Feedback）
-
-```python
-from app.ui.components import Badge, Alert, Separator, ProgressBar
-
-Badge("NEW", variant="primary")
-Badge("已废弃", variant="outline")
-Alert("无法导出", "磁盘空间不足，请清理后重试", variant="destructive")
-Alert("已保存", "预设已写入本地", variant="success")
-Separator()                                    # 水平分割线
-Separator(Qt.Vertical)                         # 垂直分割线
-prog = ProgressBar(); prog.set_progress(40)    # 圆角进度条
-```
-
-### 4.7 Dialog / Sheet
-
-```python
-from app.ui.components import Dialog, Sheet, Button
-
-class MyDialog(Dialog):
-    def __init__(self, parent):
-        super().__init__(parent, title="设置")
-        ...
-        self.layout().addWidget(self.button_row([
-            Button("取消", variant="ghost"),
-            Button("确定", variant="default"),
-        ]))
-
-panel = Sheet()    # 右侧抽屉容器（role=sheet）
-```
-
----
-
-## 5. 使用准则（Do / Don't）
-
-**Do**
-- 新界面一律从 `app.ui.components` 取件，颜色/尺寸只经 `Theme` 取值。
-- 主操作用 `variant="default"`，次要操作用 `ghost`/`secondary`，危险操作用 `destructive`。
-- 分组用 `Card`，状态提示用 `Alert`/`Badge`，分隔用 `Separator`。
-
-**Don't**
-- 不要在业务代码写死十六进制色值或像素尺寸（破坏令牌体系）。
-- 不要新建第三套 QSS / 样式表；全局样式已统一。
-- 不要用原生 `QCheckBox` 充当开关；用 `Switch`。
-- 不要在对话框里重新实现按钮/卡片样式，复用组件即可。
-
----
-
-## 6. 迁移清单（历史界面）
-
-1. 顶部加 `from app.ui.components import Button, Input, Card, ...`。
-2. `QPushButton(text)` + `setProperty("variant", x)` → `Button(text, variant=x)`。
-3. `QLineEdit()` → `Input(placeholder=...)`，行布局用 `field()`。
-4. 分组容器 `QFrame(role="section")` → `Card()`。
-5. 状态提示 `QMessageBox` 模态框 → `Alert` 行内提示（参考 new_canvas_dialog）。
-6. 运行 `python main.py` 验证外观与行为无回归。
-
-> 试点已落地：`app/ui/new_canvas_dialog.py` 已全面采用 `Button / Input / Card`。
-
-## 7. 可视化组件画廊（Showcase）
-
-为方便设计评审与组件验收，提供了可独立运行的可视化画廊，实时展示全部组件与令牌取值，
-并支持暗 / 亮主题一键切换。
-
-文件：`app/ui/showcase.py` —— `ComponentShowcase` 窗口类，含 `open_showcase(parent)` 工厂。
-
-### 运行方式
+## 12. 验证
 
 ```powershell
-# 方式一：独立预览（无需启动主程序）
-cd <项目根目录>
+# 公共组件与主题测试
+python -m pytest tests/test_theme_skin_registry.py `
+  tests/test_theme_polisher.py `
+  tests/test_ui_components_actions_forms.py `
+  tests/test_ui_components_layout_overlays.py `
+  tests/test_ui_components_feedback_data.py
+
+# 组件画廊
 python app/ui/showcase.py
 
-# 方式二：在程序内打开（可在主窗口菜单 / 快捷键中接入）
-from app.ui.showcase import open_showcase
-showcase = open_showcase(parent=self)   # 调用方需保活引用
+# 全量回归
+python -m pytest
 ```
 
-### 画廊内容
-
-| 区块 | 展示内容 |
-|------|----------|
-| Buttons | 6 变体 × 4 尺寸的完整矩阵，外加禁用态、图标按钮、链接样式 |
-| Card | `CardHeader / CardTitle / CardDescription / CardContent / CardFooter` 结构示例 |
-| Inputs & Forms | `Input / Select / Label / field()` 表单行 |
-| Controls | `Checkbox / RadioButton / Slider / Switch`（统一开关） |
-| Feedback | `Badge`(6 变体) / `Alert`(5 变体) / `Separator` / `ProgressBar` |
-| Tabs | `Tabs` 多页签容器 |
-| Icons | 基于 lucide 风格内嵌 SVG 的 `IconLabel / Icon / icon`，颜色取自主题令牌，主题切换自动重绘；并展示全部 41 个内置图标与 5 种令牌配色 |
-| Typography | `Heading(H1/H2/H3) / Text / Lead / Muted / Small / Code / Blockquote / Kbd`，由全局 QSS 的 role 驱动 |
-| Colors | 语义令牌色板 + 8 色图表配色，随主题实时刷新 |
-
-顶部工具条提供「切换到亮色 / 暗色」按钮，点击后整个画廊（含色板）立即换肤，
-用于验证令牌系统的双主题一致性。
-
+视觉验收至少覆盖 1280 x 800 和 900 x 700，检查深色背景、焦点、长文本、禁用态、空状态、进度状态和弹层层级。
