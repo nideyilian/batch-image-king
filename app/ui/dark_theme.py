@@ -20,6 +20,7 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtCore import Qt
 
 from app.ui.design_tokens import Tokens
+from app.ui.theme.provider import build_global_stylesheet
 
 
 class CursorDarkTheme:
@@ -323,4 +324,4 @@ class CursorDarkTheme:
             border-radius: 6px;
             padding: 5px 9px;
         }}
-        """
+        """ + "\n" + build_global_stylesheet()

@@ -12,8 +12,8 @@
 """
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QSpinBox,
-    QComboBox, QPushButton, QCheckBox, QDialogButtonBox, QFrame, QSizePolicy,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
+    QComboBox, QCheckBox, QDialogButtonBox, QFrame, QSizePolicy,
     QInputDialog, QWidget, QSpacerItem,
 )
 from PySide6.QtCore import Qt, QSize
@@ -23,6 +23,7 @@ from app.ui.canvas_preset_dialog import CanvasPresetManagerDialog
 from app.ui.design_tokens import Tokens
 from app.ui.icon_manager import IconManager
 from app.ui.ui_primitives import InlineAlert
+from app.ui.components import Button, Input
 from app.utils.canvas_preset_manager import CanvasPresetManager
 
 
@@ -155,8 +156,7 @@ class NewCanvasDialog(QDialog):
 
         name_label = QLabel("文档名称")
         name_label.setProperty("role", "fieldLabel")
-        self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("未命名文档")
+        self.name_edit = Input(placeholder="未命名文档")
         self.name_edit.setMinimumHeight(32)
         default_name = (default_settings or {}).get("document_name", "未命名文档")
         self.name_edit.setText(default_name)
@@ -206,9 +206,7 @@ class NewCanvasDialog(QDialog):
         ratio_row = QHBoxLayout()
         ratio_row.setSpacing(8)
         for label, (w, h) in (("16:9", (1920, 1080)), ("4:3", (1600, 1200)), ("1:1", (1080, 1080))):
-            btn = QPushButton(label)
-            btn.setMinimumHeight(32)
-            btn.setProperty("variant", "ghost")
+            btn = Button(label, variant="ghost", size="sm")
             btn.setToolTip(f"应用 {label} 比例（{w}×{h}）")
             btn.setAccessibleName(f"应用 {label} 比例")
             btn.clicked.connect(lambda _checked, w=w, h=h: self._apply_ratio(w, h))
@@ -223,19 +221,15 @@ class NewCanvasDialog(QDialog):
         # 预设操作
         preset_ops = QHBoxLayout()
         preset_ops.setSpacing(8)
-        manage_btn = QPushButton("管理预设")
+        manage_btn = Button("管理预设", variant="ghost", size="sm")
         manage_btn.setIcon(IconManager.get_icon("settings", 16, "secondary"))
         manage_btn.setIconSize(QSize(16, 16))
-        manage_btn.setMinimumHeight(32)
-        manage_btn.setProperty("variant", "ghost")
         manage_btn.setToolTip("管理画布预设")
         manage_btn.setAccessibleName("管理画布预设")
         manage_btn.clicked.connect(self._manage_presets)
-        save_btn = QPushButton("保存为预设…")
+        save_btn = Button("保存为预设…", variant="ghost", size="sm")
         save_btn.setIcon(IconManager.get_icon("plus", 16, "secondary"))
         save_btn.setIconSize(QSize(16, 16))
-        save_btn.setMinimumHeight(32)
-        save_btn.setProperty("variant", "ghost")
         save_btn.setToolTip("保存当前尺寸为预设")
         save_btn.setAccessibleName("保存为预设")
         save_btn.clicked.connect(self._save_preset)

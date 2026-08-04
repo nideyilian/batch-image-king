@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>批图王 · 组件库可视化预览 (shadcn/ui)</title>
+<style>
+  :root {
+    /* ---- 暗色主题令牌（与 app/ui/theme/tokens.py 一致）---- */
+    --background: #181818;
+    --foreground: #F4F4F5;
+    --card: #1F1F1F;
+    --card-foreground: #F4F4F5;
+    --popover: #151515;
+    --primary: #2F9CF4;
+    --primary-foreground: #FFFFFF;
+    --primary-hover: #55B2FF;
+    --primary-pressed: #1F7EC8;
+    --secondary: #2A2A2A;
+    --secondary-foreground: #F4F4F5;
+    --muted: #2A2A2A;
+    --muted-foreground: #8E8E93;
+    --accent: #242B33;
+    --accent-foreground: #F4F4F5;
+    --destructive: #FF453A;
+    --destructive-foreground: #FFFFFF;
+    --success: #30D158;
+    --warning: #FF8A3D;
+    --border: #303033;
+    --input: #3A3A3D;
+    --ring: #2F9CF4;
+    --radius: 6px;
+    --radius-lg: 8px;
+  }
+  body.light {
+    --background: #FFFFFF;
+    --foreground: #09090B;
+    --card: #FFFFFF;
+    --card-foreground: #09090B;
+    --popover: #FFFFFF;
+    --primary: #2F9CF4;
+    --primary-foreground: #FFFFFF;
+    --primary-hover: #1F7EC8;
+    --primary-pressed: #176BB0;
+    --secondary: #F4F4F5;
+    --secondary-foreground: #09090B;
+    --muted: #F4F4F5;
+    --muted-foreground: #71717A;
+    --accent: #F4F4F5;
+    --accent-foreground: #09090B;
+    --destructive: #EF4444;
+    --destructive-foreground: #FAFAFA;
+    --success: #16A34A;
+    --warning: #EA580C;
+    --border: #E4E4E7;
+    --input: #E4E4E7;
+    --ring: #2F9CF4;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0;
+    background: var(--background); color: var(--foreground);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei", sans-serif;
+    font-size: 13px; line-height: 1.5;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 24px; background: var(--card);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar h1 { font-size: 15px; font-weight: 700; margin: 0; flex: 1; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+  .intro { padding: 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+  .intro h2 { margin: 0 0 6px; font-size: 18px; }
+  .intro p { margin: 0; color: var(--muted-foreground); }
+
+  .section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+  .section > .sec-head { margin-bottom: 12px; }
+  .section .sec-title { font-size: 15px; font-weight: 700; }
+  .section .sec-desc { color: var(--muted-foreground); font-size: 11px; margin-top: 2px; }
+
+  /* ---- Button ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 36px; padding: 0 16px; border-radius: var(--radius);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px solid transparent; background: transparent; color: var(--foreground);
+    font-family: inherit; user-select: none; white-space: nowrap;
+  }
+  .btn:hover { opacity: .92; }
+  .btn:active { transform: translateY(1px); }
+  .btn.sm { height: 30px; padding: 0 12px; font-size: 11px; }
+  .btn.lg { height: 40px; padding: 0 22px; font-size: 15px; }
+  .btn.icon { width: 36px; height: 36px; padding: 0; }
+  .btn.default { background: var(--primary); color: var(--primary-foreground); }
+  .btn.default:hover { background: var(--primary-hover); }
+  .btn.secondary { background: var(--secondary); color: var(--secondary-foreground); border-color: var(--border); }
+  .btn.secondary:hover { background: var(--border); }
+  .btn.outline { border-color: var(--border); color: var(--foreground); }
+  .btn.outline:hover { background: var(--accent); color: var(--accent-foreground); }
+  .btn.ghost { color: var(--foreground); }
+  .btn.ghost:hover { background: var(--accent); color: var(--accent-foreground); }
+  .btn.destructive { background: var(--destructive); color: var(--destructive-foreground); }
+  .btn.link { background: transparent; color: var(--primary); text-decoration: underline; padding: 0 4px; height: auto; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  .grid { display: grid; grid-template-columns: 120px repeat(3, 1fr); gap: 12px; align-items: center; }
+  .grid .corner, .grid .colh, .grid .rowh { color: var(--muted-foreground); font-size: 11px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+  /* ---- Card ---- */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; max-width: 420px; }
+  .card .ct { font-size: 15px; font-weight: 700; }
+  .card .cd { color: var(--muted-foreground); font-size: 11px; margin: 4px 0 12px; }
+  .card .cbody { display: flex; flex-direction: column; gap: 10px; }
+  .card .cfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+  /* ---- Input / Form ---- */
+  input.fld, select.fld {
+    background: var(--popover); border: 1px solid var(--input); color: var(--foreground);
+    border-radius: var(--radius); padding: 4px 10px; min-height: 30px; font-size: 13px; font-family: inherit;
+  }
+  input.fld:focus, select.fld:focus { outline: none; border-color: var(--ring); }
+  .field-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .field-row label { width: 72px; text-align: right; font-weight: 600; font-size: 11px; color: var(--foreground); }
+
+  /* ---- Controls ---- */
+  .ctl-col { display: flex; flex-direction: column; gap: 8px; }
+  .chk { display: flex; align-items: center; gap: 8px; }
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider-sw { position: absolute; cursor: pointer; inset: 0; background: var(--input); border-radius: 9999px; transition: .15s; }
+  .slider-sw:before { content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+  .switch input:checked + .slider-sw { background: var(--primary); }
+  .switch input:checked + .slider-sw:before { transform: translateX(20px); }
+  .range { width: 220px; accent-color: var(--primary); }
+
+  /* ---- Badge ---- */
+  .badge { display: inline-flex; align-items: center; border-radius: 9999px; padding: 2px 10px; font-size: 10px; font-weight: 600; background: var(--secondary); color: var(--secondary-foreground); }
+  .badge.primary { background: var(--primary); color: var(--primary-foreground); }
+  .badge.destructive { background: var(--destructive); color: var(--destructive-foreground); }
+  .badge.success { background: var(--success); color: #fff; }
+  .badge.warning { background: var(--warning); color: #fff; }
+  .badge.outline { background: transparent; border: 1px solid var(--border); }
+
+  /* ---- Alert ---- */
+  .alert { border: 1px solid var(--border); border-left: 3px solid var(--muted-foreground); border-radius: var(--radius); padding: 12px 14px; background: var(--muted); margin-bottom: 10px; }
+  .alert .at { font-weight: 700; }
+  .alert .ad { color: var(--muted-foreground); font-size: 11px; }
+  .alert.destructive { border-left-color: var(--destructive); background: var(--destructive); color: var(--destructive-foreground); }
+  .alert.destructive .ad { color: rgba(255,255,255,.85); }
+  .alert.success { border-left-color: var(--success); }
+  .alert.warning { border-left-color: var(--warning); }
+  .alert.info { border-left-color: var(--primary-hover); }
+
+  /* ---- Separator / Progress ---- */
+  .sep { height: 1px; background: var(--border); margin: 14px 0; border: none; }
+  .progress { background: var(--muted); border-radius: 9999px; height: 8px; overflow: hidden; width: 240px; }
+  .progress > div { background: var(--primary); height: 100%; border-radius: 9999px; }
+
+  /* ---- Tabs ---- */
+  .tabs { border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; max-width: 420px; }
+  .tabbar { display: flex; border-bottom: 1px solid var(--border); background: var(--card); }
+  .tabbar .tab { padding: 8px 14px; font-size: 12px; cursor: pointer; color: var(--muted-foreground); border-bottom: 2px solid transparent; }
+  .tabbar .tab.active { color: var(--foreground); border-bottom-color: var(--primary); }
+  .tabbody { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* ---- Colors ---- */
+  .swatch-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .swatch { text-align: center; }
+  .swatch .chip { height: 44px; border-radius: 6px; border: 1px solid var(--border); }
+  .swatch .nm { font-size: 11px; margin-top: 4px; }
+  .swatch .vl { font-size: 10px; color: var(--muted-foreground); }
+  .chart-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .chart-dot { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); }
+
+  .theme-toggle { background: transparent; color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 12px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .theme-toggle:hover { background: var(--accent); }
+
+  /* ---- Icons ---- */
+  .icon-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
+  .icon-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .icon-cell svg { width: 22px; height: 22px; stroke: var(--foreground); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-cell .inm { font-size: 10px; color: var(--muted-foreground); }
+  .icon-colors { display: flex; gap: 24px; margin-bottom: 14px; flex-wrap: wrap; }
+  .icon-color { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .icon-color svg { width: 22px; height: 22px; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-color .inm { font-size: 10px; color: var(--muted-foreground); }
+
+  /* ---- Typography ---- */
+  .typo { display: flex; flex-direction: column; gap: 8px; }
+  .typo .h1 { font-size: 22px; font-weight: 700; color: var(--foreground); }
+  .typo .h2 { font-size: 18px; font-weight: 700; color: var(--foreground); }
+  .typo .h3 { font-size: 15px; font-weight: 500; color: var(--foreground); }
+  .typo .lead { font-size: 15px; color: var(--muted-foreground); }
+  .typo .text { color: var(--foreground); font-size: 13px; }
+  .typo .muted { color: var(--muted-foreground); font-size: 13px; }
+  .typo .small { color: var(--muted-foreground); font-size: 10px; }
+  .typo .code { background: var(--muted); color: var(--foreground); border-radius: 4px; padding: 2px 6px; font-family: "Cascadia Code","Consolas",monospace; font-size: 11px; align-self: flex-start; }
+  .typo .bq { border-left: 3px solid var(--border); color: var(--muted-foreground); padding: 2px 0 2px 12px; font-size: 13px; }
+  .typo .kbd { background: var(--secondary); color: var(--foreground); border: 1px solid var(--border); border-radius: 4px; padding: 1px 7px; font-family: "Cascadia Code","Consolas",monospace; font-size: 10px; }
+  .kbd-row { display: flex; gap: 6px; align-items: center; }
+  .kbd-row .lbl { color: var(--muted-foreground); font-size: 11px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>批图王 · 组件库可视化预览</h1>
+    <button class="theme-toggle" onclick="document.body.classList.toggle('light')">切换暗 / 亮主题</button>
+  </div>
+
+  <div class="wrap">
+    <div class="intro">
+      <h2>shadcn/ui 风格设计系统</h2>
+      <p>本页是组件库的静态可视化预览，色值与 token 严格对齐 <code>app/ui/theme/tokens.py</code>。点击右上角按钮可切换暗 / 亮主题，实时核对双主题一致性。</p>
+    </div>
+
+    <!-- Buttons -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Buttons 按钮</div><div class="sec-desc">变体：default / secondary / outline / ghost / destructive / link；尺寸：sm / default / lg / icon</div></div>
+      <div class="grid">
+        <div class="corner"></div><div class="colh">sm</div><div class="colh">default</div><div class="colh">lg</div>
+        <div class="rowh">default</div><button class="btn sm default">default</button><button class="btn default">default</button><button class="btn lg default">default</button>
+        <div class="rowh">secondary</div><button class="btn sm secondary">secondary</button><button class="btn secondary">secondary</button><button class="btn lg secondary">secondary</button>
+        <div class="rowh">outline</div><button class="btn sm outline">outline</button><button class="btn outline">outline</button><button class="btn lg outline">outline</button>
+        <div class="rowh">ghost</div><button class="btn sm ghost">ghost</button><button class="btn ghost">ghost</button><button class="btn lg ghost">ghost</button>
+        <div class="rowh">destructive</div><button class="btn sm destructive">destructive</button><button class="btn destructive">destructive</button><button class="btn lg destructive">destructive</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row">
+        <button class="btn default" disabled>已禁用</button>
+        <button class="btn icon secondary">⚙</button>
+        <button class="btn default">＋ 保存</button>
+        <button class="btn link">链接样式</button>
+      </div>
+    </div>
+
+    <!-- Card -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Card 卡片</div><div class="sec-desc">结构：Card &gt; CardHeader(CardTitle, CardDescription) + CardContent + CardFooter</div></div>
+      <div class="card">
+        <div class="ct">卡片标题 CardTitle</div>
+        <div class="cd">这是一段卡片描述文字 CardDescription。</div>
+        <div class="cbody">
+          <div style="color:var(--muted-foreground)">卡片正文区域，可放置任意控件。</div>
+          <input class="fld" placeholder="卡片内的输入示例" />
+        </div>
+        <div class="cfoot">
+          <button class="btn sm ghost">取消</button>
+          <button class="btn sm default">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inputs -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Inputs & Forms 输入与表单</div><div class="sec-desc">Input / Select / Label / field()</div></div>
+      <div class="field-row"><label>文档名称</label><input class="fld" placeholder="未命名文档" /></div>
+      <div class="field-row"><label>导出格式</label>
+        <select class="fld"><option>PNG</option><option>JPG</option><option>WEBP</option><option>TIFF</option></select>
+      </div>
+      <div class="field-row"><label>分辨率</label><input class="fld" placeholder="1920 × 1080" /></div>
+      <div class="field-row"><label>只读字段</label><input class="fld" placeholder="禁用态" disabled /></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Controls 基础控件</div><div class="sec-desc">Checkbox / RadioButton / Slider / Switch</div></div>
+      <div class="row">
+        <div class="ctl-col">
+          <div style="color:var(--muted-foreground);font-size:11px">选择类</div>
+          <label class="chk"><input type="checkbox" checked /> 启用随机图</label>
+          <label class="chk"><input type="checkbox" /> 启用随机文案</label>
+          <label class="chk"><input type="radio" name="r" checked /> 填充</label>
+          <label class="chk"><input type="radio" name="r" /> 适应</label>
+        </div>
+        <div class="ctl-col">
+          <div style="color:var(--muted-foreground);font-size:11px">滑块 / 开关</div>
+          <input class="range" type="range" min="0" max="100" value="60" />
+          <label class="chk"><span class="switch"><input type="checkbox" checked /><span class="slider-sw"></span></span> 描边</label>
+          <label class="chk"><span class="switch"><input type="checkbox" checked /><span class="slider-sw"></span></span> 圆角</label>
+          <label class="chk"><span class="switch"><input type="checkbox" /><span class="slider-sw"></span></span> 绑定</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Feedback 反馈组件</div><div class="sec-desc">Badge / Alert / Separator / ProgressBar</div></div>
+      <div class="row" style="margin-bottom:12px">
+        <span class="badge">default</span><span class="badge primary">primary</span>
+        <span class="badge destructive">destructive</span><span class="badge success">success</span>
+        <span class="badge warning">warning</span><span class="badge outline">outline</span>
+      </div>
+      <div class="alert"><div class="at">提示</div><div class="ad">这是默认提示信息。</div></div>
+      <div class="alert info"><div class="at">信息</div><div class="ad">这是一条信息提示。</div></div>
+      <div class="alert success"><div class="at">成功</div><div class="ad">操作已成功完成。</div></div>
+      <div class="alert warning"><div class="at">警告</div><div class="ad">请注意潜在的问题。</div></div>
+      <div class="alert destructive"><div class="at">错误</div><div class="ad">操作失败，请重试。</div></div>
+      <div class="sep"></div>
+      <div class="row"><div class="progress"><div style="width:65%"></div></div><span style="color:var(--muted-foreground)">65%</span></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Tabs 标签页</div><div class="sec-desc">基于 QTabWidget，外观由全局 QSS 驱动</div></div>
+      <div class="tabs">
+        <div class="tabbar"><div class="tab active">基础</div><div class="tab">高级</div><div class="tab">批量</div></div>
+        <div class="tabbody">
+          <div style="color:var(--muted-foreground)">基础 标签页内容</div>
+          <input class="fld" placeholder="基础 设置项" />
+          <button class="btn sm secondary" style="align-self:flex-start">应用基础</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Icons -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Icons 图标</div><div class="sec-desc">iOS / SF Symbols 线性风格内嵌 SVG（细线宽、几何对称、圆角柔和），颜色取自主题令牌，主题切换实时生效；封装于 app/ui/components/icon</div></div>
+      <div class="icon-colors">
+        <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--foreground)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">foreground</div></div>
+        <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--primary)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">primary</div></div>
+        <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--muted-foreground)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">muted</div></div>
+        <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--success)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">success</div></div>
+        <div class="icon-color"><svg viewBox="0 0 24 24" style="stroke:var(--destructive)"><path d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><div class="inm">destructive</div></div>
+      </div>
+      <div class="sep"></div>
+      <div class="icon-grid" id="iconGrid"></div>
+      <script>
+        const ICON_SVGS = {
+          success: "M5 12.5 10 17.5 19 7",
+          error: "M6 6 18 18M18 6 6 18",
+          info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 8.2h.02",
+          about: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 8.2h.02",
+          warning: "M12 4 3 20h18L12 4ZM12 9.5v5M12 17.2h.02",
+          visible: "M1.5 12S5 5.5 12 5.5 22.5 12 22.5 12 19 18.5 12 18.5 1.5 12 1.5 12ZM12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+          hidden: "M9.9 5.1A10 10 0 0 1 12 5c6.5 0 10.5 6.5 10.5 6.5a17 17 0 0 1-2.6 3.4M6.3 6.3A17 17 0 0 0 1.5 12S5 18.5 12 18.5a10 10 0 0 0 5.2-1.4M2 2l20 20",
+          lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 18 20H6a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 6 11ZM12 14.5v3",
+          unlock: "M7 11V8a5 5 0 0 1 9.8-1.5M6 11h12a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 18 20H6a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 6 11ZM12 14.5v3",
+          link: "M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5",
+          unlink: "M18.5 12.5 20 11a3.5 3.5 0 0 0-5-5l-1.5 1.5M5.5 11.5 4 13a3.5 3.5 0 0 0 5 5l1.5-1.5",
+          random: "M16 4h4v4M20 4 13 11M4 4l7 7M20 20l-7-7M4 20 20 4",
+          add: "M12 5v14M5 12h14",
+          remove: "M5 12h14",
+          edit: "M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z",
+          copy: "M9 9h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2ZM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+          paste: "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M15 2H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1Z",
+          undo: "M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13",
+          redo: "M21 7v6h-6M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13",
+          up: "M6 15 12 9 18 15",
+          down: "M6 9 12 15 18 9",
+          left: "M15 6 9 12 15 18",
+          right: "M9 6 15 12 9 18",
+          expand: "M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3",
+          collapse: "M21 9h-6V3M3 15h6v6M21 9l-6 6M3 15l6-6",
+          zoom_in: "M10.5 4.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12ZM21 21l-4.8-4.8M10.5 7.5v6M7.5 10.5h6",
+          zoom_out: "M10.5 4.5a6 6 0 1 1 0 12 6 6 0 0 1 0-12ZM21 21l-4.8-4.8M7.5 10.5h6",
+          fit: "M3 8V6a2 2 0 0 1 2-2h2M21 8V6a2 2 0 0 0-2-2h-2M3 16v2a2 2 0 0 0 2 2h2M21 16v2a2 2 0 0 1-2 2h-2",
+          folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z",
+          file: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5ZM14 3v5h5",
+          save: "M5 3h11l4 4v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 3v5h6V3M8 14h8v6H8Z",
+          open: "M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM14 2v6h6",
+          new: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8ZM14 2v6h6M12 11v7M8.5 14.5h7",
+          import: "M12 3v12M7 10l5 5 5-5M5 21h14a1 1 0 0 0 1-1V6",
+          export: "M12 15V3M7 8l5-5 5 5M5 21h14a1 1 0 0 0 1-1V6",
+          settings: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z",
+          tools: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z",
+          filter: "M3.5 5h17a1 1 0 0 1 .8 1.6L14 13.5V19l-4 2v-7.5L2.7 6.6A1 1 0 0 1 3.5 5Z",
+          sort: "M8 4v16M8 4 4 8M8 4l4 4M16 20V4M16 20l-4-4M16 20l4-4",
+          refresh: "M20 11a8 8 0 1 0-1.5 5M20 5v6h-6M4 13a8 8 0 1 0 1.5-5M4 19v-6h6",
+          help: "M9.5 9a2.5 2.5 0 0 1 4.8.9c0 1.7-2.3 2.6-2.3 2.6M12 17h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+        };
+        (function () {
+          const ig = document.getElementById('iconGrid');
+          Object.keys(ICON_SVGS).forEach(function (name) {
+            const c = document.createElement('div');
+            c.className = 'icon-cell';
+            c.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + ICON_SVGS[name] + '"/></svg><div class="inm">' + name + '</div>';
+            ig.appendChild(c);
+          });
+        })();
+      </script>
+    </div>
+
+    <!-- Typography -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Typography 排版</div><div class="sec-desc">Heading(H1/H2/H3) / Text / Lead / Muted / Small / Code / Blockquote / Kbd，由全局 QSS 的 role 驱动</div></div>
+      <div class="typo">
+        <div class="h1">一级标题 Heading 1</div>
+        <div class="h2">二级标题 Heading 2</div>
+        <div class="h3">三级标题 Heading 3</div>
+        <div class="lead">引导段落 Lead：用于页面或区块开头，字号更大、颜色更弱，引导用户阅读。</div>
+        <div class="text">正文 Text：常规阅读文本，使用前景色与基础字号，支持长段落自动换行，行高舒适。</div>
+        <div class="muted">次要文本 Muted：用于辅助说明、注释、字段备注等弱信息。</div>
+        <div class="small">小字 Small：用于极小的辅助信息，如脚注、版本号。</div>
+        <div class="code">pip install -r requirements.txt</div>
+        <div class="bq">引用 Blockquote：用于引用他人观点或文档摘录，左侧强调线，颜色更弱。</div>
+        <div class="kbd-row"><span class="lbl">快捷键示例：</span><span class="kbd">Ctrl</span><span class="kbd">Shift</span><span class="kbd">S</span></div>
+      </div>
+    </div>
+
+    <!-- Colors -->
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Colors 令牌色板</div><div class="sec-desc">实时反映当前主题下的 Theme 取值</div></div>
+      <div style="color:var(--muted-foreground);font-size:11px;margin-bottom:8px">语义令牌 Semantic Tokens</div>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="chip" style="background:var(--background)"></div><div class="nm">background</div><div class="vl">#181818</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--foreground)"></div><div class="nm">foreground</div><div class="vl">#F4F4F5</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--card)"></div><div class="nm">card</div><div class="vl">#1F1F1F</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--popover)"></div><div class="nm">popover</div><div class="vl">#151515</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--primary)"></div><div class="nm">primary</div><div class="vl">#2F9CF4</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--secondary)"></div><div class="nm">secondary</div><div class="vl">#2A2A2A</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--muted)"></div><div class="nm">muted</div><div class="vl">#2A2A2A</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--accent)"></div><div class="nm">accent</div><div class="vl">#242B33</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--destructive)"></div><div class="nm">destructive</div><div class="vl">#FF453A</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--border)"></div><div class="nm">border</div><div class="vl">#303033</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--input)"></div><div class="nm">input</div><div class="vl">#3A3A3D</div></div>
+        <div class="swatch"><div class="chip" style="background:var(--ring)"></div><div class="nm">ring</div><div class="vl">#2F9CF4</div></div>
+      </div>
+      <div class="sep"></div>
+      <div style="color:var(--muted-foreground);font-size:11px;margin-bottom:4px">图表配色 Chart Colors</div>
+      <div class="chart-row">
+        <div class="chart-dot" style="background:#2F9CF4"></div>
+        <div class="chart-dot" style="background:#30D158"></div>
+        <div class="chart-dot" style="background:#FF8A3D"></div>
+        <div class="chart-dot" style="background:#FF453A"></div>
+        <div class="chart-dot" style="background:#8E8E93"></div>
+        <div class="chart-dot" style="background:#55B2FF"></div>
+        <div class="chart-dot" style="background:#A855F7"></div>
+        <div class="chart-dot" style="background:#EAB308"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
