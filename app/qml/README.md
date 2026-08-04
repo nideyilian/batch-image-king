@@ -1,0 +1,19 @@
+# 批图王 QML 工作台
+
+这是批图王下一代 Qt Quick/QML 入口，已接入真实 `Document`、图层列表、预览渲染、保存加载、撤销重做和单图导出。现有 QWidget 主程序仍由根目录 `main.py` 启动，两个入口互不替换。
+
+![QML 工作台预览](preview.png)
+
+```powershell
+python app/qml/qml_main.py
+```
+
+生成验证截图：
+
+```powershell
+python app/qml/qml_main.py --screenshot qml-workbench.png
+```
+
+可使用 `--open project.cmp` 直接打开项目，或使用 `--blank` 启动空白文档。`--width` 和 `--height` 可指定截图尺寸。
+
+画布产品摄影来自 [Unsplash](https://images.unsplash.com/photo-1523275335684-37898b6baf30)，素材仅用于本地界面原型展示。

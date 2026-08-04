@@ -12,7 +12,7 @@ import pytest
 @pytest.mark.integration
 def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     repo_root = Path(__file__).resolve().parents[1]
-    launcher = repo_root / "prototypes" / "qml_workbench" / "main.py"
+    launcher = repo_root / "app" / "qml" / "qml_main.py"
     screenshot = tmp_path / "qml-workbench.png"
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"

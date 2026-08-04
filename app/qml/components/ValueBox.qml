@@ -4,8 +4,11 @@ Rectangle {
     id: root
 
     property alias text: input.text
+    property string value: ""
+    property bool bindValue: false
     property string suffix: ""
     property bool editable: true
+    signal valueCommitted(string value)
 
     implicitWidth: 94
     implicitHeight: Theme.controlHeight
@@ -34,6 +37,15 @@ Rectangle {
         selectByMouse: true
         verticalAlignment: TextInput.AlignVCenter
         clip: true
+        onEditingFinished: root.valueCommitted(text)
+    }
+
+    Binding {
+        target: input
+        property: "text"
+        value: root.value
+        when: root.bindValue && !input.activeFocus
+        restoreMode: Binding.RestoreBindingOrValue
     }
 
     Text {

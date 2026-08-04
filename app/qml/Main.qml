@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import "components"
 
@@ -11,16 +12,16 @@ ApplicationWindow {
     minimumWidth: 1180
     minimumHeight: 720
     visible: true
-    title: "批图王 · QML 工作台原型"
+    title: "批图王 · QML 工作台"
     color: Theme.bgApp
 
-    property int selectedLayer: 0
+    property int selectedLayer: workspace.selectedLayerIndex
     property int activeTool: 0
     property real zoomValue: 0.78
     property int inspectorTab: 0
     property bool randomTransformEnabled: true
     property string toastMessage: ""
-    property string activeLayerName: layerModel.get(selectedLayer).name
+    property string activeLayerName: workspace.selectedLayerName
 
     function showToast(message) {
         toastMessage = message
@@ -28,14 +29,43 @@ ApplicationWindow {
         toastTimer.restart()
     }
 
-    ListModel {
-        id: layerModel
-        ListElement { name: "限量腕表"; typeName: "文字"; glyph: "\uE8D2"; accent: "#46d7ad"; shown: true; locked: false }
-        ListElement { name: "曜石黑 · 2026"; typeName: "文字"; glyph: "\uE8D2"; accent: "#f7bd63"; shown: true; locked: false }
-        ListElement { name: "腕表主体"; typeName: "图片"; glyph: "\uEB9F"; accent: "#b9c4c0"; shown: true; locked: false }
-        ListElement { name: "柔光叠加"; typeName: "异形"; glyph: "\uF158"; accent: "#f1786d"; shown: true; locked: false }
-        ListElement { name: "产品底图"; typeName: "图片"; glyph: "\uEB9F"; accent: "#8e9894"; shown: true; locked: true }
-        ListElement { name: "画布背景"; typeName: "背景"; glyph: "\uE91B"; accent: "#d9d9d5"; shown: true; locked: true }
+    Connections {
+        target: workspace
+        function onToastRequested(message) { showToast(message) }
+    }
+
+    FileDialog {
+        id: openDialog
+        title: "打开批图王项目"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["批图王项目 (*.cmp)"]
+        onAccepted: workspace.openDocument(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: saveDialog
+        title: "保存批图王项目"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "cmp"
+        nameFilters: ["批图王项目 (*.cmp)"]
+        onAccepted: workspace.saveDocumentTo(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: exportDialog
+        title: "导出当前画面"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "png"
+        nameFilters: ["PNG 图片 (*.png)", "JPEG 图片 (*.jpg *.jpeg)", "WebP 图片 (*.webp)"]
+        onAccepted: workspace.exportImageTo(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: imageDialog
+        title: "添加图片图层"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
+        onAccepted: workspace.addImageLayer(selectedFile.toString())
     }
 
     component Divider: Rectangle {
@@ -233,11 +263,15 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
-                IconButton { glyph: "\uE8E5"; tooltip: "打开项目"; onClicked: showToast("打开项目") }
-                IconButton { glyph: "\uE74E"; tooltip: "保存"; onClicked: showToast("项目已保存") }
+                IconButton { glyph: "\uE8E5"; tooltip: "打开项目"; onClicked: openDialog.open() }
+                IconButton {
+                    glyph: "\uE74E"
+                    tooltip: "保存"
+                    onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
+                }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-                IconButton { glyph: "\uE7A7"; tooltip: "撤销"; onClicked: showToast("已撤销一步") }
-                IconButton { glyph: "\uE7A6"; tooltip: "重做"; onClicked: showToast("已重做一步") }
+                IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo; onClicked: workspace.undo() }
+                IconButton { glyph: "\uE7A6"; tooltip: "重做"; enabled: workspace.canRedo; onClicked: workspace.redo() }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
                 Rectangle {
@@ -253,11 +287,11 @@ ApplicationWindow {
                         AppIcon { glyph: "\uE91B"; iconSize: 14; iconColor: Theme.textPrimary; height: 20 }
                         BodyLabel { text: "添加图片"; color: Theme.textPrimary; height: 20 }
                     }
-                    MouseArea { id: addImageMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: showToast("添加图片图层") }
+                    MouseArea { id: addImageMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: imageDialog.open() }
                 }
 
-                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; onClicked: showToast("添加文字图层") }
-                IconButton { glyph: "\uF158"; tooltip: "添加异形"; onClicked: showToast("添加异形图层") }
+                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; onClicked: workspace.addTextLayer() }
+                IconButton { glyph: "\uF158"; tooltip: "添加异形（后续接入）"; enabled: false }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton { glyph: "\uE74B"; tooltip: "左对齐"; onClicked: showToast("左对齐") }
                 IconButton { glyph: "\uE74A"; tooltip: "水平居中"; onClicked: showToast("水平居中") }
@@ -276,7 +310,7 @@ ApplicationWindow {
                         AppIcon { glyph: "\uE71E"; iconSize: 14; height: 20 }
                         BodyLabel { text: "预览"; color: Theme.textPrimary; height: 20 }
                     }
-                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: showToast("正在生成高质量预览") }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: workspace.renderPreviewNow() }
                 }
 
                 Rectangle {
@@ -288,9 +322,9 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 8
                         AppIcon { glyph: "\uEDE1"; iconSize: 14; iconColor: "#09251d"; height: 20 }
-                        Text { text: "批量导出"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
+                        Text { text: "导出图像"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
                     }
-                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: showToast("已创建批量导出任务") }
+                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: exportDialog.open() }
                 }
             }
 
@@ -315,26 +349,13 @@ ApplicationWindow {
                     Row {
                         anchors.centerIn: parent
                         spacing: 8
-                        Rectangle { width: 6; height: 6; radius: 3; color: Theme.amber; anchors.verticalCenter: parent.verticalCenter }
-                        BodyLabel { text: "腕表新品主图.cmp"; color: Theme.textPrimary; height: 22 }
+                        Rectangle { width: 6; height: 6; radius: 3; color: Theme.amber; visible: workspace.isModified; anchors.verticalCenter: parent.verticalCenter }
+                        BodyLabel { text: workspace.documentTitle; color: Theme.textPrimary; height: 22 }
                         AppIcon { glyph: "\uE711"; iconSize: 10; height: 22 }
                     }
                 }
 
-                Rectangle {
-                    width: 192
-                    height: 36
-                    color: secondTabMouse.containsMouse ? Theme.bgRaised : "transparent"
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        BodyLabel { text: "夏季活动海报.cmp"; height: 22 }
-                        AppIcon { glyph: "\uE711"; iconSize: 10; height: 22 }
-                    }
-                    MouseArea { id: secondTabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: showToast("切换文档") }
-                }
-
-                IconButton { glyph: "\uE710"; tooltip: "新建文档"; buttonSize: 36; onClicked: showToast("新建文档") }
+                IconButton { glyph: "\uE710"; tooltip: "新建文档"; buttonSize: 36; onClicked: workspace.newDocument(1080, 1350) }
             }
 
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
@@ -408,7 +429,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                         }
                         IconButton { glyph: "\uE721"; tooltip: "筛选图层"; buttonSize: 28; onClicked: showToast("筛选图层") }
-                        IconButton { glyph: "\uE710"; tooltip: "新建图层"; buttonSize: 28; onClicked: showToast("新建图层") }
+                        IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; onClicked: imageDialog.open() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -480,10 +501,7 @@ ApplicationWindow {
                                 glyph: layerDelegate.shown ? "\uE890" : "\uED1A"
                                 tooltip: layerDelegate.shown ? "隐藏图层" : "显示图层"
                                 buttonSize: 28
-                                onClicked: {
-                                    layerModel.setProperty(layerDelegate.index, "shown", !layerDelegate.shown)
-                                    showToast(layerDelegate.shown ? "图层已隐藏" : "图层已显示")
-                                }
+                                onClicked: workspace.toggleLayerVisible(layerDelegate.index)
                             }
 
                             Rectangle {
@@ -524,7 +542,7 @@ ApplicationWindow {
                                 glyph: layerDelegate.locked ? "\uE72E" : "\uE785"
                                 tooltip: layerDelegate.locked ? "解锁图层" : "锁定图层"
                                 buttonSize: 28
-                                onClicked: layerModel.setProperty(layerDelegate.index, "locked", !layerDelegate.locked)
+                                onClicked: workspace.toggleLayerLocked(layerDelegate.index)
                             }
 
                             MouseArea {
@@ -534,7 +552,7 @@ ApplicationWindow {
                                 anchors.rightMargin: 38
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: selectedLayer = layerDelegate.index
+                                onClicked: workspace.selectLayer(layerDelegate.index)
                             }
 
                             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
@@ -549,10 +567,10 @@ ApplicationWindow {
                         Row {
                             anchors.centerIn: parent
                             spacing: 5
-                            IconButton { glyph: "\uE710"; tooltip: "新建图层"; buttonSize: 28; onClicked: showToast("新建图层") }
-                            IconButton { glyph: "\uE8B0"; tooltip: "创建分组"; buttonSize: 28; onClicked: showToast("创建图层组") }
-                            IconButton { glyph: "\uE8C8"; tooltip: "复制图层"; buttonSize: 28; onClicked: showToast("已复制图层") }
-                            IconButton { glyph: "\uE74D"; tooltip: "删除图层"; buttonSize: 28; onClicked: showToast("删除需要二次确认") }
+                            IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; onClicked: imageDialog.open() }
+                            IconButton { glyph: "\uE8B0"; tooltip: "创建分组（后续接入）"; buttonSize: 28; enabled: false }
+                            IconButton { glyph: "\uE8C8"; tooltip: "复制图层（后续接入）"; buttonSize: 28; enabled: false }
+                            IconButton { glyph: "\uE74D"; tooltip: "删除图层"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: workspace.deleteSelectedLayer() }
                         }
                     }
                 }
@@ -561,14 +579,19 @@ ApplicationWindow {
             }
 
             Rectangle {
-                id: workspace
+                id: canvasWorkspace
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: Theme.bgCanvas
                 clip: true
 
-                property real fitScale: Math.min(0.86, (height - 50) / 650, (width - 60) / 520)
-                property real actualScale: Math.min(zoomValue, fitScale)
+                property real safeCanvasWidth: Math.max(1, workspace.canvasWidth)
+                property real safeCanvasHeight: Math.max(1, workspace.canvasHeight)
+                property real fitScale: Math.min(
+                    (height - 54) / safeCanvasHeight,
+                    (width - 60) / safeCanvasWidth
+                )
+                property real actualScale: Math.max(0.05, fitScale * (zoomValue / 0.78))
 
                 Canvas {
                     anchors.fill: parent
@@ -586,159 +609,74 @@ ApplicationWindow {
 
                 Item {
                     id: artboardFrame
-                    width: 520 * workspace.actualScale
-                    height: 650 * workspace.actualScale
+                    width: canvasWorkspace.safeCanvasWidth * canvasWorkspace.actualScale
+                    height: canvasWorkspace.safeCanvasHeight * canvasWorkspace.actualScale
                     anchors.centerIn: parent
 
                     Rectangle {
-                        width: 520
-                        height: 650
-                        scale: workspace.actualScale
+                        width: canvasWorkspace.safeCanvasWidth
+                        height: canvasWorkspace.safeCanvasHeight
+                        scale: canvasWorkspace.actualScale
                         transformOrigin: Item.TopLeft
-                        color: "#f1f0ec"
+                        color: "#f4f3ef"
                         border.width: 1
                         border.color: "#5c6260"
 
                         Image {
-                            id: productImage
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 428
-                            source: "assets/watch-product.jpg"
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: false
-                            cache: true
+                            id: documentPreview
+                            anchors.fill: parent
+                            source: workspace.previewSource
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                            cache: false
+                            smooth: true
                         }
 
                         Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 428
+                            id: selectionBox
+                            visible: workspace.selectedLayerIndex >= 0
+                            x: workspace.selectedX
+                            y: workspace.selectedY
+                            width: Math.max(1, workspace.selectedWidth)
+                            height: Math.max(1, workspace.selectedHeight)
                             color: "transparent"
-                            border.width: selectedLayer === 2 || selectedLayer === 4 ? 2 : 0
+                            border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
                             border.color: Theme.accent
-                        }
 
-                        Rectangle {
-                            x: 34
-                            y: 28
-                            width: 92
-                            height: 26
-                            radius: 13
-                            color: "#e8ebe7"
-                            border.width: 1
-                            border.color: "#c4cbc7"
-                            Text { anchors.centerIn: parent; text: "ATELIER 26"; color: "#19201e"; font.family: Theme.bodyFont; font.pixelSize: 10; font.weight: Font.DemiBold }
-                        }
-
-                        Text {
-                            anchors.right: parent.right
-                            anchors.rightMargin: 30
-                            y: 31
-                            text: "01 / 06"
-                            color: "#4a514e"
-                            font.family: Theme.bodyFont
-                            font.pixelSize: 10
-                            font.letterSpacing: 1
-                        }
-
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: 222
-                            color: "#111816"
-
-                            Rectangle { x: 34; y: 27; width: 44; height: 3; color: Theme.accent }
-
-                            Text {
-                                id: headline
-                                x: 34
-                                y: 47
-                                width: 430
-                                text: "限量腕表"
-                                color: "#f5f3eb"
-                                font.family: Theme.displayFont
-                                font.pixelSize: 38
-                                font.weight: Font.DemiBold
-                                font.letterSpacing: 0
-                            }
-
-                            Text {
-                                x: 36
-                                y: 102
-                                text: "曜石黑 · 2026 EDITION"
-                                color: Theme.amber
-                                font.family: Theme.bodyFont
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
-                                font.letterSpacing: 1
-                            }
-
-                            Text {
-                                x: 36
-                                y: 140
-                                width: 282
-                                text: "留住每一次准确抵达。\n轻量陶瓷表体，48 小时长续航。"
-                                color: "#9ea9a5"
-                                font.family: Theme.bodyFont
-                                font.pixelSize: 11
-                                lineHeight: 1.55
-                            }
-
-                            Rectangle {
-                                x: 384
-                                y: 139
-                                width: 102
-                                height: 38
-                                radius: 3
-                                color: "#f1eee5"
-                                Text { anchors.centerIn: parent; text: "立即探索  →"; color: "#111816"; font.family: Theme.bodyFont; font.pixelSize: 10; font.weight: Font.DemiBold }
-                            }
-
-                            Rectangle {
-                                visible: selectedLayer === 0 || selectedLayer === 1
-                                x: selectedLayer === 0 ? 26 : 28
-                                y: selectedLayer === 0 ? 39 : 94
-                                width: selectedLayer === 0 ? 240 : 222
-                                height: selectedLayer === 0 ? 58 : 30
-                                color: "transparent"
-                                border.width: 1
-                                border.color: Theme.accent
-
-                                Repeater {
-                                    model: [
-                                        {"x": -3, "y": -3}, {"x": parent.width / 2 - 3, "y": -3}, {"x": parent.width - 3, "y": -3},
-                                        {"x": -3, "y": parent.height - 3}, {"x": parent.width / 2 - 3, "y": parent.height - 3}, {"x": parent.width - 3, "y": parent.height - 3}
-                                    ]
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        x: modelData.x
-                                        y: modelData.y
-                                        width: 6
-                                        height: 6
-                                        color: "#f4f7f5"
-                                        border.width: 1
-                                        border.color: Theme.accentPressed
-                                    }
+                            Repeater {
+                                model: [
+                                    {"x": 0, "y": 0}, {"x": parent.width / 2, "y": 0}, {"x": parent.width, "y": 0},
+                                    {"x": 0, "y": parent.height}, {"x": parent.width / 2, "y": parent.height}, {"x": parent.width, "y": parent.height}
+                                ]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: 8 / canvasWorkspace.actualScale
+                                    height: width
+                                    radius: width / 2
+                                    x: modelData.x - width / 2
+                                    y: modelData.y - height / 2
+                                    color: "#f4f7f5"
+                                    border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                    border.color: Theme.accentPressed
                                 }
                             }
                         }
-
-                        Rectangle {
-                            visible: selectedLayer === 3
-                            x: 330
-                            y: 82
-                            width: 150
-                            height: 150
-                            radius: 75
-                            color: "transparent"
-                            border.width: 1
-                            border.color: Theme.coral
-                        }
                     }
+                }
+
+                BusyIndicator {
+                    anchors.centerIn: parent
+                    running: workspace.busy
+                    visible: running
+                    palette.accent: Theme.accent
+                }
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 8
+                    visible: layerModel.rowCount() === 0 && !workspace.busy
+                    AppIcon { anchors.horizontalCenter: parent.horizontalCenter; glyph: "\uE91B"; iconSize: 24; iconColor: Theme.textMuted }
+                    BodyLabel { text: "空白画布"; color: Theme.textMuted }
                 }
 
                 Rectangle {
@@ -755,7 +693,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 7
                         Rectangle { width: 5; height: 5; radius: 3; color: Theme.accent; anchors.verticalCenter: parent.verticalCenter }
-                        TinyLabel { text: "1080 × 1350 px  ·  RGB"; color: Theme.textSecondary; height: 18 }
+                        TinyLabel { text: workspace.canvasWidth + " × " + workspace.canvasHeight + " px  ·  RGBA"; color: Theme.textSecondary; height: 18 }
                     }
                 }
 
@@ -810,7 +748,7 @@ ApplicationWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 3
                             Text { text: activeLayerName; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 13; font.weight: Font.DemiBold }
-                            TinyLabel { text: layerModel.get(selectedLayer).typeName + "图层  ·  #" + (selectedLayer + 1); height: 15 }
+                            TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
 
                         IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "更多操作"; buttonSize: 28; onClicked: showToast("图层更多操作") }
@@ -829,10 +767,12 @@ ApplicationWindow {
                                 required property string modelData
                                 width: inspector.width / 2
                                 height: 40
+                                enabled: index === 0
+                                opacity: enabled ? 1 : 0.42
                                 color: inspectorTab === index ? Theme.bgRaised : "transparent"
                                 Text { anchors.centerIn: parent; text: modelData; color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal }
                                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 2; color: inspectorTab === index ? Theme.accent : "transparent" }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: inspectorTab = index }
+                                MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: inspectorTab = index }
                             }
                         }
                     }
@@ -840,6 +780,7 @@ ApplicationWindow {
                     ScrollView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        visible: selectedLayer >= 0
                         clip: true
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
@@ -854,17 +795,29 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "位置"
-                                    ValueBox { text: selectedLayer === 0 ? "34" : "0"; suffix: "X"; Layout.fillWidth: true }
-                                    ValueBox { text: selectedLayer === 0 ? "475" : "0"; suffix: "Y"; Layout.fillWidth: true }
+                                    ValueBox {
+                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"; Layout.fillWidth: true
+                                        onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedX(parsed) }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"; Layout.fillWidth: true
+                                        onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedY(parsed) }
+                                    }
                                 }
                                 InspectorRow {
                                     label: "尺寸"
-                                    ValueBox { text: selectedLayer === 0 ? "240" : "520"; suffix: "W"; Layout.fillWidth: true }
-                                    ValueBox { text: selectedLayer === 0 ? "58" : "428"; suffix: "H"; Layout.fillWidth: true }
+                                    ValueBox {
+                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"; Layout.fillWidth: true
+                                        onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedWidth(parsed) }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"; Layout.fillWidth: true
+                                        onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
+                                    }
                                 }
                                 InspectorRow {
                                     label: "旋转"
-                                    ValueBox { text: "0"; suffix: "°"; Layout.fillWidth: true }
+                                    ValueBox { text: "0"; suffix: "°"; editable: false; Layout.fillWidth: true }
                                     Rectangle {
                                         Layout.preferredWidth: 32; Layout.preferredHeight: 30; radius: Theme.radiusSmall; color: Theme.bgControl; border.width: 1; border.color: Theme.borderStrong
                                         AppIcon { anchors.centerIn: parent; glyph: "\uE72C"; iconSize: 13 }
@@ -884,10 +837,13 @@ ApplicationWindow {
                                         Layout.preferredHeight: 4
                                         radius: 2
                                         color: Theme.borderStrong
-                                        Rectangle { width: parent.width * 0.92; height: parent.height; radius: 2; color: Theme.accent }
-                                        Rectangle { x: parent.width * 0.92 - 7; anchors.verticalCenter: parent.verticalCenter; width: 14; height: 14; radius: 7; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
+                                        Rectangle { width: parent.width * workspace.selectedOpacity / 100; height: parent.height; radius: 2; color: Theme.accent }
+                                        Rectangle { x: parent.width * workspace.selectedOpacity / 100 - 7; anchors.verticalCenter: parent.verticalCenter; width: 14; height: 14; radius: 7; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
                                     }
-                                    ValueBox { text: "92"; suffix: "%"; Layout.preferredWidth: 66 }
+                                    ValueBox {
+                                        value: workspace.selectedOpacity.toString(); bindValue: true; suffix: "%"; Layout.preferredWidth: 66
+                                        onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedOpacity(parsed) }
+                                    }
                                 }
                                 InspectorRow {
                                     label: "混合"
@@ -913,6 +869,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "随机变换"
                                 summary: randomTransformEnabled ? "已启用" : "关闭"
+                                visible: false
 
                                 InspectorRow {
                                     label: "启用"
@@ -936,6 +893,7 @@ ApplicationWindow {
                                 title: "图层绑定"
                                 summary: "未绑定"
                                 expanded: false
+                                visible: false
                             }
                         }
 
@@ -977,6 +935,19 @@ ApplicationWindow {
                             }
                         }
                     }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: selectedLayer < 0
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 8
+                            AppIcon { anchors.horizontalCenter: parent.horizontalCenter; glyph: "\uE7C9"; iconSize: 22; iconColor: Theme.textMuted }
+                            BodyLabel { text: "无选中图层"; color: Theme.textMuted }
+                        }
+                    }
                 }
 
                 Divider { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left }
@@ -997,13 +968,13 @@ ApplicationWindow {
 
                 Row {
                     spacing: 6
-                    Rectangle { width: 6; height: 6; radius: 3; color: Theme.success; anchors.verticalCenter: parent.verticalCenter }
-                    TinyLabel { text: "就绪"; color: Theme.textSecondary; height: 28 }
+                    Rectangle { width: 6; height: 6; radius: 3; color: workspace.busy ? Theme.amber : Theme.success; anchors.verticalCenter: parent.verticalCenter }
+                    TinyLabel { text: workspace.statusMessage; color: Theme.textSecondary; height: 28 }
                 }
                 Divider { Layout.preferredHeight: 14 }
-                TinyLabel { text: "RGB / sRGB IEC61966-2.1"; height: 28 }
+                TinyLabel { text: "RGBA / sRGB IEC61966-2.1"; height: 28 }
                 Divider { Layout.preferredHeight: 14 }
-                TinyLabel { text: "X 34  ·  Y 475"; height: 28 }
+                TinyLabel { text: "X " + workspace.selectedX + "  ·  Y " + workspace.selectedY; height: 28 }
 
                 Item { Layout.fillWidth: true }
 

@@ -1,0 +1,666 @@
+from __future__ import annotations
+
+import os
+import threading
+from typing import Optional
+
+from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QImage
+
+from app.models.document import Document
+from app.qml.preview_image_provider import PreviewImageProvider
+from app.qml.viewmodels.layer_list_model import LayerListModel
+
+
+def _pil_to_qimage(image) -> QImage:
+    rgba = image.convert("RGBA")
+    data = rgba.tobytes("raw", "RGBA")
+    return QImage(
+        data,
+        rgba.width,
+        rgba.height,
+        rgba.width * 4,
+        QImage.Format_RGBA8888,
+    ).copy()
+
+
+class _PreviewTaskSignals(QObject):
+    finished = Signal(int, object, str, float)
+
+
+class _PreviewTask(QRunnable):
+    def __init__(self, request_id: int, document: Document, document_lock: threading.RLock) -> None:
+        super().__init__()
+        self.request_id = request_id
+        self.document = document
+        self.document_lock = document_lock
+        self.signals = _PreviewTaskSignals()
+
+    def run(self) -> None:
+        from app.services.preview_render_service import render_preview_to_image
+
+        try:
+            with self.document_lock:
+                result = render_preview_to_image(self.document, force_refresh=True)
+            qimage = _pil_to_qimage(result.image) if result.image is not None else None
+            self.signals.finished.emit(
+                self.request_id,
+                qimage,
+                str(result.error or ""),
+                float(result.elapsed),
+            )
+        except Exception as error:
+            self.signals.finished.emit(self.request_id, None, str(error), 0.0)
+
+
+class WorkspaceViewModel(QObject):
+    documentInfoChanged = Signal()
+    selectionChanged = Signal()
+    previewChanged = Signal()
+    statusChanged = Signal()
+    busyChanged = Signal()
+    historyStateChanged = Signal()
+    toastRequested = Signal(str)
+
+    def __init__(
+        self,
+        document: Optional[Document] = None,
+        preview_provider: Optional[PreviewImageProvider] = None,
+        *,
+        auto_render: bool = True,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self._document: Optional[Document] = None
+        self._preview_provider = preview_provider or PreviewImageProvider()
+        self._layer_model = LayerListModel(parent=self)
+        self._preview_revision = 0
+        self._status_message = "就绪"
+        self._busy = False
+        self._auto_render = bool(auto_render)
+        self._document_lock = threading.RLock()
+        self._render_request_id = 0
+        self._render_running = False
+        self._render_pending = False
+        self._active_render_task = None
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(70)
+        self._preview_timer.timeout.connect(self._start_preview_render)
+        self._set_document(document or Document())
+        if self._auto_render:
+            self.requestPreview()
+
+    @property
+    def document(self) -> Document:
+        return self._document
+
+    @Property(QObject, constant=True)
+    def layerModel(self):
+        return self._layer_model
+
+    @Property(str, notify=documentInfoChanged)
+    def documentTitle(self) -> str:
+        path = getattr(self._document, "current_file_path", None)
+        return os.path.basename(path) if path else "未命名项目.cmp"
+
+    @Property(str, notify=documentInfoChanged)
+    def documentPath(self) -> str:
+        return str(getattr(self._document, "current_file_path", None) or "")
+
+    @Property(bool, notify=documentInfoChanged)
+    def hasFilePath(self) -> bool:
+        return bool(self.documentPath)
+
+    @Property(bool, notify=documentInfoChanged)
+    def isModified(self) -> bool:
+        return bool(getattr(self._document, "is_modified", False))
+
+    @Property(int, notify=documentInfoChanged)
+    def canvasWidth(self) -> int:
+        return int(getattr(self._document, "canvas_width", 0))
+
+    @Property(int, notify=documentInfoChanged)
+    def canvasHeight(self) -> int:
+        return int(getattr(self._document, "canvas_height", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedLayerIndex(self) -> int:
+        return int(getattr(self._document, "selected_layer_index", -1))
+
+    def _selected_layer(self):
+        return self._layer_model.layer_at(self.selectedLayerIndex)
+
+    @Property(str, notify=selectionChanged)
+    def selectedLayerName(self) -> str:
+        layer = self._selected_layer()
+        return str(getattr(layer, "name", "未选择图层"))
+
+    @Property(str, notify=selectionChanged)
+    def selectedLayerType(self) -> str:
+        layer = self._selected_layer()
+        return self._layer_model.layer_type_name(layer) if layer is not None else ""
+
+    @Property(int, notify=selectionChanged)
+    def selectedX(self) -> int:
+        return int(getattr(self._selected_layer(), "x", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedY(self) -> int:
+        return int(getattr(self._selected_layer(), "y", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedWidth(self) -> int:
+        return int(getattr(self._selected_layer(), "width", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedHeight(self) -> int:
+        return int(getattr(self._selected_layer(), "height", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedOpacity(self) -> int:
+        return round(float(getattr(self._selected_layer(), "opacity", 1.0)) * 100)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedVisible(self) -> bool:
+        return bool(getattr(self._selected_layer(), "visible", False))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedLocked(self) -> bool:
+        return bool(getattr(self._selected_layer(), "locked", False))
+
+    @Property(int, notify=previewChanged)
+    def previewRevision(self) -> int:
+        return self._preview_revision
+
+    @Property(str, notify=previewChanged)
+    def previewSource(self) -> str:
+        return f"image://documentPreview/current?revision={self._preview_revision}"
+
+    @Property(str, notify=statusChanged)
+    def statusMessage(self) -> str:
+        return self._status_message
+
+    @Property(bool, notify=busyChanged)
+    def busy(self) -> bool:
+        return self._busy
+
+    @Property(bool, notify=historyStateChanged)
+    def canUndo(self) -> bool:
+        return bool(self._document and self._document.can_undo())
+
+    @Property(bool, notify=historyStateChanged)
+    def canRedo(self) -> bool:
+        return bool(self._document and self._document.can_redo())
+
+    def _set_busy(self, busy: bool) -> None:
+        busy = bool(busy)
+        if busy != self._busy:
+            self._busy = busy
+            self.busyChanged.emit()
+
+    def _set_status(self, message: str, *, toast: bool = False) -> None:
+        self._status_message = str(message)
+        self.statusChanged.emit()
+        if toast:
+            self.toastRequested.emit(self._status_message)
+
+    def _set_document(self, document: Document) -> None:
+        with self._document_lock:
+            self._disconnect_document()
+            self._document = document
+            self._layer_model.set_document(document)
+            self._connect_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+
+    def _connect_document(self) -> None:
+        if self._document is None:
+            return
+        self._document.document_changed.connect(self._on_document_changed)
+        self._document.layer_selected.connect(self._on_layer_selected)
+        self._document.history_changed.connect(self.historyStateChanged.emit)
+
+    def _disconnect_document(self) -> None:
+        if self._document is None:
+            return
+        connections = (
+            (self._document.document_changed, self._on_document_changed),
+            (self._document.layer_selected, self._on_layer_selected),
+            (self._document.history_changed, self.historyStateChanged.emit),
+        )
+        for signal, slot in connections:
+            try:
+                signal.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+
+    @Slot()
+    def _on_document_changed(self) -> None:
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+
+    @Slot(int)
+    def _on_layer_selected(self, index: int) -> None:
+        del index
+        self.selectionChanged.emit()
+
+    @staticmethod
+    def _local_path(path_or_url: str) -> str:
+        text = str(path_or_url or "")
+        url = QUrl(text)
+        if url.isLocalFile():
+            return url.toLocalFile()
+        return text
+
+    @Slot(int, int, result=bool)
+    def newDocument(self, width: int = 1080, height: int = 1350) -> bool:
+        if width <= 0 or height <= 0:
+            self._set_status("新建失败：画布尺寸无效", toast=True)
+            return False
+        document = Document()
+        document.create_new(int(width), int(height))
+        document._history_manager.clear()
+        document.save_state("初始状态")
+        self._preview_provider.clear()
+        self._preview_revision += 1
+        self._set_document(document)
+        self.previewChanged.emit()
+        self._set_status("已新建空白文档", toast=True)
+        self.requestPreview(force=True)
+        return True
+
+    @Slot(str, result=bool)
+    def createDemoDocument(self, image_path: str) -> bool:
+        image_path = self._local_path(image_path)
+        if not os.path.isfile(image_path):
+            self._set_status("示例文档创建失败：素材不存在", toast=True)
+            return False
+        from app.models.text_layer import TextLayer
+
+        document = Document()
+        document.create_new(1080, 1350)
+        document.add_layer(
+            "产品底图",
+            0,
+            0,
+            1080,
+            1350,
+            image_source=image_path,
+            use_original_size=False,
+            is_folder=False,
+        )
+        title = TextLayer(name="限量腕表", x=68, y=1040, width=860, height=160)
+        title.current_text = "限量腕表"
+        title.font_size = 86
+        title.text_color = (245, 244, 238, 255)
+        title.background_enabled = True
+        title.background_color = (17, 24, 22, 238)
+        title.background_padding = 24
+        title.auto_fit_text_box = False
+        document.add_text_layer(title)
+        subtitle = TextLayer(name="曜石黑 · 2026", x=76, y=1210, width=680, height=70)
+        subtitle.current_text = "曜石黑 · 2026 EDITION"
+        subtitle.font_size = 34
+        subtitle.text_color = (70, 215, 173, 255)
+        subtitle.auto_fit_text_box = False
+        document.add_text_layer(subtitle)
+        document.selected_layer_index = 1
+        document.selected_layer_indices = [1]
+        document.current_file_path = None
+        document.is_modified = False
+        document._history_manager.clear()
+        document.save_state("初始状态")
+        self._set_document(document)
+        self._set_status("已载入真实模型示例", toast=True)
+        self.requestPreview(force=True)
+        return True
+
+    @Slot(str, result=bool)
+    def openDocument(self, file_path: str) -> bool:
+        file_path = self._local_path(file_path)
+        candidate = Document()
+        if not file_path or not candidate.load_document(file_path):
+            self._set_status("打开失败：无法读取项目文件", toast=True)
+            return False
+        candidate._history_manager.clear()
+        candidate.save_state("打开文档")
+        self._set_document(candidate)
+        self._set_status(f"已打开 {os.path.basename(file_path)}", toast=True)
+        self.requestPreview(force=True)
+        return True
+
+    @Slot(result=bool)
+    def saveDocument(self) -> bool:
+        if not self.documentPath:
+            self._set_status("请先选择项目保存位置", toast=True)
+            return False
+        return self.saveDocumentTo(self.documentPath)
+
+    @Slot(str, result=bool)
+    def saveDocumentTo(self, file_path: str) -> bool:
+        file_path = self._local_path(file_path)
+        if not file_path:
+            self._set_status("保存失败：文件路径为空", toast=True)
+            return False
+        if not file_path.lower().endswith(".cmp"):
+            file_path += ".cmp"
+        with self._document_lock:
+            success = bool(self._document.save_document(file_path))
+        if success:
+            self.documentInfoChanged.emit()
+            self._set_status(f"已保存 {os.path.basename(file_path)}", toast=True)
+        else:
+            self._set_status("保存失败：请检查文件路径和权限", toast=True)
+        return success
+
+    @Slot(str, result=bool)
+    def exportImageTo(self, file_path: str) -> bool:
+        file_path = self._local_path(file_path)
+        if not file_path:
+            self._set_status("导出失败：文件路径为空", toast=True)
+            return False
+        self._set_busy(True)
+        try:
+            with self._document_lock:
+                success = bool(self._document.export_image(file_path))
+        finally:
+            self._set_busy(False)
+        if success:
+            self._set_status(f"已导出 {os.path.basename(file_path)}", toast=True)
+        else:
+            error = getattr(self._document, "_last_export_error", None) or "未知错误"
+            self._set_status(f"导出失败：{error}", toast=True)
+        return success
+
+    @Slot(str, result=bool)
+    def addImageLayer(self, file_path: str) -> bool:
+        file_path = self._local_path(file_path)
+        if not os.path.isfile(file_path):
+            self._set_status("添加图片失败：文件不存在", toast=True)
+            return False
+
+        try:
+            from PIL import Image
+
+            with Image.open(file_path) as image:
+                source_width, source_height = image.size
+            if source_width <= 0 or source_height <= 0:
+                raise ValueError("图片尺寸无效")
+
+            max_width = max(1, round(self.canvasWidth * 0.6))
+            max_height = max(1, round(self.canvasHeight * 0.6))
+            scale = min(max_width / source_width, max_height / source_height, 1.0)
+            width = max(1, round(source_width * scale))
+            height = max(1, round(source_height * scale))
+            x = (self.canvasWidth - width) // 2
+            y = (self.canvasHeight - height) // 2
+
+            with self._document_lock:
+                self._ensure_history_baseline()
+                self._document.add_layer(
+                    os.path.basename(file_path),
+                    x,
+                    y,
+                    width,
+                    height,
+                    image_source=file_path,
+                    use_original_size=False,
+                    is_folder=False,
+                )
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加图片失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"已添加图片 {os.path.basename(file_path)}", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def addTextLayer(self) -> bool:
+        from app.models.text_layer import TextLayer
+
+        width = max(120, min(round(self.canvasWidth * 0.6), 600))
+        height = max(64, min(round(self.canvasHeight * 0.12), 180))
+        x = (self.canvasWidth - width) // 2
+        y = (self.canvasHeight - height) // 2
+        text_layer = TextLayer(name="新建文字", x=x, y=y, width=width, height=height)
+        text_layer.current_text = "新建文字"
+        text_layer.font_size = max(24, min(round(height * 0.45), 72))
+        text_layer.auto_fit_text_box = False
+
+        try:
+            with self._document_lock:
+                self._ensure_history_baseline()
+                self._document.add_text_layer(text_layer)
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加文字失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已添加文字图层", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def deleteSelectedLayer(self) -> bool:
+        index = self.selectedLayerIndex
+        layer = self._layer_model.layer_at(index)
+        if layer is None:
+            self._set_status("没有可删除的图层", toast=True)
+            return False
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定，无法删除", toast=True)
+            return False
+
+        try:
+            with self._document_lock:
+                before_count = len(self._document.layers)
+                self._ensure_history_baseline()
+                self._document.remove_layer(index)
+                if len(self._document.layers) == before_count:
+                    return False
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"删除图层失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已删除图层", toast=True)
+        return True
+
+    @Slot(int, result=bool)
+    def selectLayer(self, index: int) -> bool:
+        if self._layer_model.layer_at(index) is None:
+            return False
+        self._document.selected_layer_index = int(index)
+        self._document.selected_layer_indices = [int(index)]
+        self.selectionChanged.emit()
+        return True
+
+    def _ensure_history_baseline(self) -> None:
+        manager = self._document._history_manager
+        if manager.get_history_count() == 0:
+            self._document.save_state("初始状态")
+
+    def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
+        with self._document_lock:
+            layer = self._layer_model.layer_at(index)
+            if layer is None:
+                return False
+            if attr not in ("visible", "locked") and bool(getattr(layer, "locked", False)):
+                self._set_status("图层已锁定", toast=True)
+                return False
+            current = getattr(layer, attr, None)
+            if current == value:
+                return True
+            self._ensure_history_baseline()
+            setattr(layer, attr, value)
+            self._document.is_modified = True
+            if attr in ("x", "y", "width", "height", "visible", "locked"):
+                self._document.bump_hit_test_version()
+            invalidate = getattr(self._document, "_invalidate_render_cache", None)
+            if callable(invalidate):
+                invalidate()
+            self._document.save_state(action)
+        self._layer_model.notify_row(index)
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        if render:
+            self.requestPreview(force=True)
+        return True
+
+    @Slot(int, result=bool)
+    def setSelectedX(self, value: int) -> bool:
+        return self._set_layer_attr(self.selectedLayerIndex, "x", int(value), "修改 X 坐标")
+
+    @Slot(int, result=bool)
+    def setSelectedY(self, value: int) -> bool:
+        return self._set_layer_attr(self.selectedLayerIndex, "y", int(value), "修改 Y 坐标")
+
+    @Slot(int, result=bool)
+    def setSelectedWidth(self, value: int) -> bool:
+        if value <= 0:
+            return False
+        return self._set_layer_attr(self.selectedLayerIndex, "width", int(value), "修改图层宽度")
+
+    @Slot(int, result=bool)
+    def setSelectedHeight(self, value: int) -> bool:
+        if value <= 0:
+            return False
+        return self._set_layer_attr(self.selectedLayerIndex, "height", int(value), "修改图层高度")
+
+    @Slot(int, result=bool)
+    def setSelectedOpacity(self, value: int) -> bool:
+        value = max(0, min(100, int(value)))
+        return self._set_layer_attr(self.selectedLayerIndex, "opacity", value / 100.0, "修改不透明度")
+
+    @Slot(int, result=bool)
+    def toggleLayerVisible(self, index: int) -> bool:
+        layer = self._layer_model.layer_at(index)
+        return bool(layer) and self._set_layer_attr(index, "visible", not bool(layer.visible), "切换图层可见性")
+
+    @Slot(int, result=bool)
+    def toggleLayerLocked(self, index: int) -> bool:
+        layer = self._layer_model.layer_at(index)
+        return bool(layer) and self._set_layer_attr(
+            index,
+            "locked",
+            not bool(layer.locked),
+            "切换图层锁定",
+            render=False,
+        )
+
+    @Slot(result=bool)
+    def undo(self) -> bool:
+        with self._document_lock:
+            if not self._document.undo():
+                return False
+            self._document.is_modified = True
+        self._layer_model.reset_from_document()
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已撤销", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def redo(self) -> bool:
+        with self._document_lock:
+            if not self._document.redo():
+                return False
+            self._document.is_modified = True
+        self._layer_model.reset_from_document()
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已重做", toast=True)
+        return True
+
+    @Slot()
+    @Slot(bool)
+    def requestPreview(self, force: bool = False) -> None:
+        del force
+        if not self._auto_render:
+            return
+        if self._render_running:
+            self._render_pending = True
+            return
+        self._preview_timer.start()
+
+    @Slot(result=bool)
+    def renderPreviewNow(self) -> bool:
+        if self._auto_render:
+            self._preview_timer.stop()
+            self._start_preview_render()
+            return True
+        return self._render_preview_sync()
+
+    @Slot()
+    def _start_preview_render(self) -> None:
+        if self._render_running:
+            self._render_pending = True
+            return
+        self._render_running = True
+        self._render_pending = False
+        self._render_request_id += 1
+        self._set_busy(True)
+        task = _PreviewTask(self._render_request_id, self._document, self._document_lock)
+        task.signals.finished.connect(self._on_preview_rendered)
+        self._active_render_task = task
+        QThreadPool.globalInstance().start(task)
+
+    @Slot(int, object, str, float)
+    def _on_preview_rendered(self, request_id: int, qimage, error: str, elapsed: float) -> None:
+        self._render_running = False
+        self._active_render_task = None
+        if request_id == self._render_request_id and qimage is not None and not qimage.isNull():
+            self._preview_provider.set_image(qimage)
+            self._preview_revision += 1
+            self.previewChanged.emit()
+            self._set_status(f"预览完成 · {elapsed * 1000:.0f} ms")
+        elif error:
+            self._set_status(f"预览失败：{error}", toast=True)
+        self._set_busy(False)
+        if self._render_pending:
+            self._render_pending = False
+            self._preview_timer.start()
+
+    def _render_preview_sync(self) -> bool:
+        from app.services.preview_render_service import render_preview_to_image
+
+        self._set_busy(True)
+        try:
+            with self._document_lock:
+                result = render_preview_to_image(self._document, force_refresh=True)
+            if result.image is None:
+                self._set_status(f"预览失败：{result.error or '渲染器未返回图像'}", toast=True)
+                return False
+            qimage = _pil_to_qimage(result.image)
+            self._preview_provider.set_image(qimage)
+            self._preview_revision += 1
+            self.previewChanged.emit()
+            self._set_status(f"预览完成 · {result.elapsed * 1000:.0f} ms")
+            return True
+        except Exception as error:
+            self._set_status(f"预览失败：{error}", toast=True)
+            return False
+        finally:
+            self._set_busy(False)
