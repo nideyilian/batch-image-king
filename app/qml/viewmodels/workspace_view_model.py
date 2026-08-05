@@ -3,8 +3,10 @@ from __future__ import annotations
 import math
 import os
 from pathlib import Path
+import re
 import threading
 from typing import Optional
+import uuid
 
 from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QImage
@@ -246,6 +248,42 @@ class WorkspaceViewModel(QObject):
         if not self.selectedIsTextLayer:
             return 0
         return int(getattr(self._selected_layer(), "font_size", 0) or 0)
+
+    @Property(bool, notify=selectionChanged)
+    def canDuplicateLayer(self) -> bool:
+        layer = self._selected_layer()
+        return bool(
+            layer is not None
+            and not self._export_running
+            and not bool(getattr(layer, "locked", False))
+            and callable(getattr(layer, "duplicate", None))
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def canMoveLayerForward(self) -> bool:
+        index = self.selectedLayerIndex
+        layer = self._selected_layer()
+        neighbor = self._layer_model.layer_at(index + 1)
+        return bool(
+            layer is not None
+            and neighbor is not None
+            and not self._export_running
+            and not bool(getattr(layer, "locked", False))
+            and not bool(getattr(neighbor, "locked", False))
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def canMoveLayerBackward(self) -> bool:
+        index = self.selectedLayerIndex
+        layer = self._selected_layer()
+        neighbor = self._layer_model.layer_at(index - 1)
+        return bool(
+            layer is not None
+            and neighbor is not None
+            and not self._export_running
+            and not bool(getattr(layer, "locked", False))
+            and not bool(getattr(neighbor, "locked", False))
+        )
 
     @Property(int, notify=previewChanged)
     def previewRevision(self) -> int:
@@ -801,6 +839,115 @@ class WorkspaceViewModel(QObject):
         self.historyStateChanged.emit()
         self.requestPreview(force=True)
         self._set_status("已删除图层", toast=True)
+        return True
+
+    def _duplicate_layer_name(self, original_name: str) -> str:
+        original_name = str(original_name or "未命名图层")
+        match = re.match(r"^(.*?)(?: 副本(?: \d+)?)?$", original_name)
+        base_name = (match.group(1) if match else original_name).strip() or "未命名图层"
+        existing_names = {str(getattr(layer, "name", "")) for layer in self._document.layers}
+        candidate = f"{base_name} 副本"
+        if candidate not in existing_names:
+            return candidate
+        number = 2
+        while f"{base_name} 副本 {number}" in existing_names:
+            number += 1
+        return f"{base_name} 副本 {number}"
+
+    @Slot(result=bool)
+    def duplicateSelectedLayer(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        if not self.canDuplicateLayer:
+            self._set_status("当前图层无法复制", toast=True)
+            return False
+        index = self.selectedLayerIndex
+        original = self._selected_layer()
+
+        try:
+            with self._document_lock:
+                self._ensure_history_baseline()
+                try:
+                    duplicate = original.duplicate(parent=self._document)
+                except TypeError:
+                    duplicate = original.duplicate()
+                if duplicate is None:
+                    raise RuntimeError("图层复制失败")
+
+                if hasattr(duplicate, "_layer_id"):
+                    duplicate._layer_id = str(uuid.uuid4())
+                duplicate.name = self._duplicate_layer_name(getattr(original, "name", ""))
+
+                if hasattr(duplicate, "x") and hasattr(duplicate, "width"):
+                    max_x = max(0, self.canvasWidth - int(getattr(duplicate, "width", 0) or 0))
+                    duplicate.x = min(max_x, max(0, int(getattr(original, "x", 0) or 0) + 12))
+                if hasattr(duplicate, "y") and hasattr(duplicate, "height"):
+                    max_y = max(0, self.canvasHeight - int(getattr(duplicate, "height", 0) or 0))
+                    duplicate.y = min(max_y, max(0, int(getattr(original, "y", 0) or 0) + 12))
+
+                changed_signal = getattr(duplicate, "changed", None)
+                if changed_signal is not None:
+                    changed_signal.connect(self._document.document_changed.emit)
+
+                insert_index = index + 1
+                self._document.layers.insert(insert_index, duplicate)
+                self._document.selected_layer_index = insert_index
+                self._document.selected_layer_indices = [insert_index]
+                self._document.is_modified = True
+                self._document._invalidate_render_cache()
+                self._document.bump_hit_test_version()
+                self._document.layer_changed.emit()
+                self._document.layer_selected.emit(insert_index)
+                self._document.layers_selection_changed.emit([insert_index])
+                self._document.document_changed.emit()
+                self._document.save_state("复制图层")
+        except Exception as error:
+            self._set_status(f"复制图层失败：{error}", toast=True)
+            return False
+
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"已创建 {duplicate.name}", toast=True)
+        return True
+
+    @Slot(str, result=bool)
+    def moveSelectedLayer(self, direction: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        direction = str(direction or "").lower()
+        allowed = self.canMoveLayerForward if direction == "forward" else self.canMoveLayerBackward
+        if direction not in {"forward", "backward"} or not allowed:
+            self._set_status("图层已在边界或相邻图层已锁定", toast=True)
+            return False
+        index = self.selectedLayerIndex
+        selected_layer = self._selected_layer()
+
+        with self._document_lock:
+            self._ensure_history_baseline()
+            if direction == "forward":
+                self._document.move_layer_down(index)
+                action_text = "前移一层"
+            else:
+                self._document.move_layer_up(index)
+                action_text = "后移一层"
+            try:
+                new_index = self._document.layers.index(selected_layer)
+            except ValueError:
+                return False
+            if new_index == index:
+                return False
+            self._document.is_modified = True
+            self._document._invalidate_render_cache()
+            self._document.document_changed.emit()
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"图层已{action_text}", toast=True)
         return True
 
     @Slot(int, result=bool)

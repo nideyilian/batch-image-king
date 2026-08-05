@@ -22,6 +22,7 @@ ApplicationWindow {
     property bool randomTransformEnabled: true
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
+    property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
 
     function showToast(message) {
         toastMessage = message
@@ -33,6 +34,24 @@ ApplicationWindow {
         target: workspace
         function onToastRequested(message) { showToast(message) }
         function onSelectionChanged() { selectedTextEditor.releaseFocus() }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+D"
+        enabled: window.layerShortcutsEnabled && workspace.canDuplicateLayer
+        onActivated: workspace.duplicateSelectedLayer()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+["
+        enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward
+        onActivated: workspace.moveSelectedLayer("backward")
+    }
+
+    Shortcut {
+        sequence: "Ctrl+]"
+        enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward
+        onActivated: workspace.moveSelectedLayer("forward")
     }
 
     FileDialog {
@@ -267,6 +286,7 @@ ApplicationWindow {
         property string placeholder: ""
         property int contextIndex: -1
         property int editingIndex: -1
+        readonly property bool editing: contentEditor.activeFocus
         signal committed(string value, int contextIndex)
 
         function releaseFocus() {
@@ -1075,10 +1095,35 @@ ApplicationWindow {
                         Row {
                             anchors.centerIn: parent
                             spacing: 5
-                            IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; onClicked: imageDialog.open() }
-                            IconButton { glyph: "\uE8B0"; tooltip: "创建分组（后续接入）"; buttonSize: 28; enabled: false }
-                            IconButton { glyph: "\uE8C8"; tooltip: "复制图层（后续接入）"; buttonSize: 28; enabled: false }
-                            IconButton { glyph: "\uE74D"; tooltip: "删除图层"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: workspace.deleteSelectedLayer() }
+                            IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; enabled: !workspace.operationsBlocked; onClicked: imageDialog.open() }
+                            IconButton {
+                                glyph: "\uE8C8"
+                                tooltip: "复制图层 · Ctrl+D"
+                                buttonSize: 28
+                                enabled: workspace.canDuplicateLayer
+                                onClicked: workspace.duplicateSelectedLayer()
+                            }
+                            IconButton {
+                                glyph: "\uE70E"
+                                tooltip: "后移一层 · Ctrl+["
+                                buttonSize: 28
+                                enabled: workspace.canMoveLayerBackward
+                                onClicked: workspace.moveSelectedLayer("backward")
+                            }
+                            IconButton {
+                                glyph: "\uE70D"
+                                tooltip: "前移一层 · Ctrl+]"
+                                buttonSize: 28
+                                enabled: workspace.canMoveLayerForward
+                                onClicked: workspace.moveSelectedLayer("forward")
+                            }
+                            IconButton {
+                                glyph: "\uE74D"
+                                tooltip: "删除图层"
+                                buttonSize: 28
+                                enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
+                                onClicked: workspace.deleteSelectedLayer()
+                            }
                         }
                     }
                 }
