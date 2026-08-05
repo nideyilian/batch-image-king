@@ -47,7 +47,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     qml_source = (repo_root / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
     assert 'objectName: "batchExportDrawer"' in qml_source
     assert 'Text { text: "批量导出"' in qml_source
-    assert 'title: "内容源"' in qml_source
+    assert 'title: "图像源"' in qml_source
     assert 'title: "文字内容"' in qml_source
     assert 'tooltip: "添加素材文件夹"' in qml_source
     assert '"复制图层 · Ctrl+D"' not in qml_source
@@ -75,12 +75,12 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'id: shapedLayerDialog' in qml_source
     assert 'workspace.addConfiguredTextLayer(' in qml_source
     assert 'workspace.addConfiguredShapedLayer(' in qml_source
-    assert 'visible: workspace.selectedHasImageSource' in qml_source
-    assert 'visible: workspace.selectedIsShapedLayer' in qml_source
+    assert 'visible: inspectorTab === 0 && workspace.selectedHasImageSource' in qml_source
+    assert 'visible: inspectorTab === 0 && workspace.selectedIsShapedLayer' in qml_source
     assert 'workspace.setSelectedShapeType(modelData.value)' in qml_source
     assert 'workspace.setSelectedTrapezoidSlopeSide(modelData.value)' in qml_source
     assert 'workspace.setSelectedPolygonCornerRadius(parsed)' in qml_source
-    assert 'title: "图片布局"' in qml_source
+    assert 'title: "高级设置"' in qml_source
     assert 'model: window.imageFitOptions' in qml_source
     assert 'workspace.setSelectedFitMode(currentValue)' in qml_source
     assert 'workspace.setSelectedCropDirection(modelData.value)' in qml_source
@@ -104,7 +104,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source
-    assert 'visible: workspace.selectedSupportsRandomTransform' in qml_source
+    assert 'visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform' in qml_source
     assert 'workspace.setSelectedRandomPositionEnabled(checkedValue)' in qml_source
     assert 'workspace.setSelectedRandomScaleMinPercent(parsed)' in qml_source
     assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source

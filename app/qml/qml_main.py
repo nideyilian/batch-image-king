@@ -322,12 +322,16 @@ def main() -> int:
     window.setProperty("width", max(1180, args.width))
     window.setProperty("height", max(720, args.height))
     if args.show_effects:
+        window.setProperty("inspectorTab", 0)
+
+    if args.show_random_transform:
         window.setProperty("inspectorTab", 1)
 
     if args.show_advanced_properties:
         def reveal_advanced_properties() -> None:
-            workspace.setSelectedCloneEnabled(True)
-            workspace.setSelectedCloneFillEnabled(True)
+            if workspace.selectedSupportsClone:
+                workspace.setSelectedCloneEnabled(True)
+                workspace.setSelectedCloneFillEnabled(True)
             if not QMetaObject.invokeMethod(window, "revealAdvancedProperties"):
                 debug("advanced properties section could not be revealed")
 

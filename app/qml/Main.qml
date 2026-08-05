@@ -109,6 +109,14 @@ ApplicationWindow {
         toastTimer.restart()
     }
 
+    function selectInspectorTab(index) {
+        inspectorTab = index
+        Qt.callLater(function() {
+            if (inspectorScroll.contentItem)
+                inspectorScroll.contentItem.contentY = 0
+        })
+    }
+
     function revealTextTypography() {
         inspectorTab = 0
         textFontSection.expanded = true
@@ -120,7 +128,7 @@ ApplicationWindow {
     }
 
     function revealTextAppearance() {
-        inspectorTab = 1
+        inspectorTab = 0
         textFillSection.expanded = true
         textBackgroundSection.expanded = true
         Qt.callLater(function() {
@@ -130,7 +138,7 @@ ApplicationWindow {
     }
 
     function revealTextEffects() {
-        inspectorTab = 1
+        inspectorTab = 0
         textShadowSection.expanded = true
         textGlowSection.expanded = true
         Qt.callLater(function() {
@@ -141,13 +149,12 @@ ApplicationWindow {
 
     function revealAdvancedProperties() {
         if (workspace.selectedLayerIndex < 0) return
-        inspectorTab = 0
-        transformSection.expanded = true
-        imageLayoutSection.expanded = true
+        inspectorTab = 1
+        layerTransformSection.expanded = true
         clonePropertiesSection.expanded = true
         Qt.callLater(function() {
             if (!inspectorScroll.contentItem) return
-            var target = workspace.selectedSupportsClone ? clonePropertiesSection : transformSection
+            var target = workspace.selectedSupportsClone ? clonePropertiesSection : layerTransformSection
             inspectorScroll.contentItem.contentY = Math.max(0, target.y - 8)
         })
     }
@@ -162,7 +169,7 @@ ApplicationWindow {
     function revealLayerNameEditor() {
         if (workspace.selectedLayerIndex < 0) return
         inspectorTab = 0
-        var section = workspace.selectedIsLayerGroup ? groupSection : transformSection
+        var section = workspace.selectedIsLayerGroup ? groupSection : basicPropertiesSection
         var editor = workspace.selectedIsLayerGroup ? groupNameEditor : layerNameEditor
         section.expanded = true
         Qt.callLater(function() {
@@ -4649,7 +4656,7 @@ ApplicationWindow {
                             TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
 
-                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
+                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "打开更多参数"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -4659,7 +4666,7 @@ ApplicationWindow {
                         Layout.preferredHeight: 40
 
                         Repeater {
-                            model: ["属性", "效果"]
+                            model: ["基本参数", "更多参数"]
                             delegate: Rectangle {
                                 required property int index
                                 required property string modelData
@@ -4668,7 +4675,7 @@ ApplicationWindow {
                                 color: inspectorTab === index ? Theme.bgRaised : "transparent"
                                 Text { anchors.centerIn: parent; text: modelData; color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal }
                                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 2; color: inspectorTab === index ? Theme.accent : "transparent" }
-                                MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: inspectorTab = index }
+                                MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.selectInspectorTab(index) }
                             }
                         }
                     }
@@ -4680,23 +4687,25 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         visible: selectedLayer >= 0
                         clip: true
-                        contentHeight: inspectorTab === 0
-                                       ? propertyInspectorColumn.implicitHeight
-                                       : effectInspectorColumn.implicitHeight
+                        contentHeight: propertyInspectorColumn.implicitHeight
+                                       + (inspectorTab === 0 ? effectInspectorColumn.implicitHeight : 0)
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-                        Column {
+                        GridLayout {
                             id: propertyInspectorColumn
                             width: inspectorScroll.availableWidth
-                            visible: inspectorTab === 0
+                            columns: 1
+                            rowSpacing: 0
 
                             PropertySection {
+                                id: imageSourceSection
                                 width: parent.width
-                                title: "内容源"
+                                Layout.row: 10
+                                title: "图像源"
                                 summary: workspace.selectedImageSource
                                          ? (workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片")
                                          : "未设置"
-                                visible: workspace.selectedHasImageSource
+                                visible: inspectorTab === 0 && workspace.selectedHasImageSource
 
                                 InspectorRow {
                                     label: "模式"
@@ -4762,10 +4771,11 @@ ApplicationWindow {
 
                             PropertySection {
                                 width: parent.width
+                                Layout.row: 21
                                 title: "矢量路径"
                                 summary: workspace.selectedVectorPathEnabled
                                          ? workspace.selectedVectorNodes.length + " 个节点" : "矩形边界"
-                                visible: workspace.selectedSupportsVectorPath
+                                visible: inspectorTab === 0 && workspace.selectedSupportsVectorPath
 
                                 InspectorRow {
                                     label: "路径"
@@ -4854,11 +4864,12 @@ ApplicationWindow {
                             }
 
                             PropertySection {
-                                id: imageLayoutSection
+                                id: advancedSettingsSection
                                 width: parent.width
-                                title: "图片布局"
+                                Layout.row: 20
+                                title: "高级设置"
                                 summary: workspace.selectedFitModeName
-                                visible: workspace.selectedSupportsImageFit
+                                visible: inspectorTab === 0 && workspace.selectedSupportsImageFit
 
                                 InspectorRow {
                                     label: "适配"
@@ -4942,37 +4953,15 @@ ApplicationWindow {
                                     }
                                 }
 
-                                InspectorRow {
-                                    label: "翻转"
-                                    BodyLabel {
-                                        text: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未翻转"
-                                        color: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? Theme.accent : Theme.textMuted
-                                        Layout.fillWidth: true
-                                    }
-                                    IconButton {
-                                        glyph: "\u2194"
-                                        tooltip: "水平翻转"
-                                        buttonSize: 30
-                                        active: workspace.selectedFlipHorizontal
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
-                                    }
-                                    IconButton {
-                                        glyph: "\u2195"
-                                        tooltip: "垂直翻转"
-                                        buttonSize: 30
-                                        active: workspace.selectedFlipVertical
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onClicked: workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)
-                                    }
-                                }
                             }
 
                             PropertySection {
+                                id: shapeSection
                                 width: parent.width
+                                Layout.row: 30
                                 title: "形状"
                                 summary: workspace.selectedShapeTypeName
-                                visible: workspace.selectedIsShapedLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsShapedLayer
 
                                 GridLayout {
                                     width: parent.width
@@ -5105,9 +5094,10 @@ ApplicationWindow {
 
                             PropertySection {
                                 width: parent.width
+                                Layout.row: 10
                                 title: "文字内容"
                                 summary: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条候选" : "整段排版"
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 ContentTextEditor {
                                     id: selectedTextEditor
@@ -5211,9 +5201,10 @@ ApplicationWindow {
                                 id: textFontSection
                                 objectName: "textFontSection"
                                 width: parent.width
+                                Layout.row: 20
                                 title: "字体"
                                 summary: workspace.selectedTextFontSize + " px"
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "字体"
@@ -5260,9 +5251,10 @@ ApplicationWindow {
                                 id: textTypographySection
                                 objectName: "textTypographySection"
                                 width: parent.width
+                                Layout.row: 30
                                 title: "排版"
                                 summary: workspace.selectedTextTypographySummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "对齐"
@@ -5374,9 +5366,10 @@ ApplicationWindow {
                             PropertySection {
                                 id: groupSection
                                 width: parent.width
+                                Layout.row: 0
                                 title: "图层组"
                                 summary: workspace.selectedGroupChildCount + " 个图层"
-                                visible: workspace.selectedIsLayerGroup
+                                visible: inspectorTab === 0 && workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "名称"
@@ -5422,11 +5415,12 @@ ApplicationWindow {
                             }
 
                             PropertySection {
-                                id: transformSection
+                                id: basicPropertiesSection
                                 width: parent.width
-                                title: "变换"
-                                summary: "px / °"
-                                visible: !workspace.selectedIsLayerGroup
+                                Layout.row: 0
+                                title: "基本属性"
+                                summary: workspace.selectedWidth + " × " + workspace.selectedHeight
+                                visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "名称"
@@ -5471,26 +5465,15 @@ ApplicationWindow {
                                         onClicked: workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)
                                     }
                                 }
-                                InspectorRow {
-                                    label: "旋转"
-                                    ValueBox {
-                                        value: (Math.round(workspace.selectedRotation * 10) / 10).toString(); bindValue: true; suffix: "°"; Layout.fillWidth: true
-                                        editable: workspace.selectedCanRotate && !workspace.selectedLocked
-                                        onValueCommitted: value => { var parsed = parseFloat(value); if (!isNaN(parsed)) workspace.setSelectedRotation(parsed) }
-                                    }
-                                    IconButton {
-                                        glyph: "\uE72C"; tooltip: "重置旋转"; buttonSize: 30
-                                        enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
-                                        onClicked: workspace.setSelectedRotation(0)
-                                    }
-                                }
                             }
 
-                                PropertySection {
-                                    width: parent.width
-                                    title: "外观"
-                                    summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
-                                    visible: !workspace.selectedIsLayerGroup
+                            PropertySection {
+                                id: appearanceSection
+                                width: parent.width
+                                Layout.row: 40
+                                title: "外观"
+                                summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
+                                visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "不透明度"
@@ -5525,11 +5508,72 @@ ApplicationWindow {
                             }
 
                             PropertySection {
+                                id: layerTransformSection
+                                objectName: "layerTransformSection"
                                 width: parent.width
+                                Layout.row: 20
+                                title: "图层变换"
+                                summary: Math.abs(workspace.selectedRotation) > 0.001
+                                         ? Math.round(workspace.selectedRotation * 10) / 10 + "°"
+                                         : (workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未变换")
+                                visible: inspectorTab === 1 && !workspace.selectedIsLayerGroup
+
+                                InspectorRow {
+                                    label: "旋转"
+                                    ValueBox {
+                                        value: (Math.round(workspace.selectedRotation * 10) / 10).toString()
+                                        bindValue: true
+                                        suffix: "°"
+                                        Layout.fillWidth: true
+                                        editable: workspace.selectedCanRotate && !workspace.selectedLocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseFloat(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedRotation(parsed)
+                                        }
+                                    }
+                                    IconButton {
+                                        glyph: "\uE72C"
+                                        tooltip: "重置旋转"
+                                        buttonSize: 30
+                                        enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
+                                        onClicked: workspace.setSelectedRotation(0)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "翻转"
+                                    BodyLabel {
+                                        text: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未翻转"
+                                        color: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? Theme.accent : Theme.textMuted
+                                        Layout.fillWidth: true
+                                    }
+                                    IconButton {
+                                        glyph: "\u2194"
+                                        tooltip: "水平翻转"
+                                        buttonSize: 30
+                                        active: workspace.selectedFlipHorizontal
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
+                                    }
+                                    IconButton {
+                                        glyph: "\u2195"
+                                        tooltip: "垂直翻转"
+                                        buttonSize: 30
+                                        active: workspace.selectedFlipVertical
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                id: randomTransformSection
+                                width: parent.width
+                                Layout.row: 30
                                 title: "随机变换"
                                 summary: workspace.selectedRandomTransformEnabledCount > 0
                                          ? workspace.selectedRandomTransformEnabledCount + " 项已启用" : "关闭"
-                                visible: workspace.selectedSupportsRandomTransform
+                                visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform
 
                                 InspectorRow {
                                     label: "位置"
@@ -5621,11 +5665,12 @@ ApplicationWindow {
                                 id: clonePropertiesSection
                                 objectName: "clonePropertiesSection"
                                 width: parent.width
-                                title: "分身与铺排"
+                                Layout.row: 10
+                                title: "图层分身"
                                 summary: workspace.selectedCloneEnabled
                                          ? workspace.selectedCloneRows + " × " + workspace.selectedCloneColumns
                                          : "关闭"
-                                visible: workspace.selectedSupportsClone
+                                visible: inspectorTab === 1 && workspace.selectedSupportsClone
 
                                 InspectorRow {
                                     label: "分身"
@@ -5832,7 +5877,8 @@ ApplicationWindow {
                         Column {
                             id: effectInspectorColumn
                             width: inspectorScroll.availableWidth
-                            visible: inspectorTab === 1
+                            y: propertyInspectorColumn.implicitHeight
+                            visible: inspectorTab === 0
 
                             PropertySection {
                                 id: textFillSection
