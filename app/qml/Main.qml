@@ -19,7 +19,6 @@ ApplicationWindow {
     property int activeTool: 0
     property real zoomValue: 0.78
     property int inspectorTab: 0
-    property bool randomTransformEnabled: true
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
@@ -1611,6 +1610,30 @@ ApplicationWindow {
 
                     var right = gestureStartX + gestureStartWidth
                     var bottom = gestureStartY + gestureStartHeight
+                    if (workspace.selectedAspectRatioLocked) {
+                        var fixedX = transformMode === "nw" || transformMode === "sw" ? right : gestureStartX
+                        var fixedY = transformMode === "nw" || transformMode === "ne" ? bottom : gestureStartY
+                        var desiredWidth = transformMode === "nw" || transformMode === "sw"
+                                ? fixedX - canvasX : canvasX - fixedX
+                        var desiredHeight = transformMode === "nw" || transformMode === "ne"
+                                ? fixedY - canvasY : canvasY - fixedY
+                        var scale = (desiredWidth * gestureStartWidth + desiredHeight * gestureStartHeight)
+                                / (gestureStartWidth * gestureStartWidth + gestureStartHeight * gestureStartHeight)
+                        var minimumScale = Math.max(minimumSize / gestureStartWidth, minimumSize / gestureStartHeight)
+                        var maximumWidth = transformMode === "nw" || transformMode === "sw"
+                                ? fixedX : safeCanvasWidth - fixedX
+                        var maximumHeight = transformMode === "nw" || transformMode === "ne"
+                                ? fixedY : safeCanvasHeight - fixedY
+                        var maximumScale = Math.min(maximumWidth / gestureStartWidth, maximumHeight / gestureStartHeight)
+                        scale = Math.max(minimumScale, Math.min(maximumScale, scale))
+                        transientWidth = gestureStartWidth * scale
+                        transientHeight = gestureStartHeight * scale
+                        transientX = transformMode === "nw" || transformMode === "sw"
+                                ? fixedX - transientWidth : fixedX
+                        transientY = transformMode === "nw" || transformMode === "ne"
+                                ? fixedY - transientHeight : fixedY
+                        return
+                    }
                     if (transformMode === "nw" || transformMode === "sw") {
                         transientX = Math.max(0, Math.min(right - minimumSize, gestureStartX + deltaX))
                         transientWidth = right - transientX
@@ -1889,14 +1912,20 @@ ApplicationWindow {
                     }
 
                     ScrollView {
+                        id: inspectorScroll
+                        objectName: "inspectorScroll"
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: selectedLayer >= 0
                         clip: true
+                        contentHeight: inspectorTab === 0
+                                       ? propertyInspectorColumn.implicitHeight
+                                       : effectInspectorColumn.implicitHeight
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
                         Column {
-                            width: inspector.width
+                            id: propertyInspectorColumn
+                            width: inspectorScroll.availableWidth
                             visible: inspectorTab === 0
 
                             PropertySection {
@@ -2289,6 +2318,14 @@ ApplicationWindow {
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
                                     }
+                                    IconButton {
+                                        glyph: workspace.selectedAspectRatioLocked ? "\uE72E" : "\uE785"
+                                        tooltip: workspace.selectedAspectRatioLocked ? "解除比例锁定" : "锁定宽高比例"
+                                        buttonSize: 30
+                                        active: workspace.selectedAspectRatioLocked
+                                        enabled: workspace.selectedSupportsAspectRatioLock && !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)
+                                    }
                                 }
                                 InspectorRow {
                                     label: "旋转"
@@ -2345,23 +2382,93 @@ ApplicationWindow {
                             PropertySection {
                                 width: parent.width
                                 title: "随机变换"
-                                summary: randomTransformEnabled ? "已启用" : "关闭"
-                                visible: false
+                                summary: workspace.selectedRandomTransformEnabledCount > 0
+                                         ? workspace.selectedRandomTransformEnabledCount + " 项已启用" : "关闭"
+                                visible: workspace.selectedSupportsRandomTransform
 
                                 InspectorRow {
-                                    label: "启用"
-                                    BodyLabel { text: "每次导出生成变化"; color: Theme.textSecondary; Layout.fillWidth: true }
-                                    ToggleSwitch { checked: randomTransformEnabled; onToggled: checkedValue => randomTransformEnabled = checkedValue }
+                                    label: "位置"
+                                    ToggleSwitch {
+                                        checked: workspace.selectedRandomPositionEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedRandomPositionEnabled(checkedValue)
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedRandomPositionRange.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.fillWidth: true
+                                        editable: workspace.selectedRandomPositionEnabled && !workspace.selectedLocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedRandomPositionRange(parsed)
+                                        }
+                                    }
                                 }
                                 InspectorRow {
-                                    label: "位置"
-                                    ValueBox { text: "-12"; suffix: "min"; Layout.fillWidth: true }
-                                    ValueBox { text: "+12"; suffix: "max"; Layout.fillWidth: true }
+                                    label: "缩放"
+                                    ToggleSwitch {
+                                        checked: workspace.selectedRandomScaleEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedRandomScaleEnabled(checkedValue)
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedRandomScaleMinPercent.toString()
+                                        bindValue: true
+                                        suffix: "min%"
+                                        Layout.fillWidth: true
+                                        editable: workspace.selectedRandomScaleEnabled && !workspace.selectedLocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedRandomScaleMinPercent(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedRandomScaleMaxPercent.toString()
+                                        bindValue: true
+                                        suffix: "max%"
+                                        Layout.fillWidth: true
+                                        editable: workspace.selectedRandomScaleEnabled && !workspace.selectedLocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedRandomScaleMaxPercent(parsed)
+                                        }
+                                    }
                                 }
                                 InspectorRow {
                                     label: "旋转"
-                                    ValueBox { text: "-3"; suffix: "°"; Layout.fillWidth: true }
-                                    ValueBox { text: "+3"; suffix: "°"; Layout.fillWidth: true }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedRandomRotationEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedRandomRotationEnabled(checkedValue)
+                                    }
+                                    ValueBox {
+                                        value: (Math.round(workspace.selectedRandomRotationRange * 10) / 10).toString()
+                                        bindValue: true
+                                        suffix: "±°"
+                                        Layout.fillWidth: true
+                                        editable: workspace.selectedRandomRotationEnabled && !workspace.selectedLocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseFloat(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedRandomRotationRange(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "本次"
+                                    TinyLabel {
+                                        text: workspace.selectedRandomPreviewSummary
+                                        color: workspace.selectedRandomTransformEnabledCount > 0 ? Theme.textSecondary : Theme.textMuted
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    IconButton {
+                                        glyph: "\uE72C"
+                                        tooltip: "换一组随机变换"
+                                        buttonSize: 30
+                                        enabled: workspace.selectedRandomTransformEnabledCount > 0 && !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.regenerateSelectedRandomTransform()
+                                    }
                                 }
                             }
 
@@ -2375,7 +2482,8 @@ ApplicationWindow {
                         }
 
                         Column {
-                            width: inspector.width
+                            id: effectInspectorColumn
+                            width: inspectorScroll.availableWidth
                             visible: inspectorTab === 1
 
                             PropertySection {

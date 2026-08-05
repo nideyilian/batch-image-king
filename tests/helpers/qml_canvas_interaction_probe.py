@@ -100,9 +100,42 @@ def main() -> int:
             )
             app.exit(5)
             return
+
+        image_layer = workspace.document.layers[0]
+        image_layer.x = 200
+        image_layer.y = 200
+        image_layer.width = 400
+        image_layer.height = 200
+        image_layer.aspect_ratio_locked = True
+        workspace.selectLayer(0)
+        workspace.selectionChanged.emit()
+
+        locked_ratio = image_layer.width / image_layer.height
+        locked_start = artboard.mapToScene(
+            QPointF(image_layer.x + image_layer.width, image_layer.y + image_layer.height)
+        )
+        locked_end = artboard.mapToScene(
+            QPointF(image_layer.x + image_layer.width + 80, image_layer.y + image_layer.height + 50)
+        )
+        locked_start_point = QPoint(round(locked_start.x()), round(locked_start.y()))
+        locked_end_point = QPoint(round(locked_end.x()), round(locked_end.y()))
+        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, locked_start_point)
+        QTest.mouseMove(window, locked_end_point, 30)
+        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, locked_end_point)
+
+        resized_ratio = image_layer.width / image_layer.height
+        if image_layer.width <= 400 or abs(resized_ratio - locked_ratio) > 0.01:
+            print(
+                f"locked resize mismatch: size=({image_layer.width}, {image_layer.height}), "
+                f"ratio={resized_ratio:.4f}",
+                file=sys.stderr,
+            )
+            app.exit(6)
+            return
         print(
             f"dragged layer to ({moved_x}, {moved_y}); "
-            f"resized to ({resized_width}, {resized_height})"
+            f"resized to ({resized_width}, {resized_height}); "
+            f"locked image ratio {resized_ratio:.4f}"
         )
         app.exit(0)
 

@@ -85,6 +85,13 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedCropDirection(modelData.value)' in qml_source
     assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
+    assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source
+    assert 'visible: workspace.selectedSupportsRandomTransform' in qml_source
+    assert 'workspace.setSelectedRandomPositionEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedRandomScaleMinPercent(parsed)' in qml_source
+    assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source
+    assert 'workspace.regenerateSelectedRandomTransform()' in qml_source
+    assert 'property bool randomTransformEnabled' not in qml_source
     assert 'enabled: index === 0' not in qml_source
 
 
@@ -108,3 +115,4 @@ def test_qml_canvas_drag_updates_real_layer_geometry():
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert "dragged layer to" in result.stdout
+    assert "locked image ratio" in result.stdout

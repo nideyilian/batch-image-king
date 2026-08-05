@@ -396,6 +396,114 @@ class WorkspaceViewModel(QObject):
         return self.selectedIsImageLayer or self.selectedIsShapedLayer
 
     @Property(bool, notify=selectionChanged)
+    def selectedSupportsAspectRatioLock(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedHasImageSource and hasattr(layer, "aspect_ratio_locked")
+
+    @Property(bool, notify=selectionChanged)
+    def selectedAspectRatioLocked(self) -> bool:
+        return self.selectedSupportsAspectRatioLock and bool(
+            getattr(self._selected_layer(), "aspect_ratio_locked", False)
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsRandomTransform(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedHasImageSource and all(
+            hasattr(layer, attr)
+            for attr in (
+                "random_position_enabled",
+                "random_position_range",
+                "random_scale_enabled",
+                "random_scale_min",
+                "random_scale_max",
+                "random_rotation_enabled",
+                "random_rotation_range",
+            )
+        ) and callable(getattr(layer, "generate_random_transform_params", None))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedRandomPositionEnabled(self) -> bool:
+        return self.selectedSupportsRandomTransform and bool(
+            getattr(self._selected_layer(), "random_position_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomPositionRange(self) -> int:
+        if not self.selectedSupportsRandomTransform:
+            return 0
+        return int(getattr(self._selected_layer(), "random_position_range", 10))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedRandomScaleEnabled(self) -> bool:
+        return self.selectedSupportsRandomTransform and bool(
+            getattr(self._selected_layer(), "random_scale_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomScaleMinPercent(self) -> int:
+        if not self.selectedSupportsRandomTransform:
+            return 100
+        return round(float(getattr(self._selected_layer(), "random_scale_min", 0.9)) * 100)
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomScaleMaxPercent(self) -> int:
+        if not self.selectedSupportsRandomTransform:
+            return 100
+        return round(float(getattr(self._selected_layer(), "random_scale_max", 1.1)) * 100)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedRandomRotationEnabled(self) -> bool:
+        return self.selectedSupportsRandomTransform and bool(
+            getattr(self._selected_layer(), "random_rotation_enabled", False)
+        )
+
+    @Property(float, notify=selectionChanged)
+    def selectedRandomRotationRange(self) -> float:
+        if not self.selectedSupportsRandomTransform:
+            return 0.0
+        return float(getattr(self._selected_layer(), "random_rotation_range", 5.0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomTransformEnabledCount(self) -> int:
+        return sum(
+            (
+                self.selectedRandomPositionEnabled,
+                self.selectedRandomScaleEnabled,
+                self.selectedRandomRotationEnabled,
+            )
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomOffsetX(self) -> int:
+        return int(getattr(self._selected_layer(), "_current_random_offset_x", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomOffsetY(self) -> int:
+        return int(getattr(self._selected_layer(), "_current_random_offset_y", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedRandomScalePercent(self) -> int:
+        return round(float(getattr(self._selected_layer(), "_current_random_scale", 1.0)) * 100)
+
+    @Property(float, notify=selectionChanged)
+    def selectedRandomRotation(self) -> float:
+        return float(getattr(self._selected_layer(), "_current_random_rotation", 0.0))
+
+    @Property(str, notify=selectionChanged)
+    def selectedRandomPreviewSummary(self) -> str:
+        if self.selectedRandomTransformEnabledCount == 0:
+            return "尚未启用随机变换"
+        parts = []
+        if self.selectedRandomPositionEnabled:
+            parts.append(f"位置 {self.selectedRandomOffsetX:+d}/{self.selectedRandomOffsetY:+d} px")
+        if self.selectedRandomScaleEnabled:
+            parts.append(f"缩放 {self.selectedRandomScalePercent}%")
+        if self.selectedRandomRotationEnabled:
+            parts.append(f"旋转 {self.selectedRandomRotation:+.1f}°")
+        return " · ".join(parts)
+
+    @Property(bool, notify=selectionChanged)
     def selectedSupportsImageFit(self) -> bool:
         layer = self._selected_layer()
         return self.selectedHasImageSource and all(
@@ -1432,6 +1540,26 @@ class WorkspaceViewModel(QObject):
     def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
         return self._set_layer_attrs(index, {attr: value}, action, render=render)
 
+    def _refresh_random_transform_preview(self) -> bool:
+        layer = self._selected_layer()
+        if not self.selectedSupportsRandomTransform or layer is None:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
+            return False
+        with self._document_lock:
+            layer.generate_random_transform_params()
+            layer.cached_image = None
+            layer._cache_valid = False
+            invalidate = getattr(self._document, "_invalidate_render_cache", None)
+            if callable(invalidate):
+                invalidate()
+        self._layer_model.notify_row(self.selectedLayerIndex)
+        self.selectionChanged.emit()
+        self.requestPreview(force=True)
+        return True
+
     @Slot(str, result=bool)
     def setSelectedFitMode(self, mode_id: str) -> bool:
         if not self.selectedSupportsImageFit:
@@ -1650,17 +1778,155 @@ class WorkspaceViewModel(QObject):
     def setSelectedY(self, value: int) -> bool:
         return self._set_layer_attr(self.selectedLayerIndex, "y", int(value), "修改 Y 坐标")
 
+    @Slot(bool, result=bool)
+    def setSelectedAspectRatioLocked(self, enabled: bool) -> bool:
+        if not self.selectedSupportsAspectRatioLock:
+            self._set_status("当前图层不支持比例锁定", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "aspect_ratio_locked",
+            bool(enabled),
+            "切换比例锁定",
+        )
+
     @Slot(int, result=bool)
     def setSelectedWidth(self, value: int) -> bool:
         if value <= 0:
             return False
+        layer = self._selected_layer()
+        if self.selectedAspectRatioLocked and layer is not None:
+            current_width = max(1, int(getattr(layer, "width", 1)))
+            current_height = max(1, int(getattr(layer, "height", 1)))
+            return self._set_layer_attrs(
+                self.selectedLayerIndex,
+                {
+                    "width": int(value),
+                    "height": max(1, round(int(value) * current_height / current_width)),
+                },
+                "等比修改图层宽度",
+            )
         return self._set_layer_attr(self.selectedLayerIndex, "width", int(value), "修改图层宽度")
 
     @Slot(int, result=bool)
     def setSelectedHeight(self, value: int) -> bool:
         if value <= 0:
             return False
+        layer = self._selected_layer()
+        if self.selectedAspectRatioLocked and layer is not None:
+            current_width = max(1, int(getattr(layer, "width", 1)))
+            current_height = max(1, int(getattr(layer, "height", 1)))
+            return self._set_layer_attrs(
+                self.selectedLayerIndex,
+                {
+                    "width": max(1, round(int(value) * current_width / current_height)),
+                    "height": int(value),
+                },
+                "等比修改图层高度",
+            )
         return self._set_layer_attr(self.selectedLayerIndex, "height", int(value), "修改图层高度")
+
+    @Slot(bool, result=bool)
+    def setSelectedRandomPositionEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        changed = self._set_layer_attr(
+            self.selectedLayerIndex,
+            "random_position_enabled",
+            bool(enabled),
+            "切换随机位置",
+            render=False,
+        )
+        return changed and self._refresh_random_transform_preview()
+
+    @Slot(int, result=bool)
+    def setSelectedRandomPositionRange(self, value: int) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "random_position_range",
+            max(0, min(10000, int(value))),
+            "修改随机位置范围",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedRandomScaleEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        changed = self._set_layer_attr(
+            self.selectedLayerIndex,
+            "random_scale_enabled",
+            bool(enabled),
+            "切换随机缩放",
+            render=False,
+        )
+        return changed and self._refresh_random_transform_preview()
+
+    @Slot(int, result=bool)
+    def setSelectedRandomScaleMinPercent(self, value: int) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        value = max(1, min(1000, int(value))) / 100.0
+        layer = self._selected_layer()
+        changes = {"random_scale_min": value}
+        if float(getattr(layer, "random_scale_max", 1.0)) < value:
+            changes["random_scale_max"] = value
+        return self._set_layer_attrs(
+            self.selectedLayerIndex,
+            changes,
+            "修改随机缩放下限",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedRandomScaleMaxPercent(self, value: int) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        value = max(1, min(1000, int(value))) / 100.0
+        layer = self._selected_layer()
+        changes = {"random_scale_max": value}
+        if float(getattr(layer, "random_scale_min", 1.0)) > value:
+            changes["random_scale_min"] = value
+        return self._set_layer_attrs(
+            self.selectedLayerIndex,
+            changes,
+            "修改随机缩放上限",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedRandomRotationEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        changed = self._set_layer_attr(
+            self.selectedLayerIndex,
+            "random_rotation_enabled",
+            bool(enabled),
+            "切换随机旋转",
+            render=False,
+        )
+        return changed and self._refresh_random_transform_preview()
+
+    @Slot(float, result=bool)
+    def setSelectedRandomRotationRange(self, value: float) -> bool:
+        if not self.selectedSupportsRandomTransform:
+            self._set_status("当前图层不支持随机变换", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "random_rotation_range",
+            max(0.0, min(180.0, float(value))),
+            "修改随机旋转范围",
+        )
+
+    @Slot(result=bool)
+    def regenerateSelectedRandomTransform(self) -> bool:
+        return self._refresh_random_transform_preview()
 
     @Slot(int, result=bool)
     def setSelectedOpacity(self, value: int) -> bool:

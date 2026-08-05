@@ -15,7 +15,10 @@ from app.utils.print_utils import safe_print as print  # R7 契约统一：print
 
 import os
 
+from PIL import Image
 from PIL.Image import Resampling, Transpose
+
+from app.utils.rgba_resampler import resize_rgba_premultiplied, rotate_rgba_premultiplied
 
 # 模块级 verbose flag（与原文件保持一致；与 layer_attrs_mixin/layer_rendering_mixin 共享）
 _LAYER_RENDER_VERBOSE = os.environ.get("BTPW_LAYER_RENDER_VERBOSE", "0") == "1"
@@ -256,5 +259,41 @@ class LayerTransformMixin:
             )
             if _LAYER_RENDER_VERBOSE:
                 print(f"应用旋转: {self.rotation}度")
+
+        return self._apply_random_transformations(result)
+
+    def _apply_random_transformations(self, image):
+        """在固定尺寸画布内应用随机缩放与随机旋转。"""
+        if image is None:
+            return None
+
+        result = image
+        if self._random_scale_enabled and abs(self._current_random_scale - 1.0) > 0.001:
+            canvas_size = result.size
+            scaled_size = (
+                max(1, round(canvas_size[0] * self._current_random_scale)),
+                max(1, round(canvas_size[1] * self._current_random_scale)),
+            )
+            scaled = resize_rgba_premultiplied(result, scaled_size, Resampling.LANCZOS)
+            canvas = Image.new("RGBA", canvas_size, (0, 0, 0, 0))
+            offset = (
+                (canvas_size[0] - scaled_size[0]) // 2,
+                (canvas_size[1] - scaled_size[1]) // 2,
+            )
+            canvas.alpha_composite(scaled, offset)
+            result = canvas
+            if _LAYER_RENDER_VERBOSE:
+                print(f"应用随机缩放: {self._current_random_scale:.3f}")
+
+        if self._random_rotation_enabled and abs(self._current_random_rotation) > 0.001:
+            result = rotate_rgba_premultiplied(
+                result,
+                -self._current_random_rotation,
+                resample=Resampling.BICUBIC,
+                expand=False,
+                fillcolor=(0, 0, 0, 0),
+            )
+            if _LAYER_RENDER_VERBOSE:
+                print(f"应用随机旋转: {self._current_random_rotation:.1f}度")
 
         return result

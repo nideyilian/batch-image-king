@@ -25,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--duplicate-selected", action="store_true", help="启动后复制当前选中图层")
     parser.add_argument("--demo-tabs", action="store_true", help="启动后创建多个文档标签用于验收")
     parser.add_argument("--demo-shaped", action="store_true", help="启动后创建真实异形图层用于验收")
+    parser.add_argument("--show-random-transform", action="store_true", help="展示图片图层随机变换配置")
     return parser.parse_args()
 
 
@@ -91,6 +92,8 @@ def main() -> int:
 
     if args.select_layer is not None:
         workspace.selectLayer(args.select_layer)
+    elif args.show_random_transform:
+        workspace.selectLayer(0)
     elif args.demo_effects:
         workspace.selectLayer(0)
     if args.demo_effects:
@@ -109,6 +112,18 @@ def main() -> int:
         workspace.addShapedLayer(str(qml_dir / "assets" / "watch-product.jpg"), "hexagon")
         workspace.setSelectedPolygonRotation(18.0)
         workspace.setSelectedPolygonCornerRadius(24)
+    if args.show_random_transform:
+        layer = workspace.document.layers[workspace.selectedLayerIndex]
+        layer.aspect_ratio_locked = True
+        layer.random_position_enabled = True
+        layer.random_position_range = 24
+        layer.random_scale_enabled = True
+        layer.random_scale_min = 0.85
+        layer.random_scale_max = 1.15
+        layer.random_rotation_enabled = True
+        layer.random_rotation_range = 8.0
+        layer.generate_random_transform_params()
+        workspace.selectionChanged.emit()
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:
@@ -138,6 +153,19 @@ def main() -> int:
     window.setProperty("height", max(720, args.height))
     if args.show_effects:
         window.setProperty("inspectorTab", 1)
+
+    if args.show_random_transform:
+        def reveal_random_transform() -> None:
+            scroll_view = window.findChild(QObject, "inspectorScroll")
+            flickable = scroll_view.property("contentItem") if scroll_view is not None else None
+            debug(f"random transform scroller: view={scroll_view}, content={flickable}")
+            if flickable is not None:
+                content_height = float(scroll_view.property("contentHeight") or 0)
+                viewport_height = float(flickable.property("height") or 0)
+                debug(f"random transform scroll metrics: content={content_height}, viewport={viewport_height}")
+                flickable.setProperty("contentY", max(0, content_height - viewport_height))
+
+        QTimer.singleShot(900, reveal_random_transform)
 
     if args.show_batch_export:
         def open_batch_export() -> None:
