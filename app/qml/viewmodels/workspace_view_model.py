@@ -199,6 +199,7 @@ class _PreviewTask(QRunnable):
 class WorkspaceViewModel(QObject):
     documentObjectChanged = Signal(object)
     documentInfoChanged = Signal()
+    layerCountChanged = Signal()
     selectionChanged = Signal()
     previewChanged = Signal()
     statusChanged = Signal()
@@ -223,6 +224,7 @@ class WorkspaceViewModel(QObject):
         self._document: Optional[Document] = None
         self._preview_provider = preview_provider or PreviewImageProvider()
         self._layer_model = LayerListModel(parent=self)
+        self._layer_model.modelReset.connect(self.layerCountChanged.emit)
         self._preview_revision = 0
         self._status_message = "就绪"
         self._busy = False
@@ -259,6 +261,10 @@ class WorkspaceViewModel(QObject):
     @Property(QObject, constant=True)
     def layerModel(self):
         return self._layer_model
+
+    @Property(int, notify=layerCountChanged)
+    def layerCount(self) -> int:
+        return len(getattr(self._document, "layers", []) or [])
 
     @Property(str, notify=documentInfoChanged)
     def documentTitle(self) -> str:

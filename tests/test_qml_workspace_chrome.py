@@ -54,7 +54,8 @@ def test_randomize_all_layers_button_keeps_a_visible_disabled_state():
     button_source = source.split("id: randomizeAllLayersButton", 1)[1].split("}", 1)[0]
 
     assert "primary: enabled" in button_source
-    assert "enabled: layerModel.rowCount() > 0 && !workspace.operationsBlocked" in button_source
+    assert "enabled: workspace.layerCount > 0 && !workspace.operationsBlocked" in button_source
+    assert "layerModel.rowCount()" not in button_source
 
 
 @pytest.mark.unit

@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from PIL import Image
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QCoreApplication, QSize, QUrl
+from PySide6.QtQml import QQmlComponent, QQmlEngine
 import pytest
 
 from app.models.document import Document
@@ -265,6 +266,30 @@ def test_workspace_randomizes_all_layers_through_document_command(tmp_path: Path
     assert workspace.randomizeAllLayers() is True
     assert calls == ["randomized"]
     assert "随机化" in workspace.statusMessage
+
+
+@pytest.mark.integration
+def test_workspace_layer_count_reenables_qml_binding_after_first_layer():
+    workspace = WorkspaceViewModel(document=Document(), auto_render=False)
+    engine = QQmlEngine()
+    engine.rootContext().setContextProperty("workspace", workspace)
+    component = QQmlComponent(engine)
+    component.setData(
+        b'import QtQml\nQtObject { property bool canRandomize: workspace.layerCount > 0 }',
+        QUrl(),
+    )
+    probe = component.create()
+
+    assert probe is not None, [error.toString() for error in component.errors()]
+    assert probe.property("canRandomize") is False
+    assert workspace.addEmptyImageLayer() is True
+    QCoreApplication.processEvents()
+    assert workspace.layerCount == 1
+    assert probe.property("canRandomize") is True
+    assert workspace.deleteSelectedLayer() is True
+    QCoreApplication.processEvents()
+    assert workspace.layerCount == 0
+    assert probe.property("canRandomize") is False
 
 
 @pytest.mark.integration

@@ -3704,7 +3704,7 @@ ApplicationWindow {
                                 tooltip: "随机化所有图层\n绑定的图层将选择匹配的图片"
                                 buttonSize: 30
                                 primary: enabled
-                                enabled: layerModel.rowCount() > 0 && !workspace.operationsBlocked
+                                enabled: workspace.layerCount > 0 && !workspace.operationsBlocked
                                 onClicked: workspace.randomizeAllLayers()
                             }
                         }
