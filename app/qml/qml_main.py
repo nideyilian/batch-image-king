@@ -28,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-random-transform", action="store_true", help="展示图片图层随机变换配置")
     parser.add_argument("--show-text-typography", action="store_true", help="展示文字字体与核心排版配置")
     parser.add_argument("--show-text-appearance", action="store_true", help="展示文字填充、背景与局部颜色")
+    parser.add_argument("--show-text-effects", action="store_true", help="展示文字阴影、发光与样式工具")
     return parser.parse_args()
 
 
@@ -100,6 +101,8 @@ def main() -> int:
         workspace.selectLayer(1)
     elif args.show_text_appearance:
         workspace.selectLayer(1)
+    elif args.show_text_effects:
+        workspace.selectLayer(1)
     elif args.demo_effects:
         workspace.selectLayer(0)
     if args.demo_effects:
@@ -152,6 +155,22 @@ def main() -> int:
         workspace.setSelectedStrokeEnabled(True)
         workspace.setSelectedStrokeWidth(3)
         workspace.setSelectedStrokeColor("#F2F4F3")
+    if args.show_text_effects:
+        workspace.setSelectedTextBindingEnabled(False)
+        workspace.setSelectedTextFillMode("solid")
+        workspace.setSelectedTextColor("#F7BD63")
+        workspace.setSelectedTextBackgroundEnabled(False)
+        workspace.setSelectedStrokeEnabled(True)
+        workspace.setSelectedStrokeWidth(2)
+        workspace.setSelectedStrokeColor("#F2F4F3")
+        workspace.setSelectedTextShadowEnabled(True)
+        workspace.setSelectedTextShadowOffset(12, 10)
+        workspace.setSelectedTextShadowBlur(9)
+        workspace.setSelectedTextShadowColor("#101715B8")
+        workspace.setSelectedTextGlowEnabled(True)
+        workspace.setSelectedTextGlowStrength(7)
+        workspace.setSelectedTextGlowRadius(14)
+        workspace.copySelectedLayerStyle()
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:
@@ -208,6 +227,13 @@ def main() -> int:
                 debug("text appearance section could not be revealed")
 
         QTimer.singleShot(120, reveal_text_appearance)
+
+    if args.show_text_effects:
+        def reveal_text_effects() -> None:
+            if not QMetaObject.invokeMethod(window, "revealTextEffects"):
+                debug("text effects section could not be revealed")
+
+        QTimer.singleShot(120, reveal_text_effects)
 
     if args.show_batch_export:
         def open_batch_export() -> None:

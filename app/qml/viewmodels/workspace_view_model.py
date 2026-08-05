@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 import os
 from pathlib import Path
@@ -81,6 +82,57 @@ _TEXT_GRADIENT_DIRECTION_IDS = {
     value: key for key, (value, _label) in _TEXT_GRADIENT_DIRECTIONS.items()
 }
 
+_COMMON_STYLE_ATTRIBUTES = (
+    "opacity",
+    "blend_mode",
+    "corner_radius",
+    "stroke_enabled",
+    "stroke_width",
+    "stroke_color",
+    "stroke_type",
+    "rotation",
+    "flip_horizontal",
+    "flip_vertical",
+    "color_overlay_enabled",
+    "color_overlay_color",
+    "color_overlay_opacity",
+    "gradient_overlay_enabled",
+    "gradient_overlay_colors",
+    "gradient_overlay_opacity",
+    "gradient_overlay_angle",
+)
+
+_TEXT_STYLE_ATTRIBUTES = (
+    "font_family",
+    "font_size",
+    "font_style",
+    "text_color",
+    "text_align",
+    "line_spacing",
+    "letter_spacing",
+    "text_box_padding",
+    "auto_fit_text_box",
+    "vertical_layout",
+    "gradient_enabled",
+    "gradient_type",
+    "gradient_direction",
+    "gradient_start_color",
+    "gradient_end_color",
+    "gradient_center_x",
+    "gradient_center_y",
+    "background_enabled",
+    "background_color",
+    "background_padding",
+    "shadow_enabled",
+    "shadow_offset_x",
+    "shadow_offset_y",
+    "shadow_blur",
+    "shadow_color",
+    "glow_enabled",
+    "glow_strength",
+    "glow_radius",
+)
+
 
 def _pil_to_qimage(image) -> QImage:
     rgba = image.convert("RGBA")
@@ -132,6 +184,7 @@ class WorkspaceViewModel(QObject):
     busyChanged = Signal()
     historyStateChanged = Signal()
     exportStateChanged = Signal()
+    styleClipboardChanged = Signal()
     toastRequested = Signal(str)
 
     def __init__(
@@ -157,6 +210,7 @@ class WorkspaceViewModel(QObject):
         self._render_pending = False
         self._active_render_task = None
         self._text_font_names_cache = None
+        self._layer_style_clipboard = None
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(70)
@@ -899,6 +953,75 @@ class WorkspaceViewModel(QObject):
             return 0
         getter = getattr(self._selected_layer(), "get_text_color_ranges", None)
         return len(getter()) if callable(getter) else 0
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextShadowEnabled(self) -> bool:
+        return self.selectedIsTextLayer and bool(
+            getattr(self._selected_layer(), "shadow_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextShadowOffsetX(self) -> int:
+        return int(getattr(self._selected_layer(), "shadow_offset_x", 2))
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextShadowOffsetY(self) -> int:
+        return int(getattr(self._selected_layer(), "shadow_offset_y", 2))
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextShadowBlur(self) -> int:
+        return int(getattr(self._selected_layer(), "shadow_blur", 4))
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextShadowColor(self) -> str:
+        return self._rgba_to_hex(
+            getattr(self._selected_layer(), "shadow_color", (0, 0, 0, 128))
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextShadowOpacity(self) -> int:
+        color = getattr(self._selected_layer(), "shadow_color", (0, 0, 0, 128))
+        alpha = color[3] if isinstance(color, (tuple, list)) and len(color) > 3 else 255
+        return round(max(0, min(255, int(alpha))) / 255.0 * 100)
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextShadowSummary(self) -> str:
+        if not self.selectedTextShadowEnabled:
+            return "关闭"
+        return (
+            f"{self.selectedTextShadowOffsetX:+d} / {self.selectedTextShadowOffsetY:+d} px"
+            f" · 模糊 {self.selectedTextShadowBlur}"
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextGlowEnabled(self) -> bool:
+        return self.selectedIsTextLayer and bool(
+            getattr(self._selected_layer(), "glow_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextGlowStrength(self) -> int:
+        return int(getattr(self._selected_layer(), "glow_strength", 5))
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextGlowRadius(self) -> int:
+        return int(getattr(self._selected_layer(), "glow_radius", 10))
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGlowSummary(self) -> str:
+        if not self.selectedTextGlowEnabled:
+            return "关闭"
+        return f"强度 {self.selectedTextGlowStrength} · 半径 {self.selectedTextGlowRadius} px"
+
+    @Property(bool, notify=styleClipboardChanged)
+    def hasLayerStyleClipboard(self) -> bool:
+        return bool(self._layer_style_clipboard)
+
+    @Property(str, notify=styleClipboardChanged)
+    def layerStyleClipboardSummary(self) -> str:
+        if not self._layer_style_clipboard:
+            return "尚未复制样式"
+        return str(self._layer_style_clipboard.get("summary", "已复制图层样式"))
 
     @Property(bool, notify=selectionChanged)
     def canDuplicateLayer(self) -> bool:
@@ -1763,6 +1886,93 @@ class WorkspaceViewModel(QObject):
             f"文字背景扩展 · {value:+d} px",
         )
 
+    @Slot(bool, result=bool)
+    def setSelectedTextShadowEnabled(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        return self._change_selected_text(
+            "切换文字阴影",
+            lambda layer: setattr(layer, "shadow_enabled", enabled),
+            "文字阴影已开启" if enabled else "文字阴影已关闭",
+        )
+
+    @Slot(int, int, result=bool)
+    def setSelectedTextShadowOffset(self, x: int, y: int) -> bool:
+        x = max(-50, min(50, int(x)))
+        y = max(-50, min(50, int(y)))
+
+        def apply(layer) -> None:
+            layer.shadow_offset_x = x
+            layer.shadow_offset_y = y
+
+        return self._change_selected_text(
+            "修改文字阴影偏移",
+            apply,
+            f"文字阴影偏移 · {x:+d} / {y:+d} px",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextShadowBlur(self, value: int) -> bool:
+        value = max(0, min(20, int(value)))
+        return self._change_selected_text(
+            "修改文字阴影模糊",
+            lambda layer: setattr(layer, "shadow_blur", value),
+            f"文字阴影模糊 · {value} px",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextShadowColor(self, value: str) -> bool:
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("文字阴影颜色格式无效", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字阴影颜色",
+            lambda layer: setattr(layer, "shadow_color", color),
+            f"文字阴影颜色 · {self._rgba_to_hex(color)}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextShadowOpacity(self, value: int) -> bool:
+        value = max(0, min(100, int(value)))
+
+        def apply(layer) -> None:
+            color = tuple(getattr(layer, "shadow_color", (0, 0, 0, 128)))
+            rgb = color[:3] if len(color) >= 3 else (0, 0, 0)
+            layer.shadow_color = rgb + (round(value / 100.0 * 255),)
+
+        return self._change_selected_text(
+            "修改文字阴影透明度",
+            apply,
+            f"文字阴影透明度 · {value}%",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedTextGlowEnabled(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        return self._change_selected_text(
+            "切换文字发光",
+            lambda layer: setattr(layer, "glow_enabled", enabled),
+            "文字发光已开启" if enabled else "文字发光已关闭",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextGlowStrength(self, value: int) -> bool:
+        value = max(0, min(20, int(value)))
+        return self._change_selected_text(
+            "修改文字发光强度",
+            lambda layer: setattr(layer, "glow_strength", value),
+            f"文字发光强度 · {value}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextGlowRadius(self, value: int) -> bool:
+        value = max(1, min(50, int(value)))
+        return self._change_selected_text(
+            "修改文字发光半径",
+            lambda layer: setattr(layer, "glow_radius", value),
+            f"文字发光半径 · {value} px",
+        )
+
     def _validated_selected_text_range(self, start: int, end: int):
         if not self.selectedIsTextLayer:
             self._set_status("当前图层不是文字图层", toast=True)
@@ -1812,6 +2022,80 @@ class WorkspaceViewModel(QObject):
             lambda selected: selected.clear_text_color_range(start, end),
             f"已清除 {end - start} 个字符的局部颜色",
         )
+
+    def _style_attributes_for_layer(self, layer) -> tuple:
+        attrs = list(_COMMON_STYLE_ATTRIBUTES)
+        if self._layer_model.layer_type_name(layer) == "文字":
+            attrs.extend(_TEXT_STYLE_ATTRIBUTES)
+        return tuple(attrs)
+
+    @Slot(result=bool)
+    def copySelectedLayerStyle(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        layer = self._selected_layer()
+        if layer is None:
+            self._set_status("请先选择要复制样式的图层", toast=True)
+            return False
+        layer_type = self._layer_model.layer_type_name(layer)
+        values = {
+            attr: copy.deepcopy(getattr(layer, attr))
+            for attr in self._style_attributes_for_layer(layer)
+            if hasattr(layer, attr)
+        }
+        if not values:
+            self._set_status("当前图层没有可复制的样式", toast=True)
+            return False
+        self._layer_style_clipboard = {
+            "layer_type": layer_type,
+            "values": values,
+            "summary": f"{getattr(layer, 'name', '图层')} · {layer_type}样式",
+        }
+        self.styleClipboardChanged.emit()
+        self._set_status(f"已复制“{getattr(layer, 'name', '图层')}”的样式", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def pasteSelectedLayerStyle(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        if not self._layer_style_clipboard:
+            self._set_status("尚未复制图层样式", toast=True)
+            return False
+        layer = self._selected_layer()
+        if layer is None:
+            self._set_status("请先选择要粘贴样式的图层", toast=True)
+            return False
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定，无法粘贴样式", toast=True)
+            return False
+
+        source_type = self._layer_style_clipboard.get("layer_type", "")
+        target_type = self._layer_model.layer_type_name(layer)
+        allowed = set(_COMMON_STYLE_ATTRIBUTES)
+        if source_type == target_type == "文字":
+            allowed.update(_TEXT_STYLE_ATTRIBUTES)
+        values = self._layer_style_clipboard.get("values", {})
+        changes = {
+            attr: copy.deepcopy(value)
+            for attr, value in values.items()
+            if attr in allowed and hasattr(layer, attr)
+        }
+        if not changes:
+            self._set_status("复制的样式与当前图层不兼容", toast=True)
+            return False
+
+        index = self.selectedLayerIndex
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for attr, value in changes.items():
+                setattr(layer, attr, value)
+            self._document.is_modified = True
+            self._document.bump_hit_test_version()
+            self._document._invalidate_render_cache()
+            self._document.save_state("粘贴图层样式")
+        self._publish_content_change(index, f"已粘贴 {len(changes)} 项图层样式")
+        return True
 
     @Slot(result=bool)
     def deleteSelectedLayer(self) -> bool:

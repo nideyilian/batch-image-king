@@ -116,6 +116,18 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedTextBackgroundColor(value)' in qml_source
     assert 'workspace.setSelectedTextBackgroundOpacity(parsed)' in qml_source
     assert 'workspace.setSelectedTextBackgroundPadding(parsed)' in qml_source
+    assert 'title: "文字阴影"' in qml_source
+    assert 'workspace.setSelectedTextShadowEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextShadowOffset(xValue, yValue)' in qml_source
+    assert 'workspace.setSelectedTextShadowBlur(parsed)' in qml_source
+    assert 'workspace.setSelectedTextShadowColor(value)' in qml_source
+    assert 'workspace.setSelectedTextShadowOpacity(parsed)' in qml_source
+    assert 'title: "文字发光"' in qml_source
+    assert 'workspace.setSelectedTextGlowEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextGlowStrength(parsed)' in qml_source
+    assert 'workspace.setSelectedTextGlowRadius(parsed)' in qml_source
+    assert 'workspace.copySelectedLayerStyle()' in qml_source
+    assert 'workspace.pasteSelectedLayerStyle()' in qml_source
     assert 'workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)' in qml_source
     assert 'workspace.clearSelectedTextColorRange(' in qml_source
     assert 'property bool randomTransformEnabled' not in qml_source

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """TextLayer 方法 mixin：本文件由拆分脚本生成，方法原属于 TextLayer。"""
 from PySide6.QtCore import QObject, Signal, Property
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import os
 import random
 import platform
@@ -18,6 +18,84 @@ from app.models.text_render_layout import normalize_auto_fit_padding
 
 
 class TextLayerRenderMixin:
+
+    def _text_effect_margin(self) -> int:
+        margin = 0
+        if getattr(self, '_shadow_enabled', False):
+            margin = max(
+                margin,
+                int(getattr(self, '_shadow_blur', 0)) * 3
+                + abs(int(getattr(self, '_shadow_offset_x', 0))),
+                int(getattr(self, '_shadow_blur', 0)) * 3
+                + abs(int(getattr(self, '_shadow_offset_y', 0))),
+            )
+        if getattr(self, '_glow_enabled', False):
+            margin = max(margin, int(getattr(self, '_glow_radius', 1)) * 3)
+        return margin
+
+    @staticmethod
+    def _colored_mask(mask: Image.Image, color) -> Image.Image:
+        rgba = tuple(color) if isinstance(color, (tuple, list)) else (0, 0, 0, 255)
+        if len(rgba) < 4:
+            rgba = rgba[:3] + (255,)
+        alpha_scale = max(0, min(255, int(rgba[3]))) / 255.0
+        if alpha_scale < 1.0:
+            mask = mask.point(lambda value: round(value * alpha_scale))
+        result = Image.new('RGBA', mask.size, tuple(rgba[:3]) + (0,))
+        result.putalpha(mask)
+        return result
+
+    @staticmethod
+    def _offset_mask(mask: Image.Image, offset_x: int, offset_y: int) -> Image.Image:
+        shifted = Image.new('L', mask.size, 0)
+        shifted.paste(mask, (int(offset_x), int(offset_y)))
+        return shifted
+
+    def _draw_background_from_content(self, image: Image.Image, content: Image.Image) -> None:
+        bbox = content.getbbox()
+        if bbox is None:
+            return
+        padding = int(getattr(self, '_background_padding', 0))
+        left = max(0, bbox[0] - padding)
+        top = max(0, bbox[1] - padding)
+        right = min(image.width, bbox[2] + padding)
+        bottom = min(image.height, bbox[3] + padding)
+        if right <= left or bottom <= top:
+            return
+        ImageDraw.Draw(image).rectangle(
+            [left, top, right - 1, bottom - 1],
+            fill=self._background_color,
+        )
+
+    def _compose_text_effects(self, background: Image.Image, text_image: Image.Image) -> Image.Image:
+        result = background
+        alpha = text_image.getchannel('A')
+
+        if getattr(self, '_glow_enabled', False) and getattr(self, '_glow_strength', 0) > 0:
+            radius = max(1, int(getattr(self, '_glow_radius', 1)))
+            strength = max(0, min(20, int(getattr(self, '_glow_strength', 0))))
+            glow_image = text_image.filter(ImageFilter.GaussianBlur(radius=radius))
+            glow_mask = glow_image.getchannel('A')
+            glow_mask = glow_mask.point(
+                lambda value: min(255, round(value * (strength / 5.0)))
+            )
+            glow_image.putalpha(glow_mask)
+            result = Image.alpha_composite(result, glow_image)
+
+        if getattr(self, '_shadow_enabled', False):
+            blur = max(0, int(getattr(self, '_shadow_blur', 0)))
+            shadow_mask = alpha.filter(ImageFilter.GaussianBlur(radius=blur)) if blur else alpha
+            shadow_mask = self._offset_mask(
+                shadow_mask,
+                getattr(self, '_shadow_offset_x', 0),
+                getattr(self, '_shadow_offset_y', 0),
+            )
+            result = Image.alpha_composite(
+                result,
+                self._colored_mask(shadow_mask, self._shadow_color),
+            )
+
+        return Image.alpha_composite(result, text_image)
 
     def _create_gradient_image(self, width: int, height: int) -> Image.Image:
         """创建渐变图像"""
@@ -562,8 +640,9 @@ class TextLayerRenderMixin:
                 content_width, content_height = self._measure_horizontal_text(lines, font, temp_draw)
 
             # content_width/content_height 已包含描边测量，不再重复叠加 stroke_extra
-            target_width = max(1, int(content_width + self._text_box_padding * 2))
-            target_height = max(1, int(content_height + self._text_box_padding * 2))
+            padding = self._text_box_padding + self._text_effect_margin()
+            target_width = max(1, int(content_width + padding * 2))
+            target_height = max(1, int(content_height + padding * 2))
 
             changed = (target_width != self._width or target_height != self._height)
             if changed:
@@ -854,7 +933,11 @@ class TextLayerRenderMixin:
             'stroke_width': self._stroke_width,
             'letter_spacing': self._letter_spacing,
             'text_box_padding': self._text_box_padding,
-            'background_padding': self._background_padding
+            'background_padding': self._background_padding,
+            'shadow_offset_x': self._shadow_offset_x,
+            'shadow_offset_y': self._shadow_offset_y,
+            'shadow_blur': self._shadow_blur,
+            'glow_radius': self._glow_radius,
         }
 
         try:
@@ -866,6 +949,10 @@ class TextLayerRenderMixin:
             self._letter_spacing = int(self._letter_spacing * scale)
             self._text_box_padding = int(self._text_box_padding * scale)
             self._background_padding = int(self._background_padding * scale)
+            self._shadow_offset_x = int(self._shadow_offset_x * scale)
+            self._shadow_offset_y = int(self._shadow_offset_y * scale)
+            self._shadow_blur = int(self._shadow_blur * scale)
+            self._glow_radius = int(self._glow_radius * scale)
 
             # 锁住自适配，避免在放大参数下重算图层尺寸
             self._auto_fit_lock = True
@@ -883,6 +970,10 @@ class TextLayerRenderMixin:
             self._letter_spacing = original['letter_spacing']
             self._text_box_padding = original['text_box_padding']
             self._background_padding = original['background_padding']
+            self._shadow_offset_x = original['shadow_offset_x']
+            self._shadow_offset_y = original['shadow_offset_y']
+            self._shadow_blur = original['shadow_blur']
+            self._glow_radius = original['glow_radius']
             self._auto_fit_lock = prev_auto_fit_lock
 
         return self._normalize_auto_fit_padding(image)
@@ -1006,7 +1097,7 @@ class TextLayerRenderMixin:
 
         # 自动适配边框时，以边距为锚点；否则沿用原视觉居中算法
         if self._auto_fit_text_box:
-            final_start_y = max(0, self._text_box_padding)
+            final_start_y = max(0, self._text_box_padding + self._text_effect_margin())
         else:
             # 非自动适配时，使用与测量一致的几何居中，避免视觉中心算法与bbox口径不一致
             final_start_y = max(0, (self._height - total_height) // 2)
@@ -1016,13 +1107,10 @@ class TextLayerRenderMixin:
         if self._gradient_enabled:
             gradient_image = self._create_gradient_image(self._width, self._height)
 
-        # 创建最终图像（单遍渲染）
+        # 背景和文字分层渲染，阴影/发光只使用文字蒙版。
         image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-
-        # 绘制文字背景（如果启用）
-        if self._background_enabled:
-            self._draw_text_background(draw, lines, font, final_start_y, line_widths, line_heights, max_line_height)
+        text_image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(text_image)
 
         # 使用调整后的位置进行最终渲染
         current_y = final_start_y
@@ -1041,12 +1129,18 @@ class TextLayerRenderMixin:
                 x = max(0, (self._width - line_width) // 2)
             elif self._text_align == TextAlign.RIGHT:
                 if self._auto_fit_text_box:
-                    x = max(0, self._width - self._text_box_padding - line_width)
+                    x = max(
+                        0,
+                        self._width
+                        - self._text_box_padding
+                        - self._text_effect_margin()
+                        - line_width,
+                    )
                 else:
                     x = max(0, self._width - line_width)
             else:  # LEFT
                 if self._auto_fit_text_box:
-                    x = max(0, self._text_box_padding)
+                    x = max(0, self._text_box_padding + self._text_effect_margin())
                 else:
                     x = 0
 
@@ -1069,7 +1163,8 @@ class TextLayerRenderMixin:
                     stroke_colored = Image.new('RGBA', (self._width, self._height), self._stroke_color)
                     stroke_result = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
                     stroke_result.paste(stroke_colored, (0, 0), stroke_mask)
-                    image = Image.alpha_composite(image, stroke_result)
+                    text_image = Image.alpha_composite(text_image, stroke_result)
+                    draw = ImageDraw.Draw(text_image)
                 else:
                     if self._letter_spacing != 0:
                         self._draw_text_with_letter_spacing(
@@ -1093,13 +1188,25 @@ class TextLayerRenderMixin:
                             stroke_fill=self._stroke_color
                         )
 
-            image = self._draw_text_line_fill(image, draw_x, draw_y, line, line_start_index, font, gradient_image)
-            draw = ImageDraw.Draw(image)
+            text_image = self._draw_text_line_fill(
+                text_image,
+                draw_x,
+                draw_y,
+                line,
+                line_start_index,
+                font,
+                gradient_image,
+            )
+            draw = ImageDraw.Draw(text_image)
 
             # 移动到下一行
             if i < len(line_heights) - 1 and line_heights:
                 current_y += line_heights[i] + int(max_line_height * (self._line_spacing - 1))
             line_start_index += len(line) + 1
+
+        if self._background_enabled:
+            self._draw_background_from_content(image, text_image)
+        image = self._compose_text_effects(image, text_image)
 
         # 应用透明度
         if self._opacity < 1.0:
@@ -1111,8 +1218,8 @@ class TextLayerRenderMixin:
 
     def _render_text_vertical_internal(self, font, lines: List[str], temp_draw: ImageDraw.Draw) -> Image.Image:
         """竖排渲染实现。"""
-        image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
+        text_image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(text_image)
 
         # 计算列宽和列高
         column_data = []
@@ -1150,8 +1257,9 @@ class TextLayerRenderMixin:
 
         # 起始位置
         if self._auto_fit_text_box:
-            start_x = max(0, self._text_box_padding)
-            start_y = max(0, self._text_box_padding)
+            padding = self._text_box_padding + self._text_effect_margin()
+            start_x = max(0, padding)
+            start_y = max(0, padding)
         else:
             if self._text_align == TextAlign.CENTER:
                 start_x = max(0, (self._width - total_width) // 2)
@@ -1184,24 +1292,29 @@ class TextLayerRenderMixin:
                 if local_color is not None:
                     color_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, local_color)
                     if color_result:
-                        image = Image.alpha_composite(image, color_result)
-                        draw = ImageDraw.Draw(image)
+                        text_image = Image.alpha_composite(text_image, color_result)
+                        draw = ImageDraw.Draw(text_image)
                 elif self._gradient_enabled and gradient_image is not None:
                     gradient_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, gradient_image)
                     if gradient_result:
-                        image = Image.alpha_composite(image, gradient_result)
-                        draw = ImageDraw.Draw(image)
+                        text_image = Image.alpha_composite(text_image, gradient_result)
+                        draw = ImageDraw.Draw(text_image)
                 else:
                     color_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, self._text_color)
                     if color_result:
-                        image = Image.alpha_composite(image, color_result)
-                        draw = ImageDraw.Draw(image)
+                        text_image = Image.alpha_composite(text_image, color_result)
+                        draw = ImageDraw.Draw(text_image)
                     else:
                         draw.text((char_x, char_y), ch, font=font, fill=self._text_color)
 
                 current_y += char_height + char_gap
 
             current_x += col_width + col_gap
+
+        image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
+        if self._background_enabled:
+            self._draw_background_from_content(image, text_image)
+        image = self._compose_text_effects(image, text_image)
 
         if self._opacity < 1.0:
             alpha = image.split()[-1]

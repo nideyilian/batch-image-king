@@ -98,6 +98,16 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         self._background_enabled = False
         self._background_color = (255, 255, 255, 128)  # 背景颜色 RGBA
         self._background_padding = 5  # 背景内边距
+
+        # 阴影与发光
+        self._shadow_enabled = False
+        self._shadow_offset_x = 2
+        self._shadow_offset_y = 2
+        self._shadow_blur = 4
+        self._shadow_color = (0, 0, 0, 128)
+        self._glow_enabled = False
+        self._glow_strength = 5
+        self._glow_radius = 10
         
         # 缓存
         self._cached_image = None
@@ -448,6 +458,110 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         if self._background_padding != value:  # 移除value >= 0的限制，允许负值
             self._background_padding = value
             self._cached_image = None
+            self.changed.emit()
+
+    @Property(bool)
+    def shadow_enabled(self):
+        return self._shadow_enabled
+
+    @shadow_enabled.setter
+    def shadow_enabled(self, value):
+        value = bool(value)
+        if self._shadow_enabled != value:
+            self._shadow_enabled = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
+            self.changed.emit()
+
+    @Property(int)
+    def shadow_offset_x(self):
+        return self._shadow_offset_x
+
+    @shadow_offset_x.setter
+    def shadow_offset_x(self, value):
+        value = max(-50, min(50, int(value)))
+        if self._shadow_offset_x != value:
+            self._shadow_offset_x = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
+            self.changed.emit()
+
+    @Property(int)
+    def shadow_offset_y(self):
+        return self._shadow_offset_y
+
+    @shadow_offset_y.setter
+    def shadow_offset_y(self, value):
+        value = max(-50, min(50, int(value)))
+        if self._shadow_offset_y != value:
+            self._shadow_offset_y = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
+            self.changed.emit()
+
+    @Property(int)
+    def shadow_blur(self):
+        return self._shadow_blur
+
+    @shadow_blur.setter
+    def shadow_blur(self, value):
+        value = max(0, min(20, int(value)))
+        if self._shadow_blur != value:
+            self._shadow_blur = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
+            self.changed.emit()
+
+    @Property(tuple)
+    def shadow_color(self):
+        return self._shadow_color
+
+    @shadow_color.setter
+    def shadow_color(self, value):
+        if isinstance(value, (tuple, list)) and len(value) >= 3:
+            channels = tuple(max(0, min(255, int(channel))) for channel in value[:4])
+            color = channels[:3] + ((channels[3] if len(channels) > 3 else 255),)
+            if self._shadow_color != color:
+                self._shadow_color = color
+                self._cached_image = None
+                self.changed.emit()
+
+    @Property(bool)
+    def glow_enabled(self):
+        return self._glow_enabled
+
+    @glow_enabled.setter
+    def glow_enabled(self, value):
+        value = bool(value)
+        if self._glow_enabled != value:
+            self._glow_enabled = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
+            self.changed.emit()
+
+    @Property(int)
+    def glow_strength(self):
+        return self._glow_strength
+
+    @glow_strength.setter
+    def glow_strength(self, value):
+        value = max(0, min(20, int(value)))
+        if self._glow_strength != value:
+            self._glow_strength = value
+            self._cached_image = None
+            self.changed.emit()
+
+    @Property(int)
+    def glow_radius(self):
+        return self._glow_radius
+
+    @glow_radius.setter
+    def glow_radius(self, value):
+        value = max(1, min(50, int(value)))
+        if self._glow_radius != value:
+            self._glow_radius = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
             self.changed.emit()
 
     # 渐变属性

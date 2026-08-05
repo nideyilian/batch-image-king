@@ -267,14 +267,14 @@ class TextLayerSerializeMixin:
             'gradient_center_y': self._gradient_center_y,
             'supersample_enabled': self._supersample_enabled,
             'supersample_scale': self._supersample_scale,
-            'shadow_enabled': getattr(self, 'shadow_enabled', False),
-            'shadow_offset_x': getattr(self, 'shadow_offset_x', 2),
-            'shadow_offset_y': getattr(self, 'shadow_offset_y', 2),
-            'shadow_blur': getattr(self, 'shadow_blur', 4),
-            'shadow_color': getattr(self, 'shadow_color', (0, 0, 0, 128)),
-            'glow_enabled': getattr(self, 'glow_enabled', False),
-            'glow_strength': getattr(self, 'glow_strength', 50),
-            'glow_radius': getattr(self, 'glow_radius', 6)
+            'shadow_enabled': self._shadow_enabled,
+            'shadow_offset_x': self._shadow_offset_x,
+            'shadow_offset_y': self._shadow_offset_y,
+            'shadow_blur': self._shadow_blur,
+            'shadow_color': self._shadow_color,
+            'glow_enabled': self._glow_enabled,
+            'glow_strength': self._glow_strength,
+            'glow_radius': self._glow_radius
         }
 
     @classmethod
@@ -330,8 +330,8 @@ class TextLayerSerializeMixin:
         layer.shadow_blur = int(data.get('shadow_blur', 4))
         layer.shadow_color = tuple(data.get('shadow_color', (0, 0, 0, 128)))
         layer.glow_enabled = bool(data.get('glow_enabled', False))
-        layer.glow_strength = int(data.get('glow_strength', 50))
-        layer.glow_radius = int(data.get('glow_radius', 6))
+        layer.glow_strength = int(data.get('glow_strength', 5))
+        layer.glow_radius = int(data.get('glow_radius', 10))
         layer._update_text_box_size_if_needed()
 
         return layer

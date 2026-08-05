@@ -82,6 +82,16 @@ ApplicationWindow {
         })
     }
 
+    function revealTextEffects() {
+        inspectorTab = 1
+        textShadowSection.expanded = true
+        textGlowSection.expanded = true
+        Qt.callLater(function() {
+            if (inspectorScroll.contentItem)
+                inspectorScroll.contentItem.contentY = Math.max(0, textShadowSection.y - 8)
+        })
+    }
+
     function optionIndex(options, value) {
         for (var index = 0; index < options.length; index++) {
             if (options[index].value === value) return index
@@ -433,6 +443,7 @@ ApplicationWindow {
             if (target === "overlay") return "选择叠加颜色"
             if (target === "textFill") return "选择文字颜色"
             if (target === "textBackground") return "选择文字背景颜色"
+            if (target === "textShadow") return "选择文字阴影颜色"
             if (target === "textRange") return "选择选区文字颜色"
             return "选择渐变颜色"
         }
@@ -453,6 +464,7 @@ ApplicationWindow {
             else if (target === "textFill") workspace.setSelectedTextColor(hexValue)
             else if (target === "textGradient") workspace.setSelectedTextGradientColor(colorIndex, hexValue)
             else if (target === "textBackground") workspace.setSelectedTextBackgroundColor(hexValue)
+            else if (target === "textShadow") workspace.setSelectedTextShadowColor(hexValue)
             else if (target === "textRange") workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)
             else workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)
         }
@@ -1653,6 +1665,25 @@ ApplicationWindow {
                                 buttonSize: 28
                                 enabled: workspace.canDuplicateLayer
                                 onClicked: workspace.duplicateSelectedLayer()
+                            }
+                            IconButton {
+                                glyph: "\uE8C8"
+                                tooltip: "复制图层样式"
+                                buttonSize: 28
+                                enabled: workspace.selectedLayerIndex >= 0 && !workspace.operationsBlocked
+                                onClicked: workspace.copySelectedLayerStyle()
+                            }
+                            IconButton {
+                                glyph: "\uE77F"
+                                tooltip: workspace.hasLayerStyleClipboard
+                                         ? "粘贴图层样式 · " + workspace.layerStyleClipboardSummary
+                                         : "粘贴图层样式 · 尚未复制"
+                                buttonSize: 28
+                                enabled: workspace.hasLayerStyleClipboard
+                                         && workspace.selectedLayerIndex >= 0
+                                         && !workspace.selectedLocked
+                                         && !workspace.operationsBlocked
+                                onClicked: workspace.pasteSelectedLayerStyle()
                             }
                             IconButton {
                                 glyph: "\uE70E"
@@ -3045,6 +3076,147 @@ ApplicationWindow {
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedTextBackgroundPadding(parsed)
+                                        }
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                id: textShadowSection
+                                objectName: "textShadowSection"
+                                width: parent.width
+                                title: "文字阴影"
+                                summary: workspace.selectedTextShadowSummary
+                                visible: workspace.selectedIsTextLayer
+
+                                InspectorRow {
+                                    label: "启用"
+                                    BodyLabel {
+                                        text: workspace.selectedTextShadowEnabled ? "投影已开启" : "无投影"
+                                        color: workspace.selectedTextShadowEnabled ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedTextShadowEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedTextShadowEnabled(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "偏移"
+                                    visible: workspace.selectedTextShadowEnabled
+                                    ValueBox {
+                                        value: workspace.selectedTextShadowOffsetX.toString()
+                                        bindValue: true
+                                        suffix: "X px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var xValue = parseInt(value)
+                                            var yValue = workspace.selectedTextShadowOffsetY
+                                            if (!isNaN(xValue)) workspace.setSelectedTextShadowOffset(xValue, yValue)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTextShadowOffsetY.toString()
+                                        bindValue: true
+                                        suffix: "Y px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var xValue = workspace.selectedTextShadowOffsetX
+                                            var yValue = parseInt(value)
+                                            if (!isNaN(yValue)) workspace.setSelectedTextShadowOffset(xValue, yValue)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "模糊"
+                                    visible: workspace.selectedTextShadowEnabled
+                                    ValueBox {
+                                        value: workspace.selectedTextShadowBlur.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextShadowBlur(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "颜色"
+                                    visible: workspace.selectedTextShadowEnabled
+                                    ColorValueField {
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextShadowColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("textShadow", workspace.selectedTextShadowColor)
+                                        onValueCommitted: value => workspace.setSelectedTextShadowColor(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "透明度"
+                                    visible: workspace.selectedTextShadowEnabled
+                                    ValueBox {
+                                        value: workspace.selectedTextShadowOpacity.toString()
+                                        bindValue: true
+                                        suffix: "%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextShadowOpacity(parsed)
+                                        }
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                id: textGlowSection
+                                objectName: "textGlowSection"
+                                width: parent.width
+                                title: "文字发光"
+                                summary: workspace.selectedTextGlowSummary
+                                visible: workspace.selectedIsTextLayer
+
+                                InspectorRow {
+                                    label: "启用"
+                                    BodyLabel {
+                                        text: workspace.selectedTextGlowEnabled ? "沿用文字填充色" : "无发光"
+                                        color: workspace.selectedTextGlowEnabled ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedTextGlowEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedTextGlowEnabled(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "参数"
+                                    visible: workspace.selectedTextGlowEnabled
+                                    ValueBox {
+                                        value: workspace.selectedTextGlowStrength.toString()
+                                        bindValue: true
+                                        suffix: "强度"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextGlowStrength(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTextGlowRadius.toString()
+                                        bindValue: true
+                                        suffix: "半径px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextGlowRadius(parsed)
                                         }
                                     }
                                 }
