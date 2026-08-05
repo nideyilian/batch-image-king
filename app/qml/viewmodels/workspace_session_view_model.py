@@ -186,6 +186,22 @@ class WorkspaceSessionViewModel(QAbstractListModel):
             return self._sessions[index].document
         return None
 
+    def appendDocuments(self, documents, action="加载预设") -> int:
+        valid = [document for document in list(documents or []) if isinstance(document, Document)]
+        if not valid or self._workspace.operationsBlocked:
+            return 0
+        first_index = -1
+        for document in valid:
+            document.current_file_path = None
+            document.is_modified = False
+            self._prepare_history(document, action)
+            index = self._append_document(document)
+            if first_index < 0:
+                first_index = index
+        if first_index >= 0:
+            self.activateDocument(first_index)
+        return len(valid)
+
     @Slot(int, result=bool)
     def activateDocument(self, index: int) -> bool:
         if not 0 <= index < len(self._sessions):

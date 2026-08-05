@@ -306,6 +306,194 @@ ApplicationWindow {
         }
     }
 
+    Dialog {
+        id: presetDeleteConfirm
+        anchors.centerIn: parent
+        width: 390
+        height: 170
+        modal: true
+        padding: 0
+        property string presetId: ""
+        property string presetName: ""
+        background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong; radius: Theme.radius }
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 14
+            Text { text: "删除项目预设？"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 16; font.weight: Font.DemiBold }
+            BodyLabel { text: "“" + presetDeleteConfirm.presetName + "”将从本机永久移除。"; color: Theme.textSecondary; Layout.fillWidth: true; wrapMode: Text.Wrap }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 80; label: "取消"; onClicked: presetDeleteConfirm.close() }
+                ExportButton {
+                    Layout.preferredWidth: 90
+                    label: "删除"
+                    primary: true
+                    onClicked: {
+                        projectPresets.deletePreset(presetDeleteConfirm.presetId)
+                        projectPresetDrawer.selectedPresetId = ""
+                        presetDeleteConfirm.close()
+                    }
+                }
+            }
+        }
+    }
+
+    Drawer {
+        id: projectPresetDrawer
+        objectName: "projectPresetDrawer"
+        edge: Qt.RightEdge
+        width: Math.min(460, Math.max(390, window.width * 0.29))
+        height: window.height
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        property string selectedPresetId: ""
+
+        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "项目预设"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                TinyLabel { text: projectPresets.count + " 项" }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: projectPresetDrawer.close() }
+            }
+            TinyLabel { text: "保存完整文档结构，加载时追加为新标签页"; color: Theme.textMuted }
+            Divider { Layout.fillWidth: true }
+
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(220, projectPresetDrawer.height - 500)
+                clip: true
+                spacing: 2
+                model: projectPresets.presets
+
+                delegate: Rectangle {
+                    required property var modelData
+                    width: ListView.view.width
+                    height: 66
+                    radius: Theme.radiusSmall
+                    color: modelData.id === projectPresetDrawer.selectedPresetId ? Theme.accentSoft : (projectPresetMouse.containsMouse ? Theme.bgHover : "transparent")
+                    border.width: modelData.id === projectPresetDrawer.selectedPresetId ? 1 : 0
+                    border.color: Theme.accentPressed
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 3
+                            BodyLabel { text: modelData.name; color: Theme.textPrimary; width: parent.width; elide: Text.ElideRight }
+                            TinyLabel { text: modelData.canvasSizes.join(" / ") + "  ·  " + modelData.totalLayers + " 图层" }
+                            TinyLabel { text: modelData.description || "无描述"; width: parent.width; elide: Text.ElideRight }
+                        }
+                        IconButton {
+                            glyph: "\uE768"
+                            tooltip: "追加加载为新标签页"
+                            buttonSize: 32
+                            onClicked: {
+                                var loaded = projectPresets.loadPreset(modelData.id)
+                                if (loaded > 0) {
+                                    showToast("已加载 " + loaded + " 个标签页")
+                                    projectPresetDrawer.close()
+                                } else showToast(projectPresets.lastError)
+                            }
+                        }
+                    }
+                    MouseArea {
+                        id: projectPresetMouse
+                        anchors.fill: parent
+                        anchors.rightMargin: 40
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            projectPresetDrawer.selectedPresetId = modelData.id
+                            projectPresetName.text = modelData.name
+                            projectPresetDescription.text = modelData.description
+                        }
+                    }
+                }
+            }
+
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 72
+                visible: projectPresets.count === 0
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 5
+                    BodyLabel { text: "还没有项目预设"; color: Theme.textPrimary; anchors.horizontalCenter: parent.horizontalCenter }
+                    TinyLabel { text: "输入名称后保存当前文档"; anchors.horizontalCenter: parent.horizontalCenter }
+                }
+            }
+            Divider { Layout.fillWidth: true }
+            TextField {
+                id: projectPresetName
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                placeholderText: "预设名称"
+                color: Theme.textPrimary
+                selectByMouse: true
+                background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: projectPresetName.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+            }
+            TextField {
+                id: projectPresetDescription
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                placeholderText: "描述（可选）"
+                color: Theme.textPrimary
+                selectByMouse: true
+                background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: projectPresetDescription.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                ExportButton {
+                    Layout.fillWidth: true
+                    label: "保存当前文档"
+                    glyph: "\uE74E"
+                    primary: true
+                    onClicked: {
+                        if (projectPresets.saveCurrent(projectPresetName.text, projectPresetDescription.text)) {
+                            showToast("项目预设已保存")
+                            projectPresetName.clear()
+                            projectPresetDescription.clear()
+                        } else showToast(projectPresets.lastError)
+                    }
+                }
+                IconButton {
+                    glyph: "\uE70F"
+                    tooltip: "更新所选预设名称与描述"
+                    buttonSize: 36
+                    enabled: projectPresetDrawer.selectedPresetId.length > 0
+                    onClicked: {
+                        if (!projectPresets.renamePreset(projectPresetDrawer.selectedPresetId, projectPresetName.text, projectPresetDescription.text))
+                            showToast(projectPresets.lastError)
+                    }
+                }
+                IconButton {
+                    glyph: "\uE74D"
+                    tooltip: "删除所选预设"
+                    buttonSize: 36
+                    enabled: projectPresetDrawer.selectedPresetId.length > 0
+                    onClicked: {
+                        presetDeleteConfirm.presetId = projectPresetDrawer.selectedPresetId
+                        presetDeleteConfirm.presetName = projectPresetName.text
+                        presetDeleteConfirm.open()
+                    }
+                }
+            }
+        }
+    }
+
     Drawer {
         id: canvasPresetDrawer
         objectName: "canvasPresetDrawer"
@@ -337,7 +525,7 @@ ApplicationWindow {
             ListView {
                 id: canvasPresetList
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(240, canvasPresetDrawer.height - 420)
+                Layout.preferredHeight: Math.max(240, canvasPresetDrawer.height - 500)
                 clip: true
                 spacing: 4
                 model: canvasPresets.presets
@@ -1428,6 +1616,12 @@ ApplicationWindow {
                     tooltip: "保存"
                     enabled: !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
+                }
+                IconButton {
+                    glyph: "\uE8F1"
+                    tooltip: "项目预设"
+                    enabled: !workspace.operationsBlocked
+                    onClicked: projectPresetDrawer.open()
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }

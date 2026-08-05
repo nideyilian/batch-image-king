@@ -2,6 +2,7 @@
 
 from app.qml.viewmodels.layer_list_model import LayerListModel
 from app.qml.viewmodels.canvas_preset_view_model import CanvasPresetViewModel
+from app.qml.viewmodels.preset_manager_view_model import PresetManagerViewModel
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
-__all__ = ["CanvasPresetViewModel", "LayerListModel", "WorkspaceViewModel"]
+__all__ = ["CanvasPresetViewModel", "LayerListModel", "PresetManagerViewModel", "WorkspaceViewModel"]

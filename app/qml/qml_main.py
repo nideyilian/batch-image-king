@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-grouped-layers", action="store_true", help="展示图层组层级与属性")
     parser.add_argument("--show-guides", action="store_true", help="展示标尺与参考线")
     parser.add_argument("--show-canvas-presets", action="store_true", help="展示画布预设管理")
+    parser.add_argument("--show-project-presets", action="store_true", help="展示项目预设管理")
     return parser.parse_args()
 
 
@@ -68,6 +69,7 @@ def main() -> int:
     from app.qml.preview_image_provider import PreviewImageProvider
     from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
     from app.qml.viewmodels.canvas_preset_view_model import CanvasPresetViewModel
+    from app.qml.viewmodels.preset_manager_view_model import PresetManagerViewModel
     from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
@@ -203,6 +205,11 @@ def main() -> int:
         workspace.addGuide("horizontal", workspace.canvasHeight * 0.67)
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
+    project_presets = PresetManagerViewModel(
+        workspace=workspace,
+        sessions=workspace_sessions,
+        parent=engine,
+    )
     if args.demo_tabs:
         workspace_sessions.newDocument(1080, 1080)
         workspace_sessions.newDocument(1920, 1080)
@@ -213,6 +220,7 @@ def main() -> int:
     engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
     engine.rootContext().setContextProperty("batchExport", batch_export)
     engine.rootContext().setContextProperty("canvasPresets", canvas_presets)
+    engine.rootContext().setContextProperty("projectPresets", project_presets)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")
@@ -282,6 +290,14 @@ def main() -> int:
 
         QTimer.singleShot(80, open_canvas_presets)
 
+    if args.show_project_presets:
+        def open_project_presets() -> None:
+            drawer = window.findChild(QObject, "projectPresetDrawer")
+            if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
+                debug("project preset drawer could not be opened")
+
+        QTimer.singleShot(80, open_project_presets)
+
     if args.show_new_canvas:
         def open_new_canvas() -> None:
             dialog = window.findChild(QObject, "newCanvasDialog")
@@ -305,7 +321,13 @@ def main() -> int:
         def capture() -> None:
             debug("capturing root window")
             try:
-                if args.show_batch_export or args.show_new_canvas or args.show_close_confirm or args.show_canvas_presets:
+                if (
+                    args.show_batch_export
+                    or args.show_new_canvas
+                    or args.show_close_confirm
+                    or args.show_canvas_presets
+                    or args.show_project_presets
+                ):
                     image = window.grabWindow()
                     saved = not image.isNull() and image.save(str(output_path), "PNG")
                     if saved:

@@ -14,15 +14,16 @@ from app.utils.trusted_pickle import load_trusted_pickle
 class PresetManager:
     """预设管理器，负责管理项目预设"""
 
-    def __init__(self):
+    def __init__(self, app_dir=None, copy_initial=True):
         # 获取用户数据目录，避免写入程序目录（打包后可能只读）
-        self.app_dir = self._get_user_data_dir()
+        self.app_dir = str(app_dir) if app_dir else self._get_user_data_dir()
         # 创建预设目录
         self.presets_dir = os.path.join(self.app_dir, "presets")
         # 预设索引文件，用于管理预设元数据
         self.index_file = os.path.join(self.presets_dir, "presets_index.json")
         self._ensure_presets_dir()
-        self._copy_initial_presets()
+        if copy_initial:
+            self._copy_initial_presets()
         self._load_index()
     
     def _get_user_data_dir(self):
