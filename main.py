@@ -434,4 +434,10 @@ def main() -> int:
         return finish_crash_session(crash_session_id, 1, logger)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    if "--classic" in sys.argv:
+        sys.argv.remove("--classic")
+        sys.exit(main())
+
+    from app.qml.qml_main import main as qml_main
+
+    sys.exit(qml_main())

@@ -15,22 +15,39 @@ ApplicationWindow {
     title: "批图王 · QML 工作台"
     color: Theme.bgApp
 
+    onClosing: function(close) {
+        if (!workspaceSessions.applicationCloseApproved) {
+            close.accepted = false
+            workspaceSessions.requestApplicationClose()
+        }
+    }
+
     property int selectedLayer: workspace.selectedLayerIndex
     property int activeTool: 0
-    property real zoomValue: 0.78
     property int inspectorTab: 0
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
     property string pendingCloseTitle: ""
     property string pendingShapeType: "circle"
+    property int contextDocumentIndex: -1
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
         { label: "正片叠底", value: "multiply" },
         { label: "滤色", value: "screen" },
         { label: "叠加", value: "overlay" },
         { label: "柔光", value: "soft_light" },
-        { label: "强光", value: "hard_light" }
+        { label: "强光", value: "hard_light" },
+        { label: "颜色减淡", value: "color_dodge" },
+        { label: "颜色加深", value: "color_burn" },
+        { label: "变暗", value: "darken" },
+        { label: "变亮", value: "lighten" },
+        { label: "差值", value: "difference" },
+        { label: "排除", value: "exclusion" },
+        { label: "色相", value: "hue" },
+        { label: "饱和度", value: "saturation" },
+        { label: "颜色", value: "color" },
+        { label: "明度", value: "luminosity" }
     ]
     readonly property var imageFitOptions: [
         { label: "填满裁剪", value: "crop" },
@@ -140,7 +157,36 @@ ApplicationWindow {
             pendingCloseTitle = title
             closeSaveDialog.open()
         }
+        function onApplicationCloseReady() {
+            Qt.callLater(function() { window.close() })
+        }
     }
+
+    Shortcut { sequence: "Ctrl+N"; onActivated: newCanvasDialog.open() }
+    Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
+    Shortcut { sequence: "Ctrl+S"; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+    Shortcut { sequence: "Ctrl+Shift+S"; onActivated: saveDialog.open() }
+    Shortcut { sequence: "Ctrl+W"; onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
+    Shortcut { sequence: "Ctrl+E"; onActivated: exportDialog.open() }
+    Shortcut { sequence: "Ctrl+Shift+E"; onActivated: legacyTools.openMultiTabExport() }
+    Shortcut { sequence: "Ctrl+P"; onActivated: legacyTools.openPresetManager() }
+    Shortcut { sequence: "Ctrl+R"; onActivated: legacyTools.openResizeCanvas() }
+    Shortcut { sequence: "Ctrl+Z"; enabled: workspace.canUndo; onActivated: workspace.undo() }
+    Shortcut { sequence: "Ctrl+Y"; enabled: workspace.canRedo; onActivated: workspace.redo() }
+    Shortcut { sequence: "Ctrl+C"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.copySelectedLayers() }
+    Shortcut { sequence: "Ctrl+V"; enabled: window.layerShortcutsEnabled && legacyTools.hasLayerClipboard; onActivated: legacyTools.pasteLayers() }
+    Shortcut { sequence: "Ctrl+Shift+C"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.copySelectedLayerStyle() }
+    Shortcut { sequence: "Ctrl+Shift+V"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.pasteSelectedLayerStyle() }
+    Shortcut { sequence: "Ctrl+A"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.selectAllLayers() }
+    Shortcut { sequence: "Ctrl+L"; enabled: window.layerShortcutsEnabled; onActivated: imageDialog.open() }
+    Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: workspace.addTextLayer() }
+    Shortcut { sequence: "Ctrl+Up"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward; onActivated: workspace.moveSelectedLayer("forward") }
+    Shortcut { sequence: "Ctrl+Down"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") }
+    Shortcut { sequence: "Ctrl++"; onActivated: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
+    Shortcut { sequence: "Ctrl+-"; onActivated: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
+    Shortcut { sequence: "Ctrl+0"; onActivated: workspace.setZoomFactor(0.78) }
+    Shortcut { sequence: "F2"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: legacyTools.renameSelectedLayer() }
+    Shortcut { sequence: "Delete"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.deleteSelectedLayers() }
 
     Shortcut {
         sequence: "Ctrl+D"
@@ -995,6 +1041,91 @@ ApplicationWindow {
         onAccepted: workspace.addShapedLayer(selectedFile.toString(), pendingShapeType)
     }
 
+    AppMenu {
+        id: fileMenu
+        ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: newCanvasDialog.open() }
+        ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "保存\tCtrl+S"; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+        ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; onTriggered: saveDialog.open() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "关闭当前标签\tCtrl+W"; onTriggered: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
+        ShapeMenuItem { text: "复制当前标签"; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
+        MenuSeparator { }
+        ShapeMenuItem { text: "导出当前画面\tCtrl+E"; onTriggered: exportDialog.open() }
+        ShapeMenuItem { text: "完整批量导出"; onTriggered: legacyTools.openBatchExport() }
+        ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; onTriggered: legacyTools.openMultiTabExport() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "退出"; onTriggered: window.close() }
+    }
+
+    AppMenu {
+        id: editMenu
+        ShapeMenuItem { text: "撤销\tCtrl+Z"; enabled: workspace.canUndo; onTriggered: workspace.undo() }
+        ShapeMenuItem { text: "重做\tCtrl+Y"; enabled: workspace.canRedo; onTriggered: workspace.redo() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "复制图层\tCtrl+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.copySelectedLayers() }
+        ShapeMenuItem { text: "粘贴图层\tCtrl+V"; enabled: legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
+        ShapeMenuItem { text: "复制图层样式\tCtrl+Shift+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.copySelectedLayerStyle() }
+        ShapeMenuItem { text: "粘贴图层样式\tCtrl+Shift+V"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.pasteSelectedLayerStyle() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "全选图层\tCtrl+A"; onTriggered: legacyTools.selectAllLayers() }
+    }
+
+    AppMenu {
+        id: layerMenu
+        ShapeMenuItem { text: "添加图片图层"; onTriggered: imageDialog.open() }
+        ShapeMenuItem { text: "添加素材文件夹"; onTriggered: imageFolderDialog.open() }
+        ShapeMenuItem { text: "添加文字图层"; onTriggered: workspace.addTextLayer() }
+        ShapeMenuItem { text: "添加异形图层"; onTriggered: addShapeMenu.popup() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.renameSelectedLayer() }
+        ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.openAdvancedLayerProperties() }
+        ShapeMenuItem { text: "绑定管理"; onTriggered: legacyTools.openBindingManager() }
+        ShapeMenuItem { text: "尺寸匹配管理"; onTriggered: legacyTools.openSizeMatchManager() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "删除所选图层\tDelete"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.deleteSelectedLayers() }
+    }
+
+    AppMenu {
+        id: canvasMenu
+        ShapeMenuItem { text: "修改画布尺寸\tCtrl+R"; onTriggered: legacyTools.openResizeCanvas() }
+        ShapeMenuItem { text: "画布预设管理"; onTriggered: legacyTools.openCanvasPresetManager() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "项目预设中心\tCtrl+P"; onTriggered: legacyTools.openPresetManager() }
+        ShapeMenuItem { text: "QML 项目预设面板"; onTriggered: projectPresetDrawer.open() }
+    }
+
+    AppMenu {
+        id: viewMenu
+        ShapeMenuItem { text: "放大\tCtrl++"; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
+        ShapeMenuItem { text: "缩小\tCtrl+-"; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
+        ShapeMenuItem { text: "适合窗口\tCtrl+0"; onTriggered: workspace.setZoomFactor(0.78) }
+        MenuSeparator { }
+        ShapeMenuItem { text: (workspace.showRulers ? "✓  " : "    ") + "显示标尺"; onTriggered: workspace.setShowRulers(!workspace.showRulers) }
+        ShapeMenuItem { text: (workspace.showGuides ? "✓  " : "    ") + "显示参考线"; onTriggered: workspace.setShowGuides(!workspace.showGuides) }
+        ShapeMenuItem { text: (workspace.snapToGuides ? "✓  " : "    ") + "吸附到参考线"; onTriggered: workspace.setSnapToGuides(!workspace.snapToGuides) }
+        ShapeMenuItem { text: "清空参考线"; onTriggered: workspace.clearGuides() }
+    }
+
+    AppMenu {
+        id: documentTabMenu
+        ShapeMenuItem { text: "复制标签页"; onTriggered: workspaceSessions.duplicateDocument(contextDocumentIndex) }
+        ShapeMenuItem {
+            text: "重命名标签页"
+            onTriggered: {
+                workspaceSessions.activateDocument(contextDocumentIndex)
+                Qt.callLater(function() { legacyTools.renameCurrentTab() })
+            }
+        }
+        MenuSeparator { }
+        ShapeMenuItem { text: "向左移动"; enabled: contextDocumentIndex > 0; onTriggered: workspaceSessions.moveDocument(contextDocumentIndex, contextDocumentIndex - 1) }
+        ShapeMenuItem { text: "向右移动"; enabled: contextDocumentIndex >= 0 && contextDocumentIndex < workspaceSessions.count - 1; onTriggered: workspaceSessions.moveDocument(contextDocumentIndex, contextDocumentIndex + 1) }
+        MenuSeparator { }
+        ShapeMenuItem { text: "关闭其他标签页"; enabled: workspaceSessions.count > 1; onTriggered: workspaceSessions.closeOtherDocuments(contextDocumentIndex) }
+        ShapeMenuItem { text: "关闭标签页"; onTriggered: workspaceSessions.requestClose(contextDocumentIndex) }
+    }
+
     Menu {
         id: addShapeMenu
         width: 168
@@ -1272,6 +1403,17 @@ ApplicationWindow {
             Layout.fillWidth: true
             editable: colorField.enabled
             onValueCommitted: value => colorField.valueCommitted(value)
+        }
+    }
+
+    component AppMenu: Menu {
+        width: 250
+        padding: 5
+        background: Rectangle {
+            color: Theme.bgRaised
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radiusSmall
         }
     }
 
@@ -2128,24 +2270,28 @@ ApplicationWindow {
                 }
 
                 Row {
-                    spacing: 24
+                    spacing: 22
                     Layout.preferredWidth: 360
 
-                    Repeater {
-                        model: ["文件", "编辑", "图层", "画布", "视图"]
-                        delegate: MenuLabel {
-                            required property string modelData
-                            height: 42
-                            text: modelData
-                            hovered: menuMouse.containsMouse
-                            MouseArea {
-                                id: menuMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: showToast(parent.text + "菜单将在正式版本中接入")
-                            }
-                        }
+                    MenuLabel {
+                        height: 42; text: "文件"; hovered: fileMenuMouse.containsMouse
+                        MouseArea { id: fileMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fileMenu.popup(parent, 0, parent.height) }
+                    }
+                    MenuLabel {
+                        height: 42; text: "编辑"; hovered: editMenuMouse.containsMouse
+                        MouseArea { id: editMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: editMenu.popup(parent, 0, parent.height) }
+                    }
+                    MenuLabel {
+                        height: 42; text: "图层"; hovered: layerMenuMouse.containsMouse
+                        MouseArea { id: layerMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: layerMenu.popup(parent, 0, parent.height) }
+                    }
+                    MenuLabel {
+                        height: 42; text: "画布"; hovered: canvasMenuMouse.containsMouse
+                        MouseArea { id: canvasMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: canvasMenu.popup(parent, 0, parent.height) }
+                    }
+                    MenuLabel {
+                        height: 42; text: "视图"; hovered: viewMenuMouse.containsMouse
+                        MouseArea { id: viewMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: viewMenu.popup(parent, 0, parent.height) }
                     }
                 }
 
@@ -2171,8 +2317,7 @@ ApplicationWindow {
                         }
                     }
 
-                    IconButton { glyph: "\uE713"; tooltip: "设置"; buttonSize: 28; onClicked: showToast("设置") }
-                    IconButton { glyph: "\uE77B"; tooltip: "账户"; buttonSize: 28; onClicked: showToast("账户") }
+                    IconButton { glyph: "\uE713"; tooltip: "高级工具"; buttonSize: 28; onClicked: legacyTools.openAdvancedLayerProperties() }
                 }
             }
 
@@ -2385,9 +2530,20 @@ ApplicationWindow {
                             id: tabMouse
                             anchors.fill: parent
                             anchors.rightMargin: 30
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: workspaceSessions.activateDocument(documentTab.index)
+                            onPressed: function(mouse) {
+                                if (mouse.button === Qt.RightButton) {
+                                    contextDocumentIndex = documentTab.index
+                                    workspaceSessions.activateDocument(documentTab.index)
+                                    documentTabMenu.popup(documentTab, mouse.x, mouse.y)
+                                }
+                            }
+                            onClicked: function(mouse) {
+                                if (mouse.button === Qt.LeftButton)
+                                    workspaceSessions.activateDocument(documentTab.index)
+                            }
                         }
                     }
                 }
@@ -2775,7 +2931,7 @@ ApplicationWindow {
                     (height - 54) / safeCanvasHeight,
                     (width - 60) / safeCanvasWidth
                 )
-                property real actualScale: Math.max(0.05, fitScale * (zoomValue / 0.78))
+                property real actualScale: Math.max(0.05, fitScale * (workspace.zoomFactor / 0.78))
                 property bool transformActive: false
                 property string transformMode: ""
                 property real gestureStartMouseX: 0
@@ -2980,7 +3136,7 @@ ApplicationWindow {
                     target: null
                     onWheel: event => {
                         var direction = event.angleDelta.y > 0 ? 1 : -1
-                        zoomValue = Math.max(0.35, Math.min(2.0, zoomValue + direction * 0.05))
+                        workspace.setZoomFactor(workspace.zoomFactor + direction * 0.05)
                         event.accepted = true
                     }
                 }
@@ -3593,7 +3749,7 @@ ApplicationWindow {
                             TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
 
-                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "更多操作"; buttonSize: 28; onClicked: showToast("图层更多操作") }
+                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "高级图层属性"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: legacyTools.openAdvancedLayerProperties() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -5282,7 +5438,7 @@ ApplicationWindow {
                     spacing: 5
                     IconButton {
                         glyph: "\uE738"; tooltip: "缩小"; buttonSize: 24
-                        onClicked: zoomValue = Math.max(0.35, zoomValue - 0.05)
+                        onClicked: workspace.setZoomFactor(workspace.zoomFactor - 0.05)
                     }
                     Rectangle {
                         width: 92
@@ -5290,16 +5446,16 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         radius: 2
                         color: Theme.borderStrong
-                        Rectangle { width: parent.width * ((zoomValue - 0.35) / 1.65); height: 4; radius: 2; color: Theme.accent }
-                        Rectangle { x: parent.width * ((zoomValue - 0.35) / 1.65) - 6; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
+                        Rectangle { width: parent.width * ((workspace.zoomFactor - 0.35) / 1.65); height: 4; radius: 2; color: Theme.accent }
+                        Rectangle { x: parent.width * ((workspace.zoomFactor - 0.35) / 1.65) - 6; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
                     }
                     IconButton {
                         glyph: "\uE8A3"; tooltip: "放大"; buttonSize: 24
-                        onClicked: zoomValue = Math.min(2.0, zoomValue + 0.05)
+                        onClicked: workspace.setZoomFactor(workspace.zoomFactor + 0.05)
                     }
                                     TinyLabel {
                                         width: 42
-                                        text: Math.round(zoomValue * 100) + "%"
+                                        text: Math.round(workspace.zoomFactor * 100) + "%"
                                         color: fitZoomMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
                                         height: 28
                                         horizontalAlignment: Text.AlignRight
@@ -5308,7 +5464,7 @@ ApplicationWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: zoomValue = 0.78
+                                            onClicked: workspace.setZoomFactor(0.78)
                                         }
                                     }
                                 }

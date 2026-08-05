@@ -36,10 +36,17 @@ def build():
         '--icon=app/resources/app_icon.ico',
         # 添加资源目录
         '--add-data=app/resources;app/resources',
+        '--add-data=app/qml/Main.qml;app/qml',
+        '--add-data=app/qml/components;app/qml/components',
+        '--add-data=app/qml/assets;app/qml/assets',
         # 版本信息
         '--version-file=version_info.txt' if os.path.exists('version_info.txt') else None,
         # 隐藏导入
         '--hidden-import=PySide6',
+        '--hidden-import=PySide6.QtQml',
+        '--hidden-import=PySide6.QtQuick',
+        '--hidden-import=PySide6.QtQuickControls2',
+        '--hidden-import=PySide6.QtWidgets',
         '--hidden-import=PIL',
         '--hidden-import=pyvips',
         '--hidden-import=app.workers.export_worker',

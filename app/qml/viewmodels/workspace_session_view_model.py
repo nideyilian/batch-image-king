@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import os
-from typing import List
+from typing import List, Optional
 
 from PySide6.QtCore import (
     QAbstractListModel,
@@ -16,12 +17,14 @@ from PySide6.QtCore import (
 )
 
 from app.models.document import Document
+from app.models.document_serializer import DocumentSerializer
 
 
 @dataclass
 class _DocumentSession:
     document: Document
     untitled_number: int
+    custom_title: str = ""
 
 
 class WorkspaceSessionViewModel(QAbstractListModel):
@@ -37,6 +40,8 @@ class WorkspaceSessionViewModel(QAbstractListModel):
     pendingCloseIndexChanged = Signal()
     closeConfirmationRequested = Signal(int, str)
     savePathRequested = Signal(int, str)
+    applicationCloseStateChanged = Signal()
+    applicationCloseReady = Signal()
 
     MIN_CANVAS_SIZE = 16
     MAX_CANVAS_SIZE = 32768
@@ -48,6 +53,9 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         self._active_index = -1
         self._pending_close_index = -1
         self._next_untitled_number = 1
+        self._application_close_pending = False
+        self._application_close_approved = False
+        self._close_others_keep_document: Optional[Document] = None
 
         self._append_initial_document(workspace.document)
         workspace.documentInfoChanged.connect(self._on_active_document_info_changed)
@@ -96,6 +104,14 @@ class WorkspaceSessionViewModel(QAbstractListModel):
     def pendingCloseIndex(self) -> int:
         return self._pending_close_index
 
+    @Property(bool, notify=applicationCloseStateChanged)
+    def applicationClosePending(self) -> bool:
+        return self._application_close_pending
+
+    @Property(bool, notify=applicationCloseStateChanged)
+    def applicationCloseApproved(self) -> bool:
+        return self._application_close_approved
+
     @staticmethod
     def _local_path(path_or_url: str) -> str:
         text = str(path_or_url or "").strip()
@@ -113,6 +129,8 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         document.save_state(action)
 
     def _title_for(self, session: _DocumentSession) -> str:
+        if session.custom_title:
+            return session.custom_title
         path = getattr(session.document, "current_file_path", None)
         if path:
             return os.path.basename(path)
@@ -146,6 +164,17 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         session = _DocumentSession(document, self._next_untitled_number)
         self._next_untitled_number += 1
         self._sessions.append(session)
+        self._connect_document(document)
+        self.endInsertRows()
+        self.countChanged.emit()
+        return index
+
+    def _insert_document(self, index: int, document: Document, custom_title: str = "") -> int:
+        index = max(0, min(int(index), len(self._sessions)))
+        self.beginInsertRows(QModelIndex(), index, index)
+        session = _DocumentSession(document, self._next_untitled_number, str(custom_title or ""))
+        self._next_untitled_number += 1
+        self._sessions.insert(index, session)
         self._connect_document(document)
         self.endInsertRows()
         self.countChanged.emit()
@@ -201,6 +230,94 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         if first_index >= 0:
             self.activateDocument(first_index)
         return len(valid)
+
+    @Slot(int, result=int)
+    def duplicateDocument(self, index: int) -> int:
+        if not 0 <= int(index) < len(self._sessions) or self._workspace.operationsBlocked:
+            return -1
+        source_session = self._sessions[int(index)]
+        try:
+            data = copy.deepcopy(DocumentSerializer.prepare_document_data(source_session.document))
+            duplicate = Document()
+            if not DocumentSerializer.restore_document_data(duplicate, data):
+                return -1
+        except Exception:
+            return -1
+        duplicate.current_file_path = None
+        duplicate.is_modified = True
+        self._prepare_history(duplicate, "复制标签页")
+        source_title = self._title_for(source_session)
+        stem, extension = os.path.splitext(source_title)
+        title = f"{stem} 副本{extension or '.cmp'}"
+        new_index = self._insert_document(int(index) + 1, duplicate, title)
+        if not self.activateDocument(new_index):
+            self._remove_session(new_index)
+            return -1
+        self._workspace._set_status(f"已复制标签页：{title}", toast=True)
+        return new_index
+
+    @Slot(int, str, result=bool)
+    def renameDocument(self, index: int, title: str) -> bool:
+        if not 0 <= int(index) < len(self._sessions):
+            return False
+        title = str(title or "").strip()
+        if not title:
+            return False
+        if not os.path.splitext(title)[1]:
+            title += ".cmp"
+        self._sessions[int(index)].custom_title = title
+        self._emit_row_changed(int(index))
+        return True
+
+    @Slot(int, int, result=bool)
+    def moveDocument(self, source_index: int, target_index: int) -> bool:
+        source_index = int(source_index)
+        target_index = int(target_index)
+        if not 0 <= source_index < len(self._sessions):
+            return False
+        target_index = max(0, min(target_index, len(self._sessions) - 1))
+        if source_index == target_index:
+            return True
+        active_document = self._sessions[self._active_index].document
+        self.beginResetModel()
+        session = self._sessions.pop(source_index)
+        self._sessions.insert(target_index, session)
+        self._active_index = next(
+            index for index, item in enumerate(self._sessions) if item.document is active_document
+        )
+        self.endResetModel()
+        self.activeIndexChanged.emit()
+        return True
+
+    @Slot(int, result=bool)
+    def closeOtherDocuments(self, keep_index: int) -> bool:
+        if not 0 <= int(keep_index) < len(self._sessions) or self._workspace.operationsBlocked:
+            return False
+        self._close_others_keep_document = self._sessions[int(keep_index)].document
+        return self._advance_close_others()
+
+    def _advance_close_others(self) -> bool:
+        keep_document = self._close_others_keep_document
+        if keep_document is None:
+            return False
+        for index, session in enumerate(self._sessions):
+            if session.document is keep_document:
+                continue
+            if bool(getattr(session.document, "is_modified", False)):
+                self.activateDocument(index)
+                self._set_pending_close_index(index)
+                self.closeConfirmationRequested.emit(index, self._title_for(session))
+                return False
+            self._close_session(index)
+            return self._advance_close_others()
+        keep_index = next(
+            (index for index, session in enumerate(self._sessions) if session.document is keep_document),
+            -1,
+        )
+        self._close_others_keep_document = None
+        if keep_index >= 0:
+            self.activateDocument(keep_index)
+        return True
 
     @Slot(int, result=bool)
     def activateDocument(self, index: int) -> bool:
@@ -291,14 +408,57 @@ class WorkspaceSessionViewModel(QAbstractListModel):
             return False
         return self._close_session(index)
 
+    @Slot(result=bool)
+    def requestApplicationClose(self) -> bool:
+        if self._application_close_approved:
+            return True
+        if self._workspace.operationsBlocked:
+            self._workspace._set_status("请先结束正在运行的导出任务", toast=True)
+            return False
+        self._close_others_keep_document = None
+        self._application_close_pending = True
+        self._application_close_approved = False
+        self.applicationCloseStateChanged.emit()
+        return self._advance_application_close()
+
+    def _advance_application_close(self) -> bool:
+        for index, session in enumerate(self._sessions):
+            if bool(getattr(session.document, "is_modified", False)):
+                self.activateDocument(index)
+                self._set_pending_close_index(index)
+                self.closeConfirmationRequested.emit(index, self._title_for(session))
+                return False
+        self._set_pending_close_index(-1)
+        self._application_close_pending = False
+        self._application_close_approved = True
+        self.applicationCloseStateChanged.emit()
+        self.applicationCloseReady.emit()
+        return True
+
     @Slot()
     def cancelClose(self) -> None:
         self._set_pending_close_index(-1)
+        self._close_others_keep_document = None
+        if self._application_close_pending:
+            self._application_close_pending = False
+            self._application_close_approved = False
+            self.applicationCloseStateChanged.emit()
 
     @Slot(int, result=bool)
     def discardAndClose(self, index: int) -> bool:
         if not 0 <= index < len(self._sessions) or self._workspace.operationsBlocked:
             return False
+        if self._application_close_pending:
+            self._sessions[index].document.is_modified = False
+            self._emit_row_changed(index)
+            self._set_pending_close_index(-1)
+            self._advance_application_close()
+            return True
+        if self._close_others_keep_document is not None:
+            self._set_pending_close_index(-1)
+            result = self._close_session(index)
+            self._advance_close_others()
+            return result
         self._set_pending_close_index(-1)
         return self._close_session(index)
 
@@ -318,6 +478,15 @@ class WorkspaceSessionViewModel(QAbstractListModel):
             return False
         if not self._workspace.saveDocumentTo(target):
             return False
+        if self._application_close_pending:
+            self._set_pending_close_index(-1)
+            self._advance_application_close()
+            return True
+        if self._close_others_keep_document is not None:
+            self._set_pending_close_index(-1)
+            result = self._close_session(index)
+            self._advance_close_others()
+            return result
         self._set_pending_close_index(-1)
         return self._close_session(index)
 

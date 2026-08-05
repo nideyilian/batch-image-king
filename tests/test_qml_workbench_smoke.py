@@ -149,6 +149,37 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.clearSelectedTextColorRange(' in qml_source
     assert 'property bool randomTransformEnabled' not in qml_source
     assert 'enabled: index === 0' not in qml_source
+    assert 'id: fileMenu' in qml_source
+    assert 'legacyTools.openBatchExport()' in qml_source
+    assert 'legacyTools.openAdvancedLayerProperties()' in qml_source
+    assert 'legacyTools.openBindingManager()' in qml_source
+    assert 'legacyTools.openSizeMatchManager()' in qml_source
+    assert 'legacyTools.openCanvasPresetManager()' in qml_source
+    assert 'legacyTools.openPresetManager()' in qml_source
+    assert 'workspaceSessions.requestApplicationClose()' in qml_source
+    assert 'workspaceSessions.duplicateDocument(contextDocumentIndex)' in qml_source
+    assert 'workspaceSessions.closeOtherDocuments(contextDocumentIndex)' in qml_source
+    assert 'property real zoomValue' not in qml_source
+    assert 'workspace.zoomFactor' in qml_source
+    assert '{ label: "明度", value: "luminosity" }' in qml_source
+
+
+@pytest.mark.unit
+def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
+    repo_root = Path(__file__).resolve().parents[1]
+    main_source = (repo_root / "main.py").read_text(encoding="utf-8")
+    build_source = (repo_root / "build.py").read_text(encoding="utf-8")
+    spec_source = (repo_root / "批图王.spec").read_text(encoding="utf-8")
+
+    assert 'if "--classic" in sys.argv:' in main_source
+    assert "from app.qml.qml_main import main as qml_main" in main_source
+    assert "sys.exit(qml_main())" in main_source
+    for source in (build_source, spec_source):
+        assert "app/qml/Main.qml" in source
+        assert "app/qml/components" in source
+        assert "app/qml/assets" in source
+        assert "PySide6.QtQml" in source
+        assert "PySide6.QtQuick" in source
 
 
 @pytest.mark.integration

@@ -62,6 +62,21 @@ def test_image_layer_effect_properties_and_commands_are_atomic(tmp_path: Path):
     assert workspace.redo() is True
     assert workspace.document.layers[0].blend_mode == 1
 
+
+@pytest.mark.unit
+def test_all_legacy_blend_modes_are_available_in_qml(tmp_path: Path):
+    workspace = _effects_workspace(tmp_path)
+    modes = [
+        "normal", "multiply", "screen", "overlay", "soft_light", "hard_light",
+        "color_dodge", "color_burn", "darken", "lighten", "difference",
+        "exclusion", "hue", "saturation", "color", "luminosity",
+    ]
+
+    for expected_value, mode in enumerate(modes):
+        assert workspace.setSelectedBlendMode(mode) is True
+        assert workspace.document.layers[0].blend_mode == expected_value
+        assert workspace.selectedBlendModeId == mode
+
     assert workspace.setSelectedStrokeEnabled(True) is True
     assert workspace.setSelectedStrokeWidth(18) is True
     assert workspace.setSelectedStrokeColor("#F1786D") is True

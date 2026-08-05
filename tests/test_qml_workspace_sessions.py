@@ -186,3 +186,89 @@ def test_workspace_rejects_document_switch_while_export_is_running():
     assert workspace.activateDocument(candidate) is False
     assert workspace.document is not candidate
     assert "导出" in workspace.statusMessage
+
+
+@pytest.mark.unit
+def test_sessions_duplicate_rename_reorder_and_close_others():
+    workspace = _workspace()
+    workspace.addTextLayer()
+    sessions = WorkspaceSessionViewModel(workspace)
+
+    duplicate_index = sessions.duplicateDocument(0)
+    assert duplicate_index == 1
+    assert sessions.count == 2
+    assert sessions.activeIndex == 1
+    assert sessions.documentAt(1) is not sessions.documentAt(0)
+    assert len(sessions.documentAt(1).layers) == 1
+
+    assert sessions.renameDocument(1, "商品主图") is True
+    assert sessions.data(sessions.index(1, 0), sessions.TitleRole) == "商品主图.cmp"
+    assert sessions.moveDocument(1, 0) is True
+    assert sessions.activeIndex == 0
+    assert sessions.data(sessions.index(0, 0), sessions.TitleRole) == "商品主图.cmp"
+
+    sessions.documentAt(1).is_modified = False
+    assert sessions.closeOtherDocuments(0) is True
+    assert sessions.count == 1
+    assert sessions.activeIndex == 0
+
+
+@pytest.mark.unit
+def test_zoom_is_isolated_per_document_session():
+    workspace = _workspace()
+    sessions = WorkspaceSessionViewModel(workspace)
+    first = workspace.document
+
+    assert workspace.zoomFactor == pytest.approx(0.78)
+    assert workspace.setZoomFactor(1.25) is True
+    assert sessions.newDocument(640, 480) is True
+    second = workspace.document
+    assert workspace.zoomFactor == pytest.approx(0.78)
+    assert workspace.setZoomFactor(0.55) is True
+
+    assert sessions.activateDocument(0) is True
+    assert workspace.document is first
+    assert workspace.zoomFactor == pytest.approx(1.25)
+    assert sessions.activateDocument(1) is True
+    assert workspace.document is second
+    assert workspace.zoomFactor == pytest.approx(0.55)
+
+
+@pytest.mark.unit
+def test_application_close_resolves_modified_documents_in_sequence():
+    workspace = _workspace()
+    sessions = WorkspaceSessionViewModel(workspace)
+    assert sessions.newDocument(640, 480) is True
+    first = sessions.documentAt(0)
+    second = sessions.documentAt(1)
+    first.is_modified = True
+    second.is_modified = True
+    ready = []
+    sessions.applicationCloseReady.connect(lambda: ready.append(True))
+
+    assert sessions.requestApplicationClose() is False
+    assert sessions.applicationClosePending is True
+    assert sessions.pendingCloseIndex == 0
+
+    assert sessions.discardAndClose(0) is True
+    assert sessions.count == 2
+    assert first.is_modified is False
+    assert sessions.pendingCloseIndex == 1
+
+    assert sessions.discardAndClose(1) is True
+    assert sessions.applicationCloseApproved is True
+    assert ready == [True]
+
+
+@pytest.mark.unit
+def test_cancel_close_aborts_application_shutdown():
+    workspace = _workspace()
+    sessions = WorkspaceSessionViewModel(workspace)
+    workspace.document.is_modified = True
+
+    assert sessions.requestApplicationClose() is False
+    sessions.cancelClose()
+
+    assert sessions.applicationClosePending is False
+    assert sessions.applicationCloseApproved is False
+    assert sessions.pendingCloseIndex == -1

@@ -67,9 +67,11 @@ def main() -> int:
 
     debug("importing Qt modules")
     from PySide6.QtCore import QMetaObject, QObject, QThreadPool, QTimer, QUrl
-    from PySide6.QtGui import QGuiApplication, QIcon
+    from PySide6.QtGui import QIcon
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuick import QQuickItem
+    from PySide6.QtWidgets import QApplication
+    from app.qml.legacy_feature_bridge import LegacyFeatureBridge
     from app.qml.preview_image_provider import PreviewImageProvider
     from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
     from app.qml.viewmodels.binding_manager_view_model import BindingManagerViewModel
@@ -80,11 +82,27 @@ def main() -> int:
     from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
-    debug("creating QGuiApplication")
-    app = QGuiApplication(sys.argv)
+    debug("creating QApplication")
+    app = QApplication(sys.argv)
     app.setApplicationName("批图王 QML")
     app.setOrganizationName("BatchImageKing")
-    app.aboutToQuit.connect(lambda: QThreadPool.globalInstance().waitForDone(5000))
+
+    def cleanup_runtime() -> None:
+        QThreadPool.globalInstance().waitForDone(5000)
+        try:
+            from app.utils.intelligent_thread_pool_manager import shutdown_thread_pools
+
+            shutdown_thread_pools(wait=True)
+        except Exception as error:
+            debug(f"thread pool cleanup failed: {error}")
+        try:
+            from app.utils.advanced_task_queue import shutdown_task_queue
+
+            shutdown_task_queue()
+        except Exception as error:
+            debug(f"task queue cleanup failed: {error}")
+
+    app.aboutToQuit.connect(cleanup_runtime)
     icon_path = repo_root / "app" / "resources" / "app_icon.ico"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
@@ -224,6 +242,12 @@ def main() -> int:
         sessions=workspace_sessions,
         parent=engine,
     )
+    legacy_tools = LegacyFeatureBridge(
+        workspace=workspace,
+        sessions=workspace_sessions,
+        preset_view_model=project_presets,
+        parent=engine,
+    )
     if args.demo_tabs:
         workspace_sessions.newDocument(1080, 1080)
         workspace_sessions.newDocument(1920, 1080)
@@ -238,6 +262,7 @@ def main() -> int:
     engine.rootContext().setContextProperty("bindingManager", binding_manager)
     engine.rootContext().setContextProperty("sizeMatch", size_match)
     engine.rootContext().setContextProperty("multiTabExport", multi_tab_export)
+    engine.rootContext().setContextProperty("legacyTools", legacy_tools)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")

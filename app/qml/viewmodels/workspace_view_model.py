@@ -36,6 +36,16 @@ _BLEND_MODES = {
     "overlay": (3, "叠加"),
     "soft_light": (4, "柔光"),
     "hard_light": (5, "强光"),
+    "color_dodge": (6, "颜色减淡"),
+    "color_burn": (7, "颜色加深"),
+    "darken": (8, "变暗"),
+    "lighten": (9, "变亮"),
+    "difference": (10, "差值"),
+    "exclusion": (11, "排除"),
+    "hue": (12, "色相"),
+    "saturation": (13, "饱和度"),
+    "color": (14, "颜色"),
+    "luminosity": (15, "明度"),
 }
 _BLEND_MODE_IDS = {value: key for key, (value, _label) in _BLEND_MODES.items()}
 
@@ -272,6 +282,19 @@ class WorkspaceViewModel(QObject):
     @Property(int, notify=documentInfoChanged)
     def canvasHeight(self) -> int:
         return int(getattr(self._document, "canvas_height", 0))
+
+    @Property(float, notify=viewSettingsChanged)
+    def zoomFactor(self) -> float:
+        return float(self._document.view_settings.get("qml_zoom_factor", 0.78))
+
+    @Slot(float, result=bool)
+    def setZoomFactor(self, value: float) -> bool:
+        value = round(max(0.35, min(2.0, float(value))), 2)
+        if self._document.view_settings.get("qml_zoom_factor", 0.78) == value:
+            return True
+        self._document.view_settings["qml_zoom_factor"] = value
+        self.viewSettingsChanged.emit()
+        return True
 
     @Property(bool, notify=viewSettingsChanged)
     def showRulers(self) -> bool:
