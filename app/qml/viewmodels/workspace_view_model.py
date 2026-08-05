@@ -55,12 +55,14 @@ class _PreviewTask(QRunnable):
 
 
 class WorkspaceViewModel(QObject):
+    documentObjectChanged = Signal(object)
     documentInfoChanged = Signal()
     selectionChanged = Signal()
     previewChanged = Signal()
     statusChanged = Signal()
     busyChanged = Signal()
     historyStateChanged = Signal()
+    exportStateChanged = Signal()
     toastRequested = Signal(str)
 
     def __init__(
@@ -78,6 +80,7 @@ class WorkspaceViewModel(QObject):
         self._preview_revision = 0
         self._status_message = "就绪"
         self._busy = False
+        self._export_running = False
         self._auto_render = bool(auto_render)
         self._document_lock = threading.RLock()
         self._render_request_id = 0
@@ -95,6 +98,10 @@ class WorkspaceViewModel(QObject):
     @property
     def document(self) -> Document:
         return self._document
+
+    @property
+    def documentLock(self) -> threading.RLock:
+        return self._document_lock
 
     @Property(QObject, constant=True)
     def layerModel(self):
@@ -204,6 +211,27 @@ class WorkspaceViewModel(QObject):
     def canRedo(self) -> bool:
         return bool(self._document and self._document.can_redo())
 
+    @Property(bool, notify=exportStateChanged)
+    def exportRunning(self) -> bool:
+        return self._export_running
+
+    @Property(bool, notify=exportStateChanged)
+    def operationsBlocked(self) -> bool:
+        return self._export_running
+
+    @Slot(bool)
+    def setExportRunning(self, running: bool) -> None:
+        running = bool(running)
+        if running != self._export_running:
+            self._export_running = running
+            self.exportStateChanged.emit()
+
+    def _ensure_operations_available(self) -> bool:
+        if not self._export_running:
+            return True
+        self._set_status("批量导出期间无法修改或切换文档", toast=True)
+        return False
+
     def _set_busy(self, busy: bool) -> None:
         busy = bool(busy)
         if busy != self._busy:
@@ -225,6 +253,7 @@ class WorkspaceViewModel(QObject):
         self.documentInfoChanged.emit()
         self.selectionChanged.emit()
         self.historyStateChanged.emit()
+        self.documentObjectChanged.emit(document)
 
     def _connect_document(self) -> None:
         if self._document is None:
@@ -267,6 +296,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(int, int, result=bool)
     def newDocument(self, width: int = 1080, height: int = 1350) -> bool:
+        if not self._ensure_operations_available():
+            return False
         if width <= 0 or height <= 0:
             self._set_status("新建失败：画布尺寸无效", toast=True)
             return False
@@ -284,6 +315,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def createDemoDocument(self, image_path: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
         image_path = self._local_path(image_path)
         if not os.path.isfile(image_path):
             self._set_status("示例文档创建失败：素材不存在", toast=True)
@@ -330,6 +363,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def openDocument(self, file_path: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
         file_path = self._local_path(file_path)
         candidate = Document()
         if not file_path or not candidate.load_document(file_path):
@@ -344,6 +379,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(result=bool)
     def saveDocument(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
         if not self.documentPath:
             self._set_status("请先选择项目保存位置", toast=True)
             return False
@@ -351,6 +388,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def saveDocumentTo(self, file_path: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
         file_path = self._local_path(file_path)
         if not file_path:
             self._set_status("保存失败：文件路径为空", toast=True)
@@ -368,6 +407,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def exportImageTo(self, file_path: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
         file_path = self._local_path(file_path)
         if not file_path:
             self._set_status("导出失败：文件路径为空", toast=True)
@@ -387,6 +428,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def addImageLayer(self, file_path: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
         file_path = self._local_path(file_path)
         if not os.path.isfile(file_path):
             self._set_status("添加图片失败：文件不存在", toast=True)
@@ -435,6 +478,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(result=bool)
     def addTextLayer(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
         from app.models.text_layer import TextLayer
 
         width = max(120, min(round(self.canvasWidth * 0.6), 600))
@@ -465,6 +510,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(result=bool)
     def deleteSelectedLayer(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
         index = self.selectedLayerIndex
         layer = self._layer_model.layer_at(index)
         if layer is None:
@@ -551,6 +598,8 @@ class WorkspaceViewModel(QObject):
             self._document.save_state("初始状态")
 
     def _set_layer_attrs(self, index: int, changes: dict, action: str, *, render: bool = True) -> bool:
+        if not self._ensure_operations_available():
+            return False
         with self._document_lock:
             layer = self._layer_model.layer_at(index)
             if layer is None:
@@ -690,6 +739,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(result=bool)
     def undo(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
         with self._document_lock:
             if not self._document.undo():
                 return False
@@ -704,6 +755,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(result=bool)
     def redo(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
         with self._document_lock:
             if not self._document.redo():
                 return False

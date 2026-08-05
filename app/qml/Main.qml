@@ -68,6 +68,12 @@ ApplicationWindow {
         onAccepted: workspace.addImageLayer(selectedFile.toString())
     }
 
+    FolderDialog {
+        id: outputFolderDialog
+        title: "选择批量导出目录"
+        onAccepted: batchExport.outputDirectory = selectedFolder.toString()
+    }
+
     component Divider: Rectangle {
         implicitWidth: 1
         implicitHeight: 1
@@ -142,6 +148,382 @@ ApplicationWindow {
             text: parent.label
             color: Theme.textMuted
             Layout.preferredWidth: 52
+        }
+    }
+
+    component ExportField: Rectangle {
+        id: exportField
+        property alias text: exportInput.text
+        property string placeholder: ""
+        property bool readOnly: false
+        signal committed(string value)
+
+        implicitHeight: 36
+        radius: Theme.radiusSmall
+        color: Theme.bgControl
+        border.width: 1
+        border.color: exportInput.activeFocus ? Theme.accent : Theme.borderStrong
+
+        TextInput {
+            id: exportInput
+            anchors.fill: parent
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            color: Theme.textPrimary
+            selectionColor: Theme.accentPressed
+            selectedTextColor: Theme.textPrimary
+            font.family: Theme.bodyFont
+            font.pixelSize: 12
+            verticalAlignment: TextInput.AlignVCenter
+            readOnly: exportField.readOnly
+            selectByMouse: true
+            clip: true
+            onEditingFinished: exportField.committed(text)
+
+            Text {
+                anchors.fill: parent
+                text: exportField.placeholder
+                visible: exportInput.text.length === 0 && !exportInput.activeFocus
+                color: Theme.textMuted
+                font: exportInput.font
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+    }
+
+    component ExportButton: Rectangle {
+        id: exportButton
+        property string label: ""
+        property string glyph: ""
+        property bool primary: false
+        property bool destructive: false
+        signal clicked()
+
+        implicitHeight: 38
+        radius: Theme.radiusSmall
+        color: {
+            if (!enabled) return Theme.bgControl
+            if (buttonMouse.pressed) return destructive ? "#b94d45" : (primary ? Theme.accentPressed : Theme.bgHover)
+            if (buttonMouse.containsMouse) return destructive ? "#e56f65" : (primary ? Theme.accentHover : Theme.bgHover)
+            return destructive ? Theme.coral : (primary ? Theme.accent : Theme.bgControl)
+        }
+        border.width: primary || destructive ? 0 : 1
+        border.color: Theme.borderStrong
+        opacity: enabled ? 1 : 0.42
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 8
+            AppIcon {
+                glyph: exportButton.glyph
+                iconSize: 14
+                iconColor: exportButton.primary || exportButton.destructive ? "#09251d" : Theme.textPrimary
+                height: 20
+            }
+            Text {
+                text: exportButton.label
+                color: exportButton.primary || exportButton.destructive ? "#09251d" : Theme.textPrimary
+                font.family: Theme.bodyFont
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                height: 20
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        MouseArea {
+            id: buttonMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: exportButton.clicked()
+        }
+    }
+
+    Drawer {
+        id: batchExportDrawer
+        objectName: "batchExportDrawer"
+        edge: Qt.RightEdge
+        width: Math.min(420, Math.max(380, window.width * 0.28))
+        height: window.height
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+
+        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+        }
+
+        contentItem: Item {
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 22
+                spacing: 0
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 46
+                    spacing: 12
+
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: Theme.radiusSmall
+                        color: Theme.accentSoft
+                        AppIcon { anchors.centerIn: parent; glyph: "\uEDE1"; iconSize: 16; iconColor: Theme.accent }
+                    }
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text { text: "批量导出"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold }
+                        TinyLabel { text: workspace.documentTitle; color: Theme.textMuted }
+                    }
+                    IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: batchExportDrawer.close() }
+                }
+
+                Divider { Layout.fillWidth: true; Layout.topMargin: 10; Layout.bottomMargin: 18 }
+
+                Flickable {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    contentWidth: width
+                    contentHeight: exportForm.height
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+
+                    Column {
+                        id: exportForm
+                        width: parent.width
+                        spacing: 18
+                        enabled: !batchExport.running
+
+                        Column {
+                            width: parent.width
+                            spacing: 8
+                            BodyLabel { text: "输出目录"; color: Theme.textSecondary }
+                            RowLayout {
+                                width: parent.width
+                                spacing: 8
+                                ExportField {
+                                    Layout.fillWidth: true
+                                    text: batchExport.outputDirectory
+                                    placeholder: "选择文件夹"
+                                    readOnly: true
+                                }
+                                IconButton {
+                                    glyph: "\uE8B7"
+                                    tooltip: "选择输出目录"
+                                    buttonSize: 36
+                                    active: true
+                                    onClicked: outputFolderDialog.open()
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            width: parent.width
+                            spacing: 12
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                BodyLabel { text: "生成数量"; color: Theme.textSecondary }
+                                ExportField {
+                                    width: parent.width
+                                    text: String(batchExport.count)
+                                    placeholder: "12"
+                                    onCommitted: value => batchExport.count = Math.max(0, parseInt(value) || 0)
+                                }
+                            }
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                BodyLabel { text: "起始序号"; color: Theme.textSecondary }
+                                ExportField { width: parent.width; text: "1"; readOnly: true }
+                            }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 8
+                            BodyLabel { text: "文件名模板"; color: Theme.textSecondary }
+                            ExportField {
+                                width: parent.width
+                                text: batchExport.filenameTemplate
+                                placeholder: "image_{number:04d}"
+                                onCommitted: value => batchExport.filenameTemplate = value
+                            }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 8
+                            BodyLabel { text: "图像格式"; color: Theme.textSecondary }
+                            Row {
+                                width: parent.width
+                                height: 36
+                                spacing: 4
+                                Repeater {
+                                    model: ["png", "jpg", "webp"]
+                                    delegate: Rectangle {
+                                        required property string modelData
+                                        width: (exportForm.width - 8) / 3
+                                        height: 36
+                                        radius: Theme.radiusSmall
+                                        color: batchExport.fileFormat === modelData ? Theme.accentSoft : Theme.bgControl
+                                        border.width: 1
+                                        border.color: batchExport.fileFormat === modelData ? Theme.accentPressed : Theme.borderStrong
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.toUpperCase()
+                                            color: batchExport.fileFormat === modelData ? Theme.accent : Theme.textSecondary
+                                            font.family: Theme.bodyFont
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: batchExport.fileFormat = parent.modelData
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 48
+                            radius: Theme.radiusSmall
+                            color: Theme.bgRaised
+                            border.width: 1
+                            border.color: Theme.border
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 10
+                                BodyLabel { text: "避免重复组合"; color: Theme.textPrimary; Layout.fillWidth: true }
+                                ToggleSwitch {
+                                    checked: batchExport.avoidDuplicates
+                                    onToggled: checkedValue => batchExport.avoidDuplicates = checkedValue
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 58
+                            radius: Theme.radiusSmall
+                            color: Theme.bgBar
+                            border.width: 1
+                            border.color: Theme.border
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                Column {
+                                    spacing: 3
+                                    TinyLabel { text: "预计产出" }
+                                    BodyLabel { text: batchExport.count + " 张"; color: Theme.textPrimary }
+                                }
+                                Item { Layout.fillWidth: true }
+                                Column {
+                                    spacing: 3
+                                    TinyLabel { text: "预计耗时"; horizontalAlignment: Text.AlignRight; width: parent.width }
+                                    BodyLabel { text: batchExport.estimatedTime; color: Theme.textPrimary }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 18
+                    spacing: 10
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: batchExport.errorMessage.length > 0 ? 60 : 48
+                        radius: Theme.radiusSmall
+                        color: batchExport.errorMessage.length > 0 ? "#35201f" : (batchExport.succeeded ? "#173126" : Theme.bgRaised)
+                        border.width: 1
+                        border.color: batchExport.errorMessage.length > 0 ? "#70413d" : (batchExport.succeeded ? "#28583e" : Theme.border)
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 9
+                            AppIcon {
+                                glyph: batchExport.errorMessage.length > 0 ? "\uEA39" : (batchExport.succeeded ? "\uE73E" : "\uE9D9")
+                                iconSize: 15
+                                iconColor: batchExport.errorMessage.length > 0 ? Theme.coral : (batchExport.succeeded ? Theme.success : Theme.accent)
+                            }
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                BodyLabel { text: batchExport.statusText; color: Theme.textPrimary }
+                                TinyLabel {
+                                    width: parent.width
+                                    text: batchExport.errorMessage.length > 0 ? batchExport.errorMessage : batchExport.stage
+                                    color: batchExport.errorMessage.length > 0 ? "#e7a09a" : Theme.textMuted
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            TinyLabel {
+                                visible: batchExport.running || batchExport.succeeded || batchExport.canceled
+                                text: batchExport.current + " / " + batchExport.total
+                                color: Theme.textSecondary
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 5
+                        visible: batchExport.running || batchExport.current > 0
+                        radius: 2
+                        color: Theme.borderStrong
+                        Rectangle {
+                            width: parent.width * batchExport.progress
+                            height: parent.height
+                            radius: 2
+                            color: batchExport.canceled ? Theme.amber : Theme.accent
+                        }
+                    }
+
+                    TinyLabel {
+                        Layout.fillWidth: true
+                        visible: batchExport.lastFile.length > 0
+                        text: "最近文件  " + batchExport.lastFile
+                        elide: Text.ElideMiddle
+                        color: Theme.textMuted
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        ExportButton {
+                            Layout.fillWidth: true
+                            label: "打开目录"
+                            glyph: "\uE8B7"
+                            enabled: batchExport.outputDirectory.length > 0
+                            onClicked: batchExport.openOutputDirectory()
+                        }
+                        ExportButton {
+                            Layout.fillWidth: true
+                            label: batchExport.running ? "取消导出" : (batchExport.succeeded ? "再次导出" : "开始导出")
+                            glyph: batchExport.running ? "\uE71A" : "\uEDE1"
+                            primary: !batchExport.running
+                            destructive: batchExport.running
+                            onClicked: batchExport.running ? batchExport.cancelExport() : batchExport.startExport()
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -263,15 +645,16 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
-                IconButton { glyph: "\uE8E5"; tooltip: "打开项目"; onClicked: openDialog.open() }
+                IconButton { glyph: "\uE8E5"; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: openDialog.open() }
                 IconButton {
                     glyph: "\uE74E"
                     tooltip: "保存"
+                    enabled: !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-                IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo; onClicked: workspace.undo() }
-                IconButton { glyph: "\uE7A6"; tooltip: "重做"; enabled: workspace.canRedo; onClicked: workspace.redo() }
+                IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
+                IconButton { glyph: "\uE7A6"; tooltip: "重做"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
                 Rectangle {
@@ -281,31 +664,32 @@ ApplicationWindow {
                     color: addImageMouse.containsMouse ? Theme.bgHover : Theme.bgControl
                     border.width: 1
                     border.color: Theme.borderStrong
+                    opacity: workspace.operationsBlocked ? 0.38 : 1
                     Row {
                         anchors.centerIn: parent
                         spacing: 7
                         AppIcon { glyph: "\uE91B"; iconSize: 14; iconColor: Theme.textPrimary; height: 20 }
                         BodyLabel { text: "添加图片"; color: Theme.textPrimary; height: 20 }
                     }
-                    MouseArea { id: addImageMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: imageDialog.open() }
+                    MouseArea { id: addImageMouse; anchors.fill: parent; enabled: !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: imageDialog.open() }
                 }
 
-                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; onClicked: workspace.addTextLayer() }
+                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: workspace.addTextLayer() }
                 IconButton { glyph: "\uF158"; tooltip: "添加异形（后续接入）"; enabled: false }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton {
                     glyph: "\uE74B"; tooltip: "左对齐"
-                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked
+                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                     onClicked: workspace.alignSelected("left")
                 }
                 IconButton {
                     glyph: "\uE74A"; tooltip: "水平居中"
-                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked
+                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                     onClicked: workspace.alignSelected("hcenter")
                 }
                 IconButton {
                     glyph: "\uE73F"; tooltip: "垂直居中"
-                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked
+                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                     onClicked: workspace.alignSelected("vcenter")
                 }
 
@@ -322,7 +706,16 @@ ApplicationWindow {
                         AppIcon { glyph: "\uE71E"; iconSize: 14; height: 20 }
                         BodyLabel { text: "预览"; color: Theme.textPrimary; height: 20 }
                     }
-                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: workspace.renderPreviewNow() }
+                    opacity: workspace.operationsBlocked ? 0.38 : 1
+                    MouseArea { anchors.fill: parent; enabled: !workspace.operationsBlocked; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.renderPreviewNow() }
+                }
+
+                IconButton {
+                    glyph: "\uE159"
+                    tooltip: "导出当前画面"
+                    buttonSize: 32
+                    enabled: !workspace.operationsBlocked
+                    onClicked: exportDialog.open()
                 }
 
                 Rectangle {
@@ -334,9 +727,9 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 8
                         AppIcon { glyph: "\uEDE1"; iconSize: 14; iconColor: "#09251d"; height: 20 }
-                        Text { text: "导出图像"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
+                        Text { text: batchExport.running ? "查看进度" : "批量导出"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
                     }
-                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: exportDialog.open() }
+                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: batchExportDrawer.open() }
                 }
             }
 
@@ -345,6 +738,8 @@ ApplicationWindow {
 
         Rectangle {
             id: documentTabs
+            enabled: !workspace.operationsBlocked
+            opacity: enabled ? 1 : 0.55
             Layout.fillWidth: true
             Layout.preferredHeight: 36
             color: Theme.bgBar
@@ -374,9 +769,12 @@ ApplicationWindow {
         }
 
         RowLayout {
+            id: workspaceArea
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
+            enabled: !workspace.operationsBlocked
+            opacity: enabled ? 1 : 0.72
 
             Rectangle {
                 id: toolRail

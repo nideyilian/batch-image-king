@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=960, help="窗口高度")
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
+    parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     return parser.parse_args()
 
 
@@ -38,11 +39,12 @@ def main() -> int:
         sys.path.insert(0, str(repo_root))
 
     debug("importing Qt modules")
-    from PySide6.QtCore import QThreadPool, QTimer, QUrl
+    from PySide6.QtCore import QMetaObject, QObject, QThreadPool, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuick import QQuickItem
     from app.qml.preview_image_provider import PreviewImageProvider
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
     debug("creating QGuiApplication")
@@ -65,9 +67,11 @@ def main() -> int:
         auto_render=auto_render,
         parent=engine,
     )
+    batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
     engine.addImageProvider("documentPreview", preview_provider)
     engine.rootContext().setContextProperty("workspace", workspace)
     engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
+    engine.rootContext().setContextProperty("batchExport", batch_export)
 
     if args.open_path:
         workspace.openDocument(str(args.open_path.expanduser().resolve()))
@@ -92,6 +96,14 @@ def main() -> int:
     window.setProperty("width", max(1180, args.width))
     window.setProperty("height", max(720, args.height))
 
+    if args.show_batch_export:
+        def open_batch_export() -> None:
+            drawer = window.findChild(QObject, "batchExportDrawer")
+            if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
+                debug("batch export drawer could not be opened")
+
+        QTimer.singleShot(80, open_batch_export)
+
     if args.screenshot:
         output_path = args.screenshot.expanduser().resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -99,6 +111,16 @@ def main() -> int:
         def capture() -> None:
             debug("capturing root window")
             try:
+                if args.show_batch_export:
+                    image = window.grabWindow()
+                    saved = not image.isNull() and image.save(str(output_path), "PNG")
+                    if saved:
+                        print(f"截图已保存：{output_path}")
+                        app.exit(0)
+                    else:
+                        print(f"截图保存失败：{output_path}", file=sys.stderr)
+                        app.exit(3)
+                    return
                 capture_item = window.findChild(QQuickItem, "captureRoot")
                 if capture_item is None:
                     raise RuntimeError("未找到 QML 截图根节点")
