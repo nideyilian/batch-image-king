@@ -8,6 +8,7 @@ from app.models.text_layer import TextLayer
 from app.qml.viewmodels.binding_manager_view_model import BindingManagerViewModel
 from app.qml.viewmodels.size_match_view_model import SizeMatchViewModel
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
+from app.utils.text_layer_virtual_path import build_text_layer_virtual_path
 
 
 def _workspace():
@@ -42,6 +43,34 @@ def test_binding_group_crud_and_candidate_sources():
     assert bindings.globalEnabled is False
     assert bindings.deleteGroup(group_id) is True
     assert bindings.groups == []
+
+
+@pytest.mark.unit
+def test_binding_combination_preview_updates_layers_and_group_state():
+    workspace = _workspace()
+    second_text = TextLayer(name="副标题", x=40, y=520, width=500, height=60)
+    second_text.text_content = "旧副标题\n夏季副标题"
+    workspace.document.add_text_layer(second_text)
+    bindings = BindingManagerViewModel(workspace)
+
+    group_id = bindings.createGroup("文案组合", [2, 3])
+    group = workspace.document.binding_manager.binding_groups[group_id]
+    group.file_categories = {
+        "夏季": {
+            0: [build_text_layer_virtual_path("标题", "夏季限定")],
+            1: [build_text_layer_virtual_path("副标题", "夏季副标题")],
+        }
+    }
+
+    assert group.get_available_categories() == ["夏季"]
+    assert group.get_matched_files("夏季")
+    assert bindings.previewNextCombination() == 2
+    assert workspace.document.layers[2].current_text == "夏季限定"
+    assert workspace.document.layers[3].current_text == "夏季副标题"
+    assert bindings.groups[0]["selectedCategory"] == "夏季"
+
+    assert bindings.setGlobalEnabled(False) is True
+    assert bindings.previewNextCombination() == 0
 
 
 @pytest.mark.unit

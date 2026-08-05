@@ -33,6 +33,14 @@ class BindingManagerViewModel(QObject):
                 "layerNames": list(info.get("layers") or []),
                 "layerCount": int(info.get("layer_count") or 0),
                 "categoryCount": len(info.get("categories") or []),
+                "selectedCategory": str(
+                    getattr(
+                        self._manager.binding_groups.get(str(info.get("group_id") or "")),
+                        "last_selected_category",
+                        "",
+                    )
+                    or ""
+                ),
                 "usedCombinations": int(
                     statistics.get(str(info.get("group_id") or ""), {}).get("total_used_combinations") or 0
                 ),
@@ -140,3 +148,24 @@ class BindingManagerViewModel(QObject):
         self._manager.reset_global_combination_history(str(group_id or "") or None)
         self.stateChanged.emit()
         return True
+
+    @Slot(result=int)
+    def previewNextCombination(self) -> int:
+        if not self.globalEnabled or not self._manager.binding_groups:
+            return 0
+        document = self._workspace.document
+        with self._workspace._document_lock:
+            mapping = self._manager.randomize_bound_layers(document.layers)
+            if not mapping:
+                self.stateChanged.emit()
+                return 0
+            invalidate = getattr(document, "_invalidate_render_cache", None)
+            if callable(invalidate):
+                invalidate()
+        document.layer_changed.emit()
+        document.document_changed.emit()
+        self._workspace._layer_model.reset_from_document()
+        self._workspace.selectionChanged.emit()
+        self._workspace.requestPreview(force=True)
+        self.stateChanged.emit()
+        return len(mapping)

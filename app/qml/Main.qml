@@ -551,9 +551,22 @@ ApplicationWindow {
                     ToggleSwitch { checked: bindingManager.globalEnabled; onToggled: checked => bindingManager.setGlobalEnabled(checked) }
                 }
                 TinyLabel { text: "绑定图层会按相同分类共同随机取图或取文案"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                ExportButton {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    label: "预览下一组"
+                    glyph: "\uE72C"
+                    enabled: bindingManager.globalEnabled && bindingManager.groups.length > 0 && !workspace.operationsBlocked
+                    onClicked: {
+                        if (bindingManager.previewNextCombination() > 0)
+                            showToast("已切换绑定组合")
+                        else
+                            showToast("当前绑定组没有可用组合")
+                    }
+                }
                 ListView {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.max(160, dataRelationsDrawer.height - 430)
+                    Layout.preferredHeight: Math.max(160, dataRelationsDrawer.height - 470)
                     clip: true
                     spacing: 3
                     model: bindingManager.groups
@@ -572,7 +585,13 @@ ApplicationWindow {
                                 spacing: 3
                                 BodyLabel { text: modelData.name; color: Theme.textPrimary }
                                 TinyLabel { text: modelData.layerNames.join(" · "); width: parent.width; elide: Text.ElideRight }
-                                TinyLabel { text: modelData.categoryCount + " 分类  ·  " + modelData.usedCombinations + " 已用组合" }
+                                TinyLabel {
+                                    text: modelData.selectedCategory.length > 0
+                                          ? "本次：" + modelData.selectedCategory
+                                          : modelData.categoryCount + " 分类  ·  " + modelData.usedCombinations + " 已用组合"
+                                    width: parent.width
+                                    elide: Text.ElideRight
+                                }
                             }
                             IconButton { glyph: "\uE72C"; tooltip: "重置组合历史"; buttonSize: 30; onClicked: bindingManager.resetCombinationHistory(modelData.id) }
                             IconButton { glyph: "\uE74D"; tooltip: "删除绑定组"; buttonSize: 30; onClicked: bindingManager.deleteGroup(modelData.id) }
