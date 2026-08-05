@@ -17,7 +17,6 @@ from PySide6.QtCore import (
 )
 
 from app.models.document import Document
-from app.models.document_serializer import DocumentSerializer
 
 
 @dataclass
@@ -231,18 +230,58 @@ class WorkspaceSessionViewModel(QAbstractListModel):
             self.activateDocument(first_index)
         return len(valid)
 
+    def replaceDocuments(self, documents, action="加载预设") -> int:
+        valid = [document for document in list(documents or []) if isinstance(document, Document)]
+        if not valid or self._workspace.operationsBlocked:
+            return 0
+        self.beginResetModel()
+        for session in self._sessions:
+            self._disconnect_document(session.document)
+        self._sessions = []
+        for document in valid:
+            document.current_file_path = None
+            document.is_modified = False
+            self._prepare_history(document, action)
+            title = str(
+                getattr(document, "original_tab_name", None)
+                or getattr(document, "tab_name", None)
+                or ""
+            )
+            self._sessions.append(
+                _DocumentSession(document, self._next_untitled_number, title)
+            )
+            self._next_untitled_number += 1
+            self._connect_document(document)
+        self._active_index = 0
+        self.endResetModel()
+        self.countChanged.emit()
+        self.activeIndexChanged.emit()
+        self._workspace.activateDocument(self._sessions[0].document)
+        return len(valid)
+
     @Slot(int, result=int)
     def duplicateDocument(self, index: int) -> int:
         if not 0 <= int(index) < len(self._sessions) or self._workspace.operationsBlocked:
             return -1
         source_session = self._sessions[int(index)]
-        try:
-            data = copy.deepcopy(DocumentSerializer.prepare_document_data(source_session.document))
-            duplicate = Document()
-            if not DocumentSerializer.restore_document_data(duplicate, data):
-                return -1
-        except Exception:
-            return -1
+        source = source_session.document
+        duplicate = Document()
+        duplicate.canvas_width = int(source.canvas_width)
+        duplicate.canvas_height = int(source.canvas_height)
+        for layer in source.layers:
+            try:
+                copied_layer = layer.duplicate(parent=duplicate)
+            except TypeError:
+                copied_layer = layer.duplicate()
+            except Exception:
+                continue
+            if copied_layer is not None:
+                duplicate.layers.append(copied_layer)
+        duplicate.selected_layer_index = int(source.selected_layer_index)
+        duplicate.selected_layer_indices = (
+            [duplicate.selected_layer_index] if duplicate.selected_layer_index >= 0 else []
+        )
+        duplicate.export_settings = copy.deepcopy(source.export_settings)
         duplicate.current_file_path = None
         duplicate.is_modified = True
         self._prepare_history(duplicate, "复制标签页")
@@ -263,9 +302,11 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         title = str(title or "").strip()
         if not title:
             return False
-        if not os.path.splitext(title)[1]:
-            title += ".cmp"
         self._sessions[int(index)].custom_title = title
+        document = self._sessions[int(index)].document
+        document.name = title
+        document.tab_name = title
+        document.original_tab_name = title
         self._emit_row_changed(int(index))
         return True
 
@@ -372,13 +413,6 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         if not normalized:
             self._workspace._set_status("打开失败：文件路径为空", toast=True)
             return False
-
-        for index, session in enumerate(self._sessions):
-            current = getattr(session.document, "current_file_path", None)
-            if current and self._normalized_path(current) == normalized:
-                self.activateDocument(index)
-                self._workspace._set_status(f"项目已打开：{self._title_for(session)}", toast=True)
-                return True
 
         candidate = Document()
         if not candidate.load_document(file_path):
@@ -504,20 +538,15 @@ class WorkspaceSessionViewModel(QAbstractListModel):
 
         if len(self._sessions) == 1:
             old_document = self._sessions[0].document
+            self._remove_session(0)
             replacement = Document()
             replacement.create_new(1080, 1350)
-            self._prepare_history(replacement, "初始状态")
-            self.beginResetModel()
-            self._disconnect_document(old_document)
-            self._sessions = [_DocumentSession(replacement, self._next_untitled_number)]
-            self._next_untitled_number += 1
-            self._connect_document(replacement)
-            self._active_index = 0
-            self.endResetModel()
+            self._prepare_history(replacement, "空工作区")
             self._workspace.activateDocument(replacement)
+            self._active_index = -1
             self._set_pending_close_index(-1)
             self.activeIndexChanged.emit()
-            self._workspace._set_status("已关闭文档并新建空白画布", toast=True)
+            self._workspace._set_status("已关闭文档", toast=True)
             return True
 
         was_active = index == self._active_index

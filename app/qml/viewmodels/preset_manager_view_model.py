@@ -65,7 +65,31 @@ class PresetManagerViewModel(QObject):
         if self._name_exists(name):
             self._set_error("已存在同名预设")
             return False
-        preset_id = self._manager.save_preset_from_document(name, self._workspace.document, str(description or "").strip())
+        if self._sessions is not None and self._sessions.count > 0:
+            documents = []
+            for index in range(self._sessions.count):
+                document = self._sessions.documentAt(index)
+                if document is None:
+                    continue
+                title = str(
+                    self._sessions.data(
+                        self._sessions.index(index, 0), self._sessions.TitleRole
+                    )
+                    or f"标签页 {index + 1}"
+                )
+                document.tab_name = title
+                document.original_tab_name = title
+                documents.append(document)
+            preset_id = self._manager.save_preset_documents(
+                name,
+                str(description or "").strip(),
+                documents,
+                {},
+            )
+        else:
+            preset_id = self._manager.save_preset_from_document(
+                name, self._workspace.document, str(description or "").strip()
+            )
         if not preset_id:
             self._set_error("保存预设失败")
             return False

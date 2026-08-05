@@ -16,6 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=960, help="窗口高度")
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
+    parser.add_argument("--demo", action="store_true", help="启动内置演示文档")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     parser.add_argument("--show-batch-advanced", action="store_true", help="展示批量导出高级策略")
     parser.add_argument("--show-multi-tab-export", action="store_true", help="展示多标签批量导出")
@@ -124,12 +125,26 @@ def main() -> int:
     size_match = SizeMatchViewModel(workspace=workspace, parent=engine)
     engine.addImageProvider("documentPreview", preview_provider)
 
+    demo_requested = bool(
+        args.demo
+        or args.demo_effects
+        or args.demo_tabs
+        or args.demo_shaped
+        or args.show_random_transform
+        or args.show_text_typography
+        or args.show_text_appearance
+        or args.show_text_effects
+        or args.show_crop_tools
+        or args.show_vector_path
+        or args.show_multi_select
+        or args.show_grouped_layers
+    )
     if args.open_path:
         workspace.openDocument(str(args.open_path.expanduser().resolve()))
-    elif args.blank:
-        workspace.newDocument(1080, 1350)
-    else:
+    elif demo_requested and not args.blank:
         workspace.createDemoDocument(str(qml_dir / "assets" / "watch-product.jpg"))
+    else:
+        workspace.newDocument(1080, 1350)
 
     if args.select_layer is not None:
         workspace.selectLayer(args.select_layer)

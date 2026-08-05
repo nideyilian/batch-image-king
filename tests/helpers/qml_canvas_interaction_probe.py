@@ -36,6 +36,7 @@ def main() -> int:
     engine.rootContext().setContextProperty("workspace", workspace)
     engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
     workspace.createDemoDocument(str(repo_root / "app" / "qml" / "assets" / "watch-product.jpg"))
+    workspace.setZoomFactor(0.4)
     batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     engine.rootContext().setContextProperty("batchExport", batch_export)

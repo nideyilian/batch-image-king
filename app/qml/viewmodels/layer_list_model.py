@@ -17,6 +17,7 @@ class LayerListModel(QAbstractListModel):
     IsGroupRole = Qt.UserRole + 9
     ExpandedRole = Qt.UserRole + 10
     ParentExpandedRole = Qt.UserRole + 11
+    LayerIndexRole = Qt.UserRole + 12
 
     _ROLE_NAMES = {
         NameRole: QByteArray(b"name"),
@@ -30,6 +31,7 @@ class LayerListModel(QAbstractListModel):
         IsGroupRole: QByteArray(b"isGroup"),
         ExpandedRole: QByteArray(b"expanded"),
         ParentExpandedRole: QByteArray(b"parentExpanded"),
+        LayerIndexRole: QByteArray(b"layerIndex"),
     }
 
     def __init__(self, document=None, parent=None) -> None:
@@ -47,16 +49,23 @@ class LayerListModel(QAbstractListModel):
     def rowCount(self, parent=QModelIndex()):  # noqa: N802 - Qt API
         if parent.isValid() or self._document is None:
             return 0
-        return len(getattr(self._document, "layers", []))
+        return len(self._display_entries())
+
+    def _display_entries(self):
+        if self._document is None:
+            return []
+        from app.utils.layer_tree import display_entries
+
+        return display_entries(getattr(self._document, "layers", []))
 
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid() or self._document is None:
             return None
         row = index.row()
-        layers = getattr(self._document, "layers", [])
-        if row < 0 or row >= len(layers):
+        entries = self._display_entries()
+        if row < 0 or row >= len(entries):
             return None
-        layer = layers[row]
+        layer_index, layer, depth = entries[row]
         if role in (Qt.DisplayRole, self.NameRole):
             return str(getattr(layer, "name", "未命名图层"))
         if role == self.TypeNameRole:
@@ -70,22 +79,18 @@ class LayerListModel(QAbstractListModel):
         if role == self.LockedRole:
             return bool(getattr(layer, "locked", False))
         if role == self.SelectedRole:
-            return row in list(getattr(self._document, "selected_layer_indices", []) or [])
+            return layer_index in list(getattr(self._document, "selected_layer_indices", []) or [])
         if role == self.DepthRole:
-            from app.utils.layer_tree import get_parent_group_id
-            return 1 if get_parent_group_id(layer) else 0
+            return depth
         if role == self.IsGroupRole:
             from app.utils.layer_tree import is_layer_group
             return is_layer_group(layer)
         if role == self.ExpandedRole:
             return bool(getattr(layer, "expanded", True))
         if role == self.ParentExpandedRole:
-            from app.utils.layer_tree import get_parent_group_id, group_map
-            group_id = get_parent_group_id(layer)
-            if not group_id:
-                return True
-            group = group_map(getattr(self._document, "layers", [])).get(group_id)
-            return bool(getattr(group, "expanded", True)) if group is not None else True
+            return True
+        if role == self.LayerIndexRole:
+            return layer_index
         return None
 
     @staticmethod
@@ -155,9 +160,17 @@ class LayerListModel(QAbstractListModel):
         self.endResetModel()
 
     def notify_row(self, row: int) -> None:
-        if row < 0 or row >= self.rowCount():
+        display_row = next(
+            (
+                display_index
+                for display_index, (layer_index, _layer, _depth) in enumerate(self._display_entries())
+                if layer_index == row
+            ),
+            -1,
+        )
+        if display_row < 0:
             return
-        model_index = self.index(row, 0)
+        model_index = self.index(display_row, 0)
         self.dataChanged.emit(model_index, model_index, list(self._ROLE_NAMES))
 
     def layer_at(self, row: int) -> Optional[object]:

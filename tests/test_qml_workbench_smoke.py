@@ -46,11 +46,11 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
 
     qml_source = (repo_root / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
     assert 'objectName: "batchExportDrawer"' in qml_source
-    assert 'text: batchExport.running ? "查看进度" : "批量导出"' in qml_source
+    assert 'Text { text: "批量导出"' in qml_source
     assert 'title: "内容源"' in qml_source
     assert 'title: "文字内容"' in qml_source
     assert 'tooltip: "添加素材文件夹"' in qml_source
-    assert '"复制图层 · Ctrl+D"' in qml_source
+    assert '"复制图层 · Ctrl+D"' not in qml_source
     assert 'workspace.moveSelectedLayer("forward")' in qml_source
     assert 'sequence: "Ctrl+D"' in qml_source
     assert 'id: effectColorDialog' in qml_source
@@ -94,8 +94,8 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.cycleSelectedVectorNodeType()' in qml_source
     assert 'workspace.selectLayerWithModifiers(' in qml_source
     assert 'workspace.selectLayersInRect(' in qml_source
-    assert 'workspace.moveSelectedLayersBy(' in qml_source
-    assert 'workspace.moveSelectedLayersTo(dropIndex)' in qml_source
+    assert 'workspace.transformSelectedLayers(' in qml_source
+    assert 'workspace.moveSelectedLayersTo(targetItem.layerIndex)' in qml_source
     assert 'workspace.groupSelectedLayers()' in qml_source
     assert 'workspace.ungroupSelectedGroups()' in qml_source
     assert 'workspace.alignSelectedLayers("left")' in qml_source
@@ -156,6 +156,12 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'legacyTools.openSizeMatchManager()' in qml_source
     assert 'legacyTools.openCanvasPresetManager()' in qml_source
     assert 'legacyTools.openPresetManager()' in qml_source
+    assert 'legacyTools.openNewDocument()' in qml_source
+    assert 'legacyTools.openAddTextLayer()' in qml_source
+    assert 'legacyTools.openAddShapedLayer()' in qml_source
+    assert 'workspace.addEmptyImageLayer()' in qml_source
+    assert 'workspace.setSelectedImageSourceMode(false)' in qml_source
+    assert 'workspace.resetView()' in qml_source
     assert 'workspaceSessions.requestApplicationClose()' in qml_source
     assert 'workspaceSessions.duplicateDocument(contextDocumentIndex)' in qml_source
     assert 'workspaceSessions.closeOtherDocuments(contextDocumentIndex)' in qml_source

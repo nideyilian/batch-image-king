@@ -77,9 +77,13 @@ def test_group_ungroup_and_round_trip(tmp_path: Path):
     assert workspace.selectedIsLayerGroup is True
 
     model = workspace.layerModel
-    assert model.data(model.index(0, 0), LayerListModel.IsGroupRole) is True
-    assert model.data(model.index(1, 0), LayerListModel.DepthRole) == 1
-    assert model.data(model.index(0, 0), LayerListModel.SelectedRole) is True
+    group_row = next(
+        row
+        for row in range(model.rowCount())
+        if model.data(model.index(row, 0), LayerListModel.IsGroupRole) is True
+    )
+    assert model.data(model.index(group_row + 1, 0), LayerListModel.DepthRole) == 1
+    assert model.data(model.index(group_row, 0), LayerListModel.SelectedRole) is True
 
     assert workspace.undo() is True
     assert all(not isinstance(layer, LayerGroup) for layer in workspace.document.layers)

@@ -162,7 +162,7 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequence: "Ctrl+N"; onActivated: newCanvasDialog.open() }
+    Shortcut { sequence: "Ctrl+N"; onActivated: legacyTools.openNewDocument() }
     Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
     Shortcut { sequence: "Ctrl+S"; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
     Shortcut { sequence: "Ctrl+Shift+S"; onActivated: saveDialog.open() }
@@ -178,20 +178,22 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+C"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.copySelectedLayerStyle() }
     Shortcut { sequence: "Ctrl+Shift+V"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.pasteSelectedLayerStyle() }
     Shortcut { sequence: "Ctrl+A"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.selectAllLayers() }
-    Shortcut { sequence: "Ctrl+L"; enabled: window.layerShortcutsEnabled; onActivated: imageDialog.open() }
-    Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: workspace.addTextLayer() }
+    Shortcut { sequence: "Ctrl+L"; enabled: window.layerShortcutsEnabled; onActivated: workspace.addEmptyImageLayer() }
+    Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.openAddTextLayer() }
     Shortcut { sequence: "Ctrl+Up"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward; onActivated: workspace.moveSelectedLayer("forward") }
     Shortcut { sequence: "Ctrl+Down"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") }
-    Shortcut { sequence: "Ctrl++"; onActivated: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
-    Shortcut { sequence: "Ctrl+-"; onActivated: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
-    Shortcut { sequence: "Ctrl+0"; onActivated: workspace.setZoomFactor(0.78) }
+    Shortcut { sequence: "Ctrl++"; onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
+    Shortcut { sequence: "Ctrl+-"; onActivated: workspace.setZoomFactor(workspace.zoomFactor / 1.1) }
+    Shortcut { sequence: "Ctrl+0"; onActivated: workspace.resetView() }
+    Shortcut { sequence: "V"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 0 }
+    Shortcut { sequence: "H"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 1 }
     Shortcut { sequence: "F2"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: legacyTools.renameSelectedLayer() }
     Shortcut { sequence: "Delete"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.deleteSelectedLayers() }
 
     Shortcut {
         sequence: "Ctrl+D"
-        enabled: window.layerShortcutsEnabled && workspace.canDuplicateLayer
-        onActivated: workspace.duplicateSelectedLayer()
+        enabled: !workspace.operationsBlocked && workspaceSessions.activeIndex >= 0
+        onActivated: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex)
     }
 
     Shortcut {
@@ -1043,7 +1045,7 @@ ApplicationWindow {
 
     AppMenu {
         id: fileMenu
-        ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: newCanvasDialog.open() }
+        ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: legacyTools.openNewDocument() }
         ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
         MenuSeparator { }
         ShapeMenuItem { text: "保存\tCtrl+S"; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
@@ -1074,10 +1076,11 @@ ApplicationWindow {
 
     AppMenu {
         id: layerMenu
-        ShapeMenuItem { text: "添加图片图层"; onTriggered: imageDialog.open() }
-        ShapeMenuItem { text: "添加素材文件夹"; onTriggered: imageFolderDialog.open() }
-        ShapeMenuItem { text: "添加文字图层"; onTriggered: workspace.addTextLayer() }
-        ShapeMenuItem { text: "添加异形图层"; onTriggered: addShapeMenu.popup() }
+        ShapeMenuItem { text: "新建空图片图层\tCtrl+L"; onTriggered: workspace.addEmptyImageLayer() }
+        ShapeMenuItem { text: "导入图片为图层"; onTriggered: imageDialog.open() }
+        ShapeMenuItem { text: "导入素材文件夹"; onTriggered: imageFolderDialog.open() }
+        ShapeMenuItem { text: "添加文字图层\tCtrl+T"; onTriggered: legacyTools.openAddTextLayer() }
+        ShapeMenuItem { text: "添加异形图层"; onTriggered: legacyTools.openAddShapedLayer() }
         MenuSeparator { }
         ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.renameSelectedLayer() }
         ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.openAdvancedLayerProperties() }
@@ -1093,14 +1096,20 @@ ApplicationWindow {
         ShapeMenuItem { text: "画布预设管理"; onTriggered: legacyTools.openCanvasPresetManager() }
         MenuSeparator { }
         ShapeMenuItem { text: "项目预设中心\tCtrl+P"; onTriggered: legacyTools.openPresetManager() }
-        ShapeMenuItem { text: "QML 项目预设面板"; onTriggered: projectPresetDrawer.open() }
+    }
+
+    AppMenu {
+        id: dataRelationsMenu
+        ShapeMenuItem { text: "图层绑定管理"; onTriggered: legacyTools.openBindingManager() }
+        ShapeMenuItem { text: "图层尺寸匹配"; onTriggered: legacyTools.openSizeMatchManager() }
     }
 
     AppMenu {
         id: viewMenu
         ShapeMenuItem { text: "放大\tCtrl++"; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
         ShapeMenuItem { text: "缩小\tCtrl+-"; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
-        ShapeMenuItem { text: "适合窗口\tCtrl+0"; onTriggered: workspace.setZoomFactor(0.78) }
+        ShapeMenuItem { text: "实际大小 100%\tCtrl+0"; onTriggered: workspace.resetView() }
+        ShapeMenuItem { text: "适合窗口"; onTriggered: workspace.setZoomFactor(canvasWorkspace.fitScale) }
         MenuSeparator { }
         ShapeMenuItem { text: (workspace.showRulers ? "✓  " : "    ") + "显示标尺"; onTriggered: workspace.setShowRulers(!workspace.showRulers) }
         ShapeMenuItem { text: (workspace.showGuides ? "✓  " : "    ") + "显示参考线"; onTriggered: workspace.setShowGuides(!workspace.showGuides) }
@@ -1124,6 +1133,7 @@ ApplicationWindow {
         MenuSeparator { }
         ShapeMenuItem { text: "关闭其他标签页"; enabled: workspaceSessions.count > 1; onTriggered: workspaceSessions.closeOtherDocuments(contextDocumentIndex) }
         ShapeMenuItem { text: "关闭标签页"; onTriggered: workspaceSessions.requestClose(contextDocumentIndex) }
+        ShapeMenuItem { text: "恢复导出窗口"; onTriggered: legacyTools.restoreExportWindow(contextDocumentIndex) }
     }
 
     Menu {
@@ -1247,6 +1257,7 @@ ApplicationWindow {
         property int toolIndex: 0
         property string glyph: ""
         property string label: ""
+        signal triggered()
 
         width: 38
         height: 38
@@ -1269,7 +1280,7 @@ ApplicationWindow {
             cursorShape: Qt.PointingHandCursor
             onClicked: {
                 activeTool = toolButton.toolIndex
-                showToast("已切换到" + toolButton.label)
+                toolButton.triggered()
             }
         }
 
@@ -2347,13 +2358,13 @@ ApplicationWindow {
                     glyph: "\uE8F1"
                     tooltip: "项目预设"
                     enabled: !workspace.operationsBlocked
-                    onClicked: projectPresetDrawer.open()
+                    onClicked: legacyTools.openPresetManager()
                 }
                 IconButton {
                     glyph: "\uE8A9"
                     tooltip: "绑定与尺寸匹配"
                     enabled: !workspace.operationsBlocked
-                    onClicked: dataRelationsDrawer.open()
+                    onClicked: dataRelationsMenu.popup(parent, 0, parent.height)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
@@ -2372,18 +2383,18 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 7
                         AppIcon { glyph: "\uE91B"; iconSize: 14; iconColor: Theme.textPrimary; height: 20 }
-                        BodyLabel { text: "添加图片"; color: Theme.textPrimary; height: 20 }
+                        BodyLabel { text: "新建图层"; color: Theme.textPrimary; height: 20 }
                     }
-                    MouseArea { id: addImageMouse; anchors.fill: parent; enabled: !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: imageDialog.open() }
+                    MouseArea { id: addImageMouse; anchors.fill: parent; enabled: !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.addEmptyImageLayer() }
                 }
 
-                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: workspace.addTextLayer() }
+                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: legacyTools.openAddTextLayer() }
                 IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
                 IconButton {
                     glyph: "\uF158"
                     tooltip: "添加异形图层"
                     enabled: !workspace.operationsBlocked
-                    onClicked: addShapeMenu.popup()
+                    onClicked: legacyTools.openAddShapedLayer()
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton {
@@ -2435,8 +2446,7 @@ ApplicationWindow {
                     tooltip: "多标签批量导出"
                     buttonSize: 32
                     enabled: !workspace.operationsBlocked || multiTabExport.running
-                    active: multiTabExport.running
-                    onClicked: multiTabExportDrawer.open()
+                    onClicked: legacyTools.openMultiTabExport()
                 }
 
                 Rectangle {
@@ -2448,9 +2458,9 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         spacing: 8
                         AppIcon { glyph: "\uEDE1"; iconSize: 14; iconColor: "#09251d"; height: 20 }
-                        Text { text: batchExport.running ? "查看进度" : "批量导出"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
+                        Text { text: "批量导出"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
                     }
-                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: batchExportDrawer.open() }
+                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: legacyTools.openBatchExport() }
                 }
             }
 
@@ -2553,7 +2563,7 @@ ApplicationWindow {
                     tooltip: "新建文档"
                     buttonSize: 36
                     Layout.preferredWidth: 40
-                    onClicked: newCanvasDialog.open()
+                    onClicked: legacyTools.openNewDocument()
                 }
             }
 
@@ -2582,10 +2592,8 @@ ApplicationWindow {
 
                     ToolRailButton { toolIndex: 0; glyph: "\uE7C9"; label: "选择工具 (V)" }
                     ToolRailButton { toolIndex: 1; glyph: "\uE7C2"; label: "抓手工具 (H)" }
-                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)" }
-                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)" }
-                    ToolRailButton { toolIndex: 4; glyph: "\uE790"; label: "取色器 (I)" }
-                    ToolRailButton { toolIndex: 5; glyph: "\uE71E"; label: "缩放工具 (Z)" }
+                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)"; onTriggered: legacyTools.openAddTextLayer() }
+                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)"; onTriggered: legacyTools.openAddShapedLayer() }
                 }
 
                 Column {
@@ -2599,7 +2607,6 @@ ApplicationWindow {
                         Rectangle { width: 15; height: 15; anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 3; color: Theme.accent; border.width: 1; border.color: "#84f0d0" }
                         Rectangle { width: 15; height: 15; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; color: "#f3f1ea"; border.width: 1; border.color: Theme.borderStrong }
                     }
-                    ToolRailButton { toolIndex: 9; glyph: "\uE946"; label: "帮助" }
                 }
 
                 Divider { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right }
@@ -2630,39 +2637,10 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                             Layout.fillWidth: true
                         }
-                        IconButton { glyph: "\uE721"; tooltip: "筛选图层"; buttonSize: 28; onClicked: showToast("筛选图层") }
-                        IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; onClicked: imageDialog.open() }
+                        IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; onClicked: workspace.addEmptyImageLayer() }
                     }
 
                     Divider { Layout.fillWidth: true }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 38
-                        color: Theme.bgBar
-
-                        Row {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            spacing: 0
-
-                            Rectangle {
-                                width: (parent.width - 20) / 2
-                                height: parent.height
-                                color: "transparent"
-                                Text { anchors.centerIn: parent; text: "图层"; color: Theme.textPrimary; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 2; color: Theme.accent }
-                            }
-                            Rectangle {
-                                width: (parent.width - 20) / 2
-                                height: parent.height
-                                color: assetTabMouse.containsMouse ? Theme.bgRaised : "transparent"
-                                Text { anchors.centerIn: parent; text: "素材"; color: Theme.textMuted; font.family: Theme.bodyFont; font.pixelSize: 11 }
-                                MouseArea { id: assetTabMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: showToast("素材视图") }
-                            }
-                        }
-                    }
 
                     ListView {
                         id: layerList
@@ -2670,7 +2648,7 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         clip: true
                         model: layerModel
-                        currentIndex: selectedLayer
+                        currentIndex: -1
                         boundsBehavior: Flickable.StopAtBounds
 
                         delegate: Rectangle {
@@ -2687,6 +2665,7 @@ ApplicationWindow {
                             required property bool isGroup
                             required property bool expanded
                             required property bool parentExpanded
+                            required property int layerIndex
 
                             width: layerList.width
                             height: parentExpanded ? 62 : 0
@@ -2709,7 +2688,7 @@ ApplicationWindow {
                                 glyph: layerDelegate.shown ? "\uE890" : "\uED1A"
                                 tooltip: layerDelegate.shown ? "隐藏图层" : "显示图层"
                                 buttonSize: 28
-                                onClicked: workspace.toggleLayerVisible(layerDelegate.index)
+                                onClicked: workspace.toggleLayerVisible(layerDelegate.layerIndex)
                             }
 
                             IconButton {
@@ -2721,7 +2700,7 @@ ApplicationWindow {
                                 glyph: layerDelegate.expanded ? "\uE70D" : "\uE76C"
                                 tooltip: layerDelegate.expanded ? "折叠图层组" : "展开图层组"
                                 buttonSize: 22
-                                onClicked: workspace.toggleLayerGroupExpanded(layerDelegate.index)
+                                onClicked: workspace.toggleLayerGroupExpanded(layerDelegate.layerIndex)
                             }
 
                             Rectangle {
@@ -2731,7 +2710,7 @@ ApplicationWindow {
                                 width: 38
                                 height: 38
                                 radius: Theme.radiusSmall
-                                color: layerDelegate.index === 2 || layerDelegate.index === 4 ? "#d8d8d4" : Theme.bgControl
+                                color: layerDelegate.layerIndex === 2 || layerDelegate.layerIndex === 4 ? "#d8d8d4" : Theme.bgControl
                                 border.width: 1
                                 border.color: Theme.borderStrong
 
@@ -2762,7 +2741,7 @@ ApplicationWindow {
                                 glyph: layerDelegate.locked ? "\uE72E" : "\uE785"
                                 tooltip: layerDelegate.locked ? "解锁图层" : "锁定图层"
                                 buttonSize: 28
-                                onClicked: workspace.toggleLayerLocked(layerDelegate.index)
+                                onClicked: workspace.toggleLayerLocked(layerDelegate.layerIndex)
                             }
 
                             MouseArea {
@@ -2782,14 +2761,14 @@ ApplicationWindow {
                                     dragStartY = layerDelegate.y
                                     if (mouse.button === Qt.RightButton) {
                                         if (!layerDelegate.selected)
-                                            workspace.selectLayer(layerDelegate.index)
+                                            workspace.selectLayer(layerDelegate.layerIndex)
                                         layerContextMenu.popup()
                                     }
                                 }
                                 onClicked: mouse => {
                                     if (mouse.button !== Qt.LeftButton) return
                                     workspace.selectLayerWithModifiers(
-                                        layerDelegate.index,
+                                        layerDelegate.layerIndex,
                                         (mouse.modifiers & Qt.ControlModifier) !== 0,
                                         (mouse.modifiers & Qt.ShiftModifier) !== 0
                                     )
@@ -2798,8 +2777,11 @@ ApplicationWindow {
                                     if (mouse.button !== Qt.LeftButton || Math.abs(layerDelegate.y - dragStartY) < 8) return
                                     var mapped = layerDelegate.mapToItem(layerList.contentItem, 8, layerDelegate.height / 2)
                                     var dropIndex = layerList.indexAt(mapped.x, mapped.y)
-                                    if (dropIndex >= 0)
-                                        workspace.moveSelectedLayersTo(dropIndex)
+                                    if (dropIndex >= 0) {
+                                        var targetItem = layerList.itemAtIndex(dropIndex)
+                                        if (targetItem)
+                                            workspace.moveSelectedLayersTo(targetItem.layerIndex)
+                                    }
                                 }
                             }
 
@@ -2820,7 +2802,13 @@ ApplicationWindow {
                                 ShapeMenuItem { text: "解锁所选"; onTriggered: workspace.setSelectedLayersLocked(false) }
                                 MenuSeparator { }
                                 ShapeMenuItem { text: "左对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("left") }
+                                ShapeMenuItem { text: "水平居中"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("hcenter") }
+                                ShapeMenuItem { text: "右对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("right") }
                                 ShapeMenuItem { text: "顶对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("top") }
+                                ShapeMenuItem { text: "垂直居中"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("vcenter") }
+                                ShapeMenuItem { text: "底对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("bottom") }
+                                ShapeMenuItem { text: "双向居中"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("center") }
+                                ShapeMenuItem { text: "相同尺寸"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("same_size") }
                                 ShapeMenuItem { text: "水平等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("horizontal") }
                                 ShapeMenuItem { text: "垂直等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("vertical") }
                                 MenuSeparator { }
@@ -2839,10 +2827,10 @@ ApplicationWindow {
                         Row {
                             anchors.centerIn: parent
                             spacing: 5
-                            IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; enabled: !workspace.operationsBlocked; onClicked: imageDialog.open() }
+                            IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; enabled: !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                             IconButton {
                                 glyph: "\uE8C8"
-                                tooltip: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层 · Ctrl+D"
+                                tooltip: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
                                 buttonSize: 28
                                 enabled: workspace.selectedLayerCount > 1 || workspace.canDuplicateLayer
                                 onClicked: workspace.selectedLayerCount > 1
@@ -2931,7 +2919,7 @@ ApplicationWindow {
                     (height - 54) / safeCanvasHeight,
                     (width - 60) / safeCanvasWidth
                 )
-                property real actualScale: Math.max(0.05, fitScale * (workspace.zoomFactor / 0.78))
+                property real actualScale: workspace.zoomFactor
                 property bool transformActive: false
                 property string transformMode: ""
                 property real gestureStartMouseX: 0
@@ -2940,6 +2928,8 @@ ApplicationWindow {
                 property real gestureStartY: 0
                 property real gestureStartWidth: 1
                 property real gestureStartHeight: 1
+                property real gestureStartLocalX: 0
+                property real gestureStartLocalY: 0
                 property real transientX: workspace.selectedX
                 property real transientY: workspace.selectedY
                 property real transientWidth: Math.max(1, workspace.selectedWidth)
@@ -3005,12 +2995,12 @@ ApplicationWindow {
                 }
 
                 function handleAt(canvasX, canvasY) {
-                    if (workspace.selectedLayerCount !== 1 || workspace.selectedIsLayerGroup
-                            || workspace.selectedLocked || Math.abs(workspace.selectedRotation) > 0.001)
+                    if (workspace.selectedLayerIndex < 0 || workspace.selectedLocked)
                         return ""
                     var point = selectedLocalPoint(canvasX, canvasY)
-                    var width = Math.max(1, workspace.selectedWidth)
-                    var height = Math.max(1, workspace.selectedHeight)
+                    var aggregate = workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
+                    var width = Math.max(1, aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth)
+                    var height = Math.max(1, aggregate ? workspace.selectionBoundsHeight : workspace.selectedHeight)
                     var tolerance = 10 / actualScale
                     var nearLeft = Math.abs(point.x) <= tolerance
                     var nearRight = Math.abs(point.x - width) <= tolerance
@@ -3020,6 +3010,10 @@ ApplicationWindow {
                     if (nearRight && nearTop) return "ne"
                     if (nearLeft && nearBottom) return "sw"
                     if (nearRight && nearBottom) return "se"
+                    if (nearTop) return "n"
+                    if (nearRight) return "e"
+                    if (nearBottom) return "s"
+                    if (nearLeft) return "w"
                     return ""
                 }
 
@@ -3037,6 +3031,8 @@ ApplicationWindow {
                     var handle = handleAt(canvasX, canvasY)
                     if (handle === "nw" || handle === "se") return Qt.SizeFDiagCursor
                     if (handle === "ne" || handle === "sw") return Qt.SizeBDiagCursor
+                    if (handle === "n" || handle === "s") return Qt.SizeVerCursor
+                    if (handle === "e" || handle === "w") return Qt.SizeHorCursor
                     if (!workspace.selectedLocked && selectedContains(canvasX, canvasY)) return Qt.OpenHandCursor
                     return Qt.ArrowCursor
                 }
@@ -3050,6 +3046,9 @@ ApplicationWindow {
                     gestureStartY = aggregate ? workspace.selectionBoundsY : workspace.selectedY
                     gestureStartWidth = Math.max(1, aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth)
                     gestureStartHeight = Math.max(1, aggregate ? workspace.selectionBoundsHeight : workspace.selectedHeight)
+                    var localPoint = selectedLocalPoint(canvasX, canvasY)
+                    gestureStartLocalX = localPoint.x
+                    gestureStartLocalY = localPoint.y
                     transientX = gestureStartX
                     transientY = gestureStartY
                     transientWidth = gestureStartWidth
@@ -3062,31 +3061,33 @@ ApplicationWindow {
                         return
                     var deltaX = canvasX - gestureStartMouseX
                     var deltaY = canvasY - gestureStartMouseY
-                    var minimumSize = 16
+                    var minimumSize = 10
                     if (transformMode === "move") {
-                        transientX = Math.max(0, Math.min(safeCanvasWidth - gestureStartWidth, gestureStartX + deltaX))
-                        transientY = Math.max(0, Math.min(safeCanvasHeight - gestureStartHeight, gestureStartY + deltaY))
+                        transientX = gestureStartX + deltaX
+                        transientY = gestureStartY + deltaY
                         return
                     }
 
+                    var localPoint = selectedLocalPoint(canvasX, canvasY)
+                    var localDeltaX = localPoint.x - gestureStartLocalX
+                    var localDeltaY = localPoint.y - gestureStartLocalY
                     var right = gestureStartX + gestureStartWidth
                     var bottom = gestureStartY + gestureStartHeight
-                    if (workspace.selectedAspectRatioLocked) {
+                    var changesLeft = transformMode === "nw" || transformMode === "w" || transformMode === "sw"
+                    var changesRight = transformMode === "ne" || transformMode === "e" || transformMode === "se"
+                    var changesTop = transformMode === "nw" || transformMode === "n" || transformMode === "ne"
+                    var changesBottom = transformMode === "sw" || transformMode === "s" || transformMode === "se"
+                    if (workspace.selectedAspectRatioLocked && transformMode.length === 2) {
                         var fixedX = transformMode === "nw" || transformMode === "sw" ? right : gestureStartX
                         var fixedY = transformMode === "nw" || transformMode === "ne" ? bottom : gestureStartY
                         var desiredWidth = transformMode === "nw" || transformMode === "sw"
-                                ? fixedX - canvasX : canvasX - fixedX
+                                ? gestureStartWidth - localDeltaX : gestureStartWidth + localDeltaX
                         var desiredHeight = transformMode === "nw" || transformMode === "ne"
-                                ? fixedY - canvasY : canvasY - fixedY
+                                ? gestureStartHeight - localDeltaY : gestureStartHeight + localDeltaY
                         var scale = (desiredWidth * gestureStartWidth + desiredHeight * gestureStartHeight)
                                 / (gestureStartWidth * gestureStartWidth + gestureStartHeight * gestureStartHeight)
                         var minimumScale = Math.max(minimumSize / gestureStartWidth, minimumSize / gestureStartHeight)
-                        var maximumWidth = transformMode === "nw" || transformMode === "sw"
-                                ? fixedX : safeCanvasWidth - fixedX
-                        var maximumHeight = transformMode === "nw" || transformMode === "ne"
-                                ? fixedY : safeCanvasHeight - fixedY
-                        var maximumScale = Math.min(maximumWidth / gestureStartWidth, maximumHeight / gestureStartHeight)
-                        scale = Math.max(minimumScale, Math.min(maximumScale, scale))
+                        scale = Math.max(minimumScale, scale)
                         transientWidth = gestureStartWidth * scale
                         transientHeight = gestureStartHeight * scale
                         transientX = transformMode === "nw" || transformMode === "sw"
@@ -3095,17 +3096,17 @@ ApplicationWindow {
                                 ? fixedY - transientHeight : fixedY
                         return
                     }
-                    if (transformMode === "nw" || transformMode === "sw") {
-                        transientX = Math.max(0, Math.min(right - minimumSize, gestureStartX + deltaX))
+                    if (changesLeft) {
+                        transientX = Math.min(right - minimumSize, gestureStartX + localDeltaX)
                         transientWidth = right - transientX
-                    } else {
-                        transientWidth = Math.max(minimumSize, Math.min(safeCanvasWidth - gestureStartX, gestureStartWidth + deltaX))
+                    } else if (changesRight) {
+                        transientWidth = Math.max(minimumSize, gestureStartWidth + localDeltaX)
                     }
-                    if (transformMode === "nw" || transformMode === "ne") {
-                        transientY = Math.max(0, Math.min(bottom - minimumSize, gestureStartY + deltaY))
+                    if (changesTop) {
+                        transientY = Math.min(bottom - minimumSize, gestureStartY + localDeltaY)
                         transientHeight = bottom - transientY
-                    } else {
-                        transientHeight = Math.max(minimumSize, Math.min(safeCanvasHeight - gestureStartY, gestureStartHeight + deltaY))
+                    } else if (changesBottom) {
+                        transientHeight = Math.max(minimumSize, gestureStartHeight + localDeltaY)
                     }
                 }
 
@@ -3122,7 +3123,7 @@ ApplicationWindow {
                     transformActive = false
                     transformMode = ""
                     if (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup)
-                        workspace.moveSelectedLayersBy(finalX - gestureStartX, finalY - gestureStartY)
+                        workspace.transformSelectedLayers(finalX, finalY, finalWidth, finalHeight)
                     else
                         workspace.applySelectedGeometry(finalX, finalY, finalWidth, finalHeight)
                 }
@@ -3136,7 +3137,7 @@ ApplicationWindow {
                     target: null
                     onWheel: event => {
                         var direction = event.angleDelta.y > 0 ? 1 : -1
-                        workspace.setZoomFactor(workspace.zoomFactor + direction * 0.05)
+                        workspace.setZoomFactor(direction > 0 ? workspace.zoomFactor * 1.1 : workspace.zoomFactor / 1.1)
                         event.accepted = true
                     }
                 }
@@ -3155,11 +3156,34 @@ ApplicationWindow {
                     }
                 }
 
+                DragHandler {
+                    id: canvasPanHandler
+                    target: null
+                    acceptedButtons: activeTool === 1 ? Qt.LeftButton | Qt.MiddleButton : Qt.MiddleButton
+                    property int startOffsetX: 0
+                    property int startOffsetY: 0
+                    onActiveChanged: {
+                        if (active) {
+                            startOffsetX = workspace.viewOffsetX
+                            startOffsetY = workspace.viewOffsetY
+                        }
+                    }
+                    onTranslationChanged: {
+                        if (!active) return
+                        workspace.setViewOffset(
+                            Math.round(startOffsetX + translation.x),
+                            Math.round(startOffsetY + translation.y)
+                        )
+                    }
+                }
+
                 Item {
                     id: artboardFrame
                     width: canvasWorkspace.safeCanvasWidth * canvasWorkspace.actualScale
                     height: canvasWorkspace.safeCanvasHeight * canvasWorkspace.actualScale
                     anchors.centerIn: parent
+                    anchors.horizontalCenterOffset: workspace.viewOffsetX
+                    anchors.verticalCenterOffset: workspace.viewOffsetY
 
                     Rectangle {
                         id: topRuler
@@ -3322,10 +3346,10 @@ ApplicationWindow {
                                 }
                                 var ctrl = (mouse.modifiers & Qt.ControlModifier) !== 0
                                 var shift = (mouse.modifiers & Qt.ShiftModifier) !== 0
-                                var selectedIndex = workspace.hitTestLayerAt(mouse.x, mouse.y)
-                                if (selectedIndex >= 0) {
-                                    workspace.selectLayerWithModifiers(selectedIndex, ctrl, shift)
-                                }
+                                var alt = (mouse.modifiers & Qt.AltModifier) !== 0
+                                var selectedIndex = workspace.selectLayerAtWithModifiers(mouse.x, mouse.y, ctrl || alt, shift)
+                                if (ctrl)
+                                    return
                                 if (selectedIndex >= 0 && !workspace.selectedLocked) {
                                     canvasWorkspace.beginTransform("move", mouse.x, mouse.y)
                                     return
@@ -3399,20 +3423,23 @@ ApplicationWindow {
 
                             Repeater {
                                 model: [
-                                    {"x": 0, "y": 0}, {"x": parent.width, "y": 0},
-                                    {"x": 0, "y": parent.height}, {"x": parent.width, "y": parent.height}
+                                    {"edge": "nw", "x": 0, "y": 0},
+                                    {"edge": "n", "x": parent.width / 2, "y": 0},
+                                    {"edge": "ne", "x": parent.width, "y": 0},
+                                    {"edge": "e", "x": parent.width, "y": parent.height / 2},
+                                    {"edge": "se", "x": parent.width, "y": parent.height},
+                                    {"edge": "s", "x": parent.width / 2, "y": parent.height},
+                                    {"edge": "sw", "x": 0, "y": parent.height},
+                                    {"edge": "w", "x": 0, "y": parent.height / 2}
                                 ]
                                 delegate: Rectangle {
                                     required property var modelData
-                                    visible: workspace.selectedLayerCount === 1
-                                             && !workspace.selectedIsLayerGroup
-                                             && !workspace.selectedLocked
+                                    visible: !workspace.selectedLocked
                                              && !workspace.cropEditing
                                              && !workspace.selectedVectorPathEnabled
-                                             && Math.abs(workspace.selectedRotation) <= 0.001
                                     width: 8 / canvasWorkspace.actualScale
                                     height: width
-                                    radius: width / 2
+                                    radius: modelData.edge.length === 1 ? 1 / canvasWorkspace.actualScale : width / 2
                                     x: modelData.x - width / 2
                                     y: modelData.y - height / 2
                                     color: "#f4f7f5"
@@ -3793,17 +3820,27 @@ ApplicationWindow {
                             PropertySection {
                                 width: parent.width
                                 title: "内容源"
-                                summary: workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片"
+                                summary: workspace.selectedImageSource
+                                         ? (workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片")
+                                         : "未设置"
                                 visible: workspace.selectedHasImageSource
 
                                 InspectorRow {
                                     label: "模式"
-                                    BodyLabel {
-                                        text: workspace.selectedImageSourceIsFolder ? "素材文件夹" : "单文件"
-                                        color: workspace.selectedImageSourceIsFolder ? Theme.accent : Theme.textPrimary
+                                    CompactActionButton {
                                         Layout.fillWidth: true
+                                        label: "单文件"
+                                        active: !workspace.selectedImageSourceIsFolder
+                                        enabled: !workspace.selectedLocked
+                                        onClicked: workspace.setSelectedImageSourceMode(false)
                                     }
-                                    TinyLabel { text: workspace.selectedImageSourceCount + " 张" }
+                                    CompactActionButton {
+                                        Layout.fillWidth: true
+                                        label: "文件夹"
+                                        active: workspace.selectedImageSourceIsFolder
+                                        enabled: !workspace.selectedLocked
+                                        onClicked: workspace.setSelectedImageSourceMode(true)
+                                    }
                                 }
                                 InspectorRow {
                                     label: "路径"
@@ -3845,7 +3882,7 @@ ApplicationWindow {
                                     }
                                 }
                                 InspectorRow {
-                                    label: "替换"
+                                    label: "选择"
                                     ExportButton {
                                         Layout.fillWidth: true
                                         label: "图片"
@@ -5438,7 +5475,7 @@ ApplicationWindow {
                     spacing: 5
                     IconButton {
                         glyph: "\uE738"; tooltip: "缩小"; buttonSize: 24
-                        onClicked: workspace.setZoomFactor(workspace.zoomFactor - 0.05)
+                        onClicked: workspace.setZoomFactor(workspace.zoomFactor / 1.1)
                     }
                     Rectangle {
                         width: 92
@@ -5446,12 +5483,12 @@ ApplicationWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         radius: 2
                         color: Theme.borderStrong
-                        Rectangle { width: parent.width * ((workspace.zoomFactor - 0.35) / 1.65); height: 4; radius: 2; color: Theme.accent }
-                        Rectangle { x: parent.width * ((workspace.zoomFactor - 0.35) / 1.65) - 6; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
+                        Rectangle { width: parent.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100); height: 4; radius: 2; color: Theme.accent }
+                        Rectangle { x: parent.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100) - 6; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
                     }
                     IconButton {
                         glyph: "\uE8A3"; tooltip: "放大"; buttonSize: 24
-                        onClicked: workspace.setZoomFactor(workspace.zoomFactor + 0.05)
+                        onClicked: workspace.setZoomFactor(workspace.zoomFactor * 1.1)
                     }
                                     TinyLabel {
                                         width: 42
@@ -5464,7 +5501,7 @@ ApplicationWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: workspace.setZoomFactor(0.78)
+                                            onClicked: workspace.resetView()
                                         }
                                     }
                                 }

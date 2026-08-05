@@ -39,14 +39,16 @@ def test_layer_model_exposes_stable_qml_roles(tmp_path: Path):
 
     assert model.rowCount() == 2
     roles = {bytes(value).decode("ascii"): key for key, value in model.roleNames().items()}
-    image_index = model.index(0, 0)
-    text_index = model.index(1, 0)
+    text_index = model.index(0, 0)
+    image_index = model.index(1, 0)
 
     assert model.data(image_index, roles["name"]) == "产品图"
     assert model.data(image_index, roles["typeName"]) == "图片"
     assert model.data(image_index, roles["shown"]) is True
     assert model.data(text_index, roles["typeName"]) == "文字"
     assert model.data(text_index, roles["glyph"])
+    assert model.data(text_index, roles["layerIndex"]) == 1
+    assert model.data(image_index, roles["layerIndex"]) == 0
 
 
 @pytest.mark.unit

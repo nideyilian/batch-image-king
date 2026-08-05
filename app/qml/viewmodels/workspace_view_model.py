@@ -9,8 +9,8 @@ import threading
 from typing import Optional
 import uuid
 
-from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage
+from PySide6.QtCore import QObject, QPointF, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage, QPainterPath
 
 from app.models.document import Document
 from app.models.layer_group import LayerGroup
@@ -23,7 +23,9 @@ from app.utils.layer_tree import (
     child_indices_for_group,
     expand_group_indices,
     get_parent_group_id,
+    group_bounds,
     is_effectively_locked,
+    is_effectively_visible,
     is_layer_group,
     set_parent_group_id,
 )
@@ -285,16 +287,40 @@ class WorkspaceViewModel(QObject):
 
     @Property(float, notify=viewSettingsChanged)
     def zoomFactor(self) -> float:
-        return float(self._document.view_settings.get("qml_zoom_factor", 0.78))
+        return float(self._document.view_settings.get("zoom_factor", 1.0))
 
     @Slot(float, result=bool)
     def setZoomFactor(self, value: float) -> bool:
-        value = round(max(0.35, min(2.0, float(value))), 2)
-        if self._document.view_settings.get("qml_zoom_factor", 0.78) == value:
+        value = round(max(0.1, min(10.0, float(value))), 3)
+        if self._document.view_settings.get("zoom_factor", 1.0) == value:
             return True
-        self._document.view_settings["qml_zoom_factor"] = value
+        self._document.view_settings["zoom_factor"] = value
         self.viewSettingsChanged.emit()
         return True
+
+    @Property(int, notify=viewSettingsChanged)
+    def viewOffsetX(self) -> int:
+        return int(self._document.view_settings.get("offset_x", 0))
+
+    @Property(int, notify=viewSettingsChanged)
+    def viewOffsetY(self) -> int:
+        return int(self._document.view_settings.get("offset_y", 0))
+
+    @Slot(int, int, result=bool)
+    def setViewOffset(self, x: int, y: int) -> bool:
+        x, y = int(x), int(y)
+        settings = self._document.view_settings
+        if settings.get("offset_x", 0) == x and settings.get("offset_y", 0) == y:
+            return True
+        settings["offset_x"] = x
+        settings["offset_y"] = y
+        self.viewSettingsChanged.emit()
+        return True
+
+    @Slot(result=bool)
+    def resetView(self) -> bool:
+        changed = self.setZoomFactor(1.0)
+        return self.setViewOffset(0, 0) and changed
 
     @Property(bool, notify=viewSettingsChanged)
     def showRulers(self) -> bool:
@@ -1808,6 +1834,35 @@ class WorkspaceViewModel(QObject):
     def addImageLayer(self, file_path: str) -> bool:
         return self._add_image_source(file_path, require_folder=False)
 
+    @Slot(result=bool)
+    def addEmptyImageLayer(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        try:
+            with self._document_lock:
+                layer_name = f"图层 {len(self._document.layers) + 1}"
+                self._document.add_layer(
+                    name=layer_name,
+                    x=0,
+                    y=0,
+                    width=200,
+                    height=200,
+                    image_source=None,
+                    use_original_size=False,
+                    is_folder=True,
+                )
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加图层失败：{error}", toast=True)
+            return False
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"成功添加图层：{layer_name}", toast=True)
+        return True
+
     @Slot(str, result=bool)
     def addImageFolder(self, folder_path: str) -> bool:
         return self._add_image_source(folder_path, require_folder=True)
@@ -1901,6 +1956,33 @@ class WorkspaceViewModel(QObject):
 
         description = f"素材文件夹 · {len(files)} 张" if is_folder else os.path.basename(source_path)
         self._publish_content_change(index, f"已更新图片源 · {description}")
+        return True
+
+    @Slot(bool, result=bool)
+    def setSelectedImageSourceMode(self, is_folder: bool) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        layer = self._selected_layer()
+        if not self.selectedHasImageSource or layer is None:
+            return False
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
+            return False
+        is_folder = bool(is_folder)
+        if bool(getattr(layer, "is_folder", False)) == is_folder:
+            return True
+        index = self.selectedLayerIndex
+        with self._document_lock:
+            self._ensure_history_baseline()
+            layer.is_folder = is_folder
+            layer.current_image_path = None
+            self._clear_image_layer_cache(layer)
+            self._document.is_modified = True
+            self._document.bump_hit_test_version()
+            self._document._invalidate_render_cache()
+            self._document.save_state("切换图像源类型")
+        mode_name = "素材文件夹" if is_folder else "单文件"
+        self._publish_content_change(index, f"已切换为{mode_name}模式")
         return True
 
     @Slot(result=bool)
@@ -2682,21 +2764,87 @@ class WorkspaceViewModel(QObject):
 
     @Slot(float, float, result=int)
     def hitTestLayerAt(self, x: float, y: float) -> int:
+        hits = []
         for index in range(len(self._document.layers) - 1, -1, -1):
             layer = self._document.layers[index]
             if is_layer_group(layer):
                 continue
-            if not bool(getattr(layer, "visible", True)) or is_effectively_locked(layer, self._document.layers):
+            if not is_effectively_visible(layer, self._document.layers):
                 continue
-            if self._layer_contains_point(layer, x, y):
+            for position in self._layer_hit_positions(layer):
+                if self._layer_contains_point(layer, x, y, position):
+                    hits.append(index)
+                    break
+        if hits:
+            return hits[0]
+
+        selected = self._selected_layer()
+        if is_layer_group(selected):
+            bounds = group_bounds(self._document.layers, selected, include_hidden=False)
+            if bounds and bounds[0] <= x <= bounds[2] and bounds[1] <= y <= bounds[3]:
+                return self.selectedLayerIndex
+        for index in range(len(self._document.layers) - 1, -1, -1):
+            layer = self._document.layers[index]
+            if not is_layer_group(layer) or not is_effectively_visible(layer, self._document.layers):
+                continue
+            bounds = group_bounds(self._document.layers, layer, include_hidden=False)
+            if bounds and bounds[0] <= x <= bounds[2] and bounds[1] <= y <= bounds[3]:
                 return index
         return -1
 
+    @Slot(float, float, result="QVariantList")
+    def hitTestLayersAt(self, x: float, y: float):
+        hits = []
+        for index in range(len(self._document.layers) - 1, -1, -1):
+            layer = self._document.layers[index]
+            if is_layer_group(layer) or not is_effectively_visible(layer, self._document.layers):
+                continue
+            if any(
+                self._layer_contains_point(layer, x, y, position)
+                for position in self._layer_hit_positions(layer)
+            ):
+                hits.append(index)
+        return hits
+
+    def _layer_hit_positions(self, layer):
+        positions = [(float(getattr(layer, "x", 0)), float(getattr(layer, "y", 0)))]
+        if bool(getattr(layer, "clone_enabled", False)):
+            getter = getattr(layer, "get_effective_clone_positions", None)
+            if not callable(getter):
+                getter = getattr(layer, "get_clone_positions", None)
+            if callable(getter):
+                try:
+                    clone_positions = list(getter() or [])
+                    if clone_positions:
+                        positions = [(float(px), float(py)) for px, py in clone_positions]
+                except Exception:
+                    pass
+        mirror_mode = str(getattr(layer, "clone_mirror_mode", "none") or "none")
+        if mirror_mode not in ("horizontal", "vertical") or not positions:
+            return positions
+        min_x = min(px for px, _py in positions)
+        max_x = max(px + float(layer.width) for px, _py in positions)
+        min_y = min(py for _px, py in positions)
+        max_y = max(py + float(layer.height) for _px, py in positions)
+        mirrored = []
+        if mirror_mode == "horizontal":
+            mirrored_left = self.canvasWidth - (min_x + max_x - min_x)
+            mirrored = [(mirrored_left + px - min_x, py) for px, py in positions]
+        else:
+            mirrored_top = self.canvasHeight - (min_y + max_y - min_y)
+            mirrored = [(px, mirrored_top + py - min_y) for px, py in positions]
+        return positions + mirrored
+
     @Slot(float, float, bool, bool, result=int)
     def selectLayerAtWithModifiers(self, x: float, y: float, ctrl: bool, shift: bool) -> int:
-        index = self.hitTestLayerAt(x, y)
-        if index >= 0:
-            self.selectLayerWithModifiers(index, ctrl, shift)
+        hits = self.hitTestLayersAt(x, y)
+        index = hits[0] if hits else self.hitTestLayerAt(x, y)
+        if ctrl and hits:
+            current = self.selectedLayerIndex
+            index = hits[(hits.index(current) + 1) % len(hits)] if current in hits else hits[0]
+            self.selectLayer(index)
+        elif index >= 0:
+            self.selectLayerWithModifiers(index, False, shift)
         elif not ctrl and not shift:
             self.clearSelection()
         return index
@@ -2711,9 +2859,8 @@ class WorkspaceViewModel(QObject):
         ]
         if not movable:
             return False
-        left, top, width, height = self._selection_bounds()
-        dx = max(-left, min(int(delta_x), self.canvasWidth - left - width))
-        dy = max(-top, min(int(delta_y), self.canvasHeight - top - height))
+        dx = int(delta_x)
+        dy = int(delta_y)
         if dx == 0 and dy == 0:
             return True
         with self._document_lock:
@@ -2917,6 +3064,8 @@ class WorkspaceViewModel(QObject):
                 if index not in set(indices)
             ]
             insert_at = target_index - sum(index < target_index for index in indices)
+            if min(indices) < target_index:
+                insert_at += 1
             insert_at = max(0, min(insert_at, len(remaining)))
             self._document.layers = remaining[:insert_at] + selected_objects + remaining[insert_at:]
             new_indices = [self._document.layers.index(layer) for layer in selected_objects]
@@ -2955,6 +3104,9 @@ class WorkspaceViewModel(QObject):
                     layer.y = round(reference.y + reference.height / 2 - layer.height / 2)
                 elif mode == "bottom":
                     layer.y = reference.y + reference.height - layer.height
+                elif mode == "center":
+                    layer.x = round(reference.x + reference.width / 2 - layer.width / 2)
+                    layer.y = round(reference.y + reference.height / 2 - layer.height / 2)
                 elif mode == "same_size":
                     layer.width = reference.width
                     layer.height = reference.height
@@ -3028,13 +3180,15 @@ class WorkspaceViewModel(QObject):
         return True
 
     @staticmethod
-    def _layer_contains_point(layer, x: float, y: float) -> bool:
+    def _layer_local_point(layer, x: float, y: float, position=None):
         width = float(getattr(layer, "width", 0) or 0)
         height = float(getattr(layer, "height", 0) or 0)
         if width <= 0 or height <= 0:
-            return False
-        left = float(getattr(layer, "x", 0) or 0)
-        top = float(getattr(layer, "y", 0) or 0)
+            return None
+        left, top = position or (
+            float(getattr(layer, "x", 0) or 0),
+            float(getattr(layer, "y", 0) or 0),
+        )
         center_x = left + width / 2.0
         center_y = top + height / 2.0
         offset_x = float(x) - center_x
@@ -3042,9 +3196,87 @@ class WorkspaceViewModel(QObject):
         angle = math.radians(float(getattr(layer, "rotation", 0.0) or 0.0))
         cosine = math.cos(angle)
         sine = math.sin(angle)
-        local_x = cosine * offset_x + sine * offset_y
-        local_y = -sine * offset_x + cosine * offset_y
-        return abs(local_x) <= width / 2.0 and abs(local_y) <= height / 2.0
+        local_x = cosine * offset_x + sine * offset_y + width / 2.0
+        local_y = -sine * offset_x + cosine * offset_y + height / 2.0
+        return local_x, local_y
+
+    @staticmethod
+    def _layer_alpha_image(layer):
+        image = getattr(layer, "cached_image", None)
+        if image is None or not hasattr(image, "getpixel"):
+            getter = getattr(layer, "get_image", None)
+            if callable(getter):
+                try:
+                    image = getter()
+                except Exception:
+                    image = None
+        if image is None or not hasattr(image, "getpixel"):
+            return None
+        try:
+            return image if image.mode == "RGBA" else image.convert("RGBA")
+        except Exception:
+            return None
+
+    @classmethod
+    def _layer_contains_point(cls, layer, x: float, y: float, position=None) -> bool:
+        local = cls._layer_local_point(layer, x, y, position)
+        if local is None:
+            return False
+        local_x, local_y = local
+        width = float(getattr(layer, "width", 0) or 0)
+        height = float(getattr(layer, "height", 0) or 0)
+        if not (0.0 <= local_x <= width and 0.0 <= local_y <= height):
+            return False
+
+        shape = getattr(layer, "shape_type", ShapeType.RECTANGLE)
+        shape_value = str(getattr(shape, "value", shape or "rectangle"))
+        if shape_value != "rectangle" or bool(getattr(layer, "vector_path_enabled", False)):
+            try:
+                from app.utils.vector_layer_geometry import build_vector_outline_points_px
+
+                points, _ = build_vector_outline_points_px(
+                    max(1, int(width)),
+                    max(1, int(height)),
+                    int(getattr(layer, "corner_radius", 0)),
+                    int(getattr(layer, "vector_corner_radius_tl", 0)),
+                    int(getattr(layer, "vector_corner_radius_tr", 0)),
+                    int(getattr(layer, "vector_corner_radius_br", 0)),
+                    int(getattr(layer, "vector_corner_radius_bl", 0)),
+                    bool(getattr(layer, "vector_path_enabled", False)),
+                    str(getattr(layer, "vector_path_mode", "polygon")),
+                    getattr(layer, "vector_path_points", []),
+                    getattr(layer, "vector_bezier_nodes", []),
+                    bool(getattr(layer, "vector_path_closed", True)),
+                    shape_value,
+                    int(getattr(layer, "trapezoid_top_width", 100)),
+                    int(getattr(layer, "trapezoid_bottom_width", 80)),
+                    str(getattr(layer, "trapezoid_slope_side", "right")),
+                    float(getattr(layer, "polygon_rotation", 0.0)),
+                    int(getattr(layer, "polygon_corner_radius", 0)),
+                )
+                if len(points) >= 3:
+                    path = QPainterPath(QPointF(*points[0]))
+                    for point in points[1:]:
+                        path.lineTo(QPointF(*point))
+                    path.closeSubpath()
+                    if not path.contains(QPointF(local_x, local_y)):
+                        return False
+            except Exception:
+                pass
+
+        from app.models.text_layer import TextLayer
+
+        if isinstance(layer, TextLayer):
+            return True
+        image = cls._layer_alpha_image(layer)
+        if image is None or image.mode != "RGBA":
+            return True
+        pixel_x = min(image.width - 1, max(0, round(local_x / max(1.0, width) * (image.width - 1))))
+        pixel_y = min(image.height - 1, max(0, round(local_y / max(1.0, height) * (image.height - 1))))
+        try:
+            return int(image.getpixel((pixel_x, pixel_y))[-1]) >= 8
+        except Exception:
+            return True
 
     @Slot(float, float, result=int)
     def selectLayerAt(self, x: float, y: float) -> int:
@@ -3555,6 +3787,33 @@ class WorkspaceViewModel(QObject):
             "画布变换图层",
         )
 
+    @Slot(int, int, int, int, result=bool)
+    def transformSelectedLayers(self, x: int, y: int, width: int, height: int) -> bool:
+        indices = self._selected_content_indices()
+        if not indices or width < 1 or height < 1:
+            return False
+        old_x, old_y, old_width, old_height = self._selection_bounds()
+        if old_width <= 0 or old_height <= 0:
+            return False
+        scale_x = float(width) / old_width
+        scale_y = float(height) / old_height
+        with self._document_lock:
+            self._ensure_history_baseline()
+            changed = 0
+            for index in indices:
+                layer = self._document.layers[index]
+                if is_effectively_locked(layer, self._document.layers):
+                    continue
+                layer.x = round(int(x) + (float(layer.x) - old_x) * scale_x)
+                layer.y = round(int(y) + (float(layer.y) - old_y) * scale_y)
+                layer.width = max(1, round(float(layer.width) * scale_x))
+                layer.height = max(1, round(float(layer.height) * scale_y))
+                changed += 1
+            if not changed:
+                return False
+            self._finish_arrangement("缩放多个图层", f"已缩放 {changed} 个图层")
+        return True
+
     @Slot(str, result=bool)
     def alignSelected(self, mode: str) -> bool:
         layer = self._selected_layer()
@@ -3565,7 +3824,14 @@ class WorkspaceViewModel(QObject):
         alignments = {
             "left": {"x": 0},
             "hcenter": {"x": (self.canvasWidth - width) // 2},
+            "right": {"x": self.canvasWidth - width},
+            "top": {"y": 0},
             "vcenter": {"y": (self.canvasHeight - height) // 2},
+            "bottom": {"y": self.canvasHeight - height},
+            "center": {
+                "x": (self.canvasWidth - width) // 2,
+                "y": (self.canvasHeight - height) // 2,
+            },
         }
         changes = alignments.get(str(mode))
         if changes is None:

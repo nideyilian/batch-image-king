@@ -7,6 +7,9 @@ from app.qml.legacy_feature_bridge import (
 )
 from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
+from app.models.shaped_layer_new import ShapedLayer
+from app.models.text_layer import TextLayer
+from PySide6.QtWidgets import QDialog
 
 
 def _workspace_with_sessions():
@@ -38,7 +41,7 @@ def test_legacy_preset_host_exposes_all_qml_documents_and_titles():
     host = _LegacyMainWindowAdapter(manager)
 
     assert host.tab_widget.count() == 2
-    assert host.tab_widget.tabText(0) == "主图.cmp"
+    assert host.tab_widget.tabText(0) == "主图"
     assert host.documents == [sessions.documentAt(0), sessions.documentAt(1)]
 
     host._set_current_editing_preset("preset-id", "商品预设", "说明")
@@ -79,3 +82,67 @@ def test_bridge_select_all_and_rename_commands_use_active_document(monkeypatch):
     monkeypatch.setattr(bridge, "_prompt_text", lambda *_args: ("新名称", True))
     assert bridge.renameSelectedLayer() is True
     assert workspace.selectedLayerName == "新名称"
+
+
+def test_bridge_uses_classic_creation_dialog_results(monkeypatch):
+    workspace, sessions = _workspace_with_sessions()
+    bridge = LegacyFeatureBridge(workspace, sessions)
+    text_layer = TextLayer(name="旧版文字", x=50, y=50, width=300, height=100)
+    shaped_layer = ShapedLayer(
+        name="旧版异形",
+        x=-20,
+        y=30,
+        width=240,
+        height=180,
+        image_source=None,
+        is_folder=True,
+    )
+
+    class FakeTextDialog:
+        def exec(self):
+            return QDialog.Accepted
+
+        def get_text_layer(self):
+            return text_layer
+
+    class FakeShapeDialog:
+        def exec(self):
+            return QDialog.Accepted
+
+        def get_created_layer(self):
+            return shaped_layer
+
+    import app.ui.add_shaped_layer_dialog as shape_dialog_module
+    import app.ui.add_text_layer_dialog_simple as text_dialog_module
+
+    monkeypatch.setattr(text_dialog_module, "AddTextLayerDialog", FakeTextDialog)
+    monkeypatch.setattr(shape_dialog_module, "AddShapedLayerDialog", FakeShapeDialog)
+
+    assert bridge.openAddTextLayer() is True
+    assert bridge.openAddShapedLayer() is True
+    assert workspace.document.layers == [text_layer, shaped_layer]
+    assert shaped_layer.image_source is None
+    assert shaped_layer.is_folder is True
+    assert (text_layer.x, text_layer.y, text_layer.width, text_layer.height) == (50, 50, 300, 100)
+
+
+def test_bridge_new_document_uses_complete_classic_canvas_settings(monkeypatch):
+    workspace, sessions = _workspace_with_sessions()
+    bridge = LegacyFeatureBridge(workspace, sessions)
+    import app.ui.new_canvas_dialog as canvas_dialog_module
+
+    monkeypatch.setattr(
+        canvas_dialog_module,
+        "get_canvas_settings",
+        lambda **_kwargs: {
+            "document_name": "横版海报",
+            "width": 1920,
+            "height": 1080,
+            "transparent": True,
+        },
+    )
+
+    assert bridge.openNewDocument() is True
+    assert sessions.count == 2
+    assert (workspace.canvasWidth, workspace.canvasHeight) == (1920, 1080)
+    assert sessions.data(sessions.index(1, 0), sessions.TitleRole) == "横版海报"

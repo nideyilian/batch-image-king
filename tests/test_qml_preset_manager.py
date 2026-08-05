@@ -82,3 +82,18 @@ def test_invalid_preset_identifier_is_rejected(tmp_path: Path):
 
     assert view_model.loadPreset("missing") == 0
     assert view_model.deletePreset("missing") is False
+
+
+@pytest.mark.unit
+def test_saving_project_preset_includes_every_open_tab(tmp_path: Path):
+    workspace, sessions = _build_workspace()
+    assert sessions.newDocument(640, 480) is True
+    sessions.renameDocument(1, "方图")
+    manager = PresetManager(app_dir=tmp_path / "data", copy_initial=False)
+    view_model = PresetManagerViewModel(workspace, sessions, manager=manager)
+
+    assert view_model.saveCurrent("双标签模板", "") is True
+    preset = view_model.presets[0]
+    assert preset["documentCount"] == 2
+    data = manager.load_preset(preset["id"])
+    assert [item["name"] for item in data["documents"]] == ["未命名-1.cmp", "方图"]

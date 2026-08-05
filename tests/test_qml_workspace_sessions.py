@@ -66,7 +66,7 @@ def test_sessions_reject_invalid_canvas_sizes(width: int, height: int):
 
 
 @pytest.mark.unit
-def test_sessions_open_projects_in_tabs_and_deduplicate_paths(tmp_path: Path):
+def test_sessions_open_projects_in_tabs_even_for_duplicate_paths(tmp_path: Path):
     saved = Document()
     saved.create_new(640, 480)
     project = tmp_path / "sample.cmp"
@@ -76,15 +76,14 @@ def test_sessions_open_projects_in_tabs_and_deduplicate_paths(tmp_path: Path):
     sessions = WorkspaceSessionViewModel(workspace)
 
     assert sessions.openDocument(str(project)) is True
-    opened = workspace.document
     assert sessions.count == 2
     assert (workspace.canvasWidth, workspace.canvasHeight) == (640, 480)
 
     assert sessions.activateDocument(0) is True
     assert sessions.openDocument(project.as_uri()) is True
-    assert sessions.count == 2
-    assert workspace.document is opened
-    assert sessions.activeIndex == 1
+    assert sessions.count == 3
+    assert workspace.document is sessions.documentAt(2)
+    assert sessions.activeIndex == 2
 
 
 @pytest.mark.unit
@@ -108,7 +107,7 @@ def test_modified_session_requires_confirmation_and_cancel_preserves_it():
 
 
 @pytest.mark.unit
-def test_discard_close_and_last_session_replacement():
+def test_discard_close_can_leave_workbench_without_tabs():
     workspace = _workspace()
     sessions = WorkspaceSessionViewModel(workspace)
     original = workspace.document
@@ -117,8 +116,8 @@ def test_discard_close_and_last_session_replacement():
     assert sessions.requestClose(0) is False
     assert sessions.discardAndClose(0) is True
 
-    assert sessions.count == 1
-    assert sessions.activeIndex == 0
+    assert sessions.count == 0
+    assert sessions.activeIndex == -1
     assert workspace.document is not original
     assert (workspace.canvasWidth, workspace.canvasHeight) == (1080, 1350)
     assert workspace.isModified is False
@@ -202,10 +201,10 @@ def test_sessions_duplicate_rename_reorder_and_close_others():
     assert len(sessions.documentAt(1).layers) == 1
 
     assert sessions.renameDocument(1, "商品主图") is True
-    assert sessions.data(sessions.index(1, 0), sessions.TitleRole) == "商品主图.cmp"
+    assert sessions.data(sessions.index(1, 0), sessions.TitleRole) == "商品主图"
     assert sessions.moveDocument(1, 0) is True
     assert sessions.activeIndex == 0
-    assert sessions.data(sessions.index(0, 0), sessions.TitleRole) == "商品主图.cmp"
+    assert sessions.data(sessions.index(0, 0), sessions.TitleRole) == "商品主图"
 
     sessions.documentAt(1).is_modified = False
     assert sessions.closeOtherDocuments(0) is True
@@ -219,11 +218,11 @@ def test_zoom_is_isolated_per_document_session():
     sessions = WorkspaceSessionViewModel(workspace)
     first = workspace.document
 
-    assert workspace.zoomFactor == pytest.approx(0.78)
+    assert workspace.zoomFactor == pytest.approx(1.0)
     assert workspace.setZoomFactor(1.25) is True
     assert sessions.newDocument(640, 480) is True
     second = workspace.document
-    assert workspace.zoomFactor == pytest.approx(0.78)
+    assert workspace.zoomFactor == pytest.approx(1.0)
     assert workspace.setZoomFactor(0.55) is True
 
     assert sessions.activateDocument(0) is True
