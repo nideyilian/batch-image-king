@@ -138,6 +138,14 @@ class LayerAttrsMixin:
         self._property_manager.set_property('crop_direction', value)
 
     @property
+    def crop_rect(self):
+        return list(self._property_manager.get_property('crop_rect'))
+
+    @crop_rect.setter
+    def crop_rect(self, value):
+        self._property_manager.set_property('crop_rect', value)
+
+    @property
     def blend_mode(self):
         return self._property_manager.get_property('blend_mode')
 

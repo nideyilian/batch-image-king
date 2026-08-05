@@ -44,6 +44,11 @@ ApplicationWindow {
         { glyph: "\u2190", label: "保留左侧", value: "left" },
         { glyph: "\u2192", label: "保留右侧", value: "right" }
     ]
+    readonly property var vectorHandleLinkOptions: [
+        { label: "镜像", value: "mirror" },
+        { label: "共线", value: "collinear" },
+        { label: "自由", value: "free" }
+    ]
     readonly property var textGradientTypeOptions: [
         { label: "线性", value: "linear" },
         { label: "径向", value: "radial" },
@@ -1933,6 +1938,8 @@ ApplicationWindow {
                                          : canvasWorkspace.pointerCursor(mouseX, mouseY)
 
                             onPressed: mouse => {
+                                if (workspace.cropEditing)
+                                    return
                                 var handle = canvasWorkspace.handleAt(mouse.x, mouse.y)
                                 if (handle.length > 0) {
                                     canvasWorkspace.beginTransform(handle, mouse.x, mouse.y)
@@ -1970,7 +1977,10 @@ ApplicationWindow {
                                 ]
                                 delegate: Rectangle {
                                     required property var modelData
-                                    visible: !workspace.selectedLocked && Math.abs(workspace.selectedRotation) <= 0.001
+                                    visible: !workspace.selectedLocked
+                                             && !workspace.cropEditing
+                                             && !workspace.selectedVectorPathEnabled
+                                             && Math.abs(workspace.selectedRotation) <= 0.001
                                     width: 8 / canvasWorkspace.actualScale
                                     height: width
                                     radius: width / 2
@@ -1979,6 +1989,222 @@ ApplicationWindow {
                                     color: "#f4f7f5"
                                     border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
                                     border.color: Theme.accentPressed
+                                }
+                            }
+
+                            Item {
+                                id: cropOverlay
+                                anchors.fill: parent
+                                visible: workspace.cropEditing
+                                z: 4
+
+                                readonly property var rect: workspace.selectedCropRect
+                                readonly property real cropX: rect[0] * width
+                                readonly property real cropY: rect[1] * height
+                                readonly property real cropRight: rect[2] * width
+                                readonly property real cropBottom: rect[3] * height
+
+                                Rectangle {
+                                    x: 0; y: 0; width: parent.width; height: cropOverlay.cropY
+                                    color: "#99090b0c"
+                                }
+                                Rectangle {
+                                    x: 0; y: cropOverlay.cropBottom; width: parent.width
+                                    height: parent.height - cropOverlay.cropBottom
+                                    color: "#99090b0c"
+                                }
+                                Rectangle {
+                                    x: 0; y: cropOverlay.cropY; width: cropOverlay.cropX
+                                    height: cropOverlay.cropBottom - cropOverlay.cropY
+                                    color: "#99090b0c"
+                                }
+                                Rectangle {
+                                    x: cropOverlay.cropRight; y: cropOverlay.cropY
+                                    width: parent.width - cropOverlay.cropRight
+                                    height: cropOverlay.cropBottom - cropOverlay.cropY
+                                    color: "#99090b0c"
+                                }
+                                Rectangle {
+                                    x: cropOverlay.cropX
+                                    y: cropOverlay.cropY
+                                    width: cropOverlay.cropRight - cropOverlay.cropX
+                                    height: cropOverlay.cropBottom - cropOverlay.cropY
+                                    color: "transparent"
+                                    border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
+                                    border.color: Theme.amber
+                                }
+
+                                Repeater {
+                                    model: [
+                                        { edge: "nw", x: cropOverlay.cropX, y: cropOverlay.cropY },
+                                        { edge: "n", x: (cropOverlay.cropX + cropOverlay.cropRight) / 2, y: cropOverlay.cropY },
+                                        { edge: "ne", x: cropOverlay.cropRight, y: cropOverlay.cropY },
+                                        { edge: "e", x: cropOverlay.cropRight, y: (cropOverlay.cropY + cropOverlay.cropBottom) / 2 },
+                                        { edge: "se", x: cropOverlay.cropRight, y: cropOverlay.cropBottom },
+                                        { edge: "s", x: (cropOverlay.cropX + cropOverlay.cropRight) / 2, y: cropOverlay.cropBottom },
+                                        { edge: "sw", x: cropOverlay.cropX, y: cropOverlay.cropBottom },
+                                        { edge: "w", x: cropOverlay.cropX, y: (cropOverlay.cropY + cropOverlay.cropBottom) / 2 }
+                                    ]
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        width: 10 / canvasWorkspace.actualScale
+                                        height: width
+                                        x: modelData.x - width / 2
+                                        y: modelData.y - height / 2
+                                        color: Theme.amber
+                                        border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                        border.color: "#231b0e"
+                                        radius: modelData.edge.length === 1 ? 2 / canvasWorkspace.actualScale : width / 2
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            preventStealing: true
+                                            cursorShape: {
+                                                if (parent.modelData.edge === "n" || parent.modelData.edge === "s") return Qt.SizeVerCursor
+                                                if (parent.modelData.edge === "e" || parent.modelData.edge === "w") return Qt.SizeHorCursor
+                                                if (parent.modelData.edge === "nw" || parent.modelData.edge === "se") return Qt.SizeFDiagCursor
+                                                return Qt.SizeBDiagCursor
+                                            }
+                                            onPositionChanged: mouse => {
+                                                if (!pressed) return
+                                                var point = mapToItem(selectionBox, mouse.x, mouse.y)
+                                                var nx = Math.max(0, Math.min(1, point.x / Math.max(1, selectionBox.width)))
+                                                var ny = Math.max(0, Math.min(1, point.y / Math.max(1, selectionBox.height)))
+                                                var current = workspace.selectedCropRect
+                                                var left = current[0]
+                                                var top = current[1]
+                                                var right = current[2]
+                                                var bottom = current[3]
+                                                var edge = parent.modelData.edge
+                                                if (edge.indexOf("w") >= 0) left = Math.min(nx, right - 0.02)
+                                                if (edge.indexOf("e") >= 0) right = Math.max(nx, left + 0.02)
+                                                if (edge.indexOf("n") >= 0) top = Math.min(ny, bottom - 0.02)
+                                                if (edge.indexOf("s") >= 0) bottom = Math.max(ny, top + 0.02)
+                                                workspace.updateCropRect(left, top, right, bottom)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: workspace.selectedVectorPathEnabled && !workspace.cropEditing
+                                       ? workspace.selectedVectorNodes : []
+                                delegate: Item {
+                                    required property var modelData
+                                    required property int index
+                                    x: modelData.x
+                                    y: modelData.y
+                                    width: 0
+                                    height: 0
+                                    z: 5
+
+                                    Rectangle {
+                                        visible: workspace.selectedVectorNodeIndex === parent.index
+                                        x: 0
+                                        y: -height / 2
+                                        width: Math.hypot(
+                                            parent.modelData.in_x - parent.modelData.x,
+                                            parent.modelData.in_y - parent.modelData.y
+                                        )
+                                        height: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                        color: Theme.amber
+                                        transformOrigin: Item.Left
+                                        rotation: Math.atan2(
+                                            parent.modelData.in_y - parent.modelData.y,
+                                            parent.modelData.in_x - parent.modelData.x
+                                        ) * 180 / Math.PI
+                                    }
+                                    Rectangle {
+                                        visible: workspace.selectedVectorNodeIndex === parent.index
+                                        x: 0
+                                        y: -height / 2
+                                        width: Math.hypot(
+                                            parent.modelData.out_x - parent.modelData.x,
+                                            parent.modelData.out_y - parent.modelData.y
+                                        )
+                                        height: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                        color: Theme.amber
+                                        transformOrigin: Item.Left
+                                        rotation: Math.atan2(
+                                            parent.modelData.out_y - parent.modelData.y,
+                                            parent.modelData.out_x - parent.modelData.x
+                                        ) * 180 / Math.PI
+                                    }
+
+                                    Rectangle {
+                                        id: inHandle
+                                        visible: workspace.selectedVectorNodeIndex === parent.index
+                                        width: 8 / canvasWorkspace.actualScale
+                                        height: width
+                                        radius: width / 2
+                                        x: parent.modelData.in_x - parent.modelData.x - width / 2
+                                        y: parent.modelData.in_y - parent.modelData.y - height / 2
+                                        color: Theme.bgPanel
+                                        border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                        border.color: Theme.amber
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            drag.target: parent
+                                            preventStealing: true
+                                            cursorShape: Qt.CrossCursor
+                                            onReleased: workspace.moveSelectedVectorHandle(
+                                                inHandle.parent.index,
+                                                "in",
+                                                inHandle.parent.modelData.x + inHandle.x + inHandle.width / 2,
+                                                inHandle.parent.modelData.y + inHandle.y + inHandle.height / 2
+                                            )
+                                        }
+                                    }
+                                    Rectangle {
+                                        id: outHandle
+                                        visible: workspace.selectedVectorNodeIndex === parent.index
+                                        width: 8 / canvasWorkspace.actualScale
+                                        height: width
+                                        radius: width / 2
+                                        x: parent.modelData.out_x - parent.modelData.x - width / 2
+                                        y: parent.modelData.out_y - parent.modelData.y - height / 2
+                                        color: Theme.bgPanel
+                                        border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                        border.color: Theme.amber
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            drag.target: parent
+                                            preventStealing: true
+                                            cursorShape: Qt.CrossCursor
+                                            onReleased: workspace.moveSelectedVectorHandle(
+                                                outHandle.parent.index,
+                                                "out",
+                                                outHandle.parent.modelData.x + outHandle.x + outHandle.width / 2,
+                                                outHandle.parent.modelData.y + outHandle.y + outHandle.height / 2
+                                            )
+                                        }
+                                    }
+                                    Rectangle {
+                                        id: vectorAnchor
+                                        width: 10 / canvasWorkspace.actualScale
+                                        height: width
+                                        x: -width / 2
+                                        y: -height / 2
+                                        radius: workspace.selectedVectorNodeIndex === parent.index ? width / 2 : 2 / canvasWorkspace.actualScale
+                                        color: workspace.selectedVectorNodeIndex === parent.index ? Theme.accent : "#f4f7f5"
+                                        border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                        border.color: Theme.accentPressed
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            drag.target: parent
+                                            preventStealing: true
+                                            cursorShape: Qt.SizeAllCursor
+                                            onPressed: workspace.selectVectorNode(vectorAnchor.parent.index)
+                                            onDoubleClicked: workspace.cycleSelectedVectorNodeType()
+                                            onReleased: workspace.moveSelectedVectorNode(
+                                                vectorAnchor.parent.index,
+                                                vectorAnchor.parent.modelData.x + vectorAnchor.x + vectorAnchor.width / 2,
+                                                vectorAnchor.parent.modelData.y + vectorAnchor.y + vectorAnchor.height / 2
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
@@ -2210,6 +2436,99 @@ ApplicationWindow {
 
                             PropertySection {
                                 width: parent.width
+                                title: "矢量路径"
+                                summary: workspace.selectedVectorPathEnabled
+                                         ? workspace.selectedVectorNodes.length + " 个节点" : "矩形边界"
+                                visible: workspace.selectedSupportsVectorPath
+
+                                InspectorRow {
+                                    label: "路径"
+                                    BodyLabel {
+                                        text: workspace.selectedVectorPathEnabled ? "贝塞尔路径" : "尚未转换"
+                                        color: workspace.selectedVectorPathEnabled ? Theme.accent : Theme.textMuted
+                                        Layout.fillWidth: true
+                                    }
+                                    CompactActionButton {
+                                        Layout.preferredWidth: 86
+                                        label: workspace.selectedVectorPathEnabled ? "重建矩形" : "转为路径"
+                                        active: workspace.selectedVectorPathEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.convertSelectedToVectorPath()
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "闭合"
+                                    visible: workspace.selectedVectorPathEnabled
+                                    BodyLabel {
+                                        text: workspace.selectedVectorPathClosed ? "闭合轮廓" : "开放路径"
+                                        color: Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedVectorPathClosed
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedVectorPathClosed(checkedValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "控制柄"
+                                    visible: workspace.selectedVectorPathEnabled
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.vectorHandleLinkOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: {
+                                            for (var index = 0; index < window.vectorHandleLinkOptions.length; index++) {
+                                                if (window.vectorHandleLinkOptions[index].value === workspace.selectedVectorHandleLinkMode) return index
+                                            }
+                                            return 0
+                                        }
+                                        onActivated: workspace.setSelectedVectorHandleLinkMode(currentValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "节点"
+                                    visible: workspace.selectedVectorPathEnabled
+                                    BodyLabel {
+                                        text: workspace.selectedVectorNodeIndex >= 0
+                                              ? "#" + (workspace.selectedVectorNodeIndex + 1) + " · " + workspace.selectedVectorNodeType
+                                              : "在画布中选择"
+                                        color: workspace.selectedVectorNodeIndex >= 0 ? Theme.textSecondary : Theme.textMuted
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
+                                    }
+                                    IconButton {
+                                        glyph: "\uE710"
+                                        tooltip: "在选中节点后插入"
+                                        buttonSize: 30
+                                        enabled: workspace.selectedVectorNodeIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.insertVectorNodeAfter(workspace.selectedVectorNodeIndex)
+                                    }
+                                    IconButton {
+                                        glyph: "\uE8D4"
+                                        tooltip: "切换角点、平滑点和对称点"
+                                        buttonSize: 30
+                                        enabled: workspace.selectedVectorNodeIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.cycleSelectedVectorNodeType()
+                                    }
+                                    IconButton {
+                                        glyph: "\uE74D"
+                                        tooltip: "删除选中节点"
+                                        buttonSize: 30
+                                        enabled: workspace.selectedVectorNodeIndex >= 0
+                                                 && workspace.selectedVectorNodes.length > (workspace.selectedVectorPathClosed ? 3 : 2)
+                                                 && !workspace.selectedLocked
+                                                 && !workspace.operationsBlocked
+                                        onClicked: workspace.deleteSelectedVectorNode()
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                width: parent.width
                                 title: "图片布局"
                                 summary: workspace.selectedFitModeName
                                 visible: workspace.selectedSupportsImageFit
@@ -2249,6 +2568,36 @@ ApplicationWindow {
                                                 onClicked: workspace.setSelectedCropDirection(modelData.value)
                                             }
                                         }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "自由裁剪"
+                                    visible: workspace.selectedSupportsFreeCrop
+                                    BodyLabel {
+                                        text: workspace.cropEditing ? "调整画布中的裁剪框" : "源图范围"
+                                        color: workspace.cropEditing ? Theme.amber : Theme.textSecondary
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    IconButton {
+                                        glyph: "\uE7A8"
+                                        tooltip: workspace.cropEditing ? "确认自由裁剪" : "开始自由裁剪"
+                                        buttonSize: 30
+                                        active: workspace.cropEditing
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.cropEditing
+                                                   ? workspace.confirmCropEdit()
+                                                   : workspace.startCropEdit()
+                                    }
+                                    IconButton {
+                                        glyph: workspace.cropEditing ? "\uE711" : "\uE72C"
+                                        tooltip: workspace.cropEditing ? "取消自由裁剪" : "重置自由裁剪"
+                                        buttonSize: 30
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.cropEditing
+                                                   ? workspace.cancelCropEdit()
+                                                   : workspace.resetSelectedCrop()
                                     }
                                 }
 

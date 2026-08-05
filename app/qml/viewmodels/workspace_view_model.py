@@ -185,6 +185,8 @@ class WorkspaceViewModel(QObject):
     historyStateChanged = Signal()
     exportStateChanged = Signal()
     styleClipboardChanged = Signal()
+    cropEditChanged = Signal()
+    vectorEditChanged = Signal()
     toastRequested = Signal(str)
 
     def __init__(
@@ -211,6 +213,10 @@ class WorkspaceViewModel(QObject):
         self._active_render_task = None
         self._text_font_names_cache = None
         self._layer_style_clipboard = None
+        self._crop_edit_index = -1
+        self._crop_edit_original = None
+        self._crop_edit_was_modified = False
+        self._selected_vector_node_index = -1
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(70)
@@ -613,6 +619,76 @@ class WorkspaceViewModel(QObject):
     @Property(str, notify=selectionChanged)
     def selectedCropDirectionName(self) -> str:
         return _CROP_DIRECTIONS[self.selectedCropDirectionId][1]
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsFreeCrop(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedSupportsImageFit and hasattr(layer, "crop_rect")
+
+    @Property("QVariantList", notify=cropEditChanged)
+    def selectedCropRect(self):
+        if not self.selectedSupportsFreeCrop:
+            return [0.0, 0.0, 1.0, 1.0]
+        return [float(value) for value in self._selected_layer().crop_rect]
+
+    @Property(bool, notify=cropEditChanged)
+    def cropEditing(self) -> bool:
+        return self._crop_edit_index == self.selectedLayerIndex and self._crop_edit_original is not None
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsVectorPath(self) -> bool:
+        layer = self._selected_layer()
+        return layer is not None and all(
+            hasattr(layer, attr)
+            for attr in (
+                "vector_path_enabled",
+                "vector_path_mode",
+                "vector_bezier_nodes",
+                "vector_path_closed",
+            )
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedVectorPathEnabled(self) -> bool:
+        return self.selectedSupportsVectorPath and bool(
+            getattr(self._selected_layer(), "vector_path_enabled", False)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedVectorPathMode(self) -> str:
+        if not self.selectedSupportsVectorPath:
+            return "polygon"
+        return str(getattr(self._selected_layer(), "vector_path_mode", "polygon"))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedVectorPathClosed(self) -> bool:
+        return self.selectedSupportsVectorPath and bool(
+            getattr(self._selected_layer(), "vector_path_closed", True)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedVectorHandleLinkMode(self) -> str:
+        if not self.selectedSupportsVectorPath:
+            return "mirror"
+        return str(getattr(self._selected_layer(), "vector_handle_link_mode", "mirror"))
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedVectorNodes(self):
+        if not self.selectedVectorPathEnabled:
+            return []
+        return copy.deepcopy(getattr(self._selected_layer(), "vector_bezier_nodes", []))
+
+    @Property(int, notify=vectorEditChanged)
+    def selectedVectorNodeIndex(self) -> int:
+        return int(self._selected_vector_node_index)
+
+    @Property(str, notify=vectorEditChanged)
+    def selectedVectorNodeType(self) -> str:
+        index = self._selected_vector_node_index
+        nodes = self.selectedVectorNodes
+        if index < 0 or index >= len(nodes):
+            return "corner"
+        return str(nodes[index].get("node_type", "corner"))
 
     @Property(bool, notify=selectionChanged)
     def selectedFlipHorizontal(self) -> bool:
@@ -1118,6 +1194,14 @@ class WorkspaceViewModel(QObject):
 
     def _set_document(self, document: Document) -> None:
         with self._document_lock:
+            if self._crop_edit_original is not None and self._document is not None:
+                old_layer = self._layer_model.layer_at(self._crop_edit_index)
+                if old_layer is not None:
+                    old_layer.crop_rect = list(self._crop_edit_original)
+                self._document.is_modified = self._crop_edit_was_modified
+            self._crop_edit_index = -1
+            self._crop_edit_original = None
+            self._selected_vector_node_index = -1
             self._disconnect_document()
             self._document = document
             self._layer_model.set_document(document)
@@ -1125,6 +1209,8 @@ class WorkspaceViewModel(QObject):
         self.documentInfoChanged.emit()
         self.selectionChanged.emit()
         self.historyStateChanged.emit()
+        self.cropEditChanged.emit()
+        self.vectorEditChanged.emit()
         self.documentObjectChanged.emit(document)
 
     @Slot(object, result=bool)
@@ -2243,18 +2329,26 @@ class WorkspaceViewModel(QObject):
     def selectLayer(self, index: int) -> bool:
         if self._layer_model.layer_at(index) is None:
             return False
+        if self._crop_edit_original is not None and index != self._crop_edit_index:
+            self.cancelCropEdit()
         self._document.selected_layer_index = int(index)
         self._document.selected_layer_indices = [int(index)]
+        self._selected_vector_node_index = -1
         self.selectionChanged.emit()
+        self.vectorEditChanged.emit()
         return True
 
     @Slot(result=bool)
     def clearSelection(self) -> bool:
         if self.selectedLayerIndex < 0:
             return True
+        if self._crop_edit_original is not None:
+            self.cancelCropEdit()
         self._document.selected_layer_index = -1
         self._document.selected_layer_indices = []
+        self._selected_vector_node_index = -1
         self.selectionChanged.emit()
+        self.vectorEditChanged.emit()
         return True
 
     @staticmethod
@@ -2345,6 +2439,43 @@ class WorkspaceViewModel(QObject):
     def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
         return self._set_layer_attrs(index, {attr: value}, action, render=render)
 
+    def _invalidate_direct_layer_edit(self, index: int, *, save_action: str = "") -> None:
+        layer = self._layer_model.layer_at(index)
+        if layer is not None:
+            layer.cached_image = None
+            layer._cache_valid = False
+        self._document.is_modified = True
+        self._document.bump_hit_test_version()
+        invalidate = getattr(self._document, "_invalidate_render_cache", None)
+        if callable(invalidate):
+            invalidate()
+        if save_action:
+            self._document.save_state(save_action)
+        self._layer_model.notify_row(index)
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+
+    def _run_vector_command(self, action: str, command) -> bool:
+        if not self._ensure_operations_available() or not self.selectedSupportsVectorPath:
+            self._set_status("当前图层不支持路径编辑", toast=True)
+            return False
+        layer = self._selected_layer()
+        if layer is None or bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
+            return False
+        index = self.selectedLayerIndex
+        with self._document_lock:
+            before = layer.serialize()
+            self._ensure_history_baseline()
+            command(layer)
+            if layer.serialize() == before:
+                return False
+            self._invalidate_direct_layer_edit(index, save_action=action)
+        self.vectorEditChanged.emit()
+        return True
+
     def _refresh_random_transform_preview(self) -> bool:
         layer = self._selected_layer()
         if not self.selectedSupportsRandomTransform or layer is None:
@@ -2397,6 +2528,196 @@ class WorkspaceViewModel(QObject):
             "crop_direction",
             direction[0],
             "修改裁剪方向",
+        )
+
+    @Slot(result=bool)
+    def startCropEdit(self) -> bool:
+        if not self._ensure_operations_available() or not self.selectedSupportsFreeCrop:
+            self._set_status("当前图层不支持自由裁剪", toast=True)
+            return False
+        layer = self._selected_layer()
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
+            return False
+        if self.cropEditing:
+            return True
+        if self._crop_edit_original is not None:
+            self.cancelCropEdit()
+        with self._document_lock:
+            self._ensure_history_baseline()
+            self._crop_edit_index = self.selectedLayerIndex
+            self._crop_edit_original = list(layer.crop_rect)
+            self._crop_edit_was_modified = bool(self._document.is_modified)
+        self.cropEditChanged.emit()
+        self._set_status("拖动裁剪框后确认应用", toast=True)
+        return True
+
+    @Slot(float, float, float, float, result=bool)
+    def updateCropRect(self, left: float, top: float, right: float, bottom: float) -> bool:
+        if not self.cropEditing:
+            return False
+        layer = self._layer_model.layer_at(self._crop_edit_index)
+        if layer is None:
+            return False
+        with self._document_lock:
+            layer.crop_rect = [left, top, right, bottom]
+            self._invalidate_direct_layer_edit(self._crop_edit_index)
+        self.cropEditChanged.emit()
+        return True
+
+    @Slot(result=bool)
+    def confirmCropEdit(self) -> bool:
+        if not self.cropEditing:
+            return False
+        index = self._crop_edit_index
+        layer = self._layer_model.layer_at(index)
+        original = list(self._crop_edit_original)
+        changed = layer is not None and list(layer.crop_rect) != original
+        with self._document_lock:
+            if changed:
+                self._invalidate_direct_layer_edit(index, save_action="自由裁剪图片")
+            else:
+                self._document.is_modified = self._crop_edit_was_modified
+        self._crop_edit_index = -1
+        self._crop_edit_original = None
+        self.cropEditChanged.emit()
+        if changed:
+            self._set_status("已应用自由裁剪", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def cancelCropEdit(self) -> bool:
+        if self._crop_edit_original is None:
+            return False
+        index = self._crop_edit_index
+        layer = self._layer_model.layer_at(index)
+        with self._document_lock:
+            if layer is not None:
+                layer.crop_rect = list(self._crop_edit_original)
+                self._invalidate_direct_layer_edit(index)
+            self._document.is_modified = self._crop_edit_was_modified
+        self._crop_edit_index = -1
+        self._crop_edit_original = None
+        self.cropEditChanged.emit()
+        self.documentInfoChanged.emit()
+        self._set_status("已取消自由裁剪", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def resetSelectedCrop(self) -> bool:
+        if self.cropEditing:
+            self.cancelCropEdit()
+        if not self.selectedSupportsFreeCrop:
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "crop_rect",
+            [0.0, 0.0, 1.0, 1.0],
+            "重置自由裁剪",
+        )
+
+    @Slot(result=bool)
+    def convertSelectedToVectorPath(self) -> bool:
+        changed = self._run_vector_command(
+            "转换为矢量路径",
+            lambda layer: layer.convert_rect_to_vector_path(),
+        )
+        if changed:
+            self._selected_vector_node_index = 0
+            self.vectorEditChanged.emit()
+        return changed
+
+    @Slot(int, result=bool)
+    def selectVectorNode(self, node_index: int) -> bool:
+        if node_index < 0 or node_index >= len(self.selectedVectorNodes):
+            return False
+        self._selected_vector_node_index = int(node_index)
+        self.vectorEditChanged.emit()
+        return True
+
+    @Slot(int, float, float, result=bool)
+    def moveSelectedVectorNode(self, node_index: int, x: float, y: float) -> bool:
+        if node_index < 0 or node_index >= len(self.selectedVectorNodes):
+            return False
+        self._selected_vector_node_index = int(node_index)
+        return self._run_vector_command(
+            "移动路径节点",
+            lambda layer: layer.update_vector_bezier_anchor(node_index, float(x), float(y)),
+        )
+
+    @Slot(int, str, float, float, result=bool)
+    def moveSelectedVectorHandle(self, node_index: int, handle_type: str, x: float, y: float) -> bool:
+        handle_type = str(handle_type or "").lower()
+        if handle_type not in {"in", "out"}:
+            return False
+        return self._run_vector_command(
+            "移动路径控制柄",
+            lambda layer: layer.update_vector_bezier_handle(
+                node_index, handle_type, float(x), float(y)
+            ),
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedVectorNodeType(self, node_type: str) -> bool:
+        if self._selected_vector_node_index < 0:
+            return False
+        node_type = str(node_type or "").lower()
+        if node_type not in {"corner", "smooth", "symmetric"}:
+            return False
+        return self._run_vector_command(
+            "修改路径节点类型",
+            lambda layer: layer.set_vector_node_type(self._selected_vector_node_index, node_type),
+        )
+
+    @Slot(result=bool)
+    def cycleSelectedVectorNodeType(self) -> bool:
+        if self._selected_vector_node_index < 0:
+            return False
+        return self._run_vector_command(
+            "切换路径节点类型",
+            lambda layer: layer.cycle_vector_node_type(self._selected_vector_node_index),
+        )
+
+    @Slot(int, result=bool)
+    def insertVectorNodeAfter(self, segment_index: int) -> bool:
+        changed = self._run_vector_command(
+            "插入路径节点",
+            lambda layer: layer.insert_vector_node_after(int(segment_index)),
+        )
+        if changed:
+            self._selected_vector_node_index = int(segment_index) + 1
+            self.vectorEditChanged.emit()
+        return changed
+
+    @Slot(result=bool)
+    def deleteSelectedVectorNode(self) -> bool:
+        index = self._selected_vector_node_index
+        if index < 0:
+            return False
+        changed = self._run_vector_command(
+            "删除路径节点",
+            lambda layer: layer.delete_vector_node(index),
+        )
+        if changed:
+            self._selected_vector_node_index = min(index, len(self.selectedVectorNodes) - 1)
+            self.vectorEditChanged.emit()
+        return changed
+
+    @Slot(bool, result=bool)
+    def setSelectedVectorPathClosed(self, closed: bool) -> bool:
+        return self._run_vector_command(
+            "切换路径闭合",
+            lambda layer: setattr(layer, "vector_path_closed", bool(closed)),
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedVectorHandleLinkMode(self, mode: str) -> bool:
+        mode = str(mode or "").lower()
+        if mode not in {"mirror", "collinear", "free"}:
+            return False
+        return self._run_vector_command(
+            "修改控制柄联动",
+            lambda layer: setattr(layer, "vector_handle_link_mode", mode),
         )
 
     @Slot(bool, result=bool)

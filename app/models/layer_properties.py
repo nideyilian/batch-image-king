@@ -100,6 +100,7 @@ class LayerPropertyManager:
             'use_original_size': (False, bool),
             'fit_mode': (0, int),
             'crop_direction': (0, int),
+            'crop_rect': ([0.0, 0.0, 1.0, 1.0], list),
             'current_image_path': (None, (str, type(None))),
         }
         
@@ -287,6 +288,20 @@ class LayerPropertyManager:
             return max(0.0, min(1.0, float(value)))
         elif name == 'gradient_overlay_opacity' and expected_type == float:
             return max(0.0, min(1.0, float(value)))
+        elif name == 'crop_rect' and expected_type == list:
+            if not isinstance(value, (list, tuple)) or len(value) != 4:
+                return [0.0, 0.0, 1.0, 1.0]
+            try:
+                left, top, right, bottom = (float(item) for item in value)
+            except (TypeError, ValueError):
+                return [0.0, 0.0, 1.0, 1.0]
+            left = max(0.0, min(1.0, left))
+            top = max(0.0, min(1.0, top))
+            right = max(left + 0.001, min(1.0, right))
+            bottom = max(top + 0.001, min(1.0, bottom))
+            if right > 1.0 or bottom > 1.0:
+                return [0.0, 0.0, 1.0, 1.0]
+            return [left, top, right, bottom]
         elif name == 'rotation' and expected_type == float:
             return float(value) % 360
         elif name == 'gradient_overlay_angle' and expected_type == float:

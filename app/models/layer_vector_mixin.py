@@ -290,7 +290,7 @@ class LayerVectorMixin:
                     ilen = length
                 ux, uy = -vx / length, -vy / length
                 node['in_x'] = ax + ux * ilen
-                node['in_y'] = ay + ux * ilen
+                node['in_y'] = ay + uy * ilen
         self._property_manager.set_property('vector_bezier_nodes', nodes, validate=False)
         self._property_manager.set_property('vector_path_points', [[n['x'], n['y']] for n in nodes], validate=False)
         self._cached_image = None
@@ -306,7 +306,28 @@ class LayerVectorMixin:
         normalized = str(node_type).lower()
         if normalized not in {"corner", "smooth", "symmetric"}:
             normalized = "corner"
-        nodes[node_index]['node_type'] = normalized
+        node = nodes[node_index]
+        node['node_type'] = normalized
+        if normalized != "corner":
+            ax, ay = node['x'], node['y']
+            in_length = math.hypot(node['in_x'] - ax, node['in_y'] - ay)
+            out_length = math.hypot(node['out_x'] - ax, node['out_y'] - ay)
+            if in_length < 1e-6 and out_length < 1e-6 and len(nodes) >= 2:
+                previous = nodes[(node_index - 1) % len(nodes)]
+                following = nodes[(node_index + 1) % len(nodes)]
+                vx = following['x'] - previous['x']
+                vy = following['y'] - previous['y']
+                direction_length = math.hypot(vx, vy)
+                if direction_length > 1e-6:
+                    handle_length = min(
+                        math.hypot(ax - previous['x'], ay - previous['y']),
+                        math.hypot(following['x'] - ax, following['y'] - ay),
+                    ) / 3.0
+                    ux, uy = vx / direction_length, vy / direction_length
+                    node['in_x'] = ax - ux * handle_length
+                    node['in_y'] = ay - uy * handle_length
+                    node['out_x'] = ax + ux * handle_length
+                    node['out_y'] = ay + uy * handle_length
         self._property_manager.set_property('vector_bezier_nodes', nodes, validate=False)
         self._cached_image = None
         self._cache_valid = False

@@ -29,6 +29,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-text-typography", action="store_true", help="展示文字字体与核心排版配置")
     parser.add_argument("--show-text-appearance", action="store_true", help="展示文字填充、背景与局部颜色")
     parser.add_argument("--show-text-effects", action="store_true", help="展示文字阴影、发光与样式工具")
+    parser.add_argument("--show-crop-tools", action="store_true", help="展示图片自由裁剪工具")
+    parser.add_argument("--show-vector-path", action="store_true", help="展示矢量路径节点编辑")
     return parser.parse_args()
 
 
@@ -103,6 +105,8 @@ def main() -> int:
         workspace.selectLayer(1)
     elif args.show_text_effects:
         workspace.selectLayer(1)
+    elif args.show_crop_tools or args.show_vector_path:
+        workspace.selectLayer(0)
     elif args.demo_effects:
         workspace.selectLayer(0)
     if args.demo_effects:
@@ -171,6 +175,13 @@ def main() -> int:
         workspace.setSelectedTextGlowStrength(7)
         workspace.setSelectedTextGlowRadius(14)
         workspace.copySelectedLayerStyle()
+    if args.show_crop_tools:
+        workspace.startCropEdit()
+        workspace.updateCropRect(0.12, 0.1, 0.88, 0.9)
+    if args.show_vector_path:
+        workspace.convertSelectedToVectorPath()
+        workspace.selectVectorNode(1)
+        workspace.setSelectedVectorNodeType("smooth")
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:

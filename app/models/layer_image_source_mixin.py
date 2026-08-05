@@ -14,6 +14,7 @@ from app.utils.print_utils import safe_print as print  # R7 契约统一：print
 
 import os
 import logging
+import math
 
 from PIL import Image, ImageFile
 from PIL.Image import Resampling
@@ -298,6 +299,18 @@ class LayerImageSourceMixin:
         target_height = self.height
         use_original_size = self.use_original_size
         fit_mode = self.fit_mode
+
+        crop_rect = getattr(self, 'crop_rect', [0.0, 0.0, 1.0, 1.0])
+        if crop_rect != [0.0, 0.0, 1.0, 1.0]:
+            left, top, right, bottom = crop_rect
+            crop_box = (
+                max(0, min(original_image.width - 1, int(math.floor(left * original_image.width)))),
+                max(0, min(original_image.height - 1, int(math.floor(top * original_image.height)))),
+                max(1, min(original_image.width, int(math.ceil(right * original_image.width)))),
+                max(1, min(original_image.height, int(math.ceil(bottom * original_image.height)))),
+            )
+            if crop_box[2] > crop_box[0] and crop_box[3] > crop_box[1]:
+                original_image = original_image.crop(crop_box)
 
         if use_original_size:
             # 智能裁剪逻辑

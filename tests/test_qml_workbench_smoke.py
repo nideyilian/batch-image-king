@@ -83,6 +83,15 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'model: window.imageFitOptions' in qml_source
     assert 'workspace.setSelectedFitMode(currentValue)' in qml_source
     assert 'workspace.setSelectedCropDirection(modelData.value)' in qml_source
+    assert 'workspace.startCropEdit()' in qml_source
+    assert 'workspace.confirmCropEdit()' in qml_source
+    assert 'workspace.cancelCropEdit()' in qml_source
+    assert 'workspace.updateCropRect(left, top, right, bottom)' in qml_source
+    assert 'model: workspace.selectedVectorPathEnabled && !workspace.cropEditing' in qml_source
+    assert 'workspace.convertSelectedToVectorPath()' in qml_source
+    assert 'workspace.moveSelectedVectorNode(' in qml_source
+    assert 'workspace.moveSelectedVectorHandle(' in qml_source
+    assert 'workspace.cycleSelectedVectorNodeType()' in qml_source
     assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source
