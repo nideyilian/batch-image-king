@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+from pathlib import Path
 import threading
 from typing import Optional
 
@@ -187,6 +188,65 @@ class WorkspaceViewModel(QObject):
         layer = self._selected_layer()
         return layer is not None and hasattr(layer, "rotation")
 
+    @Property(bool, notify=selectionChanged)
+    def selectedIsImageLayer(self) -> bool:
+        return self.selectedLayerType == "图片"
+
+    @Property(bool, notify=selectionChanged)
+    def selectedIsTextLayer(self) -> bool:
+        return self.selectedLayerType == "文字"
+
+    @Property(str, notify=selectionChanged)
+    def selectedImageSource(self) -> str:
+        if not self.selectedIsImageLayer:
+            return ""
+        return str(getattr(self._selected_layer(), "image_source", "") or "")
+
+    @Property(bool, notify=selectionChanged)
+    def selectedImageSourceIsFolder(self) -> bool:
+        return self.selectedIsImageLayer and bool(getattr(self._selected_layer(), "is_folder", False))
+
+    @Property(int, notify=selectionChanged)
+    def selectedImageSourceCount(self) -> int:
+        if not self.selectedImageSourceIsFolder:
+            return 1 if self.selectedImageSource else 0
+        return len(self._image_files(self.selectedImageSource))
+
+    @Property(str, notify=selectionChanged)
+    def selectedImageCurrentFile(self) -> str:
+        if not self.selectedIsImageLayer:
+            return ""
+        layer = self._selected_layer()
+        path = getattr(layer, "current_image_path", None) or getattr(layer, "image_source", None)
+        return os.path.basename(str(path)) if path else ""
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextContent(self) -> str:
+        if not self.selectedIsTextLayer:
+            return ""
+        return str(getattr(self._selected_layer(), "text_content", "") or "")
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextBindingEnabled(self) -> bool:
+        return self.selectedIsTextLayer and bool(
+            getattr(self._selected_layer(), "text_binding_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextCandidateCount(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        layer = self._selected_layer()
+        if self.selectedTextBindingEnabled:
+            return len(layer.get_text_lines())
+        return 1 if self.selectedTextContent else 0
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextFontSize(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        return int(getattr(self._selected_layer(), "font_size", 0) or 0)
+
     @Property(int, notify=previewChanged)
     def previewRevision(self) -> int:
         return self._preview_revision
@@ -294,6 +354,117 @@ class WorkspaceViewModel(QObject):
             return url.toLocalFile()
         return text
 
+    @staticmethod
+    def _image_files(directory: str):
+        if not directory or not os.path.isdir(directory):
+            return []
+        extensions = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}
+        try:
+            return sorted(
+                str(path)
+                for path in Path(directory).iterdir()
+                if path.is_file() and path.suffix.lower() in extensions
+            )
+        except OSError:
+            return []
+
+    @staticmethod
+    def _clear_image_layer_cache(layer) -> None:
+        for attr in ("_cached_image", "_cached_image_path", "_cached_source_image", "_cached_source_path"):
+            if hasattr(layer, attr):
+                setattr(layer, attr, None)
+        if hasattr(layer, "cached_image"):
+            layer.cached_image = None
+
+    def _publish_content_change(self, index: int, status: str) -> None:
+        self._layer_model.notify_row(index)
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(status, toast=True)
+
+    def _validated_image_source(self, source_path: str):
+        source_path = self._local_path(source_path)
+        if os.path.isdir(source_path):
+            files = self._image_files(source_path)
+            if not files:
+                self._set_status("素材文件夹没有可用图片", toast=True)
+                return None
+            return source_path, True, files[0], files
+        if os.path.isfile(source_path):
+            try:
+                from PIL import Image
+
+                with Image.open(source_path) as image:
+                    image.verify()
+            except Exception:
+                self._set_status("所选文件不是可读取的图片", toast=True)
+                return None
+            return source_path, False, source_path, [source_path]
+        self._set_status("图片源不存在或无法访问", toast=True)
+        return None
+
+    def _add_image_source(self, source_path: str, *, require_folder: bool) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        validated = self._validated_image_source(source_path)
+        if validated is None:
+            return False
+        source_path, is_folder, preview_path, files = validated
+        if require_folder and not is_folder:
+            self._set_status("请选择素材文件夹", toast=True)
+            return False
+        if not require_folder and is_folder:
+            self._set_status("请选择单张图片文件", toast=True)
+            return False
+
+        try:
+            from PIL import Image
+
+            with Image.open(preview_path) as image:
+                source_width, source_height = image.size
+            if source_width <= 0 or source_height <= 0:
+                raise ValueError("图片尺寸无效")
+
+            max_width = max(1, round(self.canvasWidth * 0.6))
+            max_height = max(1, round(self.canvasHeight * 0.6))
+            scale = min(max_width / source_width, max_height / source_height, 1.0)
+            width = max(1, round(source_width * scale))
+            height = max(1, round(source_height * scale))
+            x = (self.canvasWidth - width) // 2
+            y = (self.canvasHeight - height) // 2
+
+            with self._document_lock:
+                self._ensure_history_baseline()
+                layer = self._document.add_layer(
+                    os.path.basename(source_path),
+                    x,
+                    y,
+                    width,
+                    height,
+                    image_source=source_path,
+                    use_original_size=False,
+                    is_folder=is_folder,
+                )
+                layer.current_image_path = preview_path
+                self._clear_image_layer_cache(layer)
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加图片源失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        if is_folder:
+            self._set_status(f"已添加素材文件夹 · {len(files)} 张", toast=True)
+        else:
+            self._set_status(f"已添加图片 {os.path.basename(source_path)}", toast=True)
+        return True
+
     @Slot(int, int, result=bool)
     def newDocument(self, width: int = 1080, height: int = 1350) -> bool:
         if not self._ensure_operations_available():
@@ -336,6 +507,7 @@ class WorkspaceViewModel(QObject):
             is_folder=False,
         )
         title = TextLayer(name="限量腕表", x=68, y=1040, width=860, height=160)
+        title.text_content = "限量腕表"
         title.current_text = "限量腕表"
         title.font_size = 86
         title.text_color = (245, 244, 238, 255)
@@ -345,6 +517,7 @@ class WorkspaceViewModel(QObject):
         title.auto_fit_text_box = False
         document.add_text_layer(title)
         subtitle = TextLayer(name="曜石黑 · 2026", x=76, y=1210, width=680, height=70)
+        subtitle.text_content = "曜石黑 · 2026 EDITION"
         subtitle.current_text = "曜石黑 · 2026 EDITION"
         subtitle.font_size = 34
         subtitle.text_color = (70, 215, 173, 255)
@@ -428,52 +601,74 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def addImageLayer(self, file_path: str) -> bool:
+        return self._add_image_source(file_path, require_folder=False)
+
+    @Slot(str, result=bool)
+    def addImageFolder(self, folder_path: str) -> bool:
+        return self._add_image_source(folder_path, require_folder=True)
+
+    @Slot(str, result=bool)
+    def setSelectedImageSource(self, source_path: str) -> bool:
         if not self._ensure_operations_available():
             return False
-        file_path = self._local_path(file_path)
-        if not os.path.isfile(file_path):
-            self._set_status("添加图片失败：文件不存在", toast=True)
+        layer = self._selected_layer()
+        if not self.selectedIsImageLayer or layer is None:
+            self._set_status("当前图层不是图片图层", toast=True)
             return False
-
-        try:
-            from PIL import Image
-
-            with Image.open(file_path) as image:
-                source_width, source_height = image.size
-            if source_width <= 0 or source_height <= 0:
-                raise ValueError("图片尺寸无效")
-
-            max_width = max(1, round(self.canvasWidth * 0.6))
-            max_height = max(1, round(self.canvasHeight * 0.6))
-            scale = min(max_width / source_width, max_height / source_height, 1.0)
-            width = max(1, round(source_width * scale))
-            height = max(1, round(source_height * scale))
-            x = (self.canvasWidth - width) // 2
-            y = (self.canvasHeight - height) // 2
-
-            with self._document_lock:
-                self._ensure_history_baseline()
-                self._document.add_layer(
-                    os.path.basename(file_path),
-                    x,
-                    y,
-                    width,
-                    height,
-                    image_source=file_path,
-                    use_original_size=False,
-                    is_folder=False,
-                )
-                self._document.is_modified = True
-        except Exception as error:
-            self._set_status(f"添加图片失败：{error}", toast=True)
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
             return False
+        validated = self._validated_image_source(source_path)
+        if validated is None:
+            return False
+        source_path, is_folder, preview_path, files = validated
+        index = self.selectedLayerIndex
 
-        self._layer_model.reset_from_document()
-        self.documentInfoChanged.emit()
-        self.selectionChanged.emit()
-        self.historyStateChanged.emit()
-        self.requestPreview(force=True)
-        self._set_status(f"已添加图片 {os.path.basename(file_path)}", toast=True)
+        with self._document_lock:
+            self._ensure_history_baseline()
+            layer.image_source = source_path
+            layer.is_folder = is_folder
+            layer.current_image_path = preview_path
+            self._clear_image_layer_cache(layer)
+            self._document.is_modified = True
+            self._document.bump_hit_test_version()
+            self._document._invalidate_render_cache()
+            self._document.save_state("更改图片内容源")
+
+        description = f"素材文件夹 · {len(files)} 张" if is_folder else os.path.basename(source_path)
+        self._publish_content_change(index, f"已更新图片源 · {description}")
+        return True
+
+    @Slot(result=bool)
+    def showNextSelectedImage(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        layer = self._selected_layer()
+        if not self.selectedImageSourceIsFolder or layer is None:
+            self._set_status("当前图片源不是素材文件夹", toast=True)
+            return False
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
+            return False
+        files = self._image_files(self.selectedImageSource)
+        if not files:
+            self._set_status("素材文件夹没有可用图片", toast=True)
+            return False
+        current = os.path.normcase(str(getattr(layer, "current_image_path", "") or ""))
+        normalized = [os.path.normcase(path) for path in files]
+        next_index = (normalized.index(current) + 1) % len(files) if current in normalized else 0
+        preview_path = files[next_index]
+        index = self.selectedLayerIndex
+
+        with self._document_lock:
+            self._ensure_history_baseline()
+            layer.current_image_path = preview_path
+            self._clear_image_layer_cache(layer)
+            self._document.is_modified = True
+            self._document._invalidate_render_cache()
+            self._document.save_state("切换素材预览")
+
+        self._publish_content_change(index, f"当前素材 · {os.path.basename(preview_path)}")
         return True
 
     @Slot(result=bool)
@@ -507,6 +702,73 @@ class WorkspaceViewModel(QObject):
         self.requestPreview(force=True)
         self._set_status("已添加文字图层", toast=True)
         return True
+
+    def _change_text_layer(self, index: int, action: str, mutator, status: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        layer = self._layer_model.layer_at(int(index))
+        if layer is None or self._layer_model.layer_type_name(layer) != "文字":
+            self._set_status("当前图层不是文字图层", toast=True)
+            return False
+        if bool(getattr(layer, "locked", False)):
+            self._set_status("图层已锁定", toast=True)
+            return False
+        with self._document_lock:
+            self._ensure_history_baseline()
+            mutator(layer)
+            self._document.is_modified = True
+            self._document.bump_hit_test_version()
+            self._document._invalidate_render_cache()
+            self._document.save_state(action)
+        self._publish_content_change(index, status)
+        return True
+
+    def _change_selected_text(self, action: str, mutator, status: str) -> bool:
+        return self._change_text_layer(self.selectedLayerIndex, action, mutator, status)
+
+    @Slot(int, str, result=bool)
+    def setTextContentForLayer(self, index: int, content: str) -> bool:
+        content = str(content or "")
+
+        def apply(layer) -> None:
+            lines = layer.parse_text_input_to_lines(content)
+            layer.set_text_lines(lines)
+            layer.set_current_text(lines[0] if lines else "", force=True)
+
+        return self._change_text_layer(
+            int(index),
+            "修改文字内容",
+            apply,
+            "文字内容已更新",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextContent(self, content: str) -> bool:
+        return self.setTextContentForLayer(self.selectedLayerIndex, content)
+
+    @Slot(bool, result=bool)
+    def setSelectedTextBindingEnabled(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+
+        def apply(layer) -> None:
+            layer.text_binding_enabled = enabled
+            lines = layer.get_text_lines()
+            layer.set_current_text(lines[0] if lines else "", force=True)
+
+        mode = "按行随机" if enabled else "整段排版"
+        return self._change_selected_text("切换文字内容模式", apply, f"文字模式 · {mode}")
+
+    @Slot(int, result=bool)
+    def setSelectedTextFontSize(self, value: int) -> bool:
+        value = int(value)
+        if not 1 <= value <= 1000:
+            self._set_status("字号必须在 1 到 1000 之间", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字字号",
+            lambda layer: setattr(layer, "font_size", value),
+            f"文字字号 · {value} px",
+        )
 
     @Slot(result=bool)
     def deleteSelectedLayer(self) -> bool:

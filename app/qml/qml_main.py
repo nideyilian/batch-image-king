@@ -17,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
+    parser.add_argument("--select-layer", type=int, help="启动后选中指定图层索引")
     return parser.parse_args()
 
 
@@ -79,6 +80,9 @@ def main() -> int:
         workspace.newDocument(1080, 1350)
     else:
         workspace.createDemoDocument(str(qml_dir / "assets" / "watch-product.jpg"))
+
+    if args.select_layer is not None:
+        workspace.selectLayer(args.select_layer)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")

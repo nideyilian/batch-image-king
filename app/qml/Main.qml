@@ -32,6 +32,7 @@ ApplicationWindow {
     Connections {
         target: workspace
         function onToastRequested(message) { showToast(message) }
+        function onSelectionChanged() { selectedTextEditor.releaseFocus() }
     }
 
     FileDialog {
@@ -66,6 +67,26 @@ ApplicationWindow {
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
         onAccepted: workspace.addImageLayer(selectedFile.toString())
+    }
+
+    FolderDialog {
+        id: imageFolderDialog
+        title: "添加素材文件夹"
+        onAccepted: workspace.addImageFolder(selectedFolder.toString())
+    }
+
+    FileDialog {
+        id: replaceImageDialog
+        title: "替换图片源"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff)"]
+        onAccepted: workspace.setSelectedImageSource(selectedFile.toString())
+    }
+
+    FolderDialog {
+        id: replaceImageFolderDialog
+        title: "选择素材文件夹"
+        onAccepted: workspace.setSelectedImageSource(selectedFolder.toString())
     }
 
     FolderDialog {
@@ -237,6 +258,82 @@ ApplicationWindow {
             hoverEnabled: true
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: exportButton.clicked()
+        }
+    }
+
+    component ContentTextEditor: Rectangle {
+        id: textEditorRoot
+        property string value: ""
+        property string placeholder: ""
+        property int contextIndex: -1
+        property int editingIndex: -1
+        signal committed(string value, int contextIndex)
+
+        function releaseFocus() {
+            if (contentEditor.activeFocus)
+                contentEditor.focus = false
+        }
+
+        implicitHeight: 104
+        radius: Theme.radiusSmall
+        color: Theme.bgControl
+        border.width: 1
+        border.color: contentEditor.activeFocus ? Theme.accent : Theme.borderStrong
+        opacity: enabled ? 1 : 0.45
+
+        Flickable {
+            id: editorFlick
+            anchors.fill: parent
+            anchors.margins: 10
+            contentWidth: width
+            contentHeight: contentEditor.paintedHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            TextEdit {
+                id: contentEditor
+                width: editorFlick.width
+                height: Math.max(editorFlick.height, paintedHeight)
+                color: Theme.textPrimary
+                selectionColor: Theme.accentPressed
+                selectedTextColor: Theme.textPrimary
+                font.family: Theme.bodyFont
+                font.pixelSize: 12
+                wrapMode: TextEdit.Wrap
+                selectByMouse: true
+                readOnly: !textEditorRoot.enabled
+                onActiveFocusChanged: {
+                    if (activeFocus) {
+                        textEditorRoot.editingIndex = textEditorRoot.contextIndex
+                    } else if (textEditorRoot.editingIndex >= 0) {
+                        textEditorRoot.committed(text, textEditorRoot.editingIndex)
+                        textEditorRoot.editingIndex = -1
+                    }
+                }
+                Keys.onPressed: event => {
+                    if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                        focus = false
+                        event.accepted = true
+                    }
+                }
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    text: textEditorRoot.placeholder
+                    visible: contentEditor.text.length === 0 && !contentEditor.activeFocus
+                    color: Theme.textMuted
+                    font: contentEditor.font
+                }
+            }
+
+            Binding {
+                target: contentEditor
+                property: "text"
+                value: textEditorRoot.value
+                when: !contentEditor.activeFocus
+                restoreMode: Binding.RestoreBindingOrValue
+            }
         }
     }
 
@@ -675,6 +772,7 @@ ApplicationWindow {
                 }
 
                 IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: workspace.addTextLayer() }
+                IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
                 IconButton { glyph: "\uF158"; tooltip: "添加异形（后续接入）"; enabled: false }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton {
@@ -1381,6 +1479,153 @@ ApplicationWindow {
                         Column {
                             width: inspector.width
                             visible: inspectorTab === 0
+
+                            PropertySection {
+                                width: parent.width
+                                title: "内容源"
+                                summary: workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片"
+                                visible: workspace.selectedIsImageLayer
+
+                                InspectorRow {
+                                    label: "模式"
+                                    BodyLabel {
+                                        text: workspace.selectedImageSourceIsFolder ? "素材文件夹" : "单文件"
+                                        color: workspace.selectedImageSourceIsFolder ? Theme.accent : Theme.textPrimary
+                                        Layout.fillWidth: true
+                                    }
+                                    TinyLabel { text: workspace.selectedImageSourceCount + " 张" }
+                                }
+                                InspectorRow {
+                                    label: "路径"
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: Theme.bgControl
+                                        border.width: 1
+                                        border.color: Theme.borderStrong
+                                        Text {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.leftMargin: 9
+                                            anchors.rightMargin: 9
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: workspace.selectedImageSource || "未设置"
+                                            color: workspace.selectedImageSource ? Theme.textSecondary : Theme.textMuted
+                                            font.family: Theme.bodyFont
+                                            font.pixelSize: 10
+                                            elide: Text.ElideMiddle
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "当前"
+                                    BodyLabel {
+                                        text: workspace.selectedImageCurrentFile || "无预览"
+                                        color: Theme.textSecondary
+                                        elide: Text.ElideMiddle
+                                        Layout.fillWidth: true
+                                    }
+                                    IconButton {
+                                        glyph: "\uE72C"
+                                        tooltip: "换一张素材"
+                                        buttonSize: 30
+                                        enabled: workspace.selectedImageSourceIsFolder && workspace.selectedImageSourceCount > 1 && !workspace.selectedLocked
+                                        onClicked: workspace.showNextSelectedImage()
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "替换"
+                                    ExportButton {
+                                        Layout.fillWidth: true
+                                        label: "图片"
+                                        glyph: "\uE91B"
+                                        enabled: !workspace.selectedLocked
+                                        onClicked: replaceImageDialog.open()
+                                    }
+                                    ExportButton {
+                                        Layout.fillWidth: true
+                                        label: "文件夹"
+                                        glyph: "\uE8B7"
+                                        enabled: !workspace.selectedLocked
+                                        onClicked: replaceImageFolderDialog.open()
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                width: parent.width
+                                title: "文字内容"
+                                summary: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条候选" : "整段排版"
+                                visible: workspace.selectedIsTextLayer
+
+                                ContentTextEditor {
+                                    id: selectedTextEditor
+                                    width: parent.width
+                                    value: workspace.selectedTextContent
+                                    placeholder: "输入文字内容"
+                                    contextIndex: workspace.selectedLayerIndex
+                                    enabled: !workspace.selectedLocked
+                                    onCommitted: (value, contextIndex) => {
+                                        workspace.setTextContentForLayer(contextIndex, value)
+                                    }
+                                }
+
+                                Row {
+                                    width: parent.width
+                                    height: 32
+                                    spacing: 4
+                                    Repeater {
+                                        model: [
+                                            { label: "按行随机", enabled: true },
+                                            { label: "整段排版", enabled: false }
+                                        ]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            width: (parent.width - 4) / 2
+                                            height: 32
+                                            radius: Theme.radiusSmall
+                                            color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentSoft : Theme.bgControl
+                                            border.width: 1
+                                            border.color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentPressed : Theme.borderStrong
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: parent.modelData.label
+                                                color: workspace.selectedTextBindingEnabled === parent.modelData.enabled ? Theme.accent : Theme.textSecondary
+                                                font.family: Theme.bodyFont
+                                                font.pixelSize: 11
+                                                font.weight: Font.DemiBold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: !workspace.selectedLocked
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: workspace.setSelectedTextBindingEnabled(parent.modelData.enabled)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: workspace.selectedTextBindingEnabled ? "候选" : "段落"
+                                    BodyLabel {
+                                        text: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条文案" : "1 条文案"
+                                        color: Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTextFontSize.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.preferredWidth: 84
+                                        editable: !workspace.selectedLocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextFontSize(parsed)
+                                        }
+                                    }
+                                }
+                            }
 
                             PropertySection {
                                 width: parent.width
