@@ -17,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
+    parser.add_argument("--show-batch-advanced", action="store_true", help="展示批量导出高级策略")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
     parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
     parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")
@@ -282,9 +283,11 @@ def main() -> int:
 
         QTimer.singleShot(120, reveal_text_effects)
 
-    if args.show_batch_export:
+    if args.show_batch_export or args.show_batch_advanced:
         def open_batch_export() -> None:
             drawer = window.findChild(QObject, "batchExportDrawer")
+            if drawer is not None and args.show_batch_advanced:
+                drawer.setProperty("advancedOpen", True)
             if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
                 debug("batch export drawer could not be opened")
 
@@ -343,6 +346,7 @@ def main() -> int:
             try:
                 if (
                     args.show_batch_export
+                    or args.show_batch_advanced
                     or args.show_new_canvas
                     or args.show_close_confirm
                     or args.show_canvas_presets

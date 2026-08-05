@@ -71,6 +71,18 @@ class BatchExportViewModel(QObject):
         self._filename_template = "image_{number:04d}"
         self._file_format = "png"
         self._avoid_duplicates = True
+        self._start_index = 1
+        self._traverse_mode = False
+        self._use_high_performance = True
+        self._preload_enabled = True
+        self._quality_profile = "quality"
+        self._memory_guard_mode = "auto"
+        self._memory_limit_mb = 0
+        self._memory_reserve_mb = 2048
+        self._max_consecutive_failures = 8
+        self._failure_rate_limit = 45
+        self._stall_timeout_seconds = 180
+        self._external_worker_enabled = True
         self._running = False
         self._succeeded = False
         self._canceled = False
@@ -79,6 +91,7 @@ class BatchExportViewModel(QObject):
         self._stage = "等待开始"
         self._last_file = ""
         self._error_message = ""
+        self._failure_summary = ""
         self._cancel_event = threading.Event()
         self._active_task = None
         self._document_states = WeakKeyDictionary()
@@ -155,6 +168,107 @@ class BatchExportViewModel(QObject):
             self._avoid_duplicates = value
             self.configChanged.emit()
 
+    def _set_config_value(self, attribute: str, value) -> None:
+        if getattr(self, attribute) != value:
+            setattr(self, attribute, value)
+            self.configChanged.emit()
+
+    @Property(int, notify=configChanged)
+    def startIndex(self) -> int:
+        return self._start_index
+
+    @startIndex.setter
+    def startIndex(self, value: int) -> None:
+        self._set_config_value("_start_index", int(value))
+
+    @Property(bool, notify=configChanged)
+    def traverseMode(self) -> bool:
+        return self._traverse_mode
+
+    @traverseMode.setter
+    def traverseMode(self, value: bool) -> None:
+        self._set_config_value("_traverse_mode", bool(value))
+
+    @Property(bool, notify=configChanged)
+    def useHighPerformance(self) -> bool:
+        return self._use_high_performance
+
+    @useHighPerformance.setter
+    def useHighPerformance(self, value: bool) -> None:
+        self._set_config_value("_use_high_performance", bool(value))
+
+    @Property(bool, notify=configChanged)
+    def preloadEnabled(self) -> bool:
+        return self._preload_enabled
+
+    @preloadEnabled.setter
+    def preloadEnabled(self, value: bool) -> None:
+        self._set_config_value("_preload_enabled", bool(value))
+
+    @Property(str, notify=configChanged)
+    def qualityProfile(self) -> str:
+        return self._quality_profile
+
+    @qualityProfile.setter
+    def qualityProfile(self, value: str) -> None:
+        self._set_config_value("_quality_profile", str(value or "quality").lower())
+
+    @Property(str, notify=configChanged)
+    def memoryGuardMode(self) -> str:
+        return self._memory_guard_mode
+
+    @memoryGuardMode.setter
+    def memoryGuardMode(self, value: str) -> None:
+        self._set_config_value("_memory_guard_mode", str(value or "auto").lower())
+
+    @Property(int, notify=configChanged)
+    def memoryLimitMB(self) -> int:
+        return self._memory_limit_mb
+
+    @memoryLimitMB.setter
+    def memoryLimitMB(self, value: int) -> None:
+        self._set_config_value("_memory_limit_mb", int(value))
+
+    @Property(int, notify=configChanged)
+    def memoryReserveMB(self) -> int:
+        return self._memory_reserve_mb
+
+    @memoryReserveMB.setter
+    def memoryReserveMB(self, value: int) -> None:
+        self._set_config_value("_memory_reserve_mb", int(value))
+
+    @Property(int, notify=configChanged)
+    def maxConsecutiveFailures(self) -> int:
+        return self._max_consecutive_failures
+
+    @maxConsecutiveFailures.setter
+    def maxConsecutiveFailures(self, value: int) -> None:
+        self._set_config_value("_max_consecutive_failures", int(value))
+
+    @Property(int, notify=configChanged)
+    def failureRateLimit(self) -> int:
+        return self._failure_rate_limit
+
+    @failureRateLimit.setter
+    def failureRateLimit(self, value: int) -> None:
+        self._set_config_value("_failure_rate_limit", int(value))
+
+    @Property(int, notify=configChanged)
+    def stallTimeoutSeconds(self) -> int:
+        return self._stall_timeout_seconds
+
+    @stallTimeoutSeconds.setter
+    def stallTimeoutSeconds(self, value: int) -> None:
+        self._set_config_value("_stall_timeout_seconds", int(value))
+
+    @Property(bool, notify=configChanged)
+    def externalWorkerEnabled(self) -> bool:
+        return self._external_worker_enabled
+
+    @externalWorkerEnabled.setter
+    def externalWorkerEnabled(self, value: bool) -> None:
+        self._set_config_value("_external_worker_enabled", bool(value))
+
     @Property(bool, notify=stateChanged)
     def running(self) -> bool:
         return self._running
@@ -192,6 +306,14 @@ class BatchExportViewModel(QObject):
     @Property(str, notify=stateChanged)
     def errorMessage(self) -> str:
         return self._error_message
+
+    @Property(str, notify=stateChanged)
+    def failureSummary(self) -> str:
+        return self._failure_summary
+
+    @Property(bool, notify=stateChanged)
+    def canRetry(self) -> bool:
+        return not self._running and (self._canceled or bool(self._error_message))
 
     @Property(str, notify=stateChanged)
     def statusText(self) -> str:
@@ -233,6 +355,18 @@ class BatchExportViewModel(QObject):
             "filename_template": self._filename_template,
             "file_format": self._file_format,
             "avoid_duplicates": self._avoid_duplicates,
+            "start_index": self._start_index,
+            "traverse_mode": self._traverse_mode,
+            "use_high_performance": self._use_high_performance,
+            "preload_enabled": self._preload_enabled,
+            "quality_profile": self._quality_profile,
+            "memory_guard_mode": self._memory_guard_mode,
+            "memory_limit_mb": self._memory_limit_mb,
+            "memory_reserve_mb": self._memory_reserve_mb,
+            "max_consecutive_failures": self._max_consecutive_failures,
+            "failure_rate_limit": self._failure_rate_limit,
+            "stall_timeout_seconds": self._stall_timeout_seconds,
+            "external_worker_enabled": self._external_worker_enabled,
             "succeeded": self._succeeded,
             "canceled": self._canceled,
             "current": self._current,
@@ -240,6 +374,7 @@ class BatchExportViewModel(QObject):
             "stage": self._stage,
             "last_file": self._last_file,
             "error_message": self._error_message,
+            "failure_summary": self._failure_summary,
         }
 
     @staticmethod
@@ -250,6 +385,18 @@ class BatchExportViewModel(QObject):
             "filename_template": "image_{number:04d}",
             "file_format": "png",
             "avoid_duplicates": True,
+            "start_index": 1,
+            "traverse_mode": False,
+            "use_high_performance": True,
+            "preload_enabled": True,
+            "quality_profile": "quality",
+            "memory_guard_mode": "auto",
+            "memory_limit_mb": 0,
+            "memory_reserve_mb": 2048,
+            "max_consecutive_failures": 8,
+            "failure_rate_limit": 45,
+            "stall_timeout_seconds": 180,
+            "external_worker_enabled": True,
             "succeeded": False,
             "canceled": False,
             "current": 0,
@@ -257,6 +404,7 @@ class BatchExportViewModel(QObject):
             "stage": "等待开始",
             "last_file": "",
             "error_message": "",
+            "failure_summary": "",
         }
 
     def _restore_state(self, state: dict) -> None:
@@ -265,6 +413,18 @@ class BatchExportViewModel(QObject):
         self._filename_template = state["filename_template"]
         self._file_format = state["file_format"]
         self._avoid_duplicates = state["avoid_duplicates"]
+        self._start_index = state["start_index"]
+        self._traverse_mode = state["traverse_mode"]
+        self._use_high_performance = state["use_high_performance"]
+        self._preload_enabled = state["preload_enabled"]
+        self._quality_profile = state["quality_profile"]
+        self._memory_guard_mode = state["memory_guard_mode"]
+        self._memory_limit_mb = state["memory_limit_mb"]
+        self._memory_reserve_mb = state["memory_reserve_mb"]
+        self._max_consecutive_failures = state["max_consecutive_failures"]
+        self._failure_rate_limit = state["failure_rate_limit"]
+        self._stall_timeout_seconds = state["stall_timeout_seconds"]
+        self._external_worker_enabled = state["external_worker_enabled"]
         self._succeeded = state["succeeded"]
         self._canceled = state["canceled"]
         self._current = state["current"]
@@ -272,6 +432,7 @@ class BatchExportViewModel(QObject):
         self._stage = state["stage"]
         self._last_file = state["last_file"]
         self._error_message = state["error_message"]
+        self._failure_summary = state["failure_summary"]
 
     @Slot(object)
     def setDocument(self, document) -> None:
@@ -309,11 +470,32 @@ class BatchExportViewModel(QObject):
         if not 1 <= self._count <= 10000:
             self._set_error("导出数量必须在 1 到 10000 之间")
             return False
+        if not 0 <= self._start_index <= 999999999:
+            self._set_error("起始序号必须在 0 到 999999999 之间")
+            return False
         if not self._filename_template.strip():
             self._set_error("文件名模板不能为空")
             return False
         if self._file_format not in {"png", "jpg", "jpeg", "webp", "bmp", "tiff"}:
             self._set_error("不支持的导出格式")
+            return False
+        if self._quality_profile not in {"quality", "balanced", "speed", "size"}:
+            self._set_error("不支持的质量策略")
+            return False
+        if self._memory_guard_mode not in {"auto", "low", "custom", "off"}:
+            self._set_error("不支持的内存保护模式")
+            return False
+        if self._memory_limit_mb < 0 or self._memory_reserve_mb < 256:
+            self._set_error("内存限制参数无效")
+            return False
+        if not 1 <= self._max_consecutive_failures <= 100:
+            self._set_error("连续失败阈值必须在 1 到 100 之间")
+            return False
+        if not 1 <= self._failure_rate_limit <= 100:
+            self._set_error("失败率阈值必须在 1% 到 100% 之间")
+            return False
+        if not 30 <= self._stall_timeout_seconds <= 3600:
+            self._set_error("停滞超时必须在 30 到 3600 秒之间")
             return False
         try:
             Path(self._output_directory).mkdir(parents=True, exist_ok=True)
@@ -338,18 +520,35 @@ class BatchExportViewModel(QObject):
         self._stage = "准备导出"
         self._last_file = ""
         self._error_message = ""
+        self._failure_summary = ""
         self._document._export_canceled = False
         self._workspace.setExportRunning(True)
         self.stateChanged.emit()
 
+        self._document.export_settings.update(
+            {
+                "export_quality_profile": self._quality_profile,
+                "allow_lossy_size_reduction": self._quality_profile == "size",
+                "auto_runtime_tuning_enabled": True,
+                "batch_preload_enabled": self._preload_enabled,
+                "export_external_worker_enabled": self._external_worker_enabled,
+                "export_safety_enabled": True,
+                "export_safety_max_consecutive_failures": self._max_consecutive_failures,
+                "export_safety_failure_rate_limit": self._failure_rate_limit / 100.0,
+                "export_safety_stall_timeout_seconds": self._stall_timeout_seconds,
+                "export_memory_guard_mode": self._memory_guard_mode,
+                "export_memory_limit_mb": self._memory_limit_mb,
+                "export_memory_reserve_mb": self._memory_reserve_mb,
+            }
+        )
         parameters = {
             "directory": self._output_directory,
             "count": self._count,
             "filename_template": self._filename_template.strip(),
             "file_format": self._file_format,
-            "start_index": 1,
-            "use_high_performance": True,
-            "traverse_mode": False,
+            "start_index": self._start_index,
+            "use_high_performance": self._use_high_performance,
+            "traverse_mode": self._traverse_mode,
             "use_smart_sampling": self._avoid_duplicates,
         }
         task = _BatchExportTask(
@@ -363,6 +562,12 @@ class BatchExportViewModel(QObject):
         self._active_task = task
         QThreadPool.globalInstance().start(task)
         return True
+
+    @Slot(result=bool)
+    def retryExport(self) -> bool:
+        if not self.canRetry:
+            return False
+        return self.startExport()
 
     @Slot(result=bool)
     def cancelExport(self) -> bool:
@@ -412,6 +617,15 @@ class BatchExportViewModel(QObject):
             self._succeeded = False
             self._stage = "导出失败"
             self._error_message = str(error or "未知错误")
+        report = getattr(self._document, "_last_export_report", None)
+        if isinstance(report, dict):
+            failed = int(report.get("failed_count", report.get("failed", 0)) or 0)
+            exported = int(report.get("exported_count", report.get("completed", self._current)) or 0)
+            skipped = int(report.get("skipped_count", report.get("skipped", 0)) or 0)
+            if failed or skipped:
+                self._failure_summary = f"成功 {exported}，失败 {failed}，跳过 {skipped}"
+        if not self._failure_summary and self._error_message:
+            self._failure_summary = self._error_message
         self.stateChanged.emit()
 
     @Slot(result=bool)

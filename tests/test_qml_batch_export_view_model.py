@@ -92,6 +92,95 @@ def test_batch_export_tracks_progress_and_success(qapp, tmp_path: Path):
 
 
 @pytest.mark.unit
+def test_batch_export_passes_advanced_runtime_and_safety_settings(qapp, tmp_path: Path):
+    workspace = _workspace()
+
+    def runner(document, **kwargs):
+        assert kwargs["start_index"] == 42
+        assert kwargs["traverse_mode"] is True
+        assert kwargs["use_high_performance"] is True
+        assert kwargs["use_smart_sampling"] is True
+        settings = document.export_settings
+        assert settings["batch_preload_enabled"] is False
+        assert settings["export_quality_profile"] == "balanced"
+        assert settings["export_external_worker_enabled"] is False
+        assert settings["export_memory_guard_mode"] == "custom"
+        assert settings["export_memory_limit_mb"] == 4096
+        assert settings["export_memory_reserve_mb"] == 1024
+        assert settings["export_safety_max_consecutive_failures"] == 5
+        assert settings["export_safety_failure_rate_limit"] == pytest.approx(0.25)
+        assert settings["export_safety_stall_timeout_seconds"] == 90
+        return True
+
+    view_model = BatchExportViewModel(workspace=workspace, runner=runner)
+    view_model.outputDirectory = str(tmp_path)
+    view_model.startIndex = 42
+    view_model.traverseMode = True
+    view_model.preloadEnabled = False
+    view_model.qualityProfile = "balanced"
+    view_model.externalWorkerEnabled = False
+    view_model.memoryGuardMode = "custom"
+    view_model.memoryLimitMB = 4096
+    view_model.memoryReserveMB = 1024
+    view_model.maxConsecutiveFailures = 5
+    view_model.failureRateLimit = 25
+    view_model.stallTimeoutSeconds = 90
+
+    assert view_model.startExport() is True
+    _wait_until(qapp, lambda: not view_model.running)
+    assert view_model.succeeded is True
+
+
+@pytest.mark.unit
+def test_batch_export_validates_advanced_settings(tmp_path: Path):
+    workspace = _workspace()
+    view_model = BatchExportViewModel(workspace=workspace)
+    view_model.outputDirectory = str(tmp_path)
+
+    view_model.startIndex = -1
+    assert view_model.startExport() is False
+    assert "起始序号" in view_model.errorMessage
+    view_model.startIndex = 1
+    view_model.memoryReserveMB = 128
+    assert view_model.startExport() is False
+    assert "内存" in view_model.errorMessage
+    view_model.memoryReserveMB = 2048
+    view_model.stallTimeoutSeconds = 10
+    assert view_model.startExport() is False
+    assert "停滞" in view_model.errorMessage
+
+
+@pytest.mark.unit
+def test_batch_export_builds_failure_summary_and_can_retry(qapp, tmp_path: Path):
+    workspace = _workspace()
+    attempts = []
+
+    def runner(document, **kwargs):
+        attempts.append(kwargs["start_index"])
+        if len(attempts) == 1:
+            document._last_export_report = {
+                "exported_count": 2,
+                "failed_count": 1,
+                "skipped_count": 1,
+            }
+            document._last_export_error = "部分任务失败"
+            return False
+        return True
+
+    view_model = BatchExportViewModel(workspace=workspace, runner=runner)
+    view_model.outputDirectory = str(tmp_path)
+    view_model.startIndex = 8
+    assert view_model.startExport() is True
+    _wait_until(qapp, lambda: not view_model.running)
+    assert view_model.canRetry is True
+    assert view_model.failureSummary == "成功 2，失败 1，跳过 1"
+    assert view_model.retryExport() is True
+    _wait_until(qapp, lambda: not view_model.running)
+    assert view_model.succeeded is True
+    assert attempts == [8, 8]
+
+
+@pytest.mark.unit
 def test_batch_export_cancel_propagates_and_preserves_canceled_state(qapp, tmp_path: Path):
     workspace = _workspace()
 

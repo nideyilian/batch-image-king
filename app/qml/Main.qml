@@ -1453,6 +1453,7 @@ ApplicationWindow {
         dim: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
+        property bool advancedOpen: false
 
         Overlay.modal: Rectangle { color: "#990a0c0d" }
         background: Rectangle {
@@ -1545,7 +1546,12 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 BodyLabel { text: "起始序号"; color: Theme.textSecondary }
-                                ExportField { width: parent.width; text: "1"; readOnly: true }
+                                ExportField {
+                                    width: parent.width
+                                    text: String(batchExport.startIndex)
+                                    placeholder: "1"
+                                    onCommitted: value => batchExport.startIndex = Math.max(0, parseInt(value) || 0)
+                                }
                             }
                         }
 
@@ -1612,6 +1618,138 @@ ApplicationWindow {
                                 ToggleSwitch {
                                     checked: batchExport.avoidDuplicates
                                     onToggled: checkedValue => batchExport.avoidDuplicates = checkedValue
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: parent.width
+                            height: 48
+                            radius: Theme.radiusSmall
+                            color: Theme.bgRaised
+                            border.width: 1
+                            border.color: Theme.border
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 10
+                                Column {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    BodyLabel { text: "遍历全部组合"; color: Theme.textPrimary }
+                                    TinyLabel { text: "按可用组合顺序生成，而非随机抽样" }
+                                }
+                                ToggleSwitch {
+                                    checked: batchExport.traverseMode
+                                    onToggled: checkedValue => batchExport.traverseMode = checkedValue
+                                }
+                            }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 10
+
+                            Rectangle {
+                                width: parent.width
+                                height: 38
+                                radius: Theme.radiusSmall
+                                color: advancedMouse.containsMouse ? Theme.bgHover : Theme.bgControl
+                                border.width: 1
+                                border.color: Theme.borderStrong
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 11
+                                    anchors.rightMargin: 8
+                                    BodyLabel { text: "高级策略"; color: Theme.textPrimary; Layout.fillWidth: true }
+                                    TinyLabel { text: batchExport.memoryGuardMode === "off" ? "无内存保护" : "内存保护已启用" }
+                                    AppIcon { glyph: batchExportDrawer.advancedOpen ? "\uE70E" : "\uE70D"; iconSize: 11; iconColor: Theme.textMuted }
+                                }
+                                MouseArea {
+                                    id: advancedMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: batchExportDrawer.advancedOpen = !batchExportDrawer.advancedOpen
+                                }
+                            }
+
+                            Column {
+                                width: parent.width
+                                spacing: 10
+                                visible: batchExportDrawer.advancedOpen
+
+                                RowLayout {
+                                    width: parent.width
+                                    BodyLabel { text: "质量策略"; Layout.preferredWidth: 74 }
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: [
+                                            { label: "高质量", value: "quality" },
+                                            { label: "均衡", value: "balanced" },
+                                            { label: "速度优先", value: "speed" },
+                                            { label: "体积优先", value: "size" }
+                                        ]
+                                        currentIndex: window.optionIndex(model, batchExport.qualityProfile)
+                                        onActivated: batchExport.qualityProfile = currentValue
+                                    }
+                                }
+                                RowLayout {
+                                    width: parent.width
+                                    BodyLabel { text: "高性能管线"; Layout.fillWidth: true }
+                                    ToggleSwitch { checked: batchExport.useHighPerformance; onToggled: checkedValue => batchExport.useHighPerformance = checkedValue }
+                                    BodyLabel { text: "预读素材"; Layout.leftMargin: 12 }
+                                    ToggleSwitch { checked: batchExport.preloadEnabled; onToggled: checkedValue => batchExport.preloadEnabled = checkedValue }
+                                }
+                                RowLayout {
+                                    width: parent.width
+                                    BodyLabel { text: "独立 Worker"; Layout.fillWidth: true }
+                                    ToggleSwitch { checked: batchExport.externalWorkerEnabled; onToggled: checkedValue => batchExport.externalWorkerEnabled = checkedValue }
+                                    TinyLabel { text: "大批量隔离主界面"; Layout.leftMargin: 8 }
+                                }
+                                RowLayout {
+                                    width: parent.width
+                                    BodyLabel { text: "内存保护"; Layout.preferredWidth: 74 }
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: [
+                                            { label: "自动", value: "auto" },
+                                            { label: "低内存", value: "low" },
+                                            { label: "自定义", value: "custom" },
+                                            { label: "关闭", value: "off" }
+                                        ]
+                                        currentIndex: window.optionIndex(model, batchExport.memoryGuardMode)
+                                        onActivated: batchExport.memoryGuardMode = currentValue
+                                    }
+                                }
+                                RowLayout {
+                                    width: parent.width
+                                    visible: batchExport.memoryGuardMode === "custom"
+                                    BodyLabel { text: "上限 MB"; Layout.preferredWidth: 62 }
+                                    ExportField { Layout.fillWidth: true; text: String(batchExport.memoryLimitMB); onCommitted: value => batchExport.memoryLimitMB = Math.max(0, parseInt(value) || 0) }
+                                    BodyLabel { text: "预留 MB"; Layout.preferredWidth: 62 }
+                                    ExportField { Layout.fillWidth: true; text: String(batchExport.memoryReserveMB); onCommitted: value => batchExport.memoryReserveMB = Math.max(256, parseInt(value) || 256) }
+                                }
+                                RowLayout {
+                                    width: parent.width
+                                    Column {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        TinyLabel { text: "连续失败上限" }
+                                        ExportField { width: parent.width; text: String(batchExport.maxConsecutiveFailures); onCommitted: value => batchExport.maxConsecutiveFailures = Math.max(1, parseInt(value) || 1) }
+                                    }
+                                    Column {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        TinyLabel { text: "失败率上限 %" }
+                                        ExportField { width: parent.width; text: String(batchExport.failureRateLimit); onCommitted: value => batchExport.failureRateLimit = Math.max(1, Math.min(100, parseInt(value) || 1)) }
+                                    }
+                                    Column {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        TinyLabel { text: "停滞超时 秒" }
+                                        ExportField { width: parent.width; text: String(batchExport.stallTimeoutSeconds); onCommitted: value => batchExport.stallTimeoutSeconds = Math.max(30, parseInt(value) || 30) }
+                                    }
                                 }
                             }
                         }
@@ -1706,6 +1844,14 @@ ApplicationWindow {
                         color: Theme.textMuted
                     }
 
+                    TinyLabel {
+                        Layout.fillWidth: true
+                        visible: batchExport.failureSummary.length > 0
+                        text: batchExport.failureSummary
+                        color: Theme.coral
+                        elide: Text.ElideRight
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
@@ -1718,11 +1864,11 @@ ApplicationWindow {
                         }
                         ExportButton {
                             Layout.fillWidth: true
-                            label: batchExport.running ? "取消导出" : (batchExport.succeeded ? "再次导出" : "开始导出")
+                            label: batchExport.running ? "取消导出" : (batchExport.canRetry ? "按原配置重试" : (batchExport.succeeded ? "再次导出" : "开始导出"))
                             glyph: batchExport.running ? "\uE71A" : "\uEDE1"
                             primary: !batchExport.running
                             destructive: batchExport.running
-                            onClicked: batchExport.running ? batchExport.cancelExport() : batchExport.startExport()
+                            onClicked: batchExport.running ? batchExport.cancelExport() : (batchExport.canRetry ? batchExport.retryExport() : batchExport.startExport())
                         }
                     }
                 }
