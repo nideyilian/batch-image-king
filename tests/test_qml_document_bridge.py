@@ -235,11 +235,36 @@ def test_workspace_rename_rotation_and_alignment_commands(tmp_path: Path):
     assert document.layers[0].x == 80
     assert workspace.alignSelected("vcenter") is True
     assert document.layers[0].y == 60
+    assert workspace.alignSelected("center") is True
+    assert (document.layers[0].x, document.layers[0].y) == (80, 60)
+    assert workspace.alignSelected("same_size") is True
+    assert (
+        document.layers[0].x,
+        document.layers[0].y,
+        document.layers[0].width,
+        document.layers[0].height,
+    ) == (0, 0, 240, 180)
 
     document.add_text_layer(TextLayer(name="文字", x=0, y=0, width=80, height=30))
     workspace.selectLayer(1)
     assert workspace.selectedCanRotate is False
     assert workspace.setSelectedRotation(30.0) is False
+
+
+@pytest.mark.unit
+def test_workspace_randomizes_all_layers_through_document_command(tmp_path: Path, monkeypatch):
+    document = _image_document(tmp_path)
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+    calls = []
+    monkeypatch.setattr(document, "randomize_all_layers", lambda: calls.append("randomized"))
+
+    assert workspace.randomizeAllLayers() is True
+    assert calls == ["randomized"]
+    assert "随机化" in workspace.statusMessage
 
 
 @pytest.mark.integration

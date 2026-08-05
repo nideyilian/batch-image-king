@@ -37,6 +37,18 @@ def test_qml_contains_the_complete_top_alignment_group():
 
 
 @pytest.mark.unit
+def test_qml_restores_original_center_size_and_randomize_commands():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    assert 'alignmentMode: "center"' in source
+    assert 'alignmentMode: "same_size"' in source
+    assert 'id: randomizeAllLayersButton' in source
+    assert 'workspace.randomizeAllLayers()' in source
+    assert 'tooltip: "完全居中于画板"' in source
+    assert 'tooltip: "完全匹配画板大小"' in source
+
+
+@pytest.mark.unit
 def test_qml_has_a_real_no_document_state():
     main_qml = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     launcher = (REPO_ROOT / "app/qml/qml_main.py").read_text(encoding="utf-8")

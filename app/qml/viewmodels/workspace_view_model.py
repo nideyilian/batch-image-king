@@ -4177,8 +4177,12 @@ class WorkspaceViewModel(QObject):
         layer = self._selected_layer()
         if layer is None:
             return False
+        mode = str(mode or "").lower()
         width = int(getattr(layer, "width", 0))
         height = int(getattr(layer, "height", 0))
+        if mode == "same_size" and bool(getattr(layer, "use_original_size", False)):
+            self._set_status("原始尺寸模式下无法匹配画板大小", toast=True)
+            return False
         alignments = {
             "left": {"x": 0},
             "hcenter": {"x": (self.canvasWidth - width) // 2},
@@ -4190,11 +4194,37 @@ class WorkspaceViewModel(QObject):
                 "x": (self.canvasWidth - width) // 2,
                 "y": (self.canvasHeight - height) // 2,
             },
+            "same_size": {
+                "x": 0,
+                "y": 0,
+                "width": self.canvasWidth,
+                "height": self.canvasHeight,
+            },
         }
-        changes = alignments.get(str(mode))
+        changes = alignments.get(mode)
         if changes is None:
             return False
         return self._set_layer_attrs(self.selectedLayerIndex, changes, "对齐图层")
+
+    @Slot(result=bool)
+    def randomizeAllLayers(self) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        if not self._document.layers:
+            self._set_status("没有可随机化的图层", toast=True)
+            return False
+        try:
+            with self._document_lock:
+                self._document.randomize_all_layers()
+        except Exception as error:
+            self._set_status(f"随机化图层失败：{error}", toast=True)
+            return False
+        self._layer_model.reset_from_document()
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已随机化所有图层", toast=True)
+        return True
 
     @Slot(int, result=bool)
     def setSelectedX(self, value: int) -> bool:

@@ -1868,6 +1868,19 @@ ApplicationWindow {
                 }
                 return
             }
+            if (mode === "center") {
+                line(1, 9, 17, 9)
+                line(9, 1, 9, 17)
+                block(5, 5, 8, 8)
+                return
+            }
+            if (mode === "same_size") {
+                line(2, 2, 16, 2); line(16, 2, 16, 16)
+                line(16, 16, 2, 16); line(2, 16, 2, 2)
+                line(5, 5, 13, 5); line(13, 5, 13, 13)
+                line(13, 13, 5, 13); line(5, 13, 5, 5)
+                return
+            }
             if (mode === "horizontal") {
                 block(1, 4, 3, 10); block(8, 2, 3, 14); block(15, 5, 3, 8)
                 line(4, 9, 8, 9); line(11, 9, 15, 9)
@@ -3092,6 +3105,13 @@ ApplicationWindow {
                         AlignmentToolButton { alignmentMode: "bottom"; tooltip: "底对齐"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
                         AlignmentToolButton { distributionMode: "horizontal"; tooltip: "水平等距分布（至少 3 个图层）"; enabled: window.hasOpenDocument && workspace.selectedLayerCount > 2 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: workspace.distributeSelectedLayers(distributionMode) }
                         AlignmentToolButton { distributionMode: "vertical"; tooltip: "垂直等距分布（至少 3 个图层）"; enabled: window.hasOpenDocument && workspace.selectedLayerCount > 2 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: workspace.distributeSelectedLayers(distributionMode) }
+                        Item {
+                            width: 7
+                            height: 30
+                            Divider { anchors.centerIn: parent; width: 1; height: 18 }
+                        }
+                        AlignmentToolButton { alignmentMode: "center"; tooltip: "完全居中于画板"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { alignmentMode: "same_size"; tooltip: "完全匹配画板大小"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
                     }
                 }
 
@@ -3672,6 +3692,20 @@ ApplicationWindow {
                                     presetHeightInput.text = String(workspace.canvasHeight)
                                     canvasPresetDrawer.open()
                                 }
+                            }
+                            Item {
+                                width: 7
+                                height: 30
+                                Divider { anchors.centerIn: parent; width: 1; height: 18 }
+                            }
+                            IconButton {
+                                id: randomizeAllLayersButton
+                                glyph: "\uE72C"
+                                tooltip: "随机化所有图层\n绑定的图层将选择匹配的图片"
+                                buttonSize: 30
+                                primary: true
+                                enabled: layerModel.rowCount() > 0 && !workspace.operationsBlocked
+                                onClicked: workspace.randomizeAllLayers()
                             }
                         }
                     }
