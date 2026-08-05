@@ -91,6 +91,19 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedRandomScaleMinPercent(parsed)' in qml_source
     assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source
     assert 'workspace.regenerateSelectedRandomTransform()' in qml_source
+    assert 'FontSelectBox {' in qml_source
+    assert 'options: workspace.selectedTextFontOptions' in qml_source
+    assert 'workspace.setSelectedTextFontFamily(value)' in qml_source
+    assert 'workspace.setSelectedTextBold(!workspace.selectedTextBold)' in qml_source
+    assert 'workspace.setSelectedTextItalic(!workspace.selectedTextItalic)' in qml_source
+    assert 'workspace.setSelectedTextAlignment(parent.modelData.value)' in qml_source
+    assert 'workspace.setSelectedTextVerticalLayout(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextLineSpacingPercent(parsed)' in qml_source
+    assert 'workspace.setSelectedTextLetterSpacing(parsed)' in qml_source
+    assert 'workspace.setSelectedTextAutoFitTextBox(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextBoxPadding(parsed)' in qml_source
+    assert 'objectName: "textTypographySection"' in qml_source
+    assert 'function revealTextTypography()' in qml_source
     assert 'property bool randomTransformEnabled' not in qml_source
     assert 'enabled: index === 0' not in qml_source
 

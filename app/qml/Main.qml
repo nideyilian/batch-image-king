@@ -51,6 +51,16 @@ ApplicationWindow {
         toastTimer.restart()
     }
 
+    function revealTextTypography() {
+        inspectorTab = 0
+        textFontSection.expanded = true
+        textTypographySection.expanded = true
+        Qt.callLater(function() {
+            if (inspectorScroll.contentItem)
+                inspectorScroll.contentItem.contentY = Math.max(0, textFontSection.y - 8)
+        })
+    }
+
     function colorChannelHex(channel) {
         var text = Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).toUpperCase()
         return text.length < 2 ? "0" + text : text
@@ -480,6 +490,50 @@ ApplicationWindow {
             color: Theme.textMuted
             Layout.preferredWidth: 52
         }
+    }
+
+    component FormatToggleButton: Rectangle {
+        id: formatButton
+        property string symbol: ""
+        property string tooltip: ""
+        property bool active: false
+        property bool italicSymbol: false
+        signal clicked()
+
+        implicitWidth: Theme.controlHeight
+        implicitHeight: Theme.controlHeight
+        radius: Theme.radiusSmall
+        color: {
+            if (!enabled) return "transparent"
+            if (formatMouse.pressed || formatMouse.containsMouse) return Theme.bgHover
+            return active ? Theme.accentSoft : "transparent"
+        }
+        border.width: active ? 1 : 0
+        border.color: Theme.accentPressed
+        opacity: enabled ? 1 : 0.38
+
+        Text {
+            anchors.centerIn: parent
+            text: formatButton.symbol
+            color: formatButton.active ? Theme.accent : Theme.textSecondary
+            font.family: Theme.bodyFont
+            font.pixelSize: 14
+            font.weight: formatButton.symbol === "B" ? Font.Bold : Font.Normal
+            font.italic: formatButton.italicSymbol
+        }
+        MouseArea {
+            id: formatMouse
+            anchors.fill: parent
+            enabled: formatButton.enabled
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: formatButton.clicked()
+        }
+        ToolTip.visible: formatMouse.containsMouse && formatButton.tooltip.length > 0
+        ToolTip.text: formatButton.tooltip
+        ToolTip.delay: 420
+        Accessible.name: tooltip
+        Accessible.role: Accessible.Button
     }
 
     component ShapeMenuItem: MenuItem {
@@ -2266,15 +2320,168 @@ ApplicationWindow {
                                         color: Theme.textSecondary
                                         Layout.fillWidth: true
                                     }
+                                }
+                            }
+
+                            PropertySection {
+                                id: textFontSection
+                                objectName: "textFontSection"
+                                width: parent.width
+                                title: "字体"
+                                summary: workspace.selectedTextFontSize + " px"
+                                visible: workspace.selectedIsTextLayer
+
+                                InspectorRow {
+                                    label: "字体"
+                                    FontSelectBox {
+                                        Layout.fillWidth: true
+                                        options: workspace.selectedTextFontOptions
+                                        value: workspace.selectedTextFontFamily
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: value => workspace.setSelectedTextFontFamily(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "样式"
                                     ValueBox {
                                         value: workspace.selectedTextFontSize.toString()
                                         bindValue: true
                                         suffix: "px"
-                                        Layout.preferredWidth: 84
-                                        editable: !workspace.selectedLocked
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedTextFontSize(parsed)
+                                        }
+                                    }
+                                    FormatToggleButton {
+                                        symbol: "B"
+                                        tooltip: "粗体"
+                                        active: workspace.selectedTextBold
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedTextBold(!workspace.selectedTextBold)
+                                    }
+                                    FormatToggleButton {
+                                        symbol: "I"
+                                        tooltip: "斜体"
+                                        italicSymbol: true
+                                        active: workspace.selectedTextItalic
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedTextItalic(!workspace.selectedTextItalic)
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                id: textTypographySection
+                                objectName: "textTypographySection"
+                                width: parent.width
+                                title: "排版"
+                                summary: workspace.selectedTextTypographySummary
+                                visible: workspace.selectedIsTextLayer
+
+                                InspectorRow {
+                                    label: "对齐"
+                                    Row {
+                                        Layout.fillWidth: true
+                                        height: Theme.controlHeight
+                                        spacing: 4
+                                        Repeater {
+                                            model: [
+                                                { label: "左", value: "left" },
+                                                { label: "中", value: "center" },
+                                                { label: "右", value: "right" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: (parent.width - 8) / 3
+                                                height: Theme.controlHeight
+                                                radius: Theme.radiusSmall
+                                                color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : Theme.bgControl
+                                                border.width: 1
+                                                border.color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong
+                                                opacity: enabled ? 1 : 0.38
+                                                enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: parent.modelData.label
+                                                    color: workspace.selectedTextAlignmentId === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                                                    font.family: Theme.bodyFont
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    enabled: parent.enabled
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: workspace.setSelectedTextAlignment(parent.modelData.value)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "方向"
+                                    BodyLabel {
+                                        text: workspace.selectedTextVerticalLayout ? "竖排" : "横排"
+                                        color: workspace.selectedTextVerticalLayout ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedTextVerticalLayout
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedTextVerticalLayout(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "间距"
+                                    ValueBox {
+                                        value: workspace.selectedTextLineSpacingPercent.toString()
+                                        bindValue: true
+                                        suffix: "行距%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextLineSpacingPercent(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTextLetterSpacing.toString()
+                                        bindValue: true
+                                        suffix: "字距px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextLetterSpacing(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "文本框"
+                                    BodyLabel {
+                                        text: workspace.selectedTextAutoFitTextBox ? "自动适配" : "手动尺寸"
+                                        color: workspace.selectedTextAutoFitTextBox ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedTextAutoFitTextBox
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedTextAutoFitTextBox(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "内边距"
+                                    ValueBox {
+                                        value: workspace.selectedTextBoxPadding.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextBoxPadding(parsed)
                                         }
                                     }
                                 }

@@ -12,6 +12,7 @@ Rectangle {
     color: checked ? Theme.accent : Theme.bgControl
     border.width: checked ? 0 : 1
     border.color: Theme.borderStrong
+    opacity: enabled ? 1 : 0.38
 
     Behavior on color {
         ColorAnimation { duration: Theme.motionNormal }
@@ -32,7 +33,8 @@ Rectangle {
 
     MouseArea {
         anchors.fill: parent
-        cursorShape: Qt.PointingHandCursor
+        enabled: root.enabled
+        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: {
             root.checked = !root.checked
             root.toggled(root.checked)

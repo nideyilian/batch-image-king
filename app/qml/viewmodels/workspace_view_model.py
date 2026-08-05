@@ -9,7 +9,7 @@ from typing import Optional
 import uuid
 
 from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage
 
 from app.models.document import Document
 from app.models.layer_new import Layer
@@ -53,6 +53,15 @@ _CROP_DIRECTIONS = {
 }
 _CROP_DIRECTION_IDS = {
     value: key for key, (value, _label) in _CROP_DIRECTIONS.items()
+}
+
+_TEXT_ALIGNMENTS = {
+    "left": ("LEFT", "左对齐"),
+    "center": ("CENTER", "居中"),
+    "right": ("RIGHT", "右对齐"),
+}
+_TEXT_ALIGNMENT_IDS = {
+    value: key for key, (value, _label) in _TEXT_ALIGNMENTS.items()
 }
 
 
@@ -130,6 +139,7 @@ class WorkspaceViewModel(QObject):
         self._render_running = False
         self._render_pending = False
         self._active_render_task = None
+        self._text_font_names_cache = None
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(70)
@@ -652,6 +662,113 @@ class WorkspaceViewModel(QObject):
         if not self.selectedIsTextLayer:
             return 0
         return int(getattr(self._selected_layer(), "font_size", 0) or 0)
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextFontFamily(self) -> str:
+        if not self.selectedIsTextLayer:
+            return ""
+        return str(getattr(self._selected_layer(), "font_family", "") or "")
+
+    def _load_text_font_names(self, layer):
+        if QGuiApplication.instance() is not None:
+            return QFontDatabase.families()
+        return layer.get_system_fonts()
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedTextFontOptions(self):
+        if not self.selectedIsTextLayer:
+            return []
+        layer = self._selected_layer()
+        if self._text_font_names_cache is None:
+            try:
+                font_names = self._load_text_font_names(layer)
+            except Exception:
+                font_names = []
+            fallbacks = [
+                "Microsoft YaHei",
+                "SimHei",
+                "SimSun",
+                "Arial",
+                "Segoe UI",
+            ]
+            unique_names = []
+            seen = set()
+            candidates = list(font_names or []) or fallbacks
+            for name in candidates:
+                normalized = str(name or "").strip()
+                if not normalized or normalized.casefold() in seen:
+                    continue
+                seen.add(normalized.casefold())
+                unique_names.append(normalized)
+            self._text_font_names_cache = unique_names
+
+        current = self.selectedTextFontFamily
+        names = [current] if current else []
+        names.extend(
+            name for name in self._text_font_names_cache
+            if name.casefold() != current.casefold()
+        )
+        return [{"label": name, "value": name} for name in names]
+
+    def _selected_text_style_name(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "NORMAL"
+        return str(getattr(self._selected_layer(), "font_style", "NORMAL") or "NORMAL").upper()
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextBold(self) -> bool:
+        return self._selected_text_style_name() in ("BOLD", "BOLD_ITALIC")
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextItalic(self) -> bool:
+        return self._selected_text_style_name() in ("ITALIC", "BOLD_ITALIC")
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextAlignmentId(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "left"
+        value = str(getattr(self._selected_layer(), "text_align", "LEFT") or "LEFT").upper()
+        return _TEXT_ALIGNMENT_IDS.get(value, "left")
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextAlignmentName(self) -> str:
+        return _TEXT_ALIGNMENTS[self.selectedTextAlignmentId][1]
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextLineSpacingPercent(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 120
+        return round(float(getattr(self._selected_layer(), "line_spacing", 1.2)) * 100)
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextLetterSpacing(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        return int(getattr(self._selected_layer(), "letter_spacing", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextBoxPadding(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        return int(getattr(self._selected_layer(), "text_box_padding", 0))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextAutoFitTextBox(self) -> bool:
+        return self.selectedIsTextLayer and bool(
+            getattr(self._selected_layer(), "auto_fit_text_box", False)
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextVerticalLayout(self) -> bool:
+        return self.selectedIsTextLayer and bool(
+            getattr(self._selected_layer(), "vertical_layout", False)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextTypographySummary(self) -> str:
+        direction = "竖排" if self.selectedTextVerticalLayout else "横排"
+        box_mode = "自动文本框" if self.selectedTextAutoFitTextBox else "手动文本框"
+        return f"{self.selectedTextAlignmentName} · {direction} · {box_mode}"
 
     @Property(bool, notify=selectionChanged)
     def canDuplicateLayer(self) -> bool:
@@ -1290,6 +1407,103 @@ class WorkspaceViewModel(QObject):
             "修改文字字号",
             lambda layer: setattr(layer, "font_size", value),
             f"文字字号 · {value} px",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextFontFamily(self, family: str) -> bool:
+        family = str(family or "").strip()
+        if not family:
+            self._set_status("字体名称不能为空", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字字体",
+            lambda layer: setattr(layer, "font_family", family),
+            f"文字字体 · {family}",
+        )
+
+    @staticmethod
+    def _font_style_name(bold: bool, italic: bool) -> str:
+        if bold and italic:
+            return "BOLD_ITALIC"
+        if bold:
+            return "BOLD"
+        if italic:
+            return "ITALIC"
+        return "NORMAL"
+
+    @Slot(bool, result=bool)
+    def setSelectedTextBold(self, enabled: bool) -> bool:
+        style = self._font_style_name(bool(enabled), self.selectedTextItalic)
+        return self._change_selected_text(
+            "切换文字粗体",
+            lambda layer: setattr(layer, "font_style", style),
+            "文字粗体已开启" if enabled else "文字粗体已关闭",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedTextItalic(self, enabled: bool) -> bool:
+        style = self._font_style_name(self.selectedTextBold, bool(enabled))
+        return self._change_selected_text(
+            "切换文字斜体",
+            lambda layer: setattr(layer, "font_style", style),
+            "文字斜体已开启" if enabled else "文字斜体已关闭",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextAlignment(self, alignment_id: str) -> bool:
+        alignment = _TEXT_ALIGNMENTS.get(str(alignment_id or "").strip().lower())
+        if alignment is None:
+            self._set_status("未知的文字对齐方式", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字对齐",
+            lambda layer: setattr(layer, "text_align", alignment[0]),
+            f"文字对齐 · {alignment[1]}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextLineSpacingPercent(self, value: int) -> bool:
+        value = max(50, min(300, int(value)))
+        return self._change_selected_text(
+            "修改文字行距",
+            lambda layer: setattr(layer, "line_spacing", value / 100.0),
+            f"文字行距 · {value}%",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextLetterSpacing(self, value: int) -> bool:
+        value = max(-20, min(100, int(value)))
+        return self._change_selected_text(
+            "修改文字字距",
+            lambda layer: setattr(layer, "letter_spacing", value),
+            f"文字字距 · {value} px",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextBoxPadding(self, value: int) -> bool:
+        value = max(0, min(200, int(value)))
+        return self._change_selected_text(
+            "修改文字内边距",
+            lambda layer: setattr(layer, "text_box_padding", value),
+            f"文字内边距 · {value} px",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedTextAutoFitTextBox(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        return self._change_selected_text(
+            "切换自动文本框",
+            lambda layer: setattr(layer, "auto_fit_text_box", enabled),
+            "自动文本框已开启" if enabled else "自动文本框已关闭",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedTextVerticalLayout(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        return self._change_selected_text(
+            "切换文字排版方向",
+            lambda layer: setattr(layer, "vertical_layout", enabled),
+            "文字已切换为竖排" if enabled else "文字已切换为横排",
         )
 
     @Slot(result=bool)

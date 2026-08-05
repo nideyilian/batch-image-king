@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo-tabs", action="store_true", help="启动后创建多个文档标签用于验收")
     parser.add_argument("--demo-shaped", action="store_true", help="启动后创建真实异形图层用于验收")
     parser.add_argument("--show-random-transform", action="store_true", help="展示图片图层随机变换配置")
+    parser.add_argument("--show-text-typography", action="store_true", help="展示文字字体与核心排版配置")
     return parser.parse_args()
 
 
@@ -94,6 +95,8 @@ def main() -> int:
         workspace.selectLayer(args.select_layer)
     elif args.show_random_transform:
         workspace.selectLayer(0)
+    elif args.show_text_typography:
+        workspace.selectLayer(1)
     elif args.demo_effects:
         workspace.selectLayer(0)
     if args.demo_effects:
@@ -124,6 +127,14 @@ def main() -> int:
         layer.random_rotation_range = 8.0
         layer.generate_random_transform_params()
         workspace.selectionChanged.emit()
+    if args.show_text_typography:
+        workspace.setSelectedTextFontFamily("Microsoft YaHei")
+        workspace.setSelectedTextFontSize(72)
+        workspace.setSelectedTextBold(True)
+        workspace.setSelectedTextAlignment("center")
+        workspace.setSelectedTextLineSpacingPercent(130)
+        workspace.setSelectedTextLetterSpacing(2)
+        workspace.setSelectedTextBoxPadding(18)
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:
@@ -166,6 +177,13 @@ def main() -> int:
                 flickable.setProperty("contentY", max(0, content_height - viewport_height))
 
         QTimer.singleShot(900, reveal_random_transform)
+
+    if args.show_text_typography:
+        def reveal_text_typography() -> None:
+            if not QMetaObject.invokeMethod(window, "revealTextTypography"):
+                debug("text typography section could not be revealed")
+
+        QTimer.singleShot(120, reveal_text_typography)
 
     if args.show_batch_export:
         def open_batch_export() -> None:
