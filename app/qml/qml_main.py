@@ -31,6 +31,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-text-effects", action="store_true", help="展示文字阴影、发光与样式工具")
     parser.add_argument("--show-crop-tools", action="store_true", help="展示图片自由裁剪工具")
     parser.add_argument("--show-vector-path", action="store_true", help="展示矢量路径节点编辑")
+    parser.add_argument("--show-multi-select", action="store_true", help="展示多图层选择与编排")
+    parser.add_argument("--show-grouped-layers", action="store_true", help="展示图层组层级与属性")
     return parser.parse_args()
 
 
@@ -105,7 +107,7 @@ def main() -> int:
         workspace.selectLayer(1)
     elif args.show_text_effects:
         workspace.selectLayer(1)
-    elif args.show_crop_tools or args.show_vector_path:
+    elif args.show_crop_tools or args.show_vector_path or args.show_multi_select or args.show_grouped_layers:
         workspace.selectLayer(0)
     elif args.demo_effects:
         workspace.selectLayer(0)
@@ -182,6 +184,13 @@ def main() -> int:
         workspace.convertSelectedToVectorPath()
         workspace.selectVectorNode(1)
         workspace.setSelectedVectorNodeType("smooth")
+    if args.show_multi_select:
+        workspace.document.select_layers([0, 1, 2], primary_index=0)
+        workspace.layerModel.reset_from_document()
+        workspace.selectionChanged.emit()
+    if args.show_grouped_layers:
+        workspace.document.select_layers([0, 1], primary_index=0)
+        workspace.groupSelectedLayers()
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:

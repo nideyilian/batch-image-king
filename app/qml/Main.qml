@@ -1306,17 +1306,20 @@ ApplicationWindow {
                 IconButton {
                     glyph: "\uE74B"; tooltip: "左对齐"
                     enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                    onClicked: workspace.alignSelected("left")
+                    onClicked: workspace.selectedLayerCount > 1
+                               ? workspace.alignSelectedLayers("left") : workspace.alignSelected("left")
                 }
                 IconButton {
                     glyph: "\uE74A"; tooltip: "水平居中"
                     enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                    onClicked: workspace.alignSelected("hcenter")
+                    onClicked: workspace.selectedLayerCount > 1
+                               ? workspace.alignSelectedLayers("hcenter") : workspace.alignSelected("hcenter")
                 }
                 IconButton {
                     glyph: "\uE73F"; tooltip: "垂直居中"
                     enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                    onClicked: workspace.alignSelected("vcenter")
+                    onClicked: workspace.selectedLayerCount > 1
+                               ? workspace.alignSelectedLayers("vcenter") : workspace.alignSelected("vcenter")
                 }
 
                 Item { Layout.fillWidth: true }
@@ -1576,23 +1579,29 @@ ApplicationWindow {
                             required property color accent
                             required property bool shown
                             required property bool locked
+                            required property bool selected
+                            required property int depth
+                            required property bool isGroup
+                            required property bool expanded
+                            required property bool parentExpanded
 
                             width: layerList.width
-                            height: 62
-                            color: selectedLayer === index ? Theme.bgSelected : (layerMouse.containsMouse ? Theme.bgRaised : "transparent")
+                            height: parentExpanded ? 62 : 0
+                            visible: parentExpanded
+                            color: selected ? Theme.bgSelected : (layerMouse.containsMouse ? Theme.bgRaised : "transparent")
 
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
                                 width: 2
-                                color: selectedLayer === index ? Theme.accent : "transparent"
+                                color: selected ? Theme.accent : "transparent"
                             }
 
                             IconButton {
                                 id: eyeButton
                                 anchors.left: parent.left
-                                anchors.leftMargin: 6
+                                anchors.leftMargin: 6 + layerDelegate.depth * 12
                                 anchors.verticalCenter: parent.verticalCenter
                                 glyph: layerDelegate.shown ? "\uE890" : "\uED1A"
                                 tooltip: layerDelegate.shown ? "隐藏图层" : "显示图层"
@@ -1600,8 +1609,20 @@ ApplicationWindow {
                                 onClicked: workspace.toggleLayerVisible(layerDelegate.index)
                             }
 
-                            Rectangle {
+                            IconButton {
+                                id: disclosureButton
                                 anchors.left: eyeButton.right
+                                anchors.leftMargin: 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: layerDelegate.isGroup
+                                glyph: layerDelegate.expanded ? "\uE70D" : "\uE76C"
+                                tooltip: layerDelegate.expanded ? "折叠图层组" : "展开图层组"
+                                buttonSize: 22
+                                onClicked: workspace.toggleLayerGroupExpanded(layerDelegate.index)
+                            }
+
+                            Rectangle {
+                                anchors.left: layerDelegate.isGroup ? disclosureButton.right : eyeButton.right
                                 anchors.leftMargin: 4
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 38
@@ -1621,12 +1642,12 @@ ApplicationWindow {
 
                             Column {
                                 anchors.left: parent.left
-                                anchors.leftMargin: 82
+                                anchors.leftMargin: 82 + layerDelegate.depth * 12 + (layerDelegate.isGroup ? 20 : 0)
                                 anchors.right: lockButton.left
                                 anchors.rightMargin: 6
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 3
-                                Text { width: parent.width; text: layerDelegate.name; color: selectedLayer === index ? Theme.textPrimary : Theme.textSecondary; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: selectedLayer === index ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                Text { width: parent.width; text: layerDelegate.name; color: layerDelegate.selected ? Theme.textPrimary : Theme.textSecondary; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: layerDelegate.selected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                 TinyLabel { text: layerDelegate.typeName; color: Theme.textMuted; height: 15 }
                             }
 
@@ -1646,9 +1667,61 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.leftMargin: 38
                                 anchors.rightMargin: 38
+                                acceptedButtons: Qt.LeftButton | Qt.RightButton
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: workspace.selectLayer(layerDelegate.index)
+                                drag.target: layerDelegate
+                                drag.axis: Drag.YAxis
+                                drag.minimumY: 0
+                                drag.maximumY: Math.max(0, layerList.contentHeight - layerDelegate.height)
+                                property real dragStartY: 0
+                                onPressed: mouse => {
+                                    dragStartY = layerDelegate.y
+                                    if (mouse.button === Qt.RightButton) {
+                                        if (!layerDelegate.selected)
+                                            workspace.selectLayer(layerDelegate.index)
+                                        layerContextMenu.popup()
+                                    }
+                                }
+                                onClicked: mouse => {
+                                    if (mouse.button !== Qt.LeftButton) return
+                                    workspace.selectLayerWithModifiers(
+                                        layerDelegate.index,
+                                        (mouse.modifiers & Qt.ControlModifier) !== 0,
+                                        (mouse.modifiers & Qt.ShiftModifier) !== 0
+                                    )
+                                }
+                                onReleased: mouse => {
+                                    if (mouse.button !== Qt.LeftButton || Math.abs(layerDelegate.y - dragStartY) < 8) return
+                                    var mapped = layerDelegate.mapToItem(layerList.contentItem, 8, layerDelegate.height / 2)
+                                    var dropIndex = layerList.indexAt(mapped.x, mapped.y)
+                                    if (dropIndex >= 0)
+                                        workspace.moveSelectedLayersTo(dropIndex)
+                                }
+                            }
+
+                            Menu {
+                                id: layerContextMenu
+                                ShapeMenuItem {
+                                    text: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
+                                    onTriggered: workspace.selectedLayerCount > 1
+                                                 ? workspace.duplicateSelectedLayers()
+                                                 : workspace.duplicateSelectedLayer()
+                                }
+                                ShapeMenuItem { text: "建立图层组"; enabled: workspace.canGroupSelectedLayers; onTriggered: workspace.groupSelectedLayers() }
+                                ShapeMenuItem { text: "解散图层组"; enabled: workspace.canUngroupSelectedLayers; onTriggered: workspace.ungroupSelectedGroups() }
+                                MenuSeparator { }
+                                ShapeMenuItem { text: "显示所选"; onTriggered: workspace.setSelectedLayersVisible(true) }
+                                ShapeMenuItem { text: "隐藏所选"; onTriggered: workspace.setSelectedLayersVisible(false) }
+                                ShapeMenuItem { text: "锁定所选"; onTriggered: workspace.setSelectedLayersLocked(true) }
+                                ShapeMenuItem { text: "解锁所选"; onTriggered: workspace.setSelectedLayersLocked(false) }
+                                MenuSeparator { }
+                                ShapeMenuItem { text: "左对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("left") }
+                                ShapeMenuItem { text: "顶对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("top") }
+                                ShapeMenuItem { text: "水平等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("horizontal") }
+                                ShapeMenuItem { text: "垂直等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("vertical") }
+                                MenuSeparator { }
+                                ShapeMenuItem { text: "删除所选图层"; onTriggered: workspace.deleteSelectedLayers() }
                             }
 
                             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
@@ -1666,15 +1739,18 @@ ApplicationWindow {
                             IconButton { glyph: "\uE710"; tooltip: "添加图片图层"; buttonSize: 28; enabled: !workspace.operationsBlocked; onClicked: imageDialog.open() }
                             IconButton {
                                 glyph: "\uE8C8"
-                                tooltip: "复制图层 · Ctrl+D"
+                                tooltip: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层 · Ctrl+D"
                                 buttonSize: 28
-                                enabled: workspace.canDuplicateLayer
-                                onClicked: workspace.duplicateSelectedLayer()
+                                enabled: workspace.selectedLayerCount > 1 || workspace.canDuplicateLayer
+                                onClicked: workspace.selectedLayerCount > 1
+                                           ? workspace.duplicateSelectedLayers()
+                                           : workspace.duplicateSelectedLayer()
                             }
                             IconButton {
                                 glyph: "\uE8C8"
                                 tooltip: "复制图层样式"
                                 buttonSize: 28
+                                visible: workspace.selectedLayerCount <= 1
                                 enabled: workspace.selectedLayerIndex >= 0 && !workspace.operationsBlocked
                                 onClicked: workspace.copySelectedLayerStyle()
                             }
@@ -1684,6 +1760,7 @@ ApplicationWindow {
                                          ? "粘贴图层样式 · " + workspace.layerStyleClipboardSummary
                                          : "粘贴图层样式 · 尚未复制"
                                 buttonSize: 28
+                                visible: workspace.selectedLayerCount <= 1
                                 enabled: workspace.hasLayerStyleClipboard
                                          && workspace.selectedLayerIndex >= 0
                                          && !workspace.selectedLocked
@@ -1691,9 +1768,26 @@ ApplicationWindow {
                                 onClicked: workspace.pasteSelectedLayerStyle()
                             }
                             IconButton {
+                                glyph: "\uE8B0"
+                                tooltip: "建立图层组"
+                                buttonSize: 28
+                                visible: workspace.selectedLayerCount > 1
+                                enabled: workspace.canGroupSelectedLayers
+                                onClicked: workspace.groupSelectedLayers()
+                            }
+                            IconButton {
+                                glyph: "\uE8D7"
+                                tooltip: "解散图层组"
+                                buttonSize: 28
+                                visible: workspace.canUngroupSelectedLayers
+                                enabled: workspace.canUngroupSelectedLayers
+                                onClicked: workspace.ungroupSelectedGroups()
+                            }
+                            IconButton {
                                 glyph: "\uE70E"
                                 tooltip: "后移一层 · Ctrl+["
                                 buttonSize: 28
+                                visible: workspace.selectedLayerCount <= 1
                                 enabled: workspace.canMoveLayerBackward
                                 onClicked: workspace.moveSelectedLayer("backward")
                             }
@@ -1701,6 +1795,7 @@ ApplicationWindow {
                                 glyph: "\uE70D"
                                 tooltip: "前移一层 · Ctrl+]"
                                 buttonSize: 28
+                                visible: workspace.selectedLayerCount <= 1
                                 enabled: workspace.canMoveLayerForward
                                 onClicked: workspace.moveSelectedLayer("forward")
                             }
@@ -1709,7 +1804,9 @@ ApplicationWindow {
                                 tooltip: "删除图层"
                                 buttonSize: 28
                                 enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                                onClicked: workspace.deleteSelectedLayer()
+                                onClicked: workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
+                                           ? workspace.deleteSelectedLayers()
+                                           : workspace.deleteSelectedLayer()
                             }
                         }
                     }
@@ -1744,13 +1841,22 @@ ApplicationWindow {
                 property real transientY: workspace.selectedY
                 property real transientWidth: Math.max(1, workspace.selectedWidth)
                 property real transientHeight: Math.max(1, workspace.selectedHeight)
+                property bool marqueeActive: false
+                property bool marqueeAdditive: false
+                property real marqueeStartX: 0
+                property real marqueeStartY: 0
+                property real marqueeCurrentX: 0
+                property real marqueeCurrentY: 0
 
                 function selectedLocalPoint(canvasX, canvasY) {
-                    var width = Math.max(1, workspace.selectedWidth)
-                    var height = Math.max(1, workspace.selectedHeight)
-                    var centerX = workspace.selectedX + width / 2
-                    var centerY = workspace.selectedY + height / 2
-                    var radians = workspace.selectedRotation * Math.PI / 180
+                    var aggregate = workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
+                    var width = Math.max(1, aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth)
+                    var height = Math.max(1, aggregate ? workspace.selectionBoundsHeight : workspace.selectedHeight)
+                    var originX = aggregate ? workspace.selectionBoundsX : workspace.selectedX
+                    var originY = aggregate ? workspace.selectionBoundsY : workspace.selectedY
+                    var centerX = originX + width / 2
+                    var centerY = originY + height / 2
+                    var radians = (aggregate ? 0 : workspace.selectedRotation) * Math.PI / 180
                     var offsetX = canvasX - centerX
                     var offsetY = canvasY - centerY
                     return {
@@ -1760,7 +1866,8 @@ ApplicationWindow {
                 }
 
                 function handleAt(canvasX, canvasY) {
-                    if (workspace.selectedLayerIndex < 0 || workspace.selectedLocked || Math.abs(workspace.selectedRotation) > 0.001)
+                    if (workspace.selectedLayerCount !== 1 || workspace.selectedIsLayerGroup
+                            || workspace.selectedLocked || Math.abs(workspace.selectedRotation) > 0.001)
                         return ""
                     var point = selectedLocalPoint(canvasX, canvasY)
                     var width = Math.max(1, workspace.selectedWidth)
@@ -1781,8 +1888,10 @@ ApplicationWindow {
                     if (workspace.selectedLayerIndex < 0)
                         return false
                     var point = selectedLocalPoint(canvasX, canvasY)
-                    return point.x >= 0 && point.x <= workspace.selectedWidth
-                            && point.y >= 0 && point.y <= workspace.selectedHeight
+                    var aggregate = workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
+                    var width = aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth
+                    var height = aggregate ? workspace.selectionBoundsHeight : workspace.selectedHeight
+                    return point.x >= 0 && point.x <= width && point.y >= 0 && point.y <= height
                 }
 
                 function pointerCursor(canvasX, canvasY) {
@@ -1797,10 +1906,11 @@ ApplicationWindow {
                     transformMode = mode
                     gestureStartMouseX = canvasX
                     gestureStartMouseY = canvasY
-                    gestureStartX = workspace.selectedX
-                    gestureStartY = workspace.selectedY
-                    gestureStartWidth = Math.max(1, workspace.selectedWidth)
-                    gestureStartHeight = Math.max(1, workspace.selectedHeight)
+                    var aggregate = workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
+                    gestureStartX = aggregate ? workspace.selectionBoundsX : workspace.selectedX
+                    gestureStartY = aggregate ? workspace.selectionBoundsY : workspace.selectedY
+                    gestureStartWidth = Math.max(1, aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth)
+                    gestureStartHeight = Math.max(1, aggregate ? workspace.selectionBoundsHeight : workspace.selectedHeight)
                     transientX = gestureStartX
                     transientY = gestureStartY
                     transientWidth = gestureStartWidth
@@ -1869,7 +1979,10 @@ ApplicationWindow {
                     var finalHeight = Math.round(transientHeight)
                     transformActive = false
                     transformMode = ""
-                    workspace.applySelectedGeometry(finalX, finalY, finalWidth, finalHeight)
+                    if (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup)
+                        workspace.moveSelectedLayersBy(finalX - gestureStartX, finalY - gestureStartY)
+                    else
+                        workspace.applySelectedGeometry(finalX, finalY, finalWidth, finalHeight)
                 }
 
                 function cancelTransform() {
@@ -1945,26 +2058,78 @@ ApplicationWindow {
                                     canvasWorkspace.beginTransform(handle, mouse.x, mouse.y)
                                     return
                                 }
-                                var selectedIndex = workspace.selectLayerAt(mouse.x, mouse.y)
-                                if (selectedIndex >= 0 && !workspace.selectedLocked)
+                                var ctrl = (mouse.modifiers & Qt.ControlModifier) !== 0
+                                var shift = (mouse.modifiers & Qt.ShiftModifier) !== 0
+                                var selectedIndex = workspace.hitTestLayerAt(mouse.x, mouse.y)
+                                if (selectedIndex >= 0) {
+                                    workspace.selectLayerWithModifiers(selectedIndex, ctrl, shift)
+                                }
+                                if (selectedIndex >= 0 && !workspace.selectedLocked) {
                                     canvasWorkspace.beginTransform("move", mouse.x, mouse.y)
+                                    return
+                                }
+                                canvasWorkspace.marqueeActive = true
+                                canvasWorkspace.marqueeAdditive = ctrl
+                                canvasWorkspace.marqueeStartX = mouse.x
+                                canvasWorkspace.marqueeStartY = mouse.y
+                                canvasWorkspace.marqueeCurrentX = mouse.x
+                                canvasWorkspace.marqueeCurrentY = mouse.y
                             }
                             onPositionChanged: mouse => {
-                                if (pressed)
+                                if (!pressed) return
+                                if (canvasWorkspace.transformActive)
                                     canvasWorkspace.updateTransform(mouse.x, mouse.y)
+                                else if (canvasWorkspace.marqueeActive) {
+                                    canvasWorkspace.marqueeCurrentX = mouse.x
+                                    canvasWorkspace.marqueeCurrentY = mouse.y
+                                }
                             }
-                            onReleased: canvasWorkspace.commitTransform()
-                            onCanceled: canvasWorkspace.cancelTransform()
+                            onReleased: {
+                                if (canvasWorkspace.transformActive) {
+                                    canvasWorkspace.commitTransform()
+                                    return
+                                }
+                                if (canvasWorkspace.marqueeActive) {
+                                    workspace.selectLayersInRect(
+                                        canvasWorkspace.marqueeStartX,
+                                        canvasWorkspace.marqueeStartY,
+                                        canvasWorkspace.marqueeCurrentX,
+                                        canvasWorkspace.marqueeCurrentY,
+                                        canvasWorkspace.marqueeAdditive
+                                    )
+                                    canvasWorkspace.marqueeActive = false
+                                }
+                            }
+                            onCanceled: {
+                                canvasWorkspace.cancelTransform()
+                                canvasWorkspace.marqueeActive = false
+                            }
+                        }
+
+                        Rectangle {
+                            visible: canvasWorkspace.marqueeActive
+                            x: Math.min(canvasWorkspace.marqueeStartX, canvasWorkspace.marqueeCurrentX)
+                            y: Math.min(canvasWorkspace.marqueeStartY, canvasWorkspace.marqueeCurrentY)
+                            width: Math.abs(canvasWorkspace.marqueeCurrentX - canvasWorkspace.marqueeStartX)
+                            height: Math.abs(canvasWorkspace.marqueeCurrentY - canvasWorkspace.marqueeStartY)
+                            color: "#2330b58f"
+                            border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                            border.color: Theme.accent
+                            z: 8
                         }
 
                         Rectangle {
                             id: selectionBox
                             visible: workspace.selectedLayerIndex >= 0
-                            x: canvasWorkspace.transformActive ? canvasWorkspace.transientX : workspace.selectedX
-                            y: canvasWorkspace.transformActive ? canvasWorkspace.transientY : workspace.selectedY
-                            width: canvasWorkspace.transformActive ? canvasWorkspace.transientWidth : Math.max(1, workspace.selectedWidth)
-                            height: canvasWorkspace.transformActive ? canvasWorkspace.transientHeight : Math.max(1, workspace.selectedHeight)
-                            rotation: workspace.selectedCanRotate ? workspace.selectedRotation : 0
+                            x: canvasWorkspace.transformActive ? canvasWorkspace.transientX
+                               : (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup ? workspace.selectionBoundsX : workspace.selectedX)
+                            y: canvasWorkspace.transformActive ? canvasWorkspace.transientY
+                               : (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup ? workspace.selectionBoundsY : workspace.selectedY)
+                            width: canvasWorkspace.transformActive ? canvasWorkspace.transientWidth
+                                   : Math.max(1, workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup ? workspace.selectionBoundsWidth : workspace.selectedWidth)
+                            height: canvasWorkspace.transformActive ? canvasWorkspace.transientHeight
+                                    : Math.max(1, workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup ? workspace.selectionBoundsHeight : workspace.selectedHeight)
+                            rotation: workspace.selectedLayerCount === 1 && !workspace.selectedIsLayerGroup && workspace.selectedCanRotate ? workspace.selectedRotation : 0
                             transformOrigin: Item.Center
                             color: canvasWorkspace.transformActive ? "#153fd2aa" : "transparent"
                             border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
@@ -1977,7 +2142,9 @@ ApplicationWindow {
                                 ]
                                 delegate: Rectangle {
                                     required property var modelData
-                                    visible: !workspace.selectedLocked
+                                    visible: workspace.selectedLayerCount === 1
+                                             && !workspace.selectedIsLayerGroup
+                                             && !workspace.selectedLocked
                                              && !workspace.cropEditing
                                              && !workspace.selectedVectorPathEnabled
                                              && Math.abs(workspace.selectedRotation) <= 0.001
@@ -3032,8 +3199,57 @@ ApplicationWindow {
 
                             PropertySection {
                                 width: parent.width
+                                title: "图层组"
+                                summary: workspace.selectedGroupChildCount + " 个图层"
+                                visible: workspace.selectedIsLayerGroup
+
+                                InspectorRow {
+                                    label: "名称"
+                                    ValueBox {
+                                        value: workspace.selectedLayerName
+                                        bindValue: true
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => workspace.setSelectedName(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "展开"
+                                    BodyLabel {
+                                        text: workspace.selectedGroupExpanded ? "已展开" : "已折叠"
+                                        color: Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedGroupExpanded
+                                        enabled: !workspace.operationsBlocked
+                                        onToggled: workspace.toggleLayerGroupExpanded(workspace.selectedLayerIndex)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "组状态"
+                                    IconButton {
+                                        glyph: workspace.selectedLocked ? "\uE72E" : "\uE785"
+                                        tooltip: workspace.selectedLocked ? "解锁图层组" : "锁定图层组"
+                                        buttonSize: 30
+                                        active: workspace.selectedLocked
+                                        onClicked: workspace.setSelectedLayersLocked(!workspace.selectedLocked)
+                                    }
+                                    IconButton {
+                                        glyph: "\uE8D7"
+                                        tooltip: "解散图层组"
+                                        buttonSize: 30
+                                        enabled: workspace.canUngroupSelectedLayers && !workspace.selectedLocked
+                                        onClicked: workspace.ungroupSelectedGroups()
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                width: parent.width
                                 title: "变换"
                                 summary: "px / °"
+                                visible: !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "名称"
@@ -3096,6 +3312,7 @@ ApplicationWindow {
                                     width: parent.width
                                     title: "外观"
                                     summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
+                                    visible: !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "不透明度"

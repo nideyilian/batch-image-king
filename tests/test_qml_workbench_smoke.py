@@ -50,7 +50,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'title: "内容源"' in qml_source
     assert 'title: "文字内容"' in qml_source
     assert 'tooltip: "添加素材文件夹"' in qml_source
-    assert 'tooltip: "复制图层 · Ctrl+D"' in qml_source
+    assert '"复制图层 · Ctrl+D"' in qml_source
     assert 'workspace.moveSelectedLayer("forward")' in qml_source
     assert 'sequence: "Ctrl+D"' in qml_source
     assert 'id: effectColorDialog' in qml_source
@@ -92,6 +92,14 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.moveSelectedVectorNode(' in qml_source
     assert 'workspace.moveSelectedVectorHandle(' in qml_source
     assert 'workspace.cycleSelectedVectorNodeType()' in qml_source
+    assert 'workspace.selectLayerWithModifiers(' in qml_source
+    assert 'workspace.selectLayersInRect(' in qml_source
+    assert 'workspace.moveSelectedLayersBy(' in qml_source
+    assert 'workspace.moveSelectedLayersTo(dropIndex)' in qml_source
+    assert 'workspace.groupSelectedLayers()' in qml_source
+    assert 'workspace.ungroupSelectedGroups()' in qml_source
+    assert 'workspace.alignSelectedLayers("left")' in qml_source
+    assert 'workspace.distributeSelectedLayers("horizontal")' in qml_source
     assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source

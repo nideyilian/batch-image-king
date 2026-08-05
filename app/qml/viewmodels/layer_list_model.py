@@ -12,6 +12,11 @@ class LayerListModel(QAbstractListModel):
     AccentRole = Qt.UserRole + 4
     ShownRole = Qt.UserRole + 5
     LockedRole = Qt.UserRole + 6
+    SelectedRole = Qt.UserRole + 7
+    DepthRole = Qt.UserRole + 8
+    IsGroupRole = Qt.UserRole + 9
+    ExpandedRole = Qt.UserRole + 10
+    ParentExpandedRole = Qt.UserRole + 11
 
     _ROLE_NAMES = {
         NameRole: QByteArray(b"name"),
@@ -20,6 +25,11 @@ class LayerListModel(QAbstractListModel):
         AccentRole: QByteArray(b"accent"),
         ShownRole: QByteArray(b"shown"),
         LockedRole: QByteArray(b"locked"),
+        SelectedRole: QByteArray(b"selected"),
+        DepthRole: QByteArray(b"depth"),
+        IsGroupRole: QByteArray(b"isGroup"),
+        ExpandedRole: QByteArray(b"expanded"),
+        ParentExpandedRole: QByteArray(b"parentExpanded"),
     }
 
     def __init__(self, document=None, parent=None) -> None:
@@ -59,6 +69,23 @@ class LayerListModel(QAbstractListModel):
             return bool(getattr(layer, "visible", True))
         if role == self.LockedRole:
             return bool(getattr(layer, "locked", False))
+        if role == self.SelectedRole:
+            return row in list(getattr(self._document, "selected_layer_indices", []) or [])
+        if role == self.DepthRole:
+            from app.utils.layer_tree import get_parent_group_id
+            return 1 if get_parent_group_id(layer) else 0
+        if role == self.IsGroupRole:
+            from app.utils.layer_tree import is_layer_group
+            return is_layer_group(layer)
+        if role == self.ExpandedRole:
+            return bool(getattr(layer, "expanded", True))
+        if role == self.ParentExpandedRole:
+            from app.utils.layer_tree import get_parent_group_id, group_map
+            group_id = get_parent_group_id(layer)
+            if not group_id:
+                return True
+            group = group_map(getattr(self._document, "layers", [])).get(group_id)
+            return bool(getattr(group, "expanded", True)) if group is not None else True
         return None
 
     @staticmethod
@@ -106,7 +133,7 @@ class LayerListModel(QAbstractListModel):
     def _connect_document(self) -> None:
         if self._document is None:
             return
-        for signal_name in ("layer_changed", "layers_changed"):
+        for signal_name in ("layer_changed", "layers_changed", "layers_selection_changed"):
             signal = getattr(self._document, signal_name, None)
             if signal is not None:
                 signal.connect(self.reset_from_document)
@@ -114,7 +141,7 @@ class LayerListModel(QAbstractListModel):
     def _disconnect_document(self) -> None:
         if self._document is None:
             return
-        for signal_name in ("layer_changed", "layers_changed"):
+        for signal_name in ("layer_changed", "layers_changed", "layers_selection_changed"):
             signal = getattr(self._document, signal_name, None)
             if signal is not None:
                 try:

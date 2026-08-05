@@ -13,11 +13,20 @@ from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QU
 from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage
 
 from app.models.document import Document
+from app.models.layer_group import LayerGroup
 from app.models.layer_new import Layer
 from app.models.layer_properties import ShapeType
 from app.models.shaped_layer_new import ShapedLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.layer_list_model import LayerListModel
+from app.utils.layer_tree import (
+    child_indices_for_group,
+    expand_group_indices,
+    get_parent_group_id,
+    is_effectively_locked,
+    is_layer_group,
+    set_parent_group_id,
+)
 
 
 _BLEND_MODES = {
@@ -217,6 +226,7 @@ class WorkspaceViewModel(QObject):
         self._crop_edit_original = None
         self._crop_edit_was_modified = False
         self._selected_vector_node_index = -1
+        self._selection_anchor_index = -1
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(70)
@@ -265,6 +275,92 @@ class WorkspaceViewModel(QObject):
     @Property(int, notify=selectionChanged)
     def selectedLayerIndex(self) -> int:
         return int(getattr(self._document, "selected_layer_index", -1))
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedLayerIndices(self):
+        return [
+            int(index)
+            for index in list(getattr(self._document, "selected_layer_indices", []) or [])
+            if 0 <= int(index) < len(getattr(self._document, "layers", []))
+        ]
+
+    @Property(int, notify=selectionChanged)
+    def selectedLayerCount(self) -> int:
+        return len(self.selectedLayerIndices)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedIsLayerGroup(self) -> bool:
+        return isinstance(self._selected_layer(), LayerGroup)
+
+    @Property(int, notify=selectionChanged)
+    def selectedGroupChildCount(self) -> int:
+        group = self._selected_layer()
+        if not isinstance(group, LayerGroup):
+            return 0
+        return len(child_indices_for_group(self._document.layers, group.group_id))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedGroupExpanded(self) -> bool:
+        group = self._selected_layer()
+        return bool(getattr(group, "expanded", False)) if isinstance(group, LayerGroup) else False
+
+    @Property(bool, notify=selectionChanged)
+    def canGroupSelectedLayers(self) -> bool:
+        movable = [
+            index
+            for index in self.selectedLayerIndices
+            if not is_layer_group(self._document.layers[index])
+            and not get_parent_group_id(self._document.layers[index])
+            and not is_effectively_locked(self._document.layers[index], self._document.layers)
+        ]
+        return len(movable) >= 2 and not self._export_running
+
+    @Property(bool, notify=selectionChanged)
+    def canUngroupSelectedLayers(self) -> bool:
+        return any(
+            isinstance(self._document.layers[index], LayerGroup)
+            for index in self.selectedLayerIndices
+        ) and not self._export_running
+
+    def _selected_content_indices(self):
+        return expand_group_indices(
+            self._document.layers,
+            self.selectedLayerIndices,
+            include_groups=False,
+        )
+
+    def _selection_bounds(self):
+        bounds = []
+        for index in self._selected_content_indices():
+            layer = self._document.layers[index]
+            if not all(hasattr(layer, attr) for attr in ("x", "y", "width", "height")):
+                continue
+            x = int(layer.x)
+            y = int(layer.y)
+            bounds.append((x, y, x + int(layer.width), y + int(layer.height)))
+        if not bounds:
+            return 0, 0, 0, 0
+        left = min(item[0] for item in bounds)
+        top = min(item[1] for item in bounds)
+        right = max(item[2] for item in bounds)
+        bottom = max(item[3] for item in bounds)
+        return left, top, right - left, bottom - top
+
+    @Property(int, notify=selectionChanged)
+    def selectionBoundsX(self) -> int:
+        return self._selection_bounds()[0]
+
+    @Property(int, notify=selectionChanged)
+    def selectionBoundsY(self) -> int:
+        return self._selection_bounds()[1]
+
+    @Property(int, notify=selectionChanged)
+    def selectionBoundsWidth(self) -> int:
+        return self._selection_bounds()[2]
+
+    @Property(int, notify=selectionChanged)
+    def selectionBoundsHeight(self) -> int:
+        return self._selection_bounds()[3]
 
     def _selected_layer(self):
         return self._layer_model.layer_at(self.selectedLayerIndex)
@@ -1202,6 +1298,7 @@ class WorkspaceViewModel(QObject):
             self._crop_edit_index = -1
             self._crop_edit_original = None
             self._selected_vector_node_index = -1
+            self._selection_anchor_index = -1
             self._disconnect_document()
             self._document = document
             self._layer_model.set_document(document)
@@ -1239,6 +1336,7 @@ class WorkspaceViewModel(QObject):
             return
         self._document.document_changed.connect(self._on_document_changed)
         self._document.layer_selected.connect(self._on_layer_selected)
+        self._document.layers_selection_changed.connect(self._on_layers_selected)
         self._document.history_changed.connect(self.historyStateChanged.emit)
 
     def _disconnect_document(self) -> None:
@@ -1247,6 +1345,7 @@ class WorkspaceViewModel(QObject):
         connections = (
             (self._document.document_changed, self._on_document_changed),
             (self._document.layer_selected, self._on_layer_selected),
+            (self._document.layers_selection_changed, self._on_layers_selected),
             (self._document.history_changed, self.historyStateChanged.emit),
         )
         for signal, slot in connections:
@@ -1263,6 +1362,12 @@ class WorkspaceViewModel(QObject):
     @Slot(int)
     def _on_layer_selected(self, index: int) -> None:
         del index
+        self.selectionChanged.emit()
+
+    @Slot(list)
+    def _on_layers_selected(self, indices) -> None:
+        del indices
+        self._layer_model.reset_from_document()
         self.selectionChanged.emit()
 
     @staticmethod
@@ -2325,14 +2430,403 @@ class WorkspaceViewModel(QObject):
         self._set_status(f"图层已{action_text}", toast=True)
         return True
 
+    def _finish_arrangement(self, action: str, status: str, *, render: bool = True) -> None:
+        self._document.is_modified = True
+        self._document._invalidate_render_cache()
+        self._document.bump_hit_test_version()
+        self._document.save_state(action)
+        self._document.layer_changed.emit()
+        self._document.document_changed.emit()
+        self._layer_model.reset_from_document()
+        self.selectionChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        if render:
+            self.requestPreview(force=True)
+        self._set_status(status, toast=True)
+
+    @Slot(int, bool, bool, result=bool)
+    def selectLayerWithModifiers(self, index: int, ctrl: bool, shift: bool) -> bool:
+        if self._layer_model.layer_at(index) is None:
+            return False
+        current = self.selectedLayerIndices
+        if shift and self._selection_anchor_index >= 0:
+            start = min(self._selection_anchor_index, index)
+            end = max(self._selection_anchor_index, index)
+            selection = list(range(start, end + 1))
+            primary = index
+        elif ctrl:
+            selection = list(current)
+            if index in selection:
+                selection.remove(index)
+                primary = selection[-1] if selection else -1
+            else:
+                selection.append(index)
+                primary = index
+            self._selection_anchor_index = index if primary >= 0 else -1
+        else:
+            selection = [index]
+            primary = index
+            self._selection_anchor_index = index
+        self._document.select_layers(selection, primary_index=primary)
+        self._selected_vector_node_index = -1
+        self.vectorEditChanged.emit()
+        return True
+
+    @Slot(float, float, float, float, bool, result=bool)
+    def selectLayersInRect(self, left: float, top: float, right: float, bottom: float, additive: bool) -> bool:
+        x1, x2 = sorted((float(left), float(right)))
+        y1, y2 = sorted((float(top), float(bottom)))
+        hits = []
+        for index, layer in enumerate(self._document.layers):
+            if is_layer_group(layer) or not bool(getattr(layer, "visible", True)):
+                continue
+            if not all(hasattr(layer, attr) for attr in ("x", "y", "width", "height")):
+                continue
+            layer_left = float(layer.x)
+            layer_top = float(layer.y)
+            layer_right = layer_left + float(layer.width)
+            layer_bottom = layer_top + float(layer.height)
+            if layer_right >= x1 and layer_left <= x2 and layer_bottom >= y1 and layer_top <= y2:
+                hits.append(index)
+        selection = list(self.selectedLayerIndices) if additive else []
+        for index in hits:
+            if index not in selection:
+                selection.append(index)
+        primary = hits[-1] if hits else (selection[-1] if selection else -1)
+        self._document.select_layers(selection, primary_index=primary)
+        self._selection_anchor_index = primary
+        return bool(hits)
+
+    @Slot(float, float, result=int)
+    def hitTestLayerAt(self, x: float, y: float) -> int:
+        for index in range(len(self._document.layers) - 1, -1, -1):
+            layer = self._document.layers[index]
+            if is_layer_group(layer):
+                continue
+            if not bool(getattr(layer, "visible", True)) or is_effectively_locked(layer, self._document.layers):
+                continue
+            if self._layer_contains_point(layer, x, y):
+                return index
+        return -1
+
+    @Slot(float, float, bool, bool, result=int)
+    def selectLayerAtWithModifiers(self, x: float, y: float, ctrl: bool, shift: bool) -> int:
+        index = self.hitTestLayerAt(x, y)
+        if index >= 0:
+            self.selectLayerWithModifiers(index, ctrl, shift)
+        elif not ctrl and not shift:
+            self.clearSelection()
+        return index
+
+    @Slot(int, int, result=bool)
+    def moveSelectedLayersBy(self, delta_x: int, delta_y: int) -> bool:
+        indices = self._selected_content_indices()
+        movable = [
+            index for index in indices
+            if not is_effectively_locked(self._document.layers[index], self._document.layers)
+            and all(hasattr(self._document.layers[index], attr) for attr in ("x", "y", "width", "height"))
+        ]
+        if not movable:
+            return False
+        left, top, width, height = self._selection_bounds()
+        dx = max(-left, min(int(delta_x), self.canvasWidth - left - width))
+        dy = max(-top, min(int(delta_y), self.canvasHeight - top - height))
+        if dx == 0 and dy == 0:
+            return True
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for index in movable:
+                layer = self._document.layers[index]
+                layer.x = int(layer.x) + dx
+                layer.y = int(layer.y) + dy
+            self._finish_arrangement("移动多个图层", f"已移动 {len(movable)} 个图层")
+        return True
+
+    @Slot(result=bool)
+    def groupSelectedLayers(self) -> bool:
+        if not self.canGroupSelectedLayers:
+            self._set_status("请选择至少两个未分组且未锁定的图层", toast=True)
+            return False
+        movable = sorted(
+            index for index in self.selectedLayerIndices
+            if not is_layer_group(self._document.layers[index])
+            and not get_parent_group_id(self._document.layers[index])
+            and not is_effectively_locked(self._document.layers[index], self._document.layers)
+        )
+        with self._document_lock:
+            self._ensure_history_baseline()
+            group_count = sum(is_layer_group(layer) for layer in self._document.layers)
+            group = LayerGroup(name=f"图层组 {group_count + 1}", parent=self._document)
+            selected_layers = [self._document.layers[index] for index in movable]
+            selected_set = set(movable)
+            insert_at = min(movable)
+            remaining = [
+                layer for index, layer in enumerate(self._document.layers)
+                if index not in selected_set
+            ]
+            for layer in selected_layers:
+                set_parent_group_id(layer, group.group_id)
+            self._document.layers = remaining[:insert_at] + [group] + selected_layers + remaining[insert_at:]
+            group_index = self._document.layers.index(group)
+            self._document.select_layers([group_index], primary_index=group_index)
+            self._selection_anchor_index = group_index
+            self._finish_arrangement("建立图层组", f"已建立包含 {len(selected_layers)} 个图层的组")
+        return True
+
+    @Slot(result=bool)
+    def ungroupSelectedGroups(self) -> bool:
+        group_indices = [
+            index for index in self.selectedLayerIndices
+            if isinstance(self._document.layers[index], LayerGroup)
+        ]
+        if not group_indices:
+            return False
+        with self._document_lock:
+            self._ensure_history_baseline()
+            group_ids = {
+                str(self._document.layers[index].group_id)
+                for index in group_indices
+            }
+            self._document.layers = [
+                layer for index, layer in enumerate(self._document.layers)
+                if index not in set(group_indices)
+            ]
+            child_indices = []
+            for index, layer in enumerate(self._document.layers):
+                if get_parent_group_id(layer) in group_ids:
+                    set_parent_group_id(layer, None)
+                    child_indices.append(index)
+            primary = child_indices[0] if child_indices else -1
+            self._document.select_layers(child_indices, primary_index=primary)
+            self._selection_anchor_index = primary
+            self._finish_arrangement("解散图层组", f"已解散 {len(group_indices)} 个图层组")
+        return True
+
+    @Slot(int, result=bool)
+    def toggleLayerGroupExpanded(self, index: int) -> bool:
+        group = self._layer_model.layer_at(index)
+        if not isinstance(group, LayerGroup):
+            return False
+        with self._document_lock:
+            self._ensure_history_baseline()
+            group.expanded = not group.expanded
+            self._document.is_modified = True
+            self._document.save_state("切换图层组展开")
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        return True
+
+    @Slot(bool, result=bool)
+    def setSelectedLayersVisible(self, visible: bool) -> bool:
+        indices = self.selectedLayerIndices
+        changes = {
+            index: self._document.layers[index]
+            for index in indices
+            if bool(getattr(self._document.layers[index], "visible", True)) != bool(visible)
+        }
+        if not changes:
+            return True
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for layer in changes.values():
+                layer.visible = bool(visible)
+            action = "批量显示图层" if visible else "批量隐藏图层"
+            self._finish_arrangement(action, f"已{action[2:4]} {len(changes)} 个图层")
+        return True
+
+    @Slot(bool, result=bool)
+    def setSelectedLayersLocked(self, locked: bool) -> bool:
+        indices = self.selectedLayerIndices
+        changes = [
+            self._document.layers[index]
+            for index in indices
+            if bool(getattr(self._document.layers[index], "locked", False)) != bool(locked)
+        ]
+        if not changes:
+            return True
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for layer in changes:
+                layer.locked = bool(locked)
+            action = "批量锁定图层" if locked else "批量解锁图层"
+            self._finish_arrangement(action, f"已{action[2:4]} {len(changes)} 个图层", render=False)
+        return True
+
+    @Slot(result=bool)
+    def duplicateSelectedLayers(self) -> bool:
+        indices = self._selected_content_indices()
+        originals = [
+            self._document.layers[index]
+            for index in indices
+            if callable(getattr(self._document.layers[index], "duplicate", None))
+            and not is_effectively_locked(self._document.layers[index], self._document.layers)
+        ]
+        if not originals:
+            return False
+        with self._document_lock:
+            self._ensure_history_baseline()
+            insert_at = max(indices) + 1
+            duplicates = []
+            for original in originals:
+                try:
+                    duplicate = original.duplicate(parent=self._document)
+                except TypeError:
+                    duplicate = original.duplicate()
+                if hasattr(duplicate, "_layer_id"):
+                    duplicate._layer_id = str(uuid.uuid4())
+                duplicate.name = self._duplicate_layer_name(getattr(original, "name", ""))
+                if hasattr(duplicate, "x"):
+                    duplicate.x = min(max(0, self.canvasWidth - int(duplicate.width)), int(original.x) + 12)
+                    duplicate.y = min(max(0, self.canvasHeight - int(duplicate.height)), int(original.y) + 12)
+                set_parent_group_id(duplicate, get_parent_group_id(original))
+                duplicates.append(duplicate)
+            self._document.layers[insert_at:insert_at] = duplicates
+            duplicate_indices = list(range(insert_at, insert_at + len(duplicates)))
+            self._document.select_layers(duplicate_indices, primary_index=duplicate_indices[0])
+            self._selection_anchor_index = duplicate_indices[0]
+            self._finish_arrangement("复制多个图层", f"已复制 {len(duplicates)} 个图层")
+        return True
+
+    @Slot(result=bool)
+    def deleteSelectedLayers(self) -> bool:
+        indices = expand_group_indices(
+            self._document.layers,
+            self.selectedLayerIndices,
+            include_groups=True,
+        )
+        deletable = sorted({
+            index for index in indices
+            if not is_effectively_locked(self._document.layers[index], self._document.layers)
+        })
+        if not deletable:
+            return False
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for index in reversed(deletable):
+                layer = self._document.layers[index]
+                if hasattr(self._document, "binding_manager") and self._document.binding_manager:
+                    self._document.binding_manager.remove_layer_from_group(layer)
+                del self._document.layers[index]
+            fallback = min(deletable[0], len(self._document.layers) - 1) if self._document.layers else -1
+            self._document.select_layers([fallback] if fallback >= 0 else [], primary_index=fallback)
+            self._selection_anchor_index = fallback
+            self._finish_arrangement("删除多个图层", f"已删除 {len(deletable)} 个图层")
+        return True
+
+    @Slot(int, result=bool)
+    def moveSelectedLayersTo(self, target_index: int) -> bool:
+        indices = sorted(expand_group_indices(
+            self._document.layers,
+            self.selectedLayerIndices,
+            include_groups=True,
+        ))
+        if not indices:
+            return False
+        target_index = max(0, min(int(target_index), len(self._document.layers) - 1))
+        if target_index in indices:
+            return True
+        with self._document_lock:
+            self._ensure_history_baseline()
+            selected_objects = [self._document.layers[index] for index in indices]
+            remaining = [
+                layer for index, layer in enumerate(self._document.layers)
+                if index not in set(indices)
+            ]
+            insert_at = target_index - sum(index < target_index for index in indices)
+            insert_at = max(0, min(insert_at, len(remaining)))
+            self._document.layers = remaining[:insert_at] + selected_objects + remaining[insert_at:]
+            new_indices = [self._document.layers.index(layer) for layer in selected_objects]
+            self._document.select_layers(new_indices, primary_index=new_indices[0])
+            self._selection_anchor_index = new_indices[0]
+            self._finish_arrangement("重新排序图层", f"已移动 {len(selected_objects)} 个图层", render=False)
+        return True
+
+    @Slot(str, result=bool)
+    def alignSelectedLayers(self, mode: str) -> bool:
+        indices = self._selected_content_indices()
+        if len(indices) < 2:
+            return False
+        primary = self.selectedLayerIndex if self.selectedLayerIndex in indices else indices[0]
+        reference = self._document.layers[primary]
+        mode = str(mode or "").lower()
+        changed = []
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for index in indices:
+                if index == primary:
+                    continue
+                layer = self._document.layers[index]
+                if is_effectively_locked(layer, self._document.layers):
+                    continue
+                before = (layer.x, layer.y, layer.width, layer.height)
+                if mode == "left":
+                    layer.x = reference.x
+                elif mode == "hcenter":
+                    layer.x = round(reference.x + reference.width / 2 - layer.width / 2)
+                elif mode == "right":
+                    layer.x = reference.x + reference.width - layer.width
+                elif mode == "top":
+                    layer.y = reference.y
+                elif mode == "vcenter":
+                    layer.y = round(reference.y + reference.height / 2 - layer.height / 2)
+                elif mode == "bottom":
+                    layer.y = reference.y + reference.height - layer.height
+                elif mode == "same_size":
+                    layer.width = reference.width
+                    layer.height = reference.height
+                else:
+                    return False
+                if before != (layer.x, layer.y, layer.width, layer.height):
+                    changed.append(layer)
+            if not changed:
+                return True
+            self._finish_arrangement("对齐多个图层", f"已对齐 {len(changed)} 个图层")
+        return True
+
+    @Slot(str, result=bool)
+    def distributeSelectedLayers(self, axis: str) -> bool:
+        indices = self._selected_content_indices()
+        if len(indices) < 3:
+            self._set_status("等距分布至少需要三个图层", toast=True)
+            return False
+        horizontal = str(axis or "").lower() == "horizontal"
+        if not horizontal and str(axis or "").lower() != "vertical":
+            return False
+        position_attr = "x" if horizontal else "y"
+        size_attr = "width" if horizontal else "height"
+        indices = sorted(indices, key=lambda index: getattr(self._document.layers[index], position_attr))
+        layers = [self._document.layers[index] for index in indices]
+        start = float(getattr(layers[0], position_attr))
+        end = float(getattr(layers[-1], position_attr) + getattr(layers[-1], size_attr))
+        total_size = sum(float(getattr(layer, size_attr)) for layer in layers)
+        gap = (end - start - total_size) / (len(layers) - 1)
+        cursor = start
+        changed = []
+        with self._document_lock:
+            self._ensure_history_baseline()
+            for offset, layer in enumerate(layers):
+                target = round(cursor)
+                if offset not in (0, len(layers) - 1) and not is_effectively_locked(layer, self._document.layers):
+                    if int(getattr(layer, position_attr)) != target:
+                        setattr(layer, position_attr, target)
+                        changed.append(layer)
+                cursor += float(getattr(layer, size_attr)) + gap
+            if not changed:
+                return True
+            direction = "水平" if horizontal else "垂直"
+            self._finish_arrangement(f"{direction}等距分布图层", f"已{direction}等距分布")
+        return True
+
     @Slot(int, result=bool)
     def selectLayer(self, index: int) -> bool:
         if self._layer_model.layer_at(index) is None:
             return False
         if self._crop_edit_original is not None and index != self._crop_edit_index:
             self.cancelCropEdit()
-        self._document.selected_layer_index = int(index)
-        self._document.selected_layer_indices = [int(index)]
+        self._document.select_layers([int(index)], primary_index=int(index))
+        self._selection_anchor_index = int(index)
         self._selected_vector_node_index = -1
         self.selectionChanged.emit()
         self.vectorEditChanged.emit()
@@ -2344,8 +2838,8 @@ class WorkspaceViewModel(QObject):
             return True
         if self._crop_edit_original is not None:
             self.cancelCropEdit()
-        self._document.selected_layer_index = -1
-        self._document.selected_layer_indices = []
+        self._document.select_layers([], primary_index=-1)
+        self._selection_anchor_index = -1
         self._selected_vector_node_index = -1
         self.selectionChanged.emit()
         self.vectorEditChanged.emit()

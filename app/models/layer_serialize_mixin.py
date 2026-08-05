@@ -58,6 +58,9 @@ class LayerSerializeMixin:
         elif layer_type == 'ShapedLayer':
             from app.models.shaped_layer_new import ShapedLayer
             target_cls = ShapedLayer
+        elif layer_type == 'group':
+            from app.models.layer_group import LayerGroup
+            return LayerGroup.deserialize(data, parent=parent)
         if not hasattr(target_cls, 'deserialize'):
             target_cls = cls
         return target_cls.deserialize(data, parent=parent)
