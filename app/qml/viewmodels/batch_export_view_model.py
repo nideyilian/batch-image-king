@@ -4,6 +4,7 @@ import os
 import threading
 from pathlib import Path
 from typing import Callable, Optional
+from weakref import WeakKeyDictionary
 
 from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
@@ -80,6 +81,7 @@ class BatchExportViewModel(QObject):
         self._error_message = ""
         self._cancel_event = threading.Event()
         self._active_task = None
+        self._document_states = WeakKeyDictionary()
 
         workspace.documentObjectChanged.connect(self.setDocument)
         self.setDocument(workspace.document)
@@ -224,18 +226,70 @@ class BatchExportViewModel(QObject):
             except (RuntimeError, TypeError):
                 pass
 
+    def _snapshot_state(self) -> dict:
+        return {
+            "output_directory": self._output_directory,
+            "count": self._count,
+            "filename_template": self._filename_template,
+            "file_format": self._file_format,
+            "avoid_duplicates": self._avoid_duplicates,
+            "succeeded": self._succeeded,
+            "canceled": self._canceled,
+            "current": self._current,
+            "total": self._total,
+            "stage": self._stage,
+            "last_file": self._last_file,
+            "error_message": self._error_message,
+        }
+
+    @staticmethod
+    def _default_state() -> dict:
+        return {
+            "output_directory": "",
+            "count": 12,
+            "filename_template": "image_{number:04d}",
+            "file_format": "png",
+            "avoid_duplicates": True,
+            "succeeded": False,
+            "canceled": False,
+            "current": 0,
+            "total": 0,
+            "stage": "等待开始",
+            "last_file": "",
+            "error_message": "",
+        }
+
+    def _restore_state(self, state: dict) -> None:
+        self._output_directory = state["output_directory"]
+        self._count = state["count"]
+        self._filename_template = state["filename_template"]
+        self._file_format = state["file_format"]
+        self._avoid_duplicates = state["avoid_duplicates"]
+        self._succeeded = state["succeeded"]
+        self._canceled = state["canceled"]
+        self._current = state["current"]
+        self._total = state["total"]
+        self._stage = state["stage"]
+        self._last_file = state["last_file"]
+        self._error_message = state["error_message"]
+
     @Slot(object)
     def setDocument(self, document) -> None:
         if document is self._document:
             return
         if self._running:
             return
+        if self._document is not None:
+            self._document_states[self._document] = self._snapshot_state()
         self._disconnect_document()
         self._document = document
+        self._restore_state(self._document_states.get(document, self._default_state()))
         if self._document is not None:
             self._document.export_progress_updated.connect(self._on_progress)
             self._document.file_exported.connect(self._on_file_exported)
             self._document.export_stage_updated.connect(self._on_stage)
+        self.configChanged.emit()
+        self.stateChanged.emit()
         self.documentChanged.emit()
 
     def _set_error(self, message: str) -> None:

@@ -517,6 +517,27 @@ class WorkspaceViewModel(QObject):
         self.historyStateChanged.emit()
         self.documentObjectChanged.emit(document)
 
+    @Slot(object, result=bool)
+    def activateDocument(self, document) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        if not isinstance(document, Document):
+            self._set_status("无法切换到无效文档", toast=True)
+            return False
+        if document is self._document:
+            return True
+
+        self._preview_timer.stop()
+        self._render_request_id += 1
+        self._render_pending = False
+        self._preview_provider.clear()
+        self._preview_revision += 1
+        self._set_document(document)
+        self.previewChanged.emit()
+        self._set_status(f"已切换到 {self.documentTitle}")
+        self.requestPreview(force=True)
+        return True
+
     def _connect_document(self) -> None:
         if self._document is None:
             return

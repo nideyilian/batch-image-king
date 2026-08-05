@@ -64,6 +64,13 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedGradientOverlayEnabled(checkedValue)' in qml_source
     assert 'workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)' in qml_source
     assert 'workspace.setSelectedGradientOverlayAngle(modelData)' in qml_source
+    assert 'model: workspaceSessions' in qml_source
+    assert 'workspaceSessions.activateDocument(documentTab.index)' in qml_source
+    assert 'workspaceSessions.requestClose(documentTab.index)' in qml_source
+    assert 'id: newCanvasDialog' in qml_source
+    assert 'workspaceSessions.newDocument(widthValue, heightValue)' in qml_source
+    assert 'id: closeConfirmDialog' in qml_source
+    assert 'workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex' in qml_source
     assert 'enabled: index === 0' not in qml_source
 
 

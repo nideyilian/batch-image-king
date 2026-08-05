@@ -23,6 +23,7 @@ ApplicationWindow {
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
+    property string pendingCloseTitle: ""
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
         { label: "正片叠底", value: "multiply" },
@@ -64,6 +65,18 @@ ApplicationWindow {
         function onSelectionChanged() { selectedTextEditor.releaseFocus() }
     }
 
+    Connections {
+        target: workspaceSessions
+        function onCloseConfirmationRequested(index, title) {
+            pendingCloseTitle = title
+            closeConfirmDialog.open()
+        }
+        function onSavePathRequested(index, title) {
+            pendingCloseTitle = title
+            closeSaveDialog.open()
+        }
+    }
+
     Shortcut {
         sequence: "Ctrl+D"
         enabled: window.layerShortcutsEnabled && workspace.canDuplicateLayer
@@ -87,7 +100,198 @@ ApplicationWindow {
         title: "打开批图王项目"
         fileMode: FileDialog.OpenFile
         nameFilters: ["批图王项目 (*.cmp)"]
-        onAccepted: workspace.openDocument(selectedFile.toString())
+        onAccepted: workspaceSessions.openDocument(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: closeSaveDialog
+        title: "保存后关闭 " + pendingCloseTitle
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "cmp"
+        nameFilters: ["批图王项目 (*.cmp)"]
+        onAccepted: workspaceSessions.saveAndClose(
+            workspaceSessions.pendingCloseIndex,
+            selectedFile.toString()
+        )
+        onRejected: workspaceSessions.cancelClose()
+    }
+
+    Dialog {
+        id: newCanvasDialog
+        objectName: "newCanvasDialog"
+        anchors.centerIn: parent
+        width: 440
+        height: 410
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+
+        function chooseSize(widthValue, heightValue) {
+            canvasWidthInput.text = String(widthValue)
+            canvasHeightInput.text = String(heightValue)
+        }
+
+        function createCanvas() {
+            var widthValue = parseInt(canvasWidthInput.text)
+            var heightValue = parseInt(canvasHeightInput.text)
+            if (workspaceSessions.newDocument(widthValue, heightValue)) close()
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            spacing: 16
+            anchors.margins: 20
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "新建画布"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: newCanvasDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            BodyLabel { text: "常用尺寸"; color: Theme.textPrimary }
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 8
+                columnSpacing: 8
+
+                Repeater {
+                    model: [
+                        { label: "商品竖图", size: "1080 x 1350", width: 1080, height: 1350 },
+                        { label: "方形主图", size: "1080 x 1080", width: 1080, height: 1080 },
+                        { label: "横版画面", size: "1920 x 1080", width: 1920, height: 1080 },
+                        { label: "竖版画面", size: "1080 x 1920", width: 1080, height: 1920 }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 48
+                        radius: Theme.radiusSmall
+                        color: presetMouse.containsMouse ? Theme.bgHover : Theme.bgControl
+                        border.width: 1
+                        border.color: Theme.borderStrong
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 2
+                            BodyLabel { text: modelData.label; color: Theme.textPrimary; anchors.horizontalCenter: parent.horizontalCenter }
+                            TinyLabel { text: modelData.size; anchors.horizontalCenter: parent.horizontalCenter }
+                        }
+                        MouseArea {
+                            id: presetMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: newCanvasDialog.chooseSize(modelData.width, modelData.height)
+                        }
+                    }
+                }
+            }
+
+            BodyLabel { text: "自定义尺寸"; color: Theme.textPrimary }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
+
+                TextField {
+                    id: canvasWidthInput
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 38
+                    text: "1080"
+                    placeholderText: "宽度"
+                    color: Theme.textPrimary
+                    selectByMouse: true
+                    validator: IntValidator { bottom: 16; top: 32768 }
+                    background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: canvasWidthInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                }
+                TinyLabel { text: "x"; Layout.preferredWidth: 10; horizontalAlignment: Text.AlignHCenter }
+                TextField {
+                    id: canvasHeightInput
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 38
+                    text: "1350"
+                    placeholderText: "高度"
+                    color: Theme.textPrimary
+                    selectByMouse: true
+                    validator: IntValidator { bottom: 16; top: 32768 }
+                    background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: canvasHeightInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                    Keys.onReturnPressed: newCanvasDialog.createCanvas()
+                }
+                TinyLabel { text: "px"; Layout.preferredWidth: 18; horizontalAlignment: Text.AlignRight }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: newCanvasDialog.close() }
+                ExportButton { Layout.preferredWidth: 112; label: "创建画布"; glyph: "\uE710"; primary: true; onClicked: newCanvasDialog.createCanvas() }
+            }
+        }
+    }
+
+    Dialog {
+        id: closeConfirmDialog
+        anchors.centerIn: parent
+        width: 430
+        height: 180
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        onRejected: workspaceSessions.cancelClose()
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            spacing: 18
+            anchors.margins: 22
+            Text {
+                text: "保存对文档的更改？"
+                color: Theme.textPrimary
+                font.family: Theme.displayFont
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+            Text {
+                Layout.fillWidth: true
+                text: pendingCloseTitle
+                color: Theme.textSecondary
+                font.family: Theme.bodyFont
+                font.pixelSize: 12
+                elide: Text.ElideMiddle
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                ExportButton { Layout.preferredWidth: 86; label: "取消"; onClicked: { workspaceSessions.cancelClose(); closeConfirmDialog.close() } }
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 96; label: "不保存"; destructive: true; onClicked: { workspaceSessions.discardAndClose(workspaceSessions.pendingCloseIndex); closeConfirmDialog.close() } }
+                ExportButton { Layout.preferredWidth: 104; label: "保存"; glyph: "\uE74E"; primary: true; onClicked: { closeConfirmDialog.close(); workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex, "") } }
+            }
+        }
     }
 
     FileDialog {
@@ -912,25 +1116,85 @@ ApplicationWindow {
             Layout.preferredHeight: 36
             color: Theme.bgBar
 
-            Row {
+            RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 48
+                spacing: 0
 
-                Rectangle {
-                    width: 220
-                    height: 36
-                    color: Theme.bgCanvas
-                    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; height: 2; color: Theme.accent }
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Rectangle { width: 6; height: 6; radius: 3; color: Theme.amber; visible: workspace.isModified; anchors.verticalCenter: parent.verticalCenter }
-                        BodyLabel { text: workspace.documentTitle; color: Theme.textPrimary; height: 22 }
-                        AppIcon { glyph: "\uE711"; iconSize: 10; height: 22 }
+                Item { Layout.preferredWidth: 48 }
+
+                ListView {
+                    id: documentTabList
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    orientation: ListView.Horizontal
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+                    spacing: 1
+                    model: workspaceSessions
+                    currentIndex: workspaceSessions.activeIndex
+
+                    delegate: Rectangle {
+                        id: documentTab
+                        required property int index
+                        required property string title
+                        required property bool modified
+                        required property bool active
+
+                        width: Math.min(240, Math.max(150, tabTitle.implicitWidth + 70))
+                        height: 36
+                        color: active ? Theme.bgCanvas : (tabMouse.containsMouse ? Theme.bgRaised : Theme.bgBar)
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: 2
+                            color: documentTab.active ? Theme.accent : "transparent"
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 5
+                            spacing: 7
+                            Rectangle { Layout.preferredWidth: 6; Layout.preferredHeight: 6; radius: 3; color: Theme.amber; visible: documentTab.modified }
+                            Text {
+                                id: tabTitle
+                                Layout.fillWidth: true
+                                text: documentTab.title
+                                color: documentTab.active ? Theme.textPrimary : Theme.textSecondary
+                                font.family: Theme.bodyFont
+                                font.pixelSize: 11
+                                font.weight: documentTab.active ? Font.DemiBold : Font.Normal
+                                elide: Text.ElideMiddle
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            IconButton {
+                                glyph: "\uE711"
+                                tooltip: "关闭文档"
+                                buttonSize: 24
+                                onClicked: workspaceSessions.requestClose(documentTab.index)
+                            }
+                        }
+
+                        MouseArea {
+                            id: tabMouse
+                            anchors.fill: parent
+                            anchors.rightMargin: 30
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: workspaceSessions.activateDocument(documentTab.index)
+                        }
                     }
                 }
 
-                IconButton { glyph: "\uE710"; tooltip: "新建文档"; buttonSize: 36; onClicked: workspace.newDocument(1080, 1350) }
+                IconButton {
+                    glyph: "\uE710"
+                    tooltip: "新建文档"
+                    buttonSize: 36
+                    Layout.preferredWidth: 40
+                    onClicked: newCanvasDialog.open()
+                }
             }
 
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }

@@ -18,9 +18,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
+    parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
+    parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")
     parser.add_argument("--demo-effects", action="store_true", help="为选中图片图层应用演示效果")
     parser.add_argument("--select-layer", type=int, help="启动后选中指定图层索引")
     parser.add_argument("--duplicate-selected", action="store_true", help="启动后复制当前选中图层")
+    parser.add_argument("--demo-tabs", action="store_true", help="启动后创建多个文档标签用于验收")
     return parser.parse_args()
 
 
@@ -52,6 +55,7 @@ def main() -> int:
     from PySide6.QtQuick import QQuickItem
     from app.qml.preview_image_provider import PreviewImageProvider
     from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+    from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
     debug("creating QGuiApplication")
@@ -76,9 +80,6 @@ def main() -> int:
     )
     batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
     engine.addImageProvider("documentPreview", preview_provider)
-    engine.rootContext().setContextProperty("workspace", workspace)
-    engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
-    engine.rootContext().setContextProperty("batchExport", batch_export)
 
     if args.open_path:
         workspace.openDocument(str(args.open_path.expanduser().resolve()))
@@ -103,6 +104,17 @@ def main() -> int:
         workspace.setSelectedGradientOverlayAngle(45.0)
     if args.duplicate_selected:
         workspace.duplicateSelectedLayer()
+
+    workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
+    if args.demo_tabs:
+        workspace_sessions.newDocument(1080, 1080)
+        workspace_sessions.newDocument(1920, 1080)
+        workspace_sessions.activateDocument(0)
+
+    engine.rootContext().setContextProperty("workspace", workspace)
+    engine.rootContext().setContextProperty("workspaceSessions", workspace_sessions)
+    engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
+    engine.rootContext().setContextProperty("batchExport", batch_export)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")
@@ -130,6 +142,22 @@ def main() -> int:
 
         QTimer.singleShot(80, open_batch_export)
 
+    if args.show_new_canvas:
+        def open_new_canvas() -> None:
+            dialog = window.findChild(QObject, "newCanvasDialog")
+            if dialog is None or not QMetaObject.invokeMethod(dialog, "open"):
+                debug("new canvas dialog could not be opened")
+
+        QTimer.singleShot(80, open_new_canvas)
+
+    if args.show_close_confirm:
+        def open_close_confirmation() -> None:
+            workspace.document.is_modified = True
+            workspace.documentInfoChanged.emit()
+            workspace_sessions.requestClose(workspace_sessions.activeIndex)
+
+        QTimer.singleShot(80, open_close_confirmation)
+
     if args.screenshot:
         output_path = args.screenshot.expanduser().resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,7 +165,7 @@ def main() -> int:
         def capture() -> None:
             debug("capturing root window")
             try:
-                if args.show_batch_export:
+                if args.show_batch_export or args.show_new_canvas or args.show_close_confirm:
                     image = window.grabWindow()
                     saved = not image.isNull() and image.save(str(output_path), "PNG")
                     if saved:

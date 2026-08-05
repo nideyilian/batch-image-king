@@ -20,6 +20,8 @@ def main() -> int:
     from PySide6.QtTest import QTest
 
     from app.qml.preview_image_provider import PreviewImageProvider
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+    from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
     app = QGuiApplication(sys.argv)
@@ -34,6 +36,10 @@ def main() -> int:
     engine.rootContext().setContextProperty("workspace", workspace)
     engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
     workspace.createDemoDocument(str(repo_root / "app" / "qml" / "assets" / "watch-product.jpg"))
+    batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
+    workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
+    engine.rootContext().setContextProperty("batchExport", batch_export)
+    engine.rootContext().setContextProperty("workspaceSessions", workspace_sessions)
     engine.load(QUrl.fromLocalFile(str(repo_root / "app" / "qml" / "Main.qml")))
     if not engine.rootObjects():
         return 2

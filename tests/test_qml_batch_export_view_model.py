@@ -163,6 +163,49 @@ def test_batch_export_follows_document_and_blocks_workspace_edits(qapp, tmp_path
     assert workspace.addTextLayer() is True
 
 
+@pytest.mark.unit
+def test_batch_export_state_is_isolated_per_document(tmp_path: Path):
+    workspace = _workspace()
+    first = workspace.document
+    second = Document()
+    second.create_new(300, 240)
+    view_model = BatchExportViewModel(workspace=workspace)
+
+    view_model.outputDirectory = str(tmp_path / "first")
+    view_model.count = 7
+    view_model.filenameTemplate = "first_{number:02d}"
+    view_model.fileFormat = "webp"
+    view_model.avoidDuplicates = False
+    view_model._set_error("第一个文档的错误")
+
+    assert workspace.activateDocument(second) is True
+    assert view_model.document is second
+    assert view_model.outputDirectory == ""
+    assert view_model.count == 12
+    assert view_model.filenameTemplate == "image_{number:04d}"
+    assert view_model.fileFormat == "png"
+    assert view_model.avoidDuplicates is True
+    assert view_model.errorMessage == ""
+
+    view_model.outputDirectory = str(tmp_path / "second")
+    view_model.count = 3
+    view_model.filenameTemplate = "second_{number}"
+
+    assert workspace.activateDocument(first) is True
+    assert view_model.outputDirectory == str(tmp_path / "first")
+    assert view_model.count == 7
+    assert view_model.filenameTemplate == "first_{number:02d}"
+    assert view_model.fileFormat == "webp"
+    assert view_model.avoidDuplicates is False
+    assert view_model.errorMessage == "第一个文档的错误"
+
+    assert workspace.activateDocument(second) is True
+    assert view_model.outputDirectory == str(tmp_path / "second")
+    assert view_model.count == 3
+    assert view_model.filenameTemplate == "second_{number}"
+    assert view_model.errorMessage == ""
+
+
 @pytest.mark.integration
 def test_batch_export_runs_real_document_pipeline(qapp, tmp_path: Path):
     source = tmp_path / "source.png"
