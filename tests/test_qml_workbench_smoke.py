@@ -53,6 +53,13 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'tooltip: "复制图层 · Ctrl+D"' in qml_source
     assert 'workspace.moveSelectedLayer("forward")' in qml_source
     assert 'sequence: "Ctrl+D"' in qml_source
+    assert 'id: strokeColorDialog' in qml_source
+    assert 'workspace.setSelectedBlendMode(currentValue)' in qml_source
+    assert 'workspace.setSelectedStrokeEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedStrokeColor(modelData)' in qml_source
+    assert 'workspace.setSelectedCornerRadius(modelData)' in qml_source
+    assert 'window.hexToColor(workspace.selectedStrokeColor)' in qml_source
+    assert 'enabled: index === 0' not in qml_source
 
 
 @pytest.mark.integration

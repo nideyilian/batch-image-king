@@ -16,6 +16,17 @@ from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.layer_list_model import LayerListModel
 
 
+_BLEND_MODES = {
+    "normal": (0, "正常"),
+    "multiply": (1, "正片叠底"),
+    "screen": (2, "滤色"),
+    "overlay": (3, "叠加"),
+    "soft_light": (4, "柔光"),
+    "hard_light": (5, "强光"),
+}
+_BLEND_MODE_IDS = {value: key for key, (value, _label) in _BLEND_MODES.items()}
+
+
 def _pil_to_qimage(image) -> QImage:
     rgba = image.convert("RGBA")
     data = rgba.tobytes("raw", "RGBA")
@@ -171,6 +182,82 @@ class WorkspaceViewModel(QObject):
     @Property(int, notify=selectionChanged)
     def selectedOpacity(self) -> int:
         return round(float(getattr(self._selected_layer(), "opacity", 1.0)) * 100)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsBlendMode(self) -> bool:
+        return hasattr(self._selected_layer(), "blend_mode")
+
+    @Property(str, notify=selectionChanged)
+    def selectedBlendModeId(self) -> str:
+        layer = self._selected_layer()
+        value = getattr(layer, "blend_mode", 0)
+        if isinstance(value, int):
+            return _BLEND_MODE_IDS.get(value, "normal")
+        mode_id = str(value or "normal").strip().lower()
+        return mode_id if mode_id in _BLEND_MODES else "normal"
+
+    @Property(str, notify=selectionChanged)
+    def selectedBlendModeName(self) -> str:
+        return _BLEND_MODES[self.selectedBlendModeId][1]
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsStroke(self) -> bool:
+        layer = self._selected_layer()
+        return all(hasattr(layer, attr) for attr in ("stroke_enabled", "stroke_width", "stroke_color"))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedStrokeEnabled(self) -> bool:
+        return self.selectedSupportsStroke and bool(getattr(self._selected_layer(), "stroke_enabled", False))
+
+    @Property(int, notify=selectionChanged)
+    def selectedStrokeWidth(self) -> int:
+        if not self.selectedSupportsStroke:
+            return 1
+        return max(1, int(getattr(self._selected_layer(), "stroke_width", 1)))
+
+    @staticmethod
+    def _rgba_to_hex(value) -> str:
+        try:
+            channels = tuple(max(0, min(255, int(channel))) for channel in value)
+        except (TypeError, ValueError):
+            channels = (0, 0, 0, 255)
+        if len(channels) < 3:
+            channels = (0, 0, 0, 255)
+        alpha = channels[3] if len(channels) > 3 else 255
+        result = "#{:02X}{:02X}{:02X}".format(*channels[:3])
+        return result if alpha == 255 else f"{result}{alpha:02X}"
+
+    @staticmethod
+    def _parse_hex_color(value: str):
+        match = re.fullmatch(r"#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?", str(value or "").strip())
+        if match is None:
+            return None
+        rgb, alpha = match.groups()
+        channels = tuple(int(rgb[index:index + 2], 16) for index in range(0, 6, 2))
+        return channels + (int(alpha, 16) if alpha else 255,)
+
+    @Property(str, notify=selectionChanged)
+    def selectedStrokeColor(self) -> str:
+        if not self.selectedSupportsStroke:
+            return "#000000"
+        return self._rgba_to_hex(getattr(self._selected_layer(), "stroke_color", (0, 0, 0, 255)))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsCornerRadius(self) -> bool:
+        return hasattr(self._selected_layer(), "corner_radius")
+
+    @Property(int, notify=selectionChanged)
+    def selectedCornerRadius(self) -> int:
+        if not self.selectedSupportsCornerRadius:
+            return 0
+        return max(0, int(getattr(self._selected_layer(), "corner_radius", 0)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedCornerRadiusMax(self) -> int:
+        if not self.selectedSupportsCornerRadius:
+            return 0
+        layer = self._selected_layer()
+        return max(0, min(int(getattr(layer, "width", 0)), int(getattr(layer, "height", 0))) // 2)
 
     @Property(bool, notify=selectionChanged)
     def selectedVisible(self) -> bool:
@@ -1129,6 +1216,61 @@ class WorkspaceViewModel(QObject):
     def setSelectedOpacity(self, value: int) -> bool:
         value = max(0, min(100, int(value)))
         return self._set_layer_attr(self.selectedLayerIndex, "opacity", value / 100.0, "修改不透明度")
+
+    @Slot(str, result=bool)
+    def setSelectedBlendMode(self, mode_id: str) -> bool:
+        mode_id = str(mode_id or "").strip().lower()
+        if not self.selectedSupportsBlendMode:
+            self._set_status("当前图层不支持混合模式", toast=True)
+            return False
+        if mode_id not in _BLEND_MODES:
+            self._set_status("未知的混合模式", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "blend_mode",
+            _BLEND_MODES[mode_id][0],
+            "修改混合模式",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedStrokeEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsStroke:
+            self._set_status("当前图层不支持描边", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "stroke_enabled",
+            bool(enabled),
+            "切换描边",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedStrokeWidth(self, value: int) -> bool:
+        if not self.selectedSupportsStroke:
+            self._set_status("当前图层不支持描边", toast=True)
+            return False
+        value = max(1, min(128, int(value)))
+        return self._set_layer_attr(self.selectedLayerIndex, "stroke_width", value, "修改描边宽度")
+
+    @Slot(str, result=bool)
+    def setSelectedStrokeColor(self, value: str) -> bool:
+        if not self.selectedSupportsStroke:
+            self._set_status("当前图层不支持描边", toast=True)
+            return False
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("描边颜色格式无效", toast=True)
+            return False
+        return self._set_layer_attr(self.selectedLayerIndex, "stroke_color", color, "修改描边颜色")
+
+    @Slot(int, result=bool)
+    def setSelectedCornerRadius(self, value: int) -> bool:
+        if not self.selectedSupportsCornerRadius:
+            self._set_status("当前图层不支持圆角", toast=True)
+            return False
+        value = max(0, min(self.selectedCornerRadiusMax, int(value)))
+        return self._set_layer_attr(self.selectedLayerIndex, "corner_radius", value, "修改圆角")
 
     @Slot(int, result=bool)
     def toggleLayerVisible(self, index: int) -> bool:

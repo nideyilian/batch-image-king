@@ -17,6 +17,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
+    parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
+    parser.add_argument("--demo-effects", action="store_true", help="为选中图片图层应用演示效果")
     parser.add_argument("--select-layer", type=int, help="启动后选中指定图层索引")
     parser.add_argument("--duplicate-selected", action="store_true", help="启动后复制当前选中图层")
     return parser.parse_args()
@@ -28,7 +30,10 @@ def main() -> int:
 
     def debug(message: str) -> None:
         if debug_enabled:
-            print(f"[qml] {message}", flush=True)
+            output = f"[qml] {message}"
+            encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+            output = output.encode(encoding, errors="backslashreplace").decode(encoding)
+            print(output, flush=True)
 
     if args.screenshot:
         os.environ.setdefault("QT_QUICK_BACKEND", "software")
@@ -84,6 +89,13 @@ def main() -> int:
 
     if args.select_layer is not None:
         workspace.selectLayer(args.select_layer)
+    elif args.demo_effects:
+        workspace.selectLayer(0)
+    if args.demo_effects:
+        workspace.setSelectedStrokeEnabled(True)
+        workspace.setSelectedStrokeWidth(8)
+        workspace.setSelectedStrokeColor("#46D7AD")
+        workspace.setSelectedCornerRadius(48)
     if args.duplicate_selected:
         workspace.duplicateSelectedLayer()
 
@@ -102,6 +114,8 @@ def main() -> int:
     )
     window.setProperty("width", max(1180, args.width))
     window.setProperty("height", max(720, args.height))
+    if args.show_effects:
+        window.setProperty("inspectorTab", 1)
 
     if args.show_batch_export:
         def open_batch_export() -> None:

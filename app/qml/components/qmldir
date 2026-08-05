@@ -5,3 +5,4 @@ IconButton 1.0 IconButton.qml
 PropertySection 1.0 PropertySection.qml
 ValueBox 1.0 ValueBox.qml
 ToggleSwitch 1.0 ToggleSwitch.qml
+SelectBox 1.0 SelectBox.qml

@@ -23,11 +23,39 @@ ApplicationWindow {
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
+    readonly property var blendModeOptions: [
+        { label: "正常", value: "normal" },
+        { label: "正片叠底", value: "multiply" },
+        { label: "滤色", value: "screen" },
+        { label: "叠加", value: "overlay" },
+        { label: "柔光", value: "soft_light" },
+        { label: "强光", value: "hard_light" }
+    ]
 
     function showToast(message) {
         toastMessage = message
         toast.opacity = 1
         toastTimer.restart()
+    }
+
+    function colorChannelHex(channel) {
+        var text = Math.round(Math.max(0, Math.min(1, channel)) * 255).toString(16).toUpperCase()
+        return text.length < 2 ? "0" + text : text
+    }
+
+    function colorToHex(colorValue) {
+        var result = "#" + colorChannelHex(colorValue.r) + colorChannelHex(colorValue.g) + colorChannelHex(colorValue.b)
+        return colorValue.a < 0.999 ? result + colorChannelHex(colorValue.a) : result
+    }
+
+    function hexToColor(hexValue) {
+        var value = String(hexValue || "#000000").replace("#", "")
+        if (value.length !== 6 && value.length !== 8) return Qt.rgba(0, 0, 0, 1)
+        var red = parseInt(value.slice(0, 2), 16) / 255
+        var green = parseInt(value.slice(2, 4), 16) / 255
+        var blue = parseInt(value.slice(4, 6), 16) / 255
+        var alpha = value.length === 8 ? parseInt(value.slice(6, 8), 16) / 255 : 1
+        return Qt.rgba(red, green, blue, alpha)
     }
 
     Connections {
@@ -112,6 +140,12 @@ ApplicationWindow {
         id: outputFolderDialog
         title: "选择批量导出目录"
         onAccepted: batchExport.outputDirectory = selectedFolder.toString()
+    }
+
+    ColorDialog {
+        id: strokeColorDialog
+        title: "选择描边颜色"
+        onAccepted: workspace.setSelectedStrokeColor(window.colorToHex(selectedColor))
     }
 
     component Divider: Rectangle {
@@ -1504,8 +1538,6 @@ ApplicationWindow {
                                 required property string modelData
                                 width: inspector.width / 2
                                 height: 40
-                                enabled: index === 0
-                                opacity: enabled ? 1 : 0.42
                                 color: inspectorTab === index ? Theme.bgRaised : "transparent"
                                 Text { anchors.centerIn: parent; text: modelData; color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal }
                                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 2; color: inspectorTab === index ? Theme.accent : "transparent" }
@@ -1726,10 +1758,10 @@ ApplicationWindow {
                                 }
                             }
 
-                            PropertySection {
-                                width: parent.width
-                                title: "外观"
-                                summary: "正常"
+                                PropertySection {
+                                    width: parent.width
+                                    title: "外观"
+                                    summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
 
                                 InspectorRow {
                                     label: "不透明度"
@@ -1748,21 +1780,18 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "混合"
-                                    Rectangle {
+                                    SelectBox {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 30
-                                        radius: Theme.radiusSmall
-                                        color: Theme.bgControl
-                                        border.width: 1
-                                        border.color: Theme.borderStrong
-                                        BodyLabel { anchors.left: parent.left; anchors.leftMargin: 9; anchors.verticalCenter: parent.verticalCenter; text: "正常" }
-                                        AppIcon { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE70D"; iconSize: 10 }
+                                        model: window.blendModeOptions
+                                        enabled: workspace.selectedSupportsBlendMode && !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: {
+                                            for (var index = 0; index < window.blendModeOptions.length; index++) {
+                                                if (window.blendModeOptions[index].value === workspace.selectedBlendModeId) return index
+                                            }
+                                            return 0
+                                        }
+                                        onActivated: workspace.setSelectedBlendMode(currentValue)
                                     }
-                                }
-                                InspectorRow {
-                                    label: "填充"
-                                    Rectangle { Layout.preferredWidth: 30; Layout.preferredHeight: 30; radius: 4; color: selectedLayer < 2 ? "#f4f2eb" : "#d9d9d5"; border.width: 1; border.color: Theme.borderStrong }
-                                    ValueBox { text: selectedLayer < 2 ? "#F4F2EB" : "原图"; Layout.fillWidth: true; editable: false }
                                 }
                             }
 
@@ -1805,34 +1834,149 @@ ApplicationWindow {
                             PropertySection {
                                 width: parent.width
                                 title: "描边"
-                                summary: "1 px"
+                                summary: workspace.selectedStrokeEnabled ? workspace.selectedStrokeWidth + " px" : "关闭"
+                                visible: workspace.selectedSupportsStroke
                                 InspectorRow {
                                     label: "启用"
-                                    BodyLabel { text: "细节描边"; Layout.fillWidth: true }
-                                    ToggleSwitch { checked: true }
+                                    BodyLabel {
+                                        text: workspace.selectedLayerType === "文字" ? "文字轮廓" : "图层边缘"
+                                        color: Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedStrokeEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedStrokeEnabled(checkedValue)
+                                    }
                                 }
                                 InspectorRow {
                                     label: "宽度"
-                                    ValueBox { text: "1"; suffix: "px"; Layout.fillWidth: true }
+                                    visible: workspace.selectedStrokeEnabled
+                                    ValueBox {
+                                        value: workspace.selectedStrokeWidth.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedStrokeWidth(parsed)
+                                        }
+                                    }
                                 }
-                            }
-                            PropertySection {
-                                width: parent.width
-                                title: "颜色叠加"
-                                summary: "关闭"
-                                expanded: false
-                            }
-                            PropertySection {
-                                width: parent.width
-                                title: "渐变叠加"
-                                summary: "线性"
-                                expanded: false
+                                InspectorRow {
+                                    label: "颜色"
+                                    visible: workspace.selectedStrokeEnabled
+                                    Rectangle {
+                                        Layout.preferredWidth: 30
+                                        Layout.preferredHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: window.hexToColor(workspace.selectedStrokeColor)
+                                        border.width: 1
+                                        border.color: strokeColorMouse.containsMouse ? Theme.accent : Theme.borderStrong
+
+                                        MouseArea {
+                                            id: strokeColorMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: {
+                                                strokeColorDialog.selectedColor = window.hexToColor(workspace.selectedStrokeColor)
+                                                strokeColorDialog.open()
+                                            }
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedStrokeColor
+                                        bindValue: true
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => workspace.setSelectedStrokeColor(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "色板"
+                                    visible: workspace.selectedStrokeEnabled
+                                    Row {
+                                        Layout.fillWidth: true
+                                        spacing: 7
+                                        Repeater {
+                                            model: ["#000000", "#F2F4F3", "#46D7AD", "#F1786D", "#F7BD63"]
+                                            delegate: Rectangle {
+                                                required property string modelData
+                                                width: 24
+                                                height: 24
+                                                radius: Theme.radiusSmall
+                                                color: modelData
+                                                border.width: workspace.selectedStrokeColor.toUpperCase() === modelData ? 2 : 1
+                                                border.color: workspace.selectedStrokeColor.toUpperCase() === modelData ? Theme.accent : Theme.borderStrong
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                    hoverEnabled: true
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: workspace.setSelectedStrokeColor(modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             PropertySection {
                                 width: parent.width
                                 title: "圆角"
-                                summary: "0 px"
-                                expanded: false
+                                summary: workspace.selectedCornerRadius + " px"
+                                visible: workspace.selectedSupportsCornerRadius
+                                InspectorRow {
+                                    label: "半径"
+                                    ValueBox {
+                                        value: workspace.selectedCornerRadius.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCornerRadius(parsed)
+                                        }
+                                    }
+                                    TinyLabel { text: "最大 " + workspace.selectedCornerRadiusMax; Layout.preferredWidth: 62 }
+                                }
+                                InspectorRow {
+                                    label: "预设"
+                                    Row {
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        Repeater {
+                                            model: [0, 12, 24, 48]
+                                            delegate: Rectangle {
+                                                required property int modelData
+                                                width: 42
+                                                height: 28
+                                                radius: Theme.radiusSmall
+                                                color: workspace.selectedCornerRadius === modelData ? Theme.accentSoft : Theme.bgControl
+                                                border.width: 1
+                                                border.color: workspace.selectedCornerRadius === modelData ? Theme.accentPressed : Theme.borderStrong
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData
+                                                    color: workspace.selectedCornerRadius === modelData ? Theme.accent : Theme.textSecondary
+                                                    font.family: Theme.bodyFont
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                    hoverEnabled: true
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: workspace.setSelectedCornerRadius(modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
