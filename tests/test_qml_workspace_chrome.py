@@ -49,6 +49,15 @@ def test_qml_restores_original_center_size_and_randomize_commands():
 
 
 @pytest.mark.unit
+def test_randomize_all_layers_button_keeps_a_visible_disabled_state():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+    button_source = source.split("id: randomizeAllLayersButton", 1)[1].split("}", 1)[0]
+
+    assert "primary: enabled" in button_source
+    assert "enabled: layerModel.rowCount() > 0 && !workspace.operationsBlocked" in button_source
+
+
+@pytest.mark.unit
 def test_qml_has_a_real_no_document_state():
     main_qml = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     launcher = (REPO_ROOT / "app/qml/qml_main.py").read_text(encoding="utf-8")
