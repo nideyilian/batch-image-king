@@ -104,6 +104,20 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedTextBoxPadding(parsed)' in qml_source
     assert 'objectName: "textTypographySection"' in qml_source
     assert 'function revealTextTypography()' in qml_source
+    assert 'title: "文字填充"' in qml_source
+    assert 'workspace.setSelectedTextFillMode(parent.modelData.value)' in qml_source
+    assert 'workspace.setSelectedTextColor(value)' in qml_source
+    assert 'workspace.setSelectedTextGradientType(currentValue)' in qml_source
+    assert 'workspace.setSelectedTextGradientDirection(currentValue)' in qml_source
+    assert 'workspace.setSelectedTextGradientCenter(xValue, yValue)' in qml_source
+    assert 'workspace.setSelectedTextGradientColor(colorIndex, hexValue)' in qml_source
+    assert 'title: "文字背景"' in qml_source
+    assert 'workspace.setSelectedTextBackgroundEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextBackgroundColor(value)' in qml_source
+    assert 'workspace.setSelectedTextBackgroundOpacity(parsed)' in qml_source
+    assert 'workspace.setSelectedTextBackgroundPadding(parsed)' in qml_source
+    assert 'workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)' in qml_source
+    assert 'workspace.clearSelectedTextColorRange(' in qml_source
     assert 'property bool randomTransformEnabled' not in qml_source
     assert 'enabled: index === 0' not in qml_source
 

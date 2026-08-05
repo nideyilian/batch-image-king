@@ -27,6 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo-shaped", action="store_true", help="启动后创建真实异形图层用于验收")
     parser.add_argument("--show-random-transform", action="store_true", help="展示图片图层随机变换配置")
     parser.add_argument("--show-text-typography", action="store_true", help="展示文字字体与核心排版配置")
+    parser.add_argument("--show-text-appearance", action="store_true", help="展示文字填充、背景与局部颜色")
     return parser.parse_args()
 
 
@@ -97,6 +98,8 @@ def main() -> int:
         workspace.selectLayer(0)
     elif args.show_text_typography:
         workspace.selectLayer(1)
+    elif args.show_text_appearance:
+        workspace.selectLayer(1)
     elif args.demo_effects:
         workspace.selectLayer(0)
     if args.demo_effects:
@@ -135,6 +138,20 @@ def main() -> int:
         workspace.setSelectedTextLineSpacingPercent(130)
         workspace.setSelectedTextLetterSpacing(2)
         workspace.setSelectedTextBoxPadding(18)
+    if args.show_text_appearance:
+        workspace.setSelectedTextBindingEnabled(False)
+        workspace.setSelectedTextFillMode("gradient")
+        workspace.setSelectedTextGradientType("linear")
+        workspace.setSelectedTextGradientDirection("diagonal_lr")
+        workspace.setSelectedTextGradientColor(0, "#F7BD63")
+        workspace.setSelectedTextGradientColor(1, "#46D7AD")
+        workspace.setSelectedTextColorRange(0, 2, "#F1786D")
+        workspace.setSelectedTextBackgroundEnabled(True)
+        workspace.setSelectedTextBackgroundColor("#101715CC")
+        workspace.setSelectedTextBackgroundPadding(14)
+        workspace.setSelectedStrokeEnabled(True)
+        workspace.setSelectedStrokeWidth(3)
+        workspace.setSelectedStrokeColor("#F2F4F3")
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:
@@ -184,6 +201,13 @@ def main() -> int:
                 debug("text typography section could not be revealed")
 
         QTimer.singleShot(120, reveal_text_typography)
+
+    if args.show_text_appearance:
+        def reveal_text_appearance() -> None:
+            if not QMetaObject.invokeMethod(window, "revealTextAppearance"):
+                debug("text appearance section could not be revealed")
+
+        QTimer.singleShot(120, reveal_text_appearance)
 
     if args.show_batch_export:
         def open_batch_export() -> None:

@@ -63,6 +63,23 @@ _TEXT_ALIGNMENTS = {
 _TEXT_ALIGNMENT_IDS = {
     value: key for key, (value, _label) in _TEXT_ALIGNMENTS.items()
 }
+_TEXT_GRADIENT_TYPES = {
+    "linear": ("LINEAR", "线性"),
+    "radial": ("RADIAL", "径向"),
+    "angular": ("ANGULAR", "角度"),
+}
+_TEXT_GRADIENT_TYPE_IDS = {
+    value: key for key, (value, _label) in _TEXT_GRADIENT_TYPES.items()
+}
+_TEXT_GRADIENT_DIRECTIONS = {
+    "horizontal": ("HORIZONTAL", "水平"),
+    "vertical": ("VERTICAL", "垂直"),
+    "diagonal_lr": ("DIAGONAL_LR", "左上到右下"),
+    "diagonal_rl": ("DIAGONAL_RL", "右上到左下"),
+}
+_TEXT_GRADIENT_DIRECTION_IDS = {
+    value: key for key, (value, _label) in _TEXT_GRADIENT_DIRECTIONS.items()
+}
 
 
 def _pil_to_qimage(image) -> QImage:
@@ -769,6 +786,119 @@ class WorkspaceViewModel(QObject):
         direction = "竖排" if self.selectedTextVerticalLayout else "横排"
         box_mode = "自动文本框" if self.selectedTextAutoFitTextBox else "手动文本框"
         return f"{self.selectedTextAlignmentName} · {direction} · {box_mode}"
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextColor(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "#000000"
+        return self._rgba_to_hex(getattr(self._selected_layer(), "text_color", (0, 0, 0, 255)))
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextFillModeId(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "solid"
+        return "gradient" if bool(getattr(self._selected_layer(), "gradient_enabled", False)) else "solid"
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextFillModeName(self) -> str:
+        return "渐变" if self.selectedTextFillModeId == "gradient" else "纯色"
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGradientTypeId(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "linear"
+        value = str(getattr(self._selected_layer(), "gradient_type", "LINEAR") or "LINEAR").upper()
+        return _TEXT_GRADIENT_TYPE_IDS.get(value, "linear")
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGradientTypeName(self) -> str:
+        return _TEXT_GRADIENT_TYPES[self.selectedTextGradientTypeId][1]
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGradientDirectionId(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "horizontal"
+        value = str(getattr(self._selected_layer(), "gradient_direction", "HORIZONTAL") or "HORIZONTAL").upper()
+        return _TEXT_GRADIENT_DIRECTION_IDS.get(value, "horizontal")
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGradientDirectionName(self) -> str:
+        return _TEXT_GRADIENT_DIRECTIONS[self.selectedTextGradientDirectionId][1]
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGradientStartColor(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "#000000"
+        return self._rgba_to_hex(
+            getattr(self._selected_layer(), "gradient_start_color", (255, 0, 0, 255))
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextGradientEndColor(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "#FFFFFF"
+        return self._rgba_to_hex(
+            getattr(self._selected_layer(), "gradient_end_color", (0, 0, 255, 255))
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextGradientCenterXPercent(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 50
+        return round(float(getattr(self._selected_layer(), "gradient_center_x", 0.5)) * 100)
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextGradientCenterYPercent(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 50
+        return round(float(getattr(self._selected_layer(), "gradient_center_y", 0.5)) * 100)
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextFillSummary(self) -> str:
+        if self.selectedTextFillModeId == "solid":
+            return self.selectedTextColor
+        return f"{self.selectedTextGradientTypeName} · {self.selectedTextGradientDirectionName}"
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextBackgroundEnabled(self) -> bool:
+        return self.selectedIsTextLayer and bool(
+            getattr(self._selected_layer(), "background_enabled", False)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextBackgroundColor(self) -> str:
+        if not self.selectedIsTextLayer:
+            return "#FFFFFF80"
+        return self._rgba_to_hex(
+            getattr(self._selected_layer(), "background_color", (255, 255, 255, 128))
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextBackgroundOpacity(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 50
+        color = getattr(self._selected_layer(), "background_color", (255, 255, 255, 128))
+        alpha = color[3] if isinstance(color, (tuple, list)) and len(color) > 3 else 255
+        return round(max(0, min(255, int(alpha))) / 255.0 * 100)
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextBackgroundPadding(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        return int(getattr(self._selected_layer(), "background_padding", 0))
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextBackgroundSummary(self) -> str:
+        if not self.selectedTextBackgroundEnabled:
+            return "关闭"
+        return f"{self.selectedTextBackgroundOpacity}% · {self.selectedTextBackgroundPadding:+d} px"
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextColorRangeCount(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        getter = getattr(self._selected_layer(), "get_text_color_ranges", None)
+        return len(getter()) if callable(getter) else 0
 
     @Property(bool, notify=selectionChanged)
     def canDuplicateLayer(self) -> bool:
@@ -1504,6 +1634,183 @@ class WorkspaceViewModel(QObject):
             "切换文字排版方向",
             lambda layer: setattr(layer, "vertical_layout", enabled),
             "文字已切换为竖排" if enabled else "文字已切换为横排",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextColor(self, value: str) -> bool:
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("文字颜色格式无效", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字颜色",
+            lambda layer: setattr(layer, "text_color", color),
+            f"文字颜色 · {self._rgba_to_hex(color)}",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextFillMode(self, mode_id: str) -> bool:
+        mode_id = str(mode_id or "").strip().lower()
+        if mode_id not in ("solid", "gradient"):
+            self._set_status("未知的文字填充模式", toast=True)
+            return False
+        enabled = mode_id == "gradient"
+        return self._change_selected_text(
+            "切换文字填充模式",
+            lambda layer: setattr(layer, "gradient_enabled", enabled),
+            "文字填充 · 渐变" if enabled else "文字填充 · 纯色",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextGradientType(self, type_id: str) -> bool:
+        gradient = _TEXT_GRADIENT_TYPES.get(str(type_id or "").strip().lower())
+        if gradient is None:
+            self._set_status("未知的文字渐变类型", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字渐变类型",
+            lambda layer: setattr(layer, "gradient_type", gradient[0]),
+            f"文字渐变 · {gradient[1]}",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextGradientDirection(self, direction_id: str) -> bool:
+        direction = _TEXT_GRADIENT_DIRECTIONS.get(
+            str(direction_id or "").strip().lower()
+        )
+        if direction is None:
+            self._set_status("未知的文字渐变方向", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字渐变方向",
+            lambda layer: setattr(layer, "gradient_direction", direction[0]),
+            f"文字渐变方向 · {direction[1]}",
+        )
+
+    @Slot(int, str, result=bool)
+    def setSelectedTextGradientColor(self, index: int, value: str) -> bool:
+        if index not in (0, 1):
+            self._set_status("文字渐变颜色端点无效", toast=True)
+            return False
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("文字渐变颜色格式无效", toast=True)
+            return False
+        attr = "gradient_start_color" if index == 0 else "gradient_end_color"
+        return self._change_selected_text(
+            "修改文字渐变颜色",
+            lambda layer: setattr(layer, attr, color),
+            f"文字渐变颜色 · {self._rgba_to_hex(color)}",
+        )
+
+    @Slot(int, int, result=bool)
+    def setSelectedTextGradientCenter(self, x_percent: int, y_percent: int) -> bool:
+        x_percent = max(0, min(100, int(x_percent)))
+        y_percent = max(0, min(100, int(y_percent)))
+
+        def apply(layer) -> None:
+            layer.gradient_center_x = x_percent / 100.0
+            layer.gradient_center_y = y_percent / 100.0
+
+        return self._change_selected_text(
+            "修改文字渐变中心",
+            apply,
+            f"文字渐变中心 · {x_percent}% / {y_percent}%",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedTextBackgroundEnabled(self, enabled: bool) -> bool:
+        enabled = bool(enabled)
+        return self._change_selected_text(
+            "切换文字背景",
+            lambda layer: setattr(layer, "background_enabled", enabled),
+            "文字背景已开启" if enabled else "文字背景已关闭",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextBackgroundColor(self, value: str) -> bool:
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("文字背景颜色格式无效", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字背景颜色",
+            lambda layer: setattr(layer, "background_color", color),
+            f"文字背景颜色 · {self._rgba_to_hex(color)}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextBackgroundOpacity(self, value: int) -> bool:
+        value = max(0, min(100, int(value)))
+
+        def apply(layer) -> None:
+            color = tuple(getattr(layer, "background_color", (255, 255, 255, 128)))
+            rgb = color[:3] if len(color) >= 3 else (255, 255, 255)
+            layer.background_color = rgb + (round(value / 100.0 * 255),)
+
+        return self._change_selected_text(
+            "修改文字背景透明度",
+            apply,
+            f"文字背景透明度 · {value}%",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextBackgroundPadding(self, value: int) -> bool:
+        value = max(-50, min(50, int(value)))
+        return self._change_selected_text(
+            "修改文字背景扩展",
+            lambda layer: setattr(layer, "background_padding", value),
+            f"文字背景扩展 · {value:+d} px",
+        )
+
+    def _validated_selected_text_range(self, start: int, end: int):
+        if not self.selectedIsTextLayer:
+            self._set_status("当前图层不是文字图层", toast=True)
+            return None
+        if self.selectedTextBindingEnabled:
+            self._set_status("局部颜色仅支持整段排版模式", toast=True)
+            return None
+        text = str(getattr(self._selected_layer(), "current_text", "") or "")
+        start = max(0, min(len(text), int(start)))
+        end = max(0, min(len(text), int(end)))
+        if start > end:
+            start, end = end, start
+        if start >= end:
+            self._set_status("请先选择需要着色的文字", toast=True)
+            return None
+        return start, end
+
+    @Slot(int, int, str, result=bool)
+    def setSelectedTextColorRange(self, start: int, end: int, value: str) -> bool:
+        selected_range = self._validated_selected_text_range(start, end)
+        if selected_range is None:
+            return False
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("局部文字颜色格式无效", toast=True)
+            return False
+        start, end = selected_range
+        return self._change_selected_text(
+            "修改局部文字颜色",
+            lambda layer: layer.set_text_color_range(start, end, color),
+            f"已设置 {end - start} 个字符的局部颜色",
+        )
+
+    @Slot(int, int, result=bool)
+    def clearSelectedTextColorRange(self, start: int, end: int) -> bool:
+        selected_range = self._validated_selected_text_range(start, end)
+        if selected_range is None:
+            return False
+        start, end = selected_range
+        layer = self._selected_layer()
+        ranges = layer.get_text_color_ranges()
+        if not any(item["end"] > start and item["start"] < end for item in ranges):
+            self._set_status("当前选区没有局部颜色", toast=True)
+            return False
+        return self._change_selected_text(
+            "清除局部文字颜色",
+            lambda selected: selected.clear_text_color_range(start, end),
+            f"已清除 {end - start} 个字符的局部颜色",
         )
 
     @Slot(result=bool)

@@ -44,6 +44,17 @@ ApplicationWindow {
         { glyph: "\u2190", label: "保留左侧", value: "left" },
         { glyph: "\u2192", label: "保留右侧", value: "right" }
     ]
+    readonly property var textGradientTypeOptions: [
+        { label: "线性", value: "linear" },
+        { label: "径向", value: "radial" },
+        { label: "角度", value: "angular" }
+    ]
+    readonly property var textGradientDirectionOptions: [
+        { label: "水平", value: "horizontal" },
+        { label: "垂直", value: "vertical" },
+        { label: "左上 → 右下", value: "diagonal_lr" },
+        { label: "右上 → 左下", value: "diagonal_rl" }
+    ]
 
     function showToast(message) {
         toastMessage = message
@@ -59,6 +70,23 @@ ApplicationWindow {
             if (inspectorScroll.contentItem)
                 inspectorScroll.contentItem.contentY = Math.max(0, textFontSection.y - 8)
         })
+    }
+
+    function revealTextAppearance() {
+        inspectorTab = 1
+        textFillSection.expanded = true
+        textBackgroundSection.expanded = true
+        Qt.callLater(function() {
+            if (inspectorScroll.contentItem)
+                inspectorScroll.contentItem.contentY = Math.max(0, textFillSection.y - 8)
+        })
+    }
+
+    function optionIndex(options, value) {
+        for (var index = 0; index < options.length; index++) {
+            if (options[index].value === value) return index
+        }
+        return 0
     }
 
     function colorChannelHex(channel) {
@@ -397,12 +425,23 @@ ApplicationWindow {
         id: effectColorDialog
         property string target: "stroke"
         property int colorIndex: 0
+        property int rangeStart: 0
+        property int rangeEnd: 0
 
-        title: target === "stroke" ? "选择描边颜色" : target === "overlay" ? "选择叠加颜色" : "选择渐变颜色"
+        title: {
+            if (target === "stroke") return "选择描边颜色"
+            if (target === "overlay") return "选择叠加颜色"
+            if (target === "textFill") return "选择文字颜色"
+            if (target === "textBackground") return "选择文字背景颜色"
+            if (target === "textRange") return "选择选区文字颜色"
+            return "选择渐变颜色"
+        }
 
-        function openFor(targetName, colorValue, index) {
+        function openFor(targetName, colorValue, index, start, end) {
             target = targetName
             colorIndex = index === undefined ? 0 : index
+            rangeStart = start === undefined ? 0 : start
+            rangeEnd = end === undefined ? 0 : end
             selectedColor = window.hexToColor(colorValue)
             open()
         }
@@ -411,6 +450,10 @@ ApplicationWindow {
             var hexValue = window.colorToHex(selectedColor)
             if (target === "stroke") workspace.setSelectedStrokeColor(hexValue)
             else if (target === "overlay") workspace.setSelectedColorOverlayColor(hexValue)
+            else if (target === "textFill") workspace.setSelectedTextColor(hexValue)
+            else if (target === "textGradient") workspace.setSelectedTextGradientColor(colorIndex, hexValue)
+            else if (target === "textBackground") workspace.setSelectedTextBackgroundColor(hexValue)
+            else if (target === "textRange") workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)
             else workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)
         }
     }
@@ -536,6 +579,77 @@ ApplicationWindow {
         Accessible.role: Accessible.Button
     }
 
+    component CompactActionButton: Rectangle {
+        id: compactButton
+        property string label: ""
+        property bool active: false
+        signal clicked()
+
+        implicitWidth: 94
+        implicitHeight: Theme.controlHeight
+        radius: Theme.radiusSmall
+        color: {
+            if (!enabled) return Theme.bgControl
+            if (compactMouse.pressed || compactMouse.containsMouse) return Theme.bgHover
+            return active ? Theme.accentSoft : Theme.bgControl
+        }
+        border.width: 1
+        border.color: active ? Theme.accentPressed : Theme.borderStrong
+        opacity: enabled ? 1 : 0.38
+
+        Text {
+            anchors.centerIn: parent
+            text: compactButton.label
+            color: compactButton.active ? Theme.accent : Theme.textSecondary
+            font.family: Theme.bodyFont
+            font.pixelSize: 11
+            font.weight: Font.DemiBold
+        }
+        MouseArea {
+            id: compactMouse
+            anchors.fill: parent
+            enabled: compactButton.enabled
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: compactButton.clicked()
+        }
+        Accessible.name: label
+        Accessible.role: Accessible.Button
+    }
+
+    component ColorValueField: RowLayout {
+        id: colorField
+        property string value: "#000000"
+        signal pickRequested()
+        signal valueCommitted(string value)
+
+        spacing: 6
+        Rectangle {
+            Layout.preferredWidth: Theme.controlHeight
+            Layout.preferredHeight: Theme.controlHeight
+            radius: Theme.radiusSmall
+            color: window.hexToColor(colorField.value)
+            border.width: 1
+            border.color: colorMouse.containsMouse ? Theme.accent : Theme.borderStrong
+            opacity: colorField.enabled ? 1 : 0.38
+            MouseArea {
+                id: colorMouse
+                anchors.fill: parent
+                enabled: colorField.enabled
+                hoverEnabled: true
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: colorField.pickRequested()
+            }
+        }
+        ValueBox {
+            value: colorField.value
+            bindValue: true
+            Layout.fillWidth: true
+            editable: colorField.enabled
+            onValueCommitted: value => colorField.valueCommitted(value)
+        }
+    }
+
     component ShapeMenuItem: MenuItem {
         id: shapeMenuItem
         implicitWidth: 158
@@ -651,11 +765,19 @@ ApplicationWindow {
         property int contextIndex: -1
         property int editingIndex: -1
         readonly property bool editing: contentEditor.activeFocus
+        readonly property int selectionStart: contentEditor.selectionStart
+        readonly property int selectionEnd: contentEditor.selectionEnd
+        readonly property int selectionLength: Math.abs(selectionEnd - selectionStart)
         signal committed(string value, int contextIndex)
 
         function releaseFocus() {
             if (contentEditor.activeFocus)
                 contentEditor.focus = false
+        }
+
+        function selectRange(start, end) {
+            contentEditor.select(start, end)
+            contentEditor.forceActiveFocus()
         }
 
         implicitHeight: 104
@@ -2280,6 +2402,47 @@ ApplicationWindow {
 
                                 Row {
                                     width: parent.width
+                                    height: Theme.controlHeight
+                                    spacing: 6
+                                    CompactActionButton {
+                                        width: (parent.width - rangeColorCount.width - 18) / 2
+                                        label: "选区颜色"
+                                        enabled: !workspace.selectedTextBindingEnabled
+                                                 && selectedTextEditor.selectionLength > 0
+                                                 && !workspace.selectedLocked
+                                                 && !workspace.operationsBlocked
+                                        onClicked: effectColorDialog.openFor(
+                                            "textRange",
+                                            workspace.selectedTextColor,
+                                            0,
+                                            selectedTextEditor.selectionStart,
+                                            selectedTextEditor.selectionEnd
+                                        )
+                                    }
+                                    CompactActionButton {
+                                        width: (parent.width - rangeColorCount.width - 18) / 2
+                                        label: "清除局部色"
+                                        enabled: !workspace.selectedTextBindingEnabled
+                                                 && selectedTextEditor.selectionLength > 0
+                                                 && workspace.selectedTextColorRangeCount > 0
+                                                 && !workspace.selectedLocked
+                                                 && !workspace.operationsBlocked
+                                        onClicked: workspace.clearSelectedTextColorRange(
+                                            selectedTextEditor.selectionStart,
+                                            selectedTextEditor.selectionEnd
+                                        )
+                                    }
+                                    TinyLabel {
+                                        id: rangeColorCount
+                                        width: 36
+                                        height: parent.height
+                                        text: workspace.selectedTextColorRangeCount + " 处"
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+                                }
+
+                                Row {
+                                    width: parent.width
                                     height: 32
                                     spacing: 4
                                     Repeater {
@@ -2692,6 +2855,200 @@ ApplicationWindow {
                             id: effectInspectorColumn
                             width: inspectorScroll.availableWidth
                             visible: inspectorTab === 1
+
+                            PropertySection {
+                                id: textFillSection
+                                objectName: "textFillSection"
+                                width: parent.width
+                                title: "文字填充"
+                                summary: workspace.selectedTextFillSummary
+                                visible: workspace.selectedIsTextLayer
+
+                                InspectorRow {
+                                    label: "模式"
+                                    Row {
+                                        Layout.fillWidth: true
+                                        height: Theme.controlHeight
+                                        spacing: 4
+                                        Repeater {
+                                            model: [
+                                                { label: "纯色", value: "solid" },
+                                                { label: "渐变", value: "gradient" }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: (parent.width - 4) / 2
+                                                height: Theme.controlHeight
+                                                radius: Theme.radiusSmall
+                                                color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : Theme.bgControl
+                                                border.width: 1
+                                                border.color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong
+                                                opacity: enabled ? 1 : 0.38
+                                                enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: parent.modelData.label
+                                                    color: workspace.selectedTextFillModeId === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                                                    font.family: Theme.bodyFont
+                                                    font.pixelSize: 11
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    enabled: parent.enabled
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: workspace.setSelectedTextFillMode(parent.modelData.value)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "颜色"
+                                    visible: workspace.selectedTextFillModeId === "solid"
+                                    ColorValueField {
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("textFill", workspace.selectedTextColor)
+                                        onValueCommitted: value => workspace.setSelectedTextColor(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "类型"
+                                    visible: workspace.selectedTextFillModeId === "gradient"
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.textGradientTypeOptions
+                                        currentIndex: window.optionIndex(window.textGradientTypeOptions, workspace.selectedTextGradientTypeId)
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: workspace.setSelectedTextGradientType(currentValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "方向"
+                                    visible: workspace.selectedTextFillModeId === "gradient"
+                                             && workspace.selectedTextGradientTypeId === "linear"
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.textGradientDirectionOptions
+                                        currentIndex: window.optionIndex(window.textGradientDirectionOptions, workspace.selectedTextGradientDirectionId)
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: workspace.setSelectedTextGradientDirection(currentValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "起始"
+                                    visible: workspace.selectedTextFillModeId === "gradient"
+                                    ColorValueField {
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextGradientStartColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("textGradient", workspace.selectedTextGradientStartColor, 0)
+                                        onValueCommitted: value => workspace.setSelectedTextGradientColor(0, value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "结束"
+                                    visible: workspace.selectedTextFillModeId === "gradient"
+                                    ColorValueField {
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextGradientEndColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("textGradient", workspace.selectedTextGradientEndColor, 1)
+                                        onValueCommitted: value => workspace.setSelectedTextGradientColor(1, value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "中心"
+                                    visible: workspace.selectedTextFillModeId === "gradient"
+                                             && workspace.selectedTextGradientTypeId === "radial"
+                                    ValueBox {
+                                        value: workspace.selectedTextGradientCenterXPercent.toString()
+                                        bindValue: true
+                                        suffix: "X%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var xValue = parseInt(value)
+                                            var yValue = workspace.selectedTextGradientCenterYPercent
+                                            if (!isNaN(xValue)) workspace.setSelectedTextGradientCenter(xValue, yValue)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTextGradientCenterYPercent.toString()
+                                        bindValue: true
+                                        suffix: "Y%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var xValue = workspace.selectedTextGradientCenterXPercent
+                                            var yValue = parseInt(value)
+                                            if (!isNaN(yValue)) workspace.setSelectedTextGradientCenter(xValue, yValue)
+                                        }
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                id: textBackgroundSection
+                                objectName: "textBackgroundSection"
+                                width: parent.width
+                                title: "文字背景"
+                                summary: workspace.selectedTextBackgroundSummary
+                                visible: workspace.selectedIsTextLayer
+
+                                InspectorRow {
+                                    label: "启用"
+                                    BodyLabel {
+                                        text: workspace.selectedTextBackgroundEnabled ? "背景已开启" : "无背景"
+                                        color: workspace.selectedTextBackgroundEnabled ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedTextBackgroundEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedTextBackgroundEnabled(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "颜色"
+                                    visible: workspace.selectedTextBackgroundEnabled
+                                    ColorValueField {
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextBackgroundColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("textBackground", workspace.selectedTextBackgroundColor)
+                                        onValueCommitted: value => workspace.setSelectedTextBackgroundColor(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "参数"
+                                    visible: workspace.selectedTextBackgroundEnabled
+                                    ValueBox {
+                                        value: workspace.selectedTextBackgroundOpacity.toString()
+                                        bindValue: true
+                                        suffix: "%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextBackgroundOpacity(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTextBackgroundPadding.toString()
+                                        bindValue: true
+                                        suffix: "扩展px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextBackgroundPadding(parsed)
+                                        }
+                                    }
+                                }
+                            }
 
                             PropertySection {
                                 width: parent.width
