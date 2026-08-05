@@ -153,6 +153,93 @@ def test_workspace_can_toggle_visibility_and_locking(tmp_path: Path):
     assert len(document.layers) == 1
 
 
+@pytest.mark.unit
+def test_workspace_selects_topmost_layer_at_canvas_point(tmp_path: Path):
+    document = _image_document(tmp_path)
+    document.add_text_layer(TextLayer(name="上层", x=20, y=20, width=80, height=50))
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+
+    assert workspace.selectLayerAt(30, 30) == 1
+    assert workspace.selectedLayerName == "上层"
+    assert workspace.selectLayerAt(220, 170) == -1
+    assert workspace.selectedLayerIndex == -1
+
+
+@pytest.mark.unit
+def test_workspace_hit_test_accounts_for_layer_rotation(tmp_path: Path):
+    document = _image_document(tmp_path)
+    layer = document.layers[0]
+    layer.x = 50
+    layer.y = 50
+    layer.width = 100
+    layer.height = 40
+    layer.rotation = 90
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+
+    assert workspace.selectLayerAt(100, 25) == 0
+    assert workspace.selectLayerAt(55, 55) == -1
+
+
+@pytest.mark.unit
+def test_workspace_geometry_commit_is_atomic_and_respects_lock(tmp_path: Path):
+    document = _image_document(tmp_path)
+    document._history_manager.clear()
+    document.save_state("初始状态")
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+    workspace.selectLayer(0)
+
+    assert workspace.applySelectedGeometry(30, 40, 100, 90) is True
+    assert (document.layers[0].x, document.layers[0].y) == (30, 40)
+    assert (document.layers[0].width, document.layers[0].height) == (100, 90)
+    assert workspace.undo() is True
+    assert (document.layers[0].x, document.layers[0].y) == (12, 18)
+    assert (document.layers[0].width, document.layers[0].height) == (80, 60)
+
+    document.layers[0].locked = True
+    assert workspace.applySelectedGeometry(1, 2, 30, 40) is False
+    assert (document.layers[0].x, document.layers[0].y) == (12, 18)
+
+
+@pytest.mark.unit
+def test_workspace_rename_rotation_and_alignment_commands(tmp_path: Path):
+    document = _image_document(tmp_path)
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+    workspace.selectLayer(0)
+
+    assert workspace.setSelectedName("主产品") is True
+    assert workspace.selectedLayerName == "主产品"
+    assert workspace.selectedCanRotate is True
+    assert workspace.setSelectedRotation(450.0) is True
+    assert workspace.selectedRotation == pytest.approx(90.0)
+    assert workspace.alignSelected("left") is True
+    assert document.layers[0].x == 0
+    assert workspace.alignSelected("hcenter") is True
+    assert document.layers[0].x == 80
+    assert workspace.alignSelected("vcenter") is True
+    assert document.layers[0].y == 60
+
+    document.add_text_layer(TextLayer(name="文字", x=0, y=0, width=80, height=30))
+    workspace.selectLayer(1)
+    assert workspace.selectedCanRotate is False
+    assert workspace.setSelectedRotation(30.0) is False
+
+
 @pytest.mark.integration
 def test_workspace_exports_real_document_image(tmp_path: Path):
     document = _image_document(tmp_path)

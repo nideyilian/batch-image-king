@@ -42,3 +42,25 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     with Image.open(screenshot) as image:
         assert image.size == (1280, 760)
         assert image.getbbox() is not None
+
+
+@pytest.mark.integration
+def test_qml_canvas_drag_updates_real_layer_geometry():
+    repo_root = Path(__file__).resolve().parents[1]
+    probe = repo_root / "tests" / "helpers" / "qml_canvas_interaction_probe.py"
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["QT_QUICK_BACKEND"] = "software"
+
+    result = subprocess.run(
+        [sys.executable, str(probe)],
+        cwd=repo_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "dragged layer to" in result.stdout

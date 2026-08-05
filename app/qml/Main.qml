@@ -293,9 +293,21 @@ ApplicationWindow {
                 IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; onClicked: workspace.addTextLayer() }
                 IconButton { glyph: "\uF158"; tooltip: "添加异形（后续接入）"; enabled: false }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-                IconButton { glyph: "\uE74B"; tooltip: "左对齐"; onClicked: showToast("左对齐") }
-                IconButton { glyph: "\uE74A"; tooltip: "水平居中"; onClicked: showToast("水平居中") }
-                IconButton { glyph: "\uE73F"; tooltip: "垂直居中"; onClicked: showToast("垂直居中") }
+                IconButton {
+                    glyph: "\uE74B"; tooltip: "左对齐"
+                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked
+                    onClicked: workspace.alignSelected("left")
+                }
+                IconButton {
+                    glyph: "\uE74A"; tooltip: "水平居中"
+                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked
+                    onClicked: workspace.alignSelected("hcenter")
+                }
+                IconButton {
+                    glyph: "\uE73F"; tooltip: "垂直居中"
+                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked
+                    onClicked: workspace.alignSelected("vcenter")
+                }
 
                 Item { Layout.fillWidth: true }
 
@@ -592,6 +604,135 @@ ApplicationWindow {
                     (width - 60) / safeCanvasWidth
                 )
                 property real actualScale: Math.max(0.05, fitScale * (zoomValue / 0.78))
+                property bool transformActive: false
+                property string transformMode: ""
+                property real gestureStartMouseX: 0
+                property real gestureStartMouseY: 0
+                property real gestureStartX: 0
+                property real gestureStartY: 0
+                property real gestureStartWidth: 1
+                property real gestureStartHeight: 1
+                property real transientX: workspace.selectedX
+                property real transientY: workspace.selectedY
+                property real transientWidth: Math.max(1, workspace.selectedWidth)
+                property real transientHeight: Math.max(1, workspace.selectedHeight)
+
+                function selectedLocalPoint(canvasX, canvasY) {
+                    var width = Math.max(1, workspace.selectedWidth)
+                    var height = Math.max(1, workspace.selectedHeight)
+                    var centerX = workspace.selectedX + width / 2
+                    var centerY = workspace.selectedY + height / 2
+                    var radians = workspace.selectedRotation * Math.PI / 180
+                    var offsetX = canvasX - centerX
+                    var offsetY = canvasY - centerY
+                    return {
+                        "x": Math.cos(radians) * offsetX + Math.sin(radians) * offsetY + width / 2,
+                        "y": -Math.sin(radians) * offsetX + Math.cos(radians) * offsetY + height / 2
+                    }
+                }
+
+                function handleAt(canvasX, canvasY) {
+                    if (workspace.selectedLayerIndex < 0 || workspace.selectedLocked || Math.abs(workspace.selectedRotation) > 0.001)
+                        return ""
+                    var point = selectedLocalPoint(canvasX, canvasY)
+                    var width = Math.max(1, workspace.selectedWidth)
+                    var height = Math.max(1, workspace.selectedHeight)
+                    var tolerance = 10 / actualScale
+                    var nearLeft = Math.abs(point.x) <= tolerance
+                    var nearRight = Math.abs(point.x - width) <= tolerance
+                    var nearTop = Math.abs(point.y) <= tolerance
+                    var nearBottom = Math.abs(point.y - height) <= tolerance
+                    if (nearLeft && nearTop) return "nw"
+                    if (nearRight && nearTop) return "ne"
+                    if (nearLeft && nearBottom) return "sw"
+                    if (nearRight && nearBottom) return "se"
+                    return ""
+                }
+
+                function selectedContains(canvasX, canvasY) {
+                    if (workspace.selectedLayerIndex < 0)
+                        return false
+                    var point = selectedLocalPoint(canvasX, canvasY)
+                    return point.x >= 0 && point.x <= workspace.selectedWidth
+                            && point.y >= 0 && point.y <= workspace.selectedHeight
+                }
+
+                function pointerCursor(canvasX, canvasY) {
+                    var handle = handleAt(canvasX, canvasY)
+                    if (handle === "nw" || handle === "se") return Qt.SizeFDiagCursor
+                    if (handle === "ne" || handle === "sw") return Qt.SizeBDiagCursor
+                    if (!workspace.selectedLocked && selectedContains(canvasX, canvasY)) return Qt.OpenHandCursor
+                    return Qt.ArrowCursor
+                }
+
+                function beginTransform(mode, canvasX, canvasY) {
+                    transformMode = mode
+                    gestureStartMouseX = canvasX
+                    gestureStartMouseY = canvasY
+                    gestureStartX = workspace.selectedX
+                    gestureStartY = workspace.selectedY
+                    gestureStartWidth = Math.max(1, workspace.selectedWidth)
+                    gestureStartHeight = Math.max(1, workspace.selectedHeight)
+                    transientX = gestureStartX
+                    transientY = gestureStartY
+                    transientWidth = gestureStartWidth
+                    transientHeight = gestureStartHeight
+                    transformActive = true
+                }
+
+                function updateTransform(canvasX, canvasY) {
+                    if (!transformActive)
+                        return
+                    var deltaX = canvasX - gestureStartMouseX
+                    var deltaY = canvasY - gestureStartMouseY
+                    var minimumSize = 16
+                    if (transformMode === "move") {
+                        transientX = Math.max(0, Math.min(safeCanvasWidth - gestureStartWidth, gestureStartX + deltaX))
+                        transientY = Math.max(0, Math.min(safeCanvasHeight - gestureStartHeight, gestureStartY + deltaY))
+                        return
+                    }
+
+                    var right = gestureStartX + gestureStartWidth
+                    var bottom = gestureStartY + gestureStartHeight
+                    if (transformMode === "nw" || transformMode === "sw") {
+                        transientX = Math.max(0, Math.min(right - minimumSize, gestureStartX + deltaX))
+                        transientWidth = right - transientX
+                    } else {
+                        transientWidth = Math.max(minimumSize, Math.min(safeCanvasWidth - gestureStartX, gestureStartWidth + deltaX))
+                    }
+                    if (transformMode === "nw" || transformMode === "ne") {
+                        transientY = Math.max(0, Math.min(bottom - minimumSize, gestureStartY + deltaY))
+                        transientHeight = bottom - transientY
+                    } else {
+                        transientHeight = Math.max(minimumSize, Math.min(safeCanvasHeight - gestureStartY, gestureStartHeight + deltaY))
+                    }
+                }
+
+                function commitTransform() {
+                    if (!transformActive)
+                        return
+                    var finalX = Math.round(transientX)
+                    var finalY = Math.round(transientY)
+                    var finalWidth = Math.round(transientWidth)
+                    var finalHeight = Math.round(transientHeight)
+                    transformActive = false
+                    transformMode = ""
+                    workspace.applySelectedGeometry(finalX, finalY, finalWidth, finalHeight)
+                }
+
+                function cancelTransform() {
+                    transformActive = false
+                    transformMode = ""
+                }
+
+                WheelHandler {
+                    target: null
+                    onWheel: event => {
+                        var direction = event.angleDelta.y > 0 ? 1 : -1
+                        zoomValue = Math.max(0.35, Math.min(2.0, zoomValue + direction * 0.05))
+                        event.accepted = true
+                    }
+                }
 
                 Canvas {
                     anchors.fill: parent
@@ -614,6 +755,8 @@ ApplicationWindow {
                     anchors.centerIn: parent
 
                     Rectangle {
+                        id: artboard
+                        objectName: "artboard"
                         width: canvasWorkspace.safeCanvasWidth
                         height: canvasWorkspace.safeCanvasHeight
                         scale: canvasWorkspace.actualScale
@@ -632,24 +775,55 @@ ApplicationWindow {
                             smooth: true
                         }
 
+                        MouseArea {
+                            id: canvasPointer
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: canvasWorkspace.transformActive
+                                         ? (canvasWorkspace.transformMode === "move" ? Qt.ClosedHandCursor : canvasWorkspace.pointerCursor(mouseX, mouseY))
+                                         : canvasWorkspace.pointerCursor(mouseX, mouseY)
+
+                            onPressed: mouse => {
+                                var handle = canvasWorkspace.handleAt(mouse.x, mouse.y)
+                                if (handle.length > 0) {
+                                    canvasWorkspace.beginTransform(handle, mouse.x, mouse.y)
+                                    return
+                                }
+                                var selectedIndex = workspace.selectLayerAt(mouse.x, mouse.y)
+                                if (selectedIndex >= 0 && !workspace.selectedLocked)
+                                    canvasWorkspace.beginTransform("move", mouse.x, mouse.y)
+                            }
+                            onPositionChanged: mouse => {
+                                if (pressed)
+                                    canvasWorkspace.updateTransform(mouse.x, mouse.y)
+                            }
+                            onReleased: canvasWorkspace.commitTransform()
+                            onCanceled: canvasWorkspace.cancelTransform()
+                        }
+
                         Rectangle {
                             id: selectionBox
                             visible: workspace.selectedLayerIndex >= 0
-                            x: workspace.selectedX
-                            y: workspace.selectedY
-                            width: Math.max(1, workspace.selectedWidth)
-                            height: Math.max(1, workspace.selectedHeight)
-                            color: "transparent"
+                            x: canvasWorkspace.transformActive ? canvasWorkspace.transientX : workspace.selectedX
+                            y: canvasWorkspace.transformActive ? canvasWorkspace.transientY : workspace.selectedY
+                            width: canvasWorkspace.transformActive ? canvasWorkspace.transientWidth : Math.max(1, workspace.selectedWidth)
+                            height: canvasWorkspace.transformActive ? canvasWorkspace.transientHeight : Math.max(1, workspace.selectedHeight)
+                            rotation: workspace.selectedCanRotate ? workspace.selectedRotation : 0
+                            transformOrigin: Item.Center
+                            color: canvasWorkspace.transformActive ? "#153fd2aa" : "transparent"
                             border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
-                            border.color: Theme.accent
+                            border.color: workspace.selectedLocked ? Theme.textMuted : Theme.accent
 
                             Repeater {
                                 model: [
-                                    {"x": 0, "y": 0}, {"x": parent.width / 2, "y": 0}, {"x": parent.width, "y": 0},
-                                    {"x": 0, "y": parent.height}, {"x": parent.width / 2, "y": parent.height}, {"x": parent.width, "y": parent.height}
+                                    {"x": 0, "y": 0}, {"x": parent.width, "y": 0},
+                                    {"x": 0, "y": parent.height}, {"x": parent.width, "y": parent.height}
                                 ]
                                 delegate: Rectangle {
                                     required property var modelData
+                                    visible: !workspace.selectedLocked && Math.abs(workspace.selectedRotation) <= 0.001
                                     width: 8 / canvasWorkspace.actualScale
                                     height: width
                                     radius: width / 2
@@ -658,6 +832,28 @@ ApplicationWindow {
                                     color: "#f4f7f5"
                                     border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
                                     border.color: Theme.accentPressed
+                                }
+                            }
+
+                            Rectangle {
+                                visible: canvasWorkspace.transformActive
+                                anchors.left: parent.left
+                                anchors.bottom: parent.top
+                                anchors.bottomMargin: 8 / canvasWorkspace.actualScale
+                                width: geometryLabel.implicitWidth + 14 / canvasWorkspace.actualScale
+                                height: 22 / canvasWorkspace.actualScale
+                                radius: 3 / canvasWorkspace.actualScale
+                                color: "#e91b2021"
+                                border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                border.color: Theme.borderStrong
+
+                                Text {
+                                    id: geometryLabel
+                                    anchors.centerIn: parent
+                                    text: Math.round(canvasWorkspace.transientWidth) + " x " + Math.round(canvasWorkspace.transientHeight)
+                                    color: Theme.textPrimary
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: 10 / canvasWorkspace.actualScale
                                 }
                             }
                         }
@@ -794,13 +990,23 @@ ApplicationWindow {
                                 summary: "px / °"
 
                                 InspectorRow {
+                                    label: "名称"
+                                    ValueBox {
+                                        value: workspace.selectedLayerName; bindValue: true; Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked
+                                        onValueCommitted: value => workspace.setSelectedName(value)
+                                    }
+                                }
+                                InspectorRow {
                                     label: "位置"
                                     ValueBox {
                                         value: workspace.selectedX.toString(); bindValue: true; suffix: "X"; Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedX(parsed) }
                                     }
                                     ValueBox {
                                         value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"; Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedY(parsed) }
                                     }
                                 }
@@ -808,19 +1014,26 @@ ApplicationWindow {
                                     label: "尺寸"
                                     ValueBox {
                                         value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"; Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedWidth(parsed) }
                                     }
                                     ValueBox {
                                         value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"; Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
                                     }
                                 }
                                 InspectorRow {
                                     label: "旋转"
-                                    ValueBox { text: "0"; suffix: "°"; editable: false; Layout.fillWidth: true }
-                                    Rectangle {
-                                        Layout.preferredWidth: 32; Layout.preferredHeight: 30; radius: Theme.radiusSmall; color: Theme.bgControl; border.width: 1; border.color: Theme.borderStrong
-                                        AppIcon { anchors.centerIn: parent; glyph: "\uE72C"; iconSize: 13 }
+                                    ValueBox {
+                                        value: (Math.round(workspace.selectedRotation * 10) / 10).toString(); bindValue: true; suffix: "°"; Layout.fillWidth: true
+                                        editable: workspace.selectedCanRotate && !workspace.selectedLocked
+                                        onValueCommitted: value => { var parsed = parseFloat(value); if (!isNaN(parsed)) workspace.setSelectedRotation(parsed) }
+                                    }
+                                    IconButton {
+                                        glyph: "\uE72C"; tooltip: "重置旋转"; buttonSize: 30
+                                        enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
+                                        onClicked: workspace.setSelectedRotation(0)
                                     }
                                 }
                             }
@@ -997,8 +1210,21 @@ ApplicationWindow {
                         glyph: "\uE8A3"; tooltip: "放大"; buttonSize: 24
                         onClicked: zoomValue = Math.min(2.0, zoomValue + 0.05)
                     }
-                    TinyLabel { width: 42; text: Math.round(zoomValue * 100) + "%"; color: Theme.textSecondary; height: 28; horizontalAlignment: Text.AlignRight }
-                }
+                                    TinyLabel {
+                                        width: 42
+                                        text: Math.round(zoomValue * 100) + "%"
+                                        color: fitZoomMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                                        height: 28
+                                        horizontalAlignment: Text.AlignRight
+                                        MouseArea {
+                                            id: fitZoomMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: zoomValue = 0.78
+                                        }
+                                    }
+                                }
             }
 
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top }

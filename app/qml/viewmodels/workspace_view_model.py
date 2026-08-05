@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import threading
 from typing import Optional
@@ -168,6 +169,16 @@ class WorkspaceViewModel(QObject):
     @Property(bool, notify=selectionChanged)
     def selectedLocked(self) -> bool:
         return bool(getattr(self._selected_layer(), "locked", False))
+
+    @Property(float, notify=selectionChanged)
+    def selectedRotation(self) -> float:
+        layer = self._selected_layer()
+        return float(getattr(layer, "rotation", 0.0) or 0.0)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedCanRotate(self) -> bool:
+        layer = self._selected_layer()
+        return layer is not None and hasattr(layer, "rotation")
 
     @Property(int, notify=previewChanged)
     def previewRevision(self) -> int:
@@ -492,30 +503,83 @@ class WorkspaceViewModel(QObject):
         self.selectionChanged.emit()
         return True
 
+    @Slot(result=bool)
+    def clearSelection(self) -> bool:
+        if self.selectedLayerIndex < 0:
+            return True
+        self._document.selected_layer_index = -1
+        self._document.selected_layer_indices = []
+        self.selectionChanged.emit()
+        return True
+
+    @staticmethod
+    def _layer_contains_point(layer, x: float, y: float) -> bool:
+        width = float(getattr(layer, "width", 0) or 0)
+        height = float(getattr(layer, "height", 0) or 0)
+        if width <= 0 or height <= 0:
+            return False
+        left = float(getattr(layer, "x", 0) or 0)
+        top = float(getattr(layer, "y", 0) or 0)
+        center_x = left + width / 2.0
+        center_y = top + height / 2.0
+        offset_x = float(x) - center_x
+        offset_y = float(y) - center_y
+        angle = math.radians(float(getattr(layer, "rotation", 0.0) or 0.0))
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        local_x = cosine * offset_x + sine * offset_y
+        local_y = -sine * offset_x + cosine * offset_y
+        return abs(local_x) <= width / 2.0 and abs(local_y) <= height / 2.0
+
+    @Slot(float, float, result=int)
+    def selectLayerAt(self, x: float, y: float) -> int:
+        for index in range(self._layer_model.rowCount() - 1, -1, -1):
+            layer = self._layer_model.layer_at(index)
+            if layer is None:
+                continue
+            if not bool(getattr(layer, "visible", True)) or bool(getattr(layer, "locked", False)):
+                continue
+            if self._layer_contains_point(layer, x, y):
+                self.selectLayer(index)
+                return index
+        self.clearSelection()
+        return -1
+
     def _ensure_history_baseline(self) -> None:
         manager = self._document._history_manager
         if manager.get_history_count() == 0:
             self._document.save_state("初始状态")
 
-    def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
+    def _set_layer_attrs(self, index: int, changes: dict, action: str, *, render: bool = True) -> bool:
         with self._document_lock:
             layer = self._layer_model.layer_at(index)
             if layer is None:
                 return False
-            if attr not in ("visible", "locked") and bool(getattr(layer, "locked", False)):
+            if any(attr not in ("visible", "locked") for attr in changes) and bool(
+                getattr(layer, "locked", False)
+            ):
                 self._set_status("图层已锁定", toast=True)
                 return False
-            current = getattr(layer, attr, None)
-            if current == value:
+            effective_changes = {
+                attr: value
+                for attr, value in changes.items()
+                if getattr(layer, attr, None) != value
+            }
+            if not effective_changes:
                 return True
             self._ensure_history_baseline()
-            setattr(layer, attr, value)
+            for attr, value in effective_changes.items():
+                setattr(layer, attr, value)
             self._document.is_modified = True
-            if attr in ("x", "y", "width", "height", "visible", "locked"):
+            if any(
+                attr in ("x", "y", "width", "height", "rotation", "visible", "locked")
+                for attr in effective_changes
+            ):
                 self._document.bump_hit_test_version()
-            invalidate = getattr(self._document, "_invalidate_render_cache", None)
-            if callable(invalidate):
-                invalidate()
+            if any(attr not in ("name", "locked") for attr in effective_changes):
+                invalidate = getattr(self._document, "_invalidate_render_cache", None)
+                if callable(invalidate):
+                    invalidate()
             self._document.save_state(action)
         self._layer_model.notify_row(index)
         self.selectionChanged.emit()
@@ -524,6 +588,64 @@ class WorkspaceViewModel(QObject):
         if render:
             self.requestPreview(force=True)
         return True
+
+    def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
+        return self._set_layer_attrs(index, {attr: value}, action, render=render)
+
+    @Slot(str, result=bool)
+    def setSelectedName(self, value: str) -> bool:
+        value = str(value or "").strip()
+        if not value:
+            self._set_status("图层名称不能为空", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "name",
+            value[:120],
+            "重命名图层",
+            render=False,
+        )
+
+    @Slot(float, result=bool)
+    def setSelectedRotation(self, value: float) -> bool:
+        if not self.selectedCanRotate:
+            self._set_status("当前图层不支持旋转", toast=True)
+            return False
+        value = float(value) % 360.0
+        return self._set_layer_attr(self.selectedLayerIndex, "rotation", value, "旋转图层")
+
+    @Slot(int, int, int, int, result=bool)
+    def applySelectedGeometry(self, x: int, y: int, width: int, height: int) -> bool:
+        if width <= 0 or height <= 0:
+            self._set_status("图层尺寸必须大于零", toast=True)
+            return False
+        return self._set_layer_attrs(
+            self.selectedLayerIndex,
+            {
+                "x": int(x),
+                "y": int(y),
+                "width": int(width),
+                "height": int(height),
+            },
+            "画布变换图层",
+        )
+
+    @Slot(str, result=bool)
+    def alignSelected(self, mode: str) -> bool:
+        layer = self._selected_layer()
+        if layer is None:
+            return False
+        width = int(getattr(layer, "width", 0))
+        height = int(getattr(layer, "height", 0))
+        alignments = {
+            "left": {"x": 0},
+            "hcenter": {"x": (self.canvasWidth - width) // 2},
+            "vcenter": {"y": (self.canvasHeight - height) // 2},
+        }
+        changes = alignments.get(str(mode))
+        if changes is None:
+            return False
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "对齐图层")
 
     @Slot(int, result=bool)
     def setSelectedX(self, value: int) -> bool:
