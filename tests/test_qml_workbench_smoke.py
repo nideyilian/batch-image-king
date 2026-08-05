@@ -151,7 +151,10 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'enabled: index === 0' not in qml_source
     assert 'id: fileMenu' in qml_source
     assert 'legacyTools.openBatchExport()' in qml_source
-    assert 'legacyTools.openAdvancedLayerProperties()' in qml_source
+    assert 'legacyTools.openAdvancedLayerProperties()' not in qml_source
+    assert 'function revealAdvancedProperties()' in qml_source
+    assert 'objectName: "clonePropertiesSection"' in qml_source
+    assert 'objectName: "advancedStrokeSection"' in qml_source
     assert 'legacyTools.openBindingManager()' in qml_source
     assert 'legacyTools.openSizeMatchManager()' in qml_source
     assert 'legacyTools.openCanvasPresetManager()' in qml_source

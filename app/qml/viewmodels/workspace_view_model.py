@@ -661,6 +661,52 @@ class WorkspaceViewModel(QObject):
         return self._rgba_to_hex(getattr(self._selected_layer(), "stroke_color", (0, 0, 0, 255)))
 
     @Property(bool, notify=selectionChanged)
+    def selectedSupportsAdvancedStroke(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedSupportsStroke and all(
+            hasattr(layer, attr)
+            for attr in (
+                "stroke_type",
+                "stroke_join",
+                "stroke_cap",
+                "stroke_dash_length",
+                "stroke_dash_gap",
+            )
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedStrokeType(self) -> int:
+        if not self.selectedSupportsAdvancedStroke:
+            return 0
+        return max(0, min(2, int(getattr(self._selected_layer(), "stroke_type", 0))))
+
+    @Property(str, notify=selectionChanged)
+    def selectedStrokeJoin(self) -> str:
+        if not self.selectedSupportsAdvancedStroke:
+            return "miter"
+        value = str(getattr(self._selected_layer(), "stroke_join", "miter"))
+        return value if value in {"miter", "round", "bevel"} else "miter"
+
+    @Property(str, notify=selectionChanged)
+    def selectedStrokeCap(self) -> str:
+        if not self.selectedSupportsAdvancedStroke:
+            return "butt"
+        value = str(getattr(self._selected_layer(), "stroke_cap", "butt"))
+        return value if value in {"butt", "round", "square"} else "butt"
+
+    @Property(int, notify=selectionChanged)
+    def selectedStrokeDashLength(self) -> int:
+        if not self.selectedSupportsAdvancedStroke:
+            return 0
+        return max(0, int(getattr(self._selected_layer(), "stroke_dash_length", 0)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedStrokeDashGap(self) -> int:
+        if not self.selectedSupportsAdvancedStroke:
+            return 0
+        return max(0, int(getattr(self._selected_layer(), "stroke_dash_gap", 0)))
+
+    @Property(bool, notify=selectionChanged)
     def selectedSupportsCornerRadius(self) -> bool:
         return hasattr(self._selected_layer(), "corner_radius")
 
@@ -893,11 +939,109 @@ class WorkspaceViewModel(QObject):
         return " · ".join(parts)
 
     @Property(bool, notify=selectionChanged)
+    def selectedSupportsClone(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedHasImageSource and all(
+            hasattr(layer, attr)
+            for attr in (
+                "clone_enabled",
+                "clone_rows",
+                "clone_columns",
+                "clone_row_spacing",
+                "clone_column_spacing",
+                "clone_mirror_mode",
+                "clone_fill_enabled",
+                "clone_fill_mode",
+                "clone_fill_spacing",
+                "clone_fill_margin",
+                "clone_fill_angle",
+                "clone_custom_size_enabled",
+                "clone_custom_width",
+                "clone_custom_height",
+            )
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedCloneEnabled(self) -> bool:
+        return self.selectedSupportsClone and bool(
+            getattr(self._selected_layer(), "clone_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneRows(self) -> int:
+        return max(1, int(getattr(self._selected_layer(), "clone_rows", 1)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneColumns(self) -> int:
+        return max(1, int(getattr(self._selected_layer(), "clone_columns", 1)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneRowSpacing(self) -> int:
+        return max(0, int(getattr(self._selected_layer(), "clone_row_spacing", 0)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneColumnSpacing(self) -> int:
+        return max(0, int(getattr(self._selected_layer(), "clone_column_spacing", 0)))
+
+    @Property(str, notify=selectionChanged)
+    def selectedCloneMirrorMode(self) -> str:
+        value = str(getattr(self._selected_layer(), "clone_mirror_mode", "none"))
+        return value if value in {"none", "horizontal", "vertical"} else "none"
+
+    @Property(bool, notify=selectionChanged)
+    def selectedCloneCustomSizeEnabled(self) -> bool:
+        return self.selectedSupportsClone and bool(
+            getattr(self._selected_layer(), "clone_custom_size_enabled", False)
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneCustomWidth(self) -> int:
+        layer = self._selected_layer()
+        value = int(getattr(layer, "clone_custom_width", 0) or 0)
+        return max(1, value or int(getattr(layer, "width", 1)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneCustomHeight(self) -> int:
+        layer = self._selected_layer()
+        value = int(getattr(layer, "clone_custom_height", 0) or 0)
+        return max(1, value or int(getattr(layer, "height", 1)))
+
+    @Property(bool, notify=selectionChanged)
+    def selectedCloneFillEnabled(self) -> bool:
+        return self.selectedSupportsClone and bool(
+            getattr(self._selected_layer(), "clone_fill_enabled", False)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedCloneFillMode(self) -> str:
+        value = str(getattr(self._selected_layer(), "clone_fill_mode", "grid"))
+        return value if value in {"grid", "staggered", "border"} else "grid"
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneFillSpacing(self) -> int:
+        return max(0, int(getattr(self._selected_layer(), "clone_fill_spacing", 0)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedCloneFillMargin(self) -> int:
+        return max(0, int(getattr(self._selected_layer(), "clone_fill_margin", 0)))
+
+    @Property(float, notify=selectionChanged)
+    def selectedCloneFillAngle(self) -> float:
+        return float(getattr(self._selected_layer(), "clone_fill_angle", 0.0)) % 360.0
+
+    @Property(bool, notify=selectionChanged)
     def selectedSupportsImageFit(self) -> bool:
         layer = self._selected_layer()
         return self.selectedHasImageSource and all(
             hasattr(layer, attr)
             for attr in ("fit_mode", "crop_direction", "flip_horizontal", "flip_vertical")
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedUseOriginalSize(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedHasImageSource and bool(
+            getattr(layer, "use_original_size", False)
         )
 
     @Property(str, notify=selectionChanged)
@@ -949,6 +1093,31 @@ class WorkspaceViewModel(QObject):
                 "vector_path_closed",
             )
         )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsVectorCorners(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedSupportsVectorPath and all(
+            hasattr(layer, attr)
+            for attr in (
+                "vector_corner_radius_tl",
+                "vector_corner_radius_tr",
+                "vector_corner_radius_br",
+                "vector_corner_radius_bl",
+            )
+        )
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedVectorCornerRadii(self):
+        if not self.selectedSupportsVectorCorners:
+            return [0, 0, 0, 0]
+        layer = self._selected_layer()
+        return [
+            max(0, int(getattr(layer, "vector_corner_radius_tl", 0))),
+            max(0, int(getattr(layer, "vector_corner_radius_tr", 0))),
+            max(0, int(getattr(layer, "vector_corner_radius_br", 0))),
+            max(0, int(getattr(layer, "vector_corner_radius_bl", 0))),
+        ]
 
     @Property(bool, notify=selectionChanged)
     def selectedVectorPathEnabled(self) -> bool:
@@ -3320,14 +3489,17 @@ class WorkspaceViewModel(QObject):
             for attr, value in effective_changes.items():
                 setattr(layer, attr, value)
             if any(
-                attr in ("fit_mode", "crop_direction")
+                attr in ("fit_mode", "crop_direction", "use_original_size")
                 for attr in effective_changes
             ):
-                layer.cached_image = None
-                layer._cache_valid = False
+                self._clear_image_layer_cache(layer)
+                if hasattr(layer, "_cache_valid"):
+                    layer._cache_valid = False
             self._document.is_modified = True
             if any(
-                attr in ("x", "y", "width", "height", "rotation", "visible", "locked")
+                attr in ("x", "y", "width", "height", "rotation", "visible", "locked", "shape_type")
+                or attr.startswith("clone_")
+                or attr.startswith("vector_")
                 for attr in effective_changes
             ):
                 self._document.bump_hit_test_version()
@@ -3419,6 +3591,19 @@ class WorkspaceViewModel(QObject):
             "fit_mode",
             mode[0],
             "修改图片适配模式",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedUseOriginalSize(self, enabled: bool) -> bool:
+        layer = self._selected_layer()
+        if not self.selectedHasImageSource or layer is None or not hasattr(layer, "use_original_size"):
+            self._set_status("当前图层不支持智能裁剪", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "use_original_size",
+            bool(enabled),
+            "切换智能裁剪",
         )
 
     @Slot(str, result=bool)
@@ -3627,6 +3812,31 @@ class WorkspaceViewModel(QObject):
             "修改控制柄联动",
             lambda layer: setattr(layer, "vector_handle_link_mode", mode),
         )
+
+    @Slot(int, result=bool)
+    def setSelectedVectorCornerRadiusAll(self, value: int) -> bool:
+        value = max(0, min(1000, int(value)))
+        return self.setSelectedVectorCornerRadii(value, value, value, value)
+
+    @Slot(int, int, int, int, result=bool)
+    def setSelectedVectorCornerRadii(self, top_left: int, top_right: int, bottom_right: int, bottom_left: int) -> bool:
+        if not self.selectedSupportsVectorCorners:
+            self._set_status("当前图层不支持四角圆角", toast=True)
+            return False
+        values = [
+            max(0, min(1000, int(top_left))),
+            max(0, min(1000, int(top_right))),
+            max(0, min(1000, int(bottom_right))),
+            max(0, min(1000, int(bottom_left))),
+        ]
+        changes = {
+            "vector_corner_radius_tl": values[0],
+            "vector_corner_radius_tr": values[1],
+            "vector_corner_radius_br": values[2],
+            "vector_corner_radius_bl": values[3],
+            "corner_radius": max(values),
+        }
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "修改矢量四角圆角")
 
     @Slot(bool, result=bool)
     def setSelectedFlipHorizontal(self, enabled: bool) -> bool:
@@ -3996,6 +4206,115 @@ class WorkspaceViewModel(QObject):
     def regenerateSelectedRandomTransform(self) -> bool:
         return self._refresh_random_transform_preview()
 
+    def _set_selected_clone_attr(self, attr: str, value, action: str) -> bool:
+        if not self.selectedSupportsClone:
+            self._set_status("当前图层不支持分身", toast=True)
+            return False
+        return self._set_layer_attr(self.selectedLayerIndex, attr, value, action)
+
+    @Slot(bool, result=bool)
+    def setSelectedCloneEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsClone:
+            self._set_status("当前图层不支持分身", toast=True)
+            return False
+        layer = self._selected_layer()
+        changes = {"clone_enabled": bool(enabled)}
+        if enabled and int(layer.clone_rows) == 1 and int(layer.clone_columns) == 1:
+            changes.update({"clone_rows": 2, "clone_columns": 2})
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "切换图层分身")
+
+    @Slot(int, result=bool)
+    def setSelectedCloneRows(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_rows", max(1, min(100, int(value))), "修改分身行数"
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedCloneColumns(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_columns", max(1, min(100, int(value))), "修改分身列数"
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedCloneRowSpacing(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_row_spacing", max(0, min(10000, int(value))), "修改分身行距"
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedCloneColumnSpacing(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_column_spacing", max(0, min(10000, int(value))), "修改分身列距"
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedCloneMirrorMode(self, value: str) -> bool:
+        value = str(value or "none")
+        if value not in {"none", "horizontal", "vertical"}:
+            self._set_status("未知的分身镜像模式", toast=True)
+            return False
+        return self._set_selected_clone_attr("clone_mirror_mode", value, "修改分身镜像")
+
+    @Slot(bool, result=bool)
+    def setSelectedCloneCustomSizeEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsClone:
+            self._set_status("当前图层不支持分身", toast=True)
+            return False
+        layer = self._selected_layer()
+        changes = {"clone_custom_size_enabled": bool(enabled)}
+        if enabled:
+            changes.update(
+                {
+                    "clone_custom_width": max(1, int(getattr(layer, "width", 1))),
+                    "clone_custom_height": max(1, int(getattr(layer, "height", 1))),
+                }
+            )
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "切换分身自定义尺寸")
+
+    @Slot(int, result=bool)
+    def setSelectedCloneCustomWidth(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_custom_width", max(1, min(10000, int(value))), "修改分身宽度"
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedCloneCustomHeight(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_custom_height", max(1, min(10000, int(value))), "修改分身高度"
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedCloneFillEnabled(self, enabled: bool) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_fill_enabled", bool(enabled), "切换元素铺排"
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedCloneFillMode(self, value: str) -> bool:
+        value = str(value or "grid")
+        if value not in {"grid", "staggered", "border"}:
+            self._set_status("未知的元素铺排模式", toast=True)
+            return False
+        return self._set_selected_clone_attr("clone_fill_mode", value, "修改元素铺排模式")
+
+    @Slot(int, result=bool)
+    def setSelectedCloneFillSpacing(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_fill_spacing", max(0, min(10000, int(value))), "修改元素间距"
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedCloneFillMargin(self, value: int) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_fill_margin", max(0, min(1000, int(value))), "修改铺排边距"
+        )
+
+    @Slot(float, result=bool)
+    def setSelectedCloneFillAngle(self, value: float) -> bool:
+        return self._set_selected_clone_attr(
+            "clone_fill_angle", float(value) % 360.0, "修改铺排角度"
+        )
+
     @Slot(int, result=bool)
     def setSelectedOpacity(self, value: int) -> bool:
         value = max(0, min(100, int(value)))
@@ -4047,6 +4366,41 @@ class WorkspaceViewModel(QObject):
             self._set_status("描边颜色格式无效", toast=True)
             return False
         return self._set_layer_attr(self.selectedLayerIndex, "stroke_color", color, "修改描边颜色")
+
+    @Slot(int, result=bool)
+    def setSelectedStrokeType(self, value: int) -> bool:
+        if not self.selectedSupportsAdvancedStroke:
+            self._set_status("当前图层不支持高级描边", toast=True)
+            return False
+        value = max(0, min(2, int(value)))
+        return self._set_layer_attr(self.selectedLayerIndex, "stroke_type", value, "修改描边对齐")
+
+    @Slot(str, result=bool)
+    def setSelectedStrokeJoin(self, value: str) -> bool:
+        value = str(value or "miter")
+        if not self.selectedSupportsAdvancedStroke or value not in {"miter", "round", "bevel"}:
+            self._set_status("未知的描边连接类型", toast=True)
+            return False
+        return self._set_layer_attr(self.selectedLayerIndex, "stroke_join", value, "修改描边连接")
+
+    @Slot(str, result=bool)
+    def setSelectedStrokeCap(self, value: str) -> bool:
+        value = str(value or "butt")
+        if not self.selectedSupportsAdvancedStroke or value not in {"butt", "round", "square"}:
+            self._set_status("未知的描边端点类型", toast=True)
+            return False
+        return self._set_layer_attr(self.selectedLayerIndex, "stroke_cap", value, "修改描边端点")
+
+    @Slot(int, int, result=bool)
+    def setSelectedStrokeDash(self, length: int, gap: int) -> bool:
+        if not self.selectedSupportsAdvancedStroke:
+            self._set_status("当前图层不支持高级描边", toast=True)
+            return False
+        changes = {
+            "stroke_dash_length": max(0, min(1000, int(length))),
+            "stroke_dash_gap": max(0, min(1000, int(gap))),
+        }
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "修改描边虚线")
 
     @Slot(int, result=bool)
     def setSelectedCornerRadius(self, value: int) -> bool:

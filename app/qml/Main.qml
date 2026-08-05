@@ -66,6 +66,31 @@ ApplicationWindow {
         { label: "共线", value: "collinear" },
         { label: "自由", value: "free" }
     ]
+    readonly property var cloneMirrorOptions: [
+        { label: "无镜像", value: "none" },
+        { label: "左右镜像", value: "horizontal" },
+        { label: "上下镜像", value: "vertical" }
+    ]
+    readonly property var cloneFillModeOptions: [
+        { label: "常规网格", value: "grid" },
+        { label: "错位排列", value: "staggered" },
+        { label: "边框排列", value: "border" }
+    ]
+    readonly property var strokeTypeOptions: [
+        { label: "内描边", value: 0 },
+        { label: "居中描边", value: 1 },
+        { label: "外描边", value: 2 }
+    ]
+    readonly property var strokeJoinOptions: [
+        { label: "斜接", value: "miter" },
+        { label: "圆角", value: "round" },
+        { label: "斜切", value: "bevel" }
+    ]
+    readonly property var strokeCapOptions: [
+        { label: "平头", value: "butt" },
+        { label: "圆头", value: "round" },
+        { label: "方头", value: "square" }
+    ]
     readonly property var textGradientTypeOptions: [
         { label: "线性", value: "linear" },
         { label: "径向", value: "radial" },
@@ -111,6 +136,19 @@ ApplicationWindow {
         Qt.callLater(function() {
             if (inspectorScroll.contentItem)
                 inspectorScroll.contentItem.contentY = Math.max(0, textShadowSection.y - 8)
+        })
+    }
+
+    function revealAdvancedProperties() {
+        if (workspace.selectedLayerIndex < 0) return
+        inspectorTab = 0
+        transformSection.expanded = true
+        imageLayoutSection.expanded = true
+        clonePropertiesSection.expanded = true
+        Qt.callLater(function() {
+            if (!inspectorScroll.contentItem) return
+            var target = workspace.selectedSupportsClone ? clonePropertiesSection : transformSection
+            inspectorScroll.contentItem.contentY = Math.max(0, target.y - 8)
         })
     }
 
@@ -1083,7 +1121,7 @@ ApplicationWindow {
         ShapeMenuItem { text: "添加异形图层"; onTriggered: legacyTools.openAddShapedLayer() }
         MenuSeparator { }
         ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.renameSelectedLayer() }
-        ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.openAdvancedLayerProperties() }
+        ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
         ShapeMenuItem { text: "绑定管理"; onTriggered: legacyTools.openBindingManager() }
         ShapeMenuItem { text: "尺寸匹配管理"; onTriggered: legacyTools.openSizeMatchManager() }
         MenuSeparator { }
@@ -2328,7 +2366,7 @@ ApplicationWindow {
                         }
                     }
 
-                    IconButton { glyph: "\uE713"; tooltip: "高级工具"; buttonSize: 28; onClicked: legacyTools.openAdvancedLayerProperties() }
+                    IconButton { glyph: "\uE713"; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                 }
             }
 
@@ -3776,7 +3814,7 @@ ApplicationWindow {
                             TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
 
-                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "高级图层属性"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: legacyTools.openAdvancedLayerProperties() }
+                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -3844,25 +3882,12 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "路径"
-                                    Rectangle {
+                                    ValueBox {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 30
-                                        radius: Theme.radiusSmall
-                                        color: Theme.bgControl
-                                        border.width: 1
-                                        border.color: Theme.borderStrong
-                                        Text {
-                                            anchors.left: parent.left
-                                            anchors.right: parent.right
-                                            anchors.leftMargin: 9
-                                            anchors.rightMargin: 9
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: workspace.selectedImageSource || "未设置"
-                                            color: workspace.selectedImageSource ? Theme.textSecondary : Theme.textMuted
-                                            font.family: Theme.bodyFont
-                                            font.pixelSize: 10
-                                            elide: Text.ElideMiddle
-                                        }
+                                        value: workspace.selectedImageSource
+                                        bindValue: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => workspace.setSelectedImageSource(value)
                                     }
                                 }
                                 InspectorRow {
@@ -3994,6 +4019,7 @@ ApplicationWindow {
                             }
 
                             PropertySection {
+                                id: imageLayoutSection
                                 width: parent.width
                                 title: "图片布局"
                                 summary: workspace.selectedFitModeName
@@ -4012,6 +4038,20 @@ ApplicationWindow {
                                             return 0
                                         }
                                         onActivated: workspace.setSelectedFitMode(currentValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "智能裁剪"
+                                    BodyLabel {
+                                        text: workspace.selectedUseOriginalSize ? "按源图细节处理" : "标准适配"
+                                        color: workspace.selectedUseOriginalSize ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedUseOriginalSize
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedUseOriginalSize(checkedValue)
                                     }
                                 }
 
@@ -4545,6 +4585,7 @@ ApplicationWindow {
                             }
 
                             PropertySection {
+                                id: transformSection
                                 width: parent.width
                                 title: "变换"
                                 summary: "px / °"
@@ -4734,6 +4775,209 @@ ApplicationWindow {
                                         buttonSize: 30
                                         enabled: workspace.selectedRandomTransformEnabledCount > 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.regenerateSelectedRandomTransform()
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                id: clonePropertiesSection
+                                objectName: "clonePropertiesSection"
+                                width: parent.width
+                                title: "分身与铺排"
+                                summary: workspace.selectedCloneEnabled
+                                         ? workspace.selectedCloneRows + " × " + workspace.selectedCloneColumns
+                                         : "关闭"
+                                visible: workspace.selectedSupportsClone
+
+                                InspectorRow {
+                                    label: "分身"
+                                    BodyLabel {
+                                        text: workspace.selectedCloneEnabled ? "已启用" : "单个图层"
+                                        color: workspace.selectedCloneEnabled ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedCloneEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedCloneEnabled(checkedValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "数量"
+                                    visible: workspace.selectedCloneEnabled
+                                    ValueBox {
+                                        value: workspace.selectedCloneRows.toString()
+                                        bindValue: true
+                                        suffix: "行"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneRows(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedCloneColumns.toString()
+                                        bindValue: true
+                                        suffix: "列"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneColumns(parsed)
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "间距"
+                                    visible: workspace.selectedCloneEnabled
+                                    ValueBox {
+                                        value: workspace.selectedCloneRowSpacing.toString()
+                                        bindValue: true
+                                        suffix: "行px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneRowSpacing(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedCloneColumnSpacing.toString()
+                                        bindValue: true
+                                        suffix: "列px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneColumnSpacing(parsed)
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "镜像"
+                                    visible: workspace.selectedCloneEnabled
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.cloneMirrorOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: window.optionIndex(window.cloneMirrorOptions, workspace.selectedCloneMirrorMode)
+                                        onActivated: workspace.setSelectedCloneMirrorMode(currentValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "自定尺寸"
+                                    visible: workspace.selectedCloneEnabled
+                                    BodyLabel {
+                                        text: workspace.selectedCloneCustomSizeEnabled ? "独立尺寸" : "沿用图层"
+                                        color: Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedCloneCustomSizeEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedCloneCustomSizeEnabled(checkedValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "分身尺寸"
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneCustomSizeEnabled
+                                    ValueBox {
+                                        value: workspace.selectedCloneCustomWidth.toString()
+                                        bindValue: true
+                                        suffix: "W"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneCustomWidth(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedCloneCustomHeight.toString()
+                                        bindValue: true
+                                        suffix: "H"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneCustomHeight(parsed)
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "元素铺排"
+                                    visible: workspace.selectedCloneEnabled
+                                    BodyLabel {
+                                        text: workspace.selectedCloneFillEnabled ? "填充画布" : "固定行列"
+                                        color: workspace.selectedCloneFillEnabled ? Theme.accent : Theme.textSecondary
+                                        Layout.fillWidth: true
+                                    }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedCloneFillEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedCloneFillEnabled(checkedValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "排列"
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneFillEnabled
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.cloneFillModeOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: window.optionIndex(window.cloneFillModeOptions, workspace.selectedCloneFillMode)
+                                        onActivated: workspace.setSelectedCloneFillMode(currentValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "铺排参数"
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneFillEnabled
+                                    ValueBox {
+                                        value: workspace.selectedCloneFillSpacing.toString()
+                                        bindValue: true
+                                        suffix: "间距"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneFillSpacing(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedCloneFillMargin.toString()
+                                        bindValue: true
+                                        suffix: "边距"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneFillMargin(parsed)
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "铺排角度"
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneFillEnabled
+                                    ValueBox {
+                                        value: (Math.round(workspace.selectedCloneFillAngle * 10) / 10).toString()
+                                        bindValue: true
+                                        suffix: "°"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseFloat(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedCloneFillAngle(parsed)
+                                        }
                                     }
                                 }
                             }
@@ -5088,6 +5332,8 @@ ApplicationWindow {
                             }
 
                             PropertySection {
+                                id: advancedStrokeSection
+                                objectName: "advancedStrokeSection"
                                 width: parent.width
                                 title: "描边"
                                 summary: workspace.selectedStrokeEnabled ? workspace.selectedStrokeWidth + " px" : "关闭"
@@ -5118,6 +5364,17 @@ ApplicationWindow {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedStrokeWidth(parsed)
                                         }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "对齐"
+                                    visible: workspace.selectedStrokeEnabled && workspace.selectedSupportsAdvancedStroke
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.strokeTypeOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: window.optionIndex(window.strokeTypeOptions, workspace.selectedStrokeType)
+                                        onActivated: workspace.setSelectedStrokeType(currentValue)
                                     }
                                 }
                                 InspectorRow {
@@ -5174,6 +5431,50 @@ ApplicationWindow {
                                                     onClicked: workspace.setSelectedStrokeColor(modelData)
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "连接"
+                                    visible: workspace.selectedStrokeEnabled && workspace.selectedSupportsAdvancedStroke
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.strokeJoinOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: window.optionIndex(window.strokeJoinOptions, workspace.selectedStrokeJoin)
+                                        onActivated: workspace.setSelectedStrokeJoin(currentValue)
+                                    }
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.strokeCapOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: window.optionIndex(window.strokeCapOptions, workspace.selectedStrokeCap)
+                                        onActivated: workspace.setSelectedStrokeCap(currentValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "虚线"
+                                    visible: workspace.selectedStrokeEnabled && workspace.selectedSupportsAdvancedStroke
+                                    ValueBox {
+                                        value: workspace.selectedStrokeDashLength.toString()
+                                        bindValue: true
+                                        suffix: "段"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedStrokeDash(parsed, workspace.selectedStrokeDashGap)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedStrokeDashGap.toString()
+                                        bindValue: true
+                                        suffix: "间隔"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedStrokeDash(workspace.selectedStrokeDashLength, parsed)
                                         }
                                     }
                                 }
@@ -5422,6 +5723,82 @@ ApplicationWindow {
                                                     onClicked: workspace.setSelectedCornerRadius(modelData)
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "矢量统一"
+                                    visible: workspace.selectedSupportsVectorCorners
+                                    ValueBox {
+                                        value: Math.max(
+                                            workspace.selectedVectorCornerRadii[0],
+                                            workspace.selectedVectorCornerRadii[1],
+                                            workspace.selectedVectorCornerRadii[2],
+                                            workspace.selectedVectorCornerRadii[3]
+                                        ).toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedVectorCornerRadiusAll(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "上角"
+                                    visible: workspace.selectedSupportsVectorCorners
+                                    ValueBox {
+                                        value: workspace.selectedVectorCornerRadii[0].toString()
+                                        bindValue: true
+                                        suffix: "TL"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            var radii = workspace.selectedVectorCornerRadii
+                                            if (!isNaN(parsed)) workspace.setSelectedVectorCornerRadii(parsed, radii[1], radii[2], radii[3])
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedVectorCornerRadii[1].toString()
+                                        bindValue: true
+                                        suffix: "TR"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            var radii = workspace.selectedVectorCornerRadii
+                                            if (!isNaN(parsed)) workspace.setSelectedVectorCornerRadii(radii[0], parsed, radii[2], radii[3])
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "下角"
+                                    visible: workspace.selectedSupportsVectorCorners
+                                    ValueBox {
+                                        value: workspace.selectedVectorCornerRadii[3].toString()
+                                        bindValue: true
+                                        suffix: "BL"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            var radii = workspace.selectedVectorCornerRadii
+                                            if (!isNaN(parsed)) workspace.setSelectedVectorCornerRadii(radii[0], radii[1], radii[2], parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedVectorCornerRadii[2].toString()
+                                        bindValue: true
+                                        suffix: "BR"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            var radii = workspace.selectedVectorCornerRadii
+                                            if (!isNaN(parsed)) workspace.setSelectedVectorCornerRadii(radii[0], radii[1], parsed, radii[3])
                                         }
                                     }
                                 }

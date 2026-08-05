@@ -239,22 +239,6 @@ class LegacyFeatureBridge(QObject):
             return False
 
     @Slot(result=bool)
-    def openAdvancedLayerProperties(self) -> bool:
-        def create():
-            from app.ui.layer_properties import LayerPropertiesPanel
-
-            panel = LayerPropertiesPanel(self._workspace.document)
-            panel.setWindowFlag(Qt.Window, True)
-            panel.setWindowTitle("高级图层属性")
-            panel.resize(430, 820)
-            ai_group = getattr(panel, "ai_generation_group", None)
-            if ai_group is not None:
-                ai_group.hide()
-            return panel
-
-        return self._show_window("advanced_properties", create) is not None
-
-    @Slot(result=bool)
     def openBatchExport(self) -> bool:
         from app.ui.batch_export_dialog import BatchExportDialog
 
