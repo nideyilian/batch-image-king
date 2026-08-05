@@ -71,6 +71,14 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspaceSessions.newDocument(widthValue, heightValue)' in qml_source
     assert 'id: closeConfirmDialog' in qml_source
     assert 'workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex' in qml_source
+    assert 'id: shapedImageDialog' in qml_source
+    assert 'id: addShapeMenu' in qml_source
+    assert 'workspace.addShapedLayer(selectedFile.toString(), pendingShapeType)' in qml_source
+    assert 'visible: workspace.selectedHasImageSource' in qml_source
+    assert 'visible: workspace.selectedIsShapedLayer' in qml_source
+    assert 'workspace.setSelectedShapeType(modelData.value)' in qml_source
+    assert 'workspace.setSelectedTrapezoidSlopeSide(modelData.value)' in qml_source
+    assert 'workspace.setSelectedPolygonCornerRadius(parsed)' in qml_source
     assert 'enabled: index === 0' not in qml_source
 
 

@@ -24,6 +24,7 @@ ApplicationWindow {
     property string activeLayerName: workspace.selectedLayerName
     property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
     property string pendingCloseTitle: ""
+    property string pendingShapeType: "circle"
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
         { label: "正片叠底", value: "multiply" },
@@ -320,6 +321,31 @@ ApplicationWindow {
         onAccepted: workspace.addImageLayer(selectedFile.toString())
     }
 
+    FileDialog {
+        id: shapedImageDialog
+        title: "选择异形图层图片"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
+        onAccepted: workspace.addShapedLayer(selectedFile.toString(), pendingShapeType)
+    }
+
+    Menu {
+        id: addShapeMenu
+        width: 168
+        padding: 5
+        background: Rectangle {
+            color: Theme.bgRaised
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radiusSmall
+        }
+        ShapeMenuItem { text: "矩形"; onTriggered: { pendingShapeType = "rectangle"; shapedImageDialog.open() } }
+        ShapeMenuItem { text: "圆形"; onTriggered: { pendingShapeType = "circle"; shapedImageDialog.open() } }
+        ShapeMenuItem { text: "直角梯形"; onTriggered: { pendingShapeType = "right_trapezoid"; shapedImageDialog.open() } }
+        ShapeMenuItem { text: "正五边形"; onTriggered: { pendingShapeType = "pentagon"; shapedImageDialog.open() } }
+        ShapeMenuItem { text: "正六边形"; onTriggered: { pendingShapeType = "hexagon"; shapedImageDialog.open() } }
+    }
+
     FolderDialog {
         id: imageFolderDialog
         title: "添加素材文件夹"
@@ -442,6 +468,25 @@ ApplicationWindow {
             text: parent.label
             color: Theme.textMuted
             Layout.preferredWidth: 52
+        }
+    }
+
+    component ShapeMenuItem: MenuItem {
+        id: shapeMenuItem
+        implicitWidth: 158
+        implicitHeight: 34
+        leftPadding: 10
+        rightPadding: 10
+        contentItem: Text {
+            text: shapeMenuItem.text
+            color: shapeMenuItem.highlighted ? Theme.textPrimary : Theme.textSecondary
+            font.family: Theme.bodyFont
+            font.pixelSize: 11
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            color: shapeMenuItem.highlighted ? Theme.bgHover : "transparent"
+            radius: Theme.radiusSmall
         }
     }
 
@@ -1047,7 +1092,12 @@ ApplicationWindow {
 
                 IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: workspace.addTextLayer() }
                 IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
-                IconButton { glyph: "\uF158"; tooltip: "添加异形（后续接入）"; enabled: false }
+                IconButton {
+                    glyph: "\uF158"
+                    tooltip: "添加异形图层"
+                    enabled: !workspace.operationsBlocked
+                    onClicked: addShapeMenu.popup()
+                }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton {
                     glyph: "\uE74B"; tooltip: "左对齐"
@@ -1841,7 +1891,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "内容源"
                                 summary: workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片"
-                                visible: workspace.selectedIsImageLayer
+                                visible: workspace.selectedHasImageSource
 
                                 InspectorRow {
                                     label: "模式"
@@ -1906,6 +1956,141 @@ ApplicationWindow {
                                         glyph: "\uE8B7"
                                         enabled: !workspace.selectedLocked
                                         onClicked: replaceImageFolderDialog.open()
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                width: parent.width
+                                title: "形状"
+                                summary: workspace.selectedShapeTypeName
+                                visible: workspace.selectedIsShapedLayer
+
+                                GridLayout {
+                                    width: parent.width
+                                    columns: 3
+                                    rowSpacing: 5
+                                    columnSpacing: 5
+
+                                    Repeater {
+                                        model: [
+                                            { label: "矩形", value: "rectangle" },
+                                            { label: "圆形", value: "circle" },
+                                            { label: "梯形", value: "right_trapezoid" },
+                                            { label: "五边形", value: "pentagon" },
+                                            { label: "六边形", value: "hexagon" }
+                                        ]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 34
+                                            radius: Theme.radiusSmall
+                                            color: workspace.selectedShapeTypeId === modelData.value ? Theme.accentSoft : Theme.bgControl
+                                            border.width: 1
+                                            border.color: workspace.selectedShapeTypeId === modelData.value ? Theme.accentPressed : Theme.borderStrong
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                color: workspace.selectedShapeTypeId === modelData.value ? Theme.accent : Theme.textSecondary
+                                                font.family: Theme.bodyFont
+                                                font.pixelSize: 10
+                                                font.weight: Font.DemiBold
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                hoverEnabled: true
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: workspace.setSelectedShapeType(modelData.value)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "上下底"
+                                    visible: workspace.selectedShapeTypeId === "right_trapezoid"
+                                    ValueBox {
+                                        value: workspace.selectedTrapezoidTopWidth.toString()
+                                        bindValue: true
+                                        suffix: "上"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTrapezoidTopWidth(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedTrapezoidBottomWidth.toString()
+                                        bindValue: true
+                                        suffix: "下"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTrapezoidBottomWidth(parsed)
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "斜边"
+                                    visible: workspace.selectedShapeTypeId === "right_trapezoid"
+                                    Repeater {
+                                        model: [
+                                            { label: "左侧", value: "left" },
+                                            { label: "右侧", value: "right" }
+                                        ]
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 30
+                                            radius: Theme.radiusSmall
+                                            color: workspace.selectedTrapezoidSlopeSide === modelData.value ? Theme.accentSoft : Theme.bgControl
+                                            border.width: 1
+                                            border.color: workspace.selectedTrapezoidSlopeSide === modelData.value ? Theme.accentPressed : Theme.borderStrong
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.label
+                                                color: workspace.selectedTrapezoidSlopeSide === modelData.value ? Theme.accent : Theme.textSecondary
+                                                font.family: Theme.bodyFont
+                                                font.pixelSize: 10
+                                            }
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: workspace.setSelectedTrapezoidSlopeSide(modelData.value)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "多边形"
+                                    visible: workspace.selectedShapeTypeId === "pentagon" || workspace.selectedShapeTypeId === "hexagon"
+                                    ValueBox {
+                                        value: (Math.round(workspace.selectedPolygonRotation * 10) / 10).toString()
+                                        bindValue: true
+                                        suffix: "°"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseFloat(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedPolygonRotation(parsed)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedPolygonCornerRadius.toString()
+                                        bindValue: true
+                                        suffix: "圆角"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedPolygonCornerRadius(parsed)
+                                        }
                                     }
                                 }
                             }

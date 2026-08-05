@@ -12,6 +12,8 @@ from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QU
 from PySide6.QtGui import QImage
 
 from app.models.document import Document
+from app.models.layer_properties import ShapeType
+from app.models.shaped_layer_new import ShapedLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.layer_list_model import LayerListModel
 
@@ -25,6 +27,14 @@ _BLEND_MODES = {
     "hard_light": (5, "强光"),
 }
 _BLEND_MODE_IDS = {value: key for key, (value, _label) in _BLEND_MODES.items()}
+
+_SHAPE_TYPES = {
+    "rectangle": (ShapeType.RECTANGLE, "矩形"),
+    "right_trapezoid": (ShapeType.RIGHT_TRAPEZOID, "直角梯形"),
+    "circle": (ShapeType.CIRCLE, "圆形"),
+    "pentagon": (ShapeType.PENTAGON, "正五边形"),
+    "hexagon": (ShapeType.HEXAGON, "正六边形"),
+}
 
 
 def _pil_to_qimage(image) -> QImage:
@@ -359,18 +369,28 @@ class WorkspaceViewModel(QObject):
         return self.selectedLayerType == "图片"
 
     @Property(bool, notify=selectionChanged)
+    def selectedIsShapedLayer(self) -> bool:
+        return isinstance(self._selected_layer(), ShapedLayer)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedHasImageSource(self) -> bool:
+        return self.selectedIsImageLayer or self.selectedIsShapedLayer
+
+    @Property(bool, notify=selectionChanged)
     def selectedIsTextLayer(self) -> bool:
         return self.selectedLayerType == "文字"
 
     @Property(str, notify=selectionChanged)
     def selectedImageSource(self) -> str:
-        if not self.selectedIsImageLayer:
+        if not self.selectedHasImageSource:
             return ""
         return str(getattr(self._selected_layer(), "image_source", "") or "")
 
     @Property(bool, notify=selectionChanged)
     def selectedImageSourceIsFolder(self) -> bool:
-        return self.selectedIsImageLayer and bool(getattr(self._selected_layer(), "is_folder", False))
+        return self.selectedHasImageSource and bool(
+            getattr(self._selected_layer(), "is_folder", False)
+        )
 
     @Property(int, notify=selectionChanged)
     def selectedImageSourceCount(self) -> int:
@@ -380,11 +400,62 @@ class WorkspaceViewModel(QObject):
 
     @Property(str, notify=selectionChanged)
     def selectedImageCurrentFile(self) -> str:
-        if not self.selectedIsImageLayer:
+        if not self.selectedHasImageSource:
             return ""
         layer = self._selected_layer()
         path = getattr(layer, "current_image_path", None) or getattr(layer, "image_source", None)
         return os.path.basename(str(path)) if path else ""
+
+    @Property(str, notify=selectionChanged)
+    def selectedShapeTypeId(self) -> str:
+        if not self.selectedIsShapedLayer:
+            return ""
+        value = getattr(self._selected_layer(), "shape_type", ShapeType.RECTANGLE)
+        if isinstance(value, ShapeType):
+            return value.value
+        value = str(value or "").strip().lower()
+        return value if value in _SHAPE_TYPES else "rectangle"
+
+    @Property(str, notify=selectionChanged)
+    def selectedShapeTypeName(self) -> str:
+        return _SHAPE_TYPES.get(self.selectedShapeTypeId, (None, ""))[1]
+
+    @Property(int, notify=selectionChanged)
+    def selectedTrapezoidTopWidth(self) -> int:
+        if not self.selectedIsShapedLayer:
+            return 0
+        return int(getattr(self._selected_layer(), "trapezoid_top_width", 0))
+
+    @Property(int, notify=selectionChanged)
+    def selectedTrapezoidBottomWidth(self) -> int:
+        if not self.selectedIsShapedLayer:
+            return 0
+        return int(getattr(self._selected_layer(), "trapezoid_bottom_width", 0))
+
+    @Property(str, notify=selectionChanged)
+    def selectedTrapezoidSlopeSide(self) -> str:
+        if not self.selectedIsShapedLayer:
+            return "right"
+        return str(getattr(self._selected_layer(), "trapezoid_slope_side", "right"))
+
+    @Property(float, notify=selectionChanged)
+    def selectedPolygonRotation(self) -> float:
+        if not self.selectedIsShapedLayer:
+            return 0.0
+        return float(getattr(self._selected_layer(), "polygon_rotation", 0.0)) % 360.0
+
+    @Property(int, notify=selectionChanged)
+    def selectedPolygonCornerRadius(self) -> int:
+        if not self.selectedIsShapedLayer:
+            return 0
+        return max(0, int(getattr(self._selected_layer(), "polygon_corner_radius", 0)))
+
+    @Property(int, notify=selectionChanged)
+    def selectedPolygonCornerRadiusMax(self) -> int:
+        if not self.selectedIsShapedLayer:
+            return 0
+        layer = self._selected_layer()
+        return max(0, min(int(layer.width), int(layer.height)) // 8)
 
     @Property(str, notify=selectionChanged)
     def selectedTextContent(self) -> str:
@@ -830,13 +901,72 @@ class WorkspaceViewModel(QObject):
     def addImageFolder(self, folder_path: str) -> bool:
         return self._add_image_source(folder_path, require_folder=True)
 
+    @Slot(str, str, result=bool)
+    def addShapedLayer(self, file_path: str, shape_id: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        shape_id = str(shape_id or "").strip().lower()
+        shape_entry = _SHAPE_TYPES.get(shape_id)
+        if shape_entry is None:
+            self._set_status("不支持的异形类型", toast=True)
+            return False
+        validated = self._validated_image_source(file_path)
+        if validated is None:
+            return False
+        source_path, is_folder, preview_path, _files = validated
+        if is_folder:
+            self._set_status("异形图层创建请选择单张图片", toast=True)
+            return False
+
+        try:
+            from PIL import Image
+
+            with Image.open(preview_path) as image:
+                source_width, source_height = image.size
+            if source_width <= 0 or source_height <= 0:
+                raise ValueError("图片尺寸无效")
+            max_width = max(1, round(self.canvasWidth * 0.6))
+            max_height = max(1, round(self.canvasHeight * 0.6))
+            scale = min(max_width / source_width, max_height / source_height, 1.0)
+            width = max(1, round(source_width * scale))
+            height = max(1, round(source_height * scale))
+            x = (self.canvasWidth - width) // 2
+            y = (self.canvasHeight - height) // 2
+            layer = ShapedLayer(
+                name=f"{shape_entry[1]} · {os.path.basename(source_path)}",
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                image_source=source_path,
+                use_original_size=False,
+                is_folder=False,
+                current_image_path=preview_path,
+                shape_type=shape_entry[0],
+            )
+            with self._document_lock:
+                self._ensure_history_baseline()
+                self._document.add_shaped_layer(layer)
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加异形图层失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"已添加{shape_entry[1]}异形图层", toast=True)
+        return True
+
     @Slot(str, result=bool)
     def setSelectedImageSource(self, source_path: str) -> bool:
         if not self._ensure_operations_available():
             return False
         layer = self._selected_layer()
-        if not self.selectedIsImageLayer or layer is None:
-            self._set_status("当前图层不是图片图层", toast=True)
+        if not self.selectedHasImageSource or layer is None:
+            self._set_status("当前图层没有图片内容源", toast=True)
             return False
         if bool(getattr(layer, "locked", False)):
             self._set_status("图层已锁定", toast=True)
@@ -1234,6 +1364,103 @@ class WorkspaceViewModel(QObject):
 
     def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
         return self._set_layer_attrs(index, {attr: value}, action, render=render)
+
+    def _selected_shaped_layer(self):
+        layer = self._selected_layer()
+        if not isinstance(layer, ShapedLayer):
+            self._set_status("当前图层不是异形图层", toast=True)
+            return None
+        return layer
+
+    @Slot(str, result=bool)
+    def setSelectedShapeType(self, shape_id: str) -> bool:
+        layer = self._selected_shaped_layer()
+        if layer is None:
+            return False
+        shape_id = str(shape_id or "").strip().lower()
+        shape_entry = _SHAPE_TYPES.get(shape_id)
+        if shape_entry is None:
+            self._set_status("不支持的异形类型", toast=True)
+            return False
+        changes = {"shape_type": shape_entry[0]}
+        if shape_entry[0] == ShapeType.RIGHT_TRAPEZOID:
+            width = max(1, int(layer.width))
+            changes.update(
+                {
+                    "trapezoid_top_width": width,
+                    "trapezoid_bottom_width": max(1, round(width * 0.8)),
+                    "trapezoid_slope_side": "right",
+                }
+            )
+        return self._set_layer_attrs(
+            self.selectedLayerIndex,
+            changes,
+            f"切换异形为{shape_entry[1]}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTrapezoidTopWidth(self, value: int) -> bool:
+        layer = self._selected_shaped_layer()
+        if layer is None:
+            return False
+        value = max(1, min(int(layer.width), int(value)))
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "trapezoid_top_width",
+            value,
+            "修改梯形上底",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTrapezoidBottomWidth(self, value: int) -> bool:
+        layer = self._selected_shaped_layer()
+        if layer is None:
+            return False
+        value = max(1, min(int(layer.width), int(value)))
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "trapezoid_bottom_width",
+            value,
+            "修改梯形下底",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTrapezoidSlopeSide(self, value: str) -> bool:
+        if self._selected_shaped_layer() is None:
+            return False
+        value = str(value or "").strip().lower()
+        if value not in {"left", "right"}:
+            self._set_status("梯形斜边方向无效", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "trapezoid_slope_side",
+            value,
+            "修改梯形斜边方向",
+        )
+
+    @Slot(float, result=bool)
+    def setSelectedPolygonRotation(self, value: float) -> bool:
+        if self._selected_shaped_layer() is None:
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "polygon_rotation",
+            float(value) % 360.0,
+            "旋转多边形内容",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedPolygonCornerRadius(self, value: int) -> bool:
+        if self._selected_shaped_layer() is None:
+            return False
+        value = max(0, min(self.selectedPolygonCornerRadiusMax, int(value)))
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "polygon_corner_radius",
+            value,
+            "修改多边形圆角",
+        )
 
     @Slot(str, result=bool)
     def setSelectedName(self, value: str) -> bool:

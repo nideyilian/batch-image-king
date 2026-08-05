@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--select-layer", type=int, help="启动后选中指定图层索引")
     parser.add_argument("--duplicate-selected", action="store_true", help="启动后复制当前选中图层")
     parser.add_argument("--demo-tabs", action="store_true", help="启动后创建多个文档标签用于验收")
+    parser.add_argument("--demo-shaped", action="store_true", help="启动后创建真实异形图层用于验收")
     return parser.parse_args()
 
 
@@ -104,6 +105,10 @@ def main() -> int:
         workspace.setSelectedGradientOverlayAngle(45.0)
     if args.duplicate_selected:
         workspace.duplicateSelectedLayer()
+    if args.demo_shaped:
+        workspace.addShapedLayer(str(qml_dir / "assets" / "watch-product.jpg"), "hexagon")
+        workspace.setSelectedPolygonRotation(18.0)
+        workspace.setSelectedPolygonCornerRadius(24)
 
     workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
     if args.demo_tabs:

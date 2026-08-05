@@ -338,9 +338,9 @@ class LayerPropertyManager:
         elif name == 'polygon_corner_radius' and expected_type == int:
             return max(0, int(value))
         elif name == 'trapezoid_top_width' and expected_type == int:
-            return max(1, min(100, int(value)))
+            return max(1, int(value))
         elif name == 'trapezoid_bottom_width' and expected_type == int:
-            return max(1, min(100, int(value)))
+            return max(1, int(value))
         elif name == 'trapezoid_slope_side' and expected_type == str:
             if value in ["left", "right"]:
                 return value
