@@ -143,11 +143,30 @@ def main() -> int:
         or args.show_multi_select
         or args.show_grouped_layers
     )
+    initial_document_requested = bool(
+        args.open_path
+        or demo_requested
+        or args.blank
+        or args.select_layer is not None
+        or args.duplicate_selected
+        or args.show_batch_export
+        or args.show_batch_advanced
+        or args.show_multi_tab_export
+        or args.show_effects
+        or args.show_close_confirm
+        or args.show_text_layer_dialog
+        or args.show_shaped_layer_dialog
+        or args.show_guides
+        or args.show_canvas_presets
+        or args.show_project_presets
+        or args.show_data_relations
+        or args.show_size_match
+    )
     if args.open_path:
         workspace.openDocument(str(args.open_path.expanduser().resolve()))
     elif demo_requested and not args.blank:
         workspace.createDemoDocument(str(qml_dir / "assets" / "watch-product.jpg"))
-    else:
+    elif initial_document_requested:
         workspace.newDocument(1080, 1350)
 
     if args.select_layer is not None:
@@ -250,7 +269,11 @@ def main() -> int:
         workspace.addGuide("horizontal", workspace.canvasHeight * 0.33)
         workspace.addGuide("horizontal", workspace.canvasHeight * 0.67)
 
-    workspace_sessions = WorkspaceSessionViewModel(workspace=workspace, parent=engine)
+    workspace_sessions = WorkspaceSessionViewModel(
+        workspace=workspace,
+        parent=engine,
+        include_initial_document=initial_document_requested,
+    )
     project_presets = PresetManagerViewModel(
         workspace=workspace,
         sessions=workspace_sessions,

@@ -45,7 +45,7 @@ class WorkspaceSessionViewModel(QAbstractListModel):
     MIN_CANVAS_SIZE = 16
     MAX_CANVAS_SIZE = 32768
 
-    def __init__(self, workspace, parent=None) -> None:
+    def __init__(self, workspace, parent=None, *, include_initial_document: bool = True) -> None:
         super().__init__(parent)
         self._workspace = workspace
         self._sessions: List[_DocumentSession] = []
@@ -56,7 +56,8 @@ class WorkspaceSessionViewModel(QAbstractListModel):
         self._application_close_approved = False
         self._close_others_keep_document: Optional[Document] = None
 
-        self._append_initial_document(workspace.document)
+        if include_initial_document:
+            self._append_initial_document(workspace.document)
         workspace.documentInfoChanged.connect(self._on_active_document_info_changed)
 
     def roleNames(self):

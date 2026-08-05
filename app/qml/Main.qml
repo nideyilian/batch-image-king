@@ -27,7 +27,8 @@ ApplicationWindow {
     property int inspectorTab: 0
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
-    property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
+    readonly property bool hasOpenDocument: workspaceSessions.count > 0
+    property bool layerShortcutsEnabled: hasOpenDocument && !selectedTextEditor.editing && !workspace.operationsBlocked
     property string pendingCloseTitle: ""
     property int contextDocumentIndex: -1
     readonly property var blendModeOptions: [
@@ -151,6 +152,13 @@ ApplicationWindow {
         })
     }
 
+    function alignCurrentSelection(mode) {
+        if (workspace.selectedLayerCount > 1)
+            workspace.alignSelectedLayers(mode)
+        else
+            workspace.alignSelected(mode)
+    }
+
     function revealLayerNameEditor() {
         if (workspace.selectedLayerIndex < 0) return
         inspectorTab = 0
@@ -214,13 +222,13 @@ ApplicationWindow {
 
     Shortcut { sequence: "Ctrl+N"; onActivated: legacyTools.openNewDocument() }
     Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
-    Shortcut { sequence: "Ctrl+S"; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-    Shortcut { sequence: "Ctrl+Shift+S"; onActivated: saveDialog.open() }
-    Shortcut { sequence: "Ctrl+W"; onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
-    Shortcut { sequence: "Ctrl+E"; onActivated: exportDialog.open() }
-    Shortcut { sequence: "Ctrl+Shift+E"; onActivated: legacyTools.openMultiTabExport() }
+    Shortcut { sequence: "Ctrl+S"; enabled: window.hasOpenDocument; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+    Shortcut { sequence: "Ctrl+Shift+S"; enabled: window.hasOpenDocument; onActivated: saveDialog.open() }
+    Shortcut { sequence: "Ctrl+W"; enabled: window.hasOpenDocument; onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
+    Shortcut { sequence: "Ctrl+E"; enabled: window.hasOpenDocument; onActivated: exportDialog.open() }
+    Shortcut { sequence: "Ctrl+Shift+E"; enabled: window.hasOpenDocument; onActivated: legacyTools.openMultiTabExport() }
     Shortcut { sequence: "Ctrl+P"; onActivated: legacyTools.openPresetManager() }
-    Shortcut { sequence: "Ctrl+R"; onActivated: legacyTools.openResizeCanvas() }
+    Shortcut { sequence: "Ctrl+R"; enabled: window.hasOpenDocument; onActivated: legacyTools.openResizeCanvas() }
     Shortcut { sequence: "Ctrl+Z"; enabled: workspace.canUndo; onActivated: workspace.undo() }
     Shortcut { sequence: "Ctrl+Y"; enabled: workspace.canRedo; onActivated: workspace.redo() }
     Shortcut { sequence: "Ctrl+C"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.copySelectedLayers() }
@@ -232,9 +240,9 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: textLayerDialog.openFresh() }
     Shortcut { sequence: "Ctrl+Up"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward; onActivated: workspace.moveSelectedLayer("forward") }
     Shortcut { sequence: "Ctrl+Down"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") }
-    Shortcut { sequence: "Ctrl++"; onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
-    Shortcut { sequence: "Ctrl+-"; onActivated: workspace.setZoomFactor(workspace.zoomFactor / 1.1) }
-    Shortcut { sequence: "Ctrl+0"; onActivated: workspace.resetView() }
+    Shortcut { sequence: "Ctrl++"; enabled: window.hasOpenDocument; onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
+    Shortcut { sequence: "Ctrl+-"; enabled: window.hasOpenDocument; onActivated: workspace.setZoomFactor(workspace.zoomFactor / 1.1) }
+    Shortcut { sequence: "Ctrl+0"; enabled: window.hasOpenDocument; onActivated: workspace.resetView() }
     Shortcut { sequence: "V"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 0 }
     Shortcut { sequence: "H"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 1 }
     Shortcut { sequence: "F2"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: window.revealLayerNameEditor() }
@@ -1527,15 +1535,15 @@ ApplicationWindow {
         ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: legacyTools.openNewDocument() }
         ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
         MenuSeparator { }
-        ShapeMenuItem { text: "保存\tCtrl+S"; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-        ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; onTriggered: saveDialog.open() }
+        ShapeMenuItem { text: "保存\tCtrl+S"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+        ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; enabled: window.hasOpenDocument; onTriggered: saveDialog.open() }
         MenuSeparator { }
-        ShapeMenuItem { text: "关闭当前标签\tCtrl+W"; onTriggered: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
-        ShapeMenuItem { text: "复制当前标签"; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
+        ShapeMenuItem { text: "关闭当前标签\tCtrl+W"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
+        ShapeMenuItem { text: "复制当前标签"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
         MenuSeparator { }
-        ShapeMenuItem { text: "导出当前画面\tCtrl+E"; onTriggered: exportDialog.open() }
-        ShapeMenuItem { text: "完整批量导出"; onTriggered: legacyTools.openBatchExport() }
-        ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; onTriggered: legacyTools.openMultiTabExport() }
+        ShapeMenuItem { text: "导出当前画面\tCtrl+E"; enabled: window.hasOpenDocument; onTriggered: exportDialog.open() }
+        ShapeMenuItem { text: "完整批量导出"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openBatchExport() }
+        ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openMultiTabExport() }
         MenuSeparator { }
         ShapeMenuItem { text: "退出"; onTriggered: window.close() }
     }
@@ -1546,54 +1554,54 @@ ApplicationWindow {
         ShapeMenuItem { text: "重做\tCtrl+Y"; enabled: workspace.canRedo; onTriggered: workspace.redo() }
         MenuSeparator { }
         ShapeMenuItem { text: "复制图层\tCtrl+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.copySelectedLayers() }
-        ShapeMenuItem { text: "粘贴图层\tCtrl+V"; enabled: legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
+        ShapeMenuItem { text: "粘贴图层\tCtrl+V"; enabled: window.hasOpenDocument && legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
         ShapeMenuItem { text: "复制图层样式\tCtrl+Shift+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.copySelectedLayerStyle() }
         ShapeMenuItem { text: "粘贴图层样式\tCtrl+Shift+V"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.pasteSelectedLayerStyle() }
         MenuSeparator { }
-        ShapeMenuItem { text: "全选图层\tCtrl+A"; onTriggered: legacyTools.selectAllLayers() }
+        ShapeMenuItem { text: "全选图层\tCtrl+A"; enabled: window.hasOpenDocument; onTriggered: legacyTools.selectAllLayers() }
     }
 
     AppMenu {
         id: layerMenu
-        ShapeMenuItem { text: "新建空图片图层\tCtrl+L"; onTriggered: workspace.addEmptyImageLayer() }
-        ShapeMenuItem { text: "导入图片为图层"; onTriggered: imageDialog.open() }
-        ShapeMenuItem { text: "导入素材文件夹"; onTriggered: imageFolderDialog.open() }
-        ShapeMenuItem { text: "添加文字图层\tCtrl+T"; onTriggered: textLayerDialog.openFresh() }
-        ShapeMenuItem { text: "添加异形图层"; onTriggered: shapedLayerDialog.openFresh() }
+        ShapeMenuItem { text: "新建空图片图层\tCtrl+L"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
+        ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
+        ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: imageFolderDialog.open() }
+        ShapeMenuItem { text: "添加文字图层\tCtrl+T"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+        ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
         MenuSeparator { }
         ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealLayerNameEditor() }
         ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
-        ShapeMenuItem { text: "绑定管理"; onTriggered: legacyTools.openBindingManager() }
-        ShapeMenuItem { text: "尺寸匹配管理"; onTriggered: legacyTools.openSizeMatchManager() }
+        ShapeMenuItem { text: "绑定管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openBindingManager() }
+        ShapeMenuItem { text: "尺寸匹配管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openSizeMatchManager() }
         MenuSeparator { }
         ShapeMenuItem { text: "删除所选图层\tDelete"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.deleteSelectedLayers() }
     }
 
     AppMenu {
         id: canvasMenu
-        ShapeMenuItem { text: "修改画布尺寸\tCtrl+R"; onTriggered: legacyTools.openResizeCanvas() }
-        ShapeMenuItem { text: "画布预设管理"; onTriggered: legacyTools.openCanvasPresetManager() }
+        ShapeMenuItem { text: "修改画布尺寸\tCtrl+R"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openResizeCanvas() }
+        ShapeMenuItem { text: "画布预设管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openCanvasPresetManager() }
         MenuSeparator { }
         ShapeMenuItem { text: "项目预设中心\tCtrl+P"; onTriggered: legacyTools.openPresetManager() }
     }
 
     AppMenu {
         id: dataRelationsMenu
-        ShapeMenuItem { text: "图层绑定管理"; onTriggered: legacyTools.openBindingManager() }
-        ShapeMenuItem { text: "图层尺寸匹配"; onTriggered: legacyTools.openSizeMatchManager() }
+        ShapeMenuItem { text: "图层绑定管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openBindingManager() }
+        ShapeMenuItem { text: "图层尺寸匹配"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openSizeMatchManager() }
     }
 
     AppMenu {
         id: viewMenu
-        ShapeMenuItem { text: "放大\tCtrl++"; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
-        ShapeMenuItem { text: "缩小\tCtrl+-"; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
-        ShapeMenuItem { text: "实际大小 100%\tCtrl+0"; onTriggered: workspace.resetView() }
-        ShapeMenuItem { text: "适合窗口"; onTriggered: workspace.setZoomFactor(canvasWorkspace.fitScale) }
+        ShapeMenuItem { text: "放大\tCtrl++"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
+        ShapeMenuItem { text: "缩小\tCtrl+-"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
+        ShapeMenuItem { text: "实际大小 100%\tCtrl+0"; enabled: window.hasOpenDocument; onTriggered: workspace.resetView() }
+        ShapeMenuItem { text: "适合窗口"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(canvasWorkspace.fitScale) }
         MenuSeparator { }
-        ShapeMenuItem { text: (workspace.showRulers ? "✓  " : "    ") + "显示标尺"; onTriggered: workspace.setShowRulers(!workspace.showRulers) }
-        ShapeMenuItem { text: (workspace.showGuides ? "✓  " : "    ") + "显示参考线"; onTriggered: workspace.setShowGuides(!workspace.showGuides) }
-        ShapeMenuItem { text: (workspace.snapToGuides ? "✓  " : "    ") + "吸附到参考线"; onTriggered: workspace.setSnapToGuides(!workspace.snapToGuides) }
-        ShapeMenuItem { text: "清空参考线"; onTriggered: workspace.clearGuides() }
+        ShapeMenuItem { text: (workspace.showRulers ? "✓  " : "    ") + "显示标尺"; enabled: window.hasOpenDocument; onTriggered: workspace.setShowRulers(!workspace.showRulers) }
+        ShapeMenuItem { text: (workspace.showGuides ? "✓  " : "    ") + "显示参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.setShowGuides(!workspace.showGuides) }
+        ShapeMenuItem { text: (workspace.snapToGuides ? "✓  " : "    ") + "吸附到参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.setSnapToGuides(!workspace.snapToGuides) }
+        ShapeMenuItem { text: "清空参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.clearGuides() }
     }
 
     AppMenu {
@@ -1808,6 +1816,110 @@ ApplicationWindow {
         verticalAlignment: Text.AlignVCenter
     }
 
+    component AlignmentGlyph: Canvas {
+        id: alignmentGlyph
+
+        property string mode: "left"
+        property color glyphColor: Theme.textSecondary
+
+        implicitWidth: 18
+        implicitHeight: 18
+
+        onModeChanged: requestPaint()
+        onGlyphColorChanged: requestPaint()
+        onPaint: {
+            var ctx = getContext("2d")
+            ctx.clearRect(0, 0, width, height)
+            ctx.strokeStyle = glyphColor
+            ctx.fillStyle = glyphColor
+            ctx.lineWidth = 1
+
+            function line(x1, y1, x2, y2) {
+                ctx.beginPath()
+                ctx.moveTo(Math.round(x1) + 0.5, Math.round(y1) + 0.5)
+                ctx.lineTo(Math.round(x2) + 0.5, Math.round(y2) + 0.5)
+                ctx.stroke()
+            }
+            function block(x, y, w, h) {
+                ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
+            }
+
+            if (mode === "left" || mode === "hcenter" || mode === "right") {
+                var axisX = mode === "left" ? 2 : (mode === "right" ? 16 : 9)
+                line(axisX, 1, axisX, 17)
+                if (mode === "left") {
+                    block(3, 4, 11, 3); block(3, 11, 7, 3)
+                } else if (mode === "right") {
+                    block(5, 4, 11, 3); block(9, 11, 7, 3)
+                } else {
+                    block(3, 4, 12, 3); block(5, 11, 8, 3)
+                }
+                return
+            }
+            if (mode === "top" || mode === "vcenter" || mode === "bottom") {
+                var axisY = mode === "top" ? 2 : (mode === "bottom" ? 16 : 9)
+                line(1, axisY, 17, axisY)
+                if (mode === "top") {
+                    block(4, 3, 3, 11); block(11, 3, 3, 7)
+                } else if (mode === "bottom") {
+                    block(4, 5, 3, 11); block(11, 9, 3, 7)
+                } else {
+                    block(4, 3, 3, 12); block(11, 5, 3, 8)
+                }
+                return
+            }
+            if (mode === "horizontal") {
+                block(1, 4, 3, 10); block(8, 2, 3, 14); block(15, 5, 3, 8)
+                line(4, 9, 8, 9); line(11, 9, 15, 9)
+                return
+            }
+            block(4, 1, 10, 3); block(2, 8, 14, 3); block(5, 15, 8, 3)
+            line(9, 4, 9, 8); line(9, 11, 9, 15)
+        }
+    }
+
+    component AlignmentToolButton: Rectangle {
+        id: alignmentButton
+
+        property string alignmentMode: ""
+        property string distributionMode: ""
+        property string tooltip: ""
+        readonly property string iconMode: alignmentMode.length > 0 ? alignmentMode : distributionMode
+        signal clicked()
+
+        implicitWidth: 28
+        implicitHeight: 30
+        radius: Theme.radiusSmall
+        color: {
+            if (!enabled) return "transparent"
+            if (alignmentMouse.pressed) return Theme.bgControl
+            return alignmentMouse.containsMouse ? Theme.bgHover : "transparent"
+        }
+        opacity: enabled ? 1 : 0.32
+
+        AlignmentGlyph {
+            anchors.centerIn: parent
+            mode: alignmentButton.iconMode
+            glyphColor: alignmentMouse.containsMouse && alignmentButton.enabled
+                        ? Theme.textPrimary : Theme.textSecondary
+        }
+
+        MouseArea {
+            id: alignmentMouse
+            anchors.fill: parent
+            enabled: alignmentButton.enabled
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: alignmentButton.clicked()
+        }
+
+        ToolTip.visible: alignmentMouse.containsMouse && tooltip.length > 0
+        ToolTip.text: tooltip
+        ToolTip.delay: 420
+        Accessible.name: tooltip
+        Accessible.role: Accessible.Button
+    }
+
     component ToolRailButton: Rectangle {
         id: toolButton
         property int toolIndex: 0
@@ -1821,6 +1933,7 @@ ApplicationWindow {
         color: activeTool === toolIndex ? Theme.accentSoft : (toolMouse.containsMouse ? Theme.bgHover : "transparent")
         border.width: activeTool === toolIndex ? 1 : 0
         border.color: "#2c7460"
+        opacity: enabled ? 1 : 0.34
 
         AppIcon {
             anchors.centerIn: parent
@@ -1832,8 +1945,9 @@ ApplicationWindow {
         MouseArea {
             id: toolMouse
             anchors.fill: parent
+            enabled: toolButton.enabled
             hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: {
                 activeTool = toolButton.toolIndex
                 toolButton.triggered()
@@ -1992,7 +2106,9 @@ ApplicationWindow {
         rightPadding: 10
         contentItem: Text {
             text: shapeMenuItem.text
-            color: shapeMenuItem.highlighted ? Theme.textPrimary : Theme.textSecondary
+            color: !shapeMenuItem.enabled
+                   ? Theme.textDisabled
+                   : (shapeMenuItem.highlighted ? Theme.textPrimary : Theme.textSecondary)
             font.family: Theme.bodyFont
             font.pixelSize: 11
             verticalAlignment: Text.AlignVCenter
@@ -2885,7 +3001,7 @@ ApplicationWindow {
                         }
                     }
 
-                    IconButton { glyph: "\uE713"; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
+                IconButton { glyph: "\uE713"; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                 }
             }
 
@@ -2908,7 +3024,7 @@ ApplicationWindow {
                 IconButton {
                     glyph: "\uE74E"
                     tooltip: "保存"
-                    enabled: !workspace.operationsBlocked
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
                 }
                 IconButton {
@@ -2920,7 +3036,7 @@ ApplicationWindow {
                 IconButton {
                     glyph: "\uE8A9"
                     tooltip: "绑定与尺寸匹配"
-                    enabled: !workspace.operationsBlocked
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: dataRelationsMenu.popup(parent, 0, parent.height)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
@@ -2935,42 +3051,48 @@ ApplicationWindow {
                     color: addImageMouse.containsMouse ? Theme.bgHover : Theme.bgControl
                     border.width: 1
                     border.color: Theme.borderStrong
-                    opacity: workspace.operationsBlocked ? 0.38 : 1
+                    opacity: addImageMouse.enabled ? 1 : 0.38
                     Row {
                         anchors.centerIn: parent
                         spacing: 7
                         AppIcon { glyph: "\uE91B"; iconSize: 14; iconColor: Theme.textPrimary; height: 20 }
                         BodyLabel { text: "新建图层"; color: Theme.textPrimary; height: 20 }
                     }
-                    MouseArea { id: addImageMouse; anchors.fill: parent; enabled: !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.addEmptyImageLayer() }
+                    MouseArea { id: addImageMouse; anchors.fill: parent; enabled: window.hasOpenDocument && !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.addEmptyImageLayer() }
                 }
 
-                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
-                IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
+                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
+                IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
                 IconButton {
                     glyph: "\uF158"
                     tooltip: "添加异形图层"
-                    enabled: !workspace.operationsBlocked
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: shapedLayerDialog.openFresh()
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-                IconButton {
-                    glyph: "\uE74B"; tooltip: "左对齐"
-                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                    onClicked: workspace.selectedLayerCount > 1
-                               ? workspace.alignSelectedLayers("left") : workspace.alignSelected("left")
-                }
-                IconButton {
-                    glyph: "\uE74A"; tooltip: "水平居中"
-                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                    onClicked: workspace.selectedLayerCount > 1
-                               ? workspace.alignSelectedLayers("hcenter") : workspace.alignSelected("hcenter")
-                }
-                IconButton {
-                    glyph: "\uE73F"; tooltip: "垂直居中"
-                    enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
-                    onClicked: workspace.selectedLayerCount > 1
-                               ? workspace.alignSelectedLayers("vcenter") : workspace.alignSelected("vcenter")
+
+                Rectangle {
+                    Layout.preferredWidth: alignmentTools.width + 8
+                    Layout.preferredHeight: 32
+                    radius: Theme.radiusSmall
+                    color: Theme.bgBar
+                    border.width: 1
+                    border.color: Theme.border
+
+                    Row {
+                        id: alignmentTools
+                        anchors.centerIn: parent
+                        spacing: 0
+
+                        AlignmentToolButton { alignmentMode: "left"; tooltip: "左对齐"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { alignmentMode: "hcenter"; tooltip: "水平居中"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { alignmentMode: "right"; tooltip: "右对齐"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { alignmentMode: "top"; tooltip: "顶对齐"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { alignmentMode: "vcenter"; tooltip: "垂直居中"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { alignmentMode: "bottom"; tooltip: "底对齐"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: window.alignCurrentSelection(alignmentMode) }
+                        AlignmentToolButton { distributionMode: "horizontal"; tooltip: "水平等距分布（至少 3 个图层）"; enabled: window.hasOpenDocument && workspace.selectedLayerCount > 2 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: workspace.distributeSelectedLayers(distributionMode) }
+                        AlignmentToolButton { distributionMode: "vertical"; tooltip: "垂直等距分布（至少 3 个图层）"; enabled: window.hasOpenDocument && workspace.selectedLayerCount > 2 && !workspace.selectedLocked && !workspace.operationsBlocked; onClicked: workspace.distributeSelectedLayers(distributionMode) }
+                    }
                 }
 
                 Item { Layout.fillWidth: true }
@@ -2986,15 +3108,15 @@ ApplicationWindow {
                         AppIcon { glyph: "\uE71E"; iconSize: 14; height: 20 }
                         BodyLabel { text: "预览"; color: Theme.textPrimary; height: 20 }
                     }
-                    opacity: workspace.operationsBlocked ? 0.38 : 1
-                    MouseArea { anchors.fill: parent; enabled: !workspace.operationsBlocked; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.renderPreviewNow() }
+                    opacity: previewMouse.enabled ? 1 : 0.38
+                    MouseArea { id: previewMouse; anchors.fill: parent; enabled: window.hasOpenDocument && !workspace.operationsBlocked; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.renderPreviewNow() }
                 }
 
                 IconButton {
                     glyph: "\uE159"
                     tooltip: "导出当前画面"
                     buttonSize: 32
-                    enabled: !workspace.operationsBlocked
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: exportDialog.open()
                 }
 
@@ -3002,7 +3124,7 @@ ApplicationWindow {
                     glyph: "\uE8FD"
                     tooltip: "多标签批量导出"
                     buttonSize: 32
-                    enabled: !workspace.operationsBlocked || multiTabExport.running
+                    enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running)
                     onClicked: legacyTools.openMultiTabExport()
                 }
 
@@ -3011,13 +3133,14 @@ ApplicationWindow {
                     Layout.preferredHeight: 32
                     radius: Theme.radiusSmall
                     color: exportMouse.pressed ? Theme.accentPressed : (exportMouse.containsMouse ? Theme.accentHover : Theme.accent)
+                    opacity: exportMouse.enabled ? 1 : 0.38
                     Row {
                         anchors.centerIn: parent
                         spacing: 8
                         AppIcon { glyph: "\uEDE1"; iconSize: 14; iconColor: "#09251d"; height: 20 }
                         Text { text: "批量导出"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
                     }
-                    MouseArea { id: exportMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: legacyTools.openBatchExport() }
+                    MouseArea { id: exportMouse; anchors.fill: parent; enabled: window.hasOpenDocument && !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: legacyTools.openBatchExport() }
                 }
             }
 
@@ -3147,10 +3270,10 @@ ApplicationWindow {
                     anchors.topMargin: 10
                     spacing: 5
 
-                    ToolRailButton { toolIndex: 0; glyph: "\uE7C9"; label: "选择工具 (V)" }
-                    ToolRailButton { toolIndex: 1; glyph: "\uE7C2"; label: "抓手工具 (H)" }
-                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)"; onTriggered: textLayerDialog.openFresh() }
-                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)"; onTriggered: shapedLayerDialog.openFresh() }
+                    ToolRailButton { toolIndex: 0; glyph: "\uE7C9"; label: "选择工具 (V)"; enabled: window.hasOpenDocument }
+                    ToolRailButton { toolIndex: 1; glyph: "\uE7C2"; label: "抓手工具 (H)"; enabled: window.hasOpenDocument }
+                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
                 }
 
                 Column {
@@ -3194,7 +3317,7 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                             Layout.fillWidth: true
                         }
-                        IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; onClicked: workspace.addEmptyImageLayer() }
+                        IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -3384,7 +3507,7 @@ ApplicationWindow {
                         Row {
                             anchors.centerIn: parent
                             spacing: 5
-                            IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; enabled: !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
+                            IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                             IconButton {
                                 glyph: "\uE8C8"
                                 tooltip: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
@@ -3477,6 +3600,7 @@ ApplicationWindow {
                     (width - 60) / safeCanvasWidth
                 )
                 property real actualScale: workspace.zoomFactor
+                property int rulerSize: 22
                 property bool transformActive: false
                 property string transformMode: ""
                 property real gestureStartMouseX: 0
@@ -3498,12 +3622,31 @@ ApplicationWindow {
                 property real marqueeCurrentX: 0
                 property real marqueeCurrentY: 0
 
+                function rulerMajorStep() {
+                    var desiredCanvasUnits = 80 / Math.max(0.001, actualScale)
+                    var magnitude = Math.pow(10, Math.floor(Math.log(desiredCanvasUnits) / Math.LN10))
+                    var normalized = desiredCanvasUnits / magnitude
+                    if (normalized <= 1) return magnitude
+                    if (normalized <= 2) return 2 * magnitude
+                    if (normalized <= 5) return 5 * magnitude
+                    return 10 * magnitude
+                }
+
+                function rulerLabel(value, majorStep) {
+                    if (Math.abs(value) < majorStep / 1000) return "0"
+                    if (majorStep >= 1) return String(Math.round(value))
+                    var decimals = Math.max(0, Math.ceil(-Math.log(majorStep) / Math.LN10))
+                    return Number(value).toFixed(decimals)
+                }
+
                 Row {
                     anchors.top: parent.top
                     anchors.right: parent.right
-                    anchors.margins: 10
+                    anchors.topMargin: workspace.showRulers ? canvasWorkspace.rulerSize + 8 : 10
+                    anchors.rightMargin: 10
                     spacing: 3
                     z: 30
+                    visible: window.hasOpenDocument
 
                     Rectangle {
                         width: guideTools.width + 10
@@ -3692,6 +3835,7 @@ ApplicationWindow {
 
                 WheelHandler {
                     target: null
+                    enabled: window.hasOpenDocument
                     onWheel: event => {
                         var direction = event.angleDelta.y > 0 ? 1 : -1
                         workspace.setZoomFactor(direction > 0 ? workspace.zoomFactor * 1.1 : workspace.zoomFactor / 1.1)
@@ -3701,6 +3845,7 @@ ApplicationWindow {
 
                 Canvas {
                     anchors.fill: parent
+                    visible: window.hasOpenDocument
                     onPaint: {
                         var ctx = getContext("2d")
                         ctx.clearRect(0, 0, width, height)
@@ -3716,6 +3861,7 @@ ApplicationWindow {
                 DragHandler {
                     id: canvasPanHandler
                     target: null
+                    enabled: window.hasOpenDocument
                     acceptedButtons: activeTool === 1 ? Qt.LeftButton | Qt.MiddleButton : Qt.MiddleButton
                     property int startOffsetX: 0
                     property int startOffsetY: 0
@@ -3736,73 +3882,12 @@ ApplicationWindow {
 
                 Item {
                     id: artboardFrame
+                    visible: window.hasOpenDocument
                     width: canvasWorkspace.safeCanvasWidth * canvasWorkspace.actualScale
                     height: canvasWorkspace.safeCanvasHeight * canvasWorkspace.actualScale
                     anchors.centerIn: parent
                     anchors.horizontalCenterOffset: workspace.viewOffsetX
                     anchors.verticalCenterOffset: workspace.viewOffsetY
-
-                    Rectangle {
-                        id: topRuler
-                        visible: workspace.showRulers
-                        x: 0
-                        y: -22
-                        width: artboardFrame.width
-                        height: 20
-                        color: Theme.bgBar
-                        border.width: 1
-                        border.color: Theme.borderStrong
-                        clip: true
-                        z: 20
-
-                        Repeater {
-                            model: Math.floor(canvasWorkspace.safeCanvasWidth / 100) + 1
-                            delegate: Item {
-                                required property int index
-                                x: index * 100 * canvasWorkspace.actualScale
-                                width: 1
-                                height: topRuler.height
-                                Rectangle { anchors.bottom: parent.bottom; width: 1; height: 7; color: Theme.textMuted }
-                                TinyLabel { x: 3; y: 1; text: String(index * 100); font.pixelSize: 8 }
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.CrossCursor
-                            onClicked: workspace.addGuide("vertical", mouse.x / canvasWorkspace.actualScale)
-                        }
-                    }
-
-                    Rectangle {
-                        id: leftRuler
-                        visible: workspace.showRulers
-                        x: -22
-                        y: 0
-                        width: 20
-                        height: artboardFrame.height
-                        color: Theme.bgBar
-                        border.width: 1
-                        border.color: Theme.borderStrong
-                        clip: true
-                        z: 20
-
-                        Repeater {
-                            model: Math.floor(canvasWorkspace.safeCanvasHeight / 100) + 1
-                            delegate: Item {
-                                required property int index
-                                y: index * 100 * canvasWorkspace.actualScale
-                                width: leftRuler.width
-                                height: 1
-                                Rectangle { anchors.right: parent.right; width: 7; height: 1; color: Theme.textMuted }
-                                TinyLabel { x: 2; y: 2; text: String(index * 100); font.pixelSize: 8; rotation: -90; transformOrigin: Item.TopLeft }
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.CrossCursor
-                            onClicked: workspace.addGuide("horizontal", mouse.y / canvasWorkspace.actualScale)
-                        }
-                    }
 
                     Rectangle {
                         id: artboard
@@ -4246,19 +4331,215 @@ ApplicationWindow {
                     }
                 }
 
+                Rectangle {
+                    id: viewportTopRuler
+                    visible: window.hasOpenDocument && workspace.showRulers
+                    x: canvasWorkspace.rulerSize
+                    y: 0
+                    width: Math.max(0, canvasWorkspace.width - x)
+                    height: canvasWorkspace.rulerSize
+                    color: Theme.bgBar
+                    z: 40
+                    clip: true
+
+                    property real rulerOriginX: artboardFrame.x
+                    property real rulerScale: canvasWorkspace.actualScale
+
+                    onRulerOriginXChanged: viewportTopRulerCanvas.requestPaint()
+                    onRulerScaleChanged: viewportTopRulerCanvas.requestPaint()
+                    onWidthChanged: viewportTopRulerCanvas.requestPaint()
+
+                    Canvas {
+                        id: viewportTopRulerCanvas
+                        anchors.fill: parent
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            var scale = Math.max(0.001, viewportTopRuler.rulerScale)
+                            var major = canvasWorkspace.rulerMajorStep()
+                            var minor = major / 5
+                            var minimumValue = (viewportTopRuler.x - viewportTopRuler.rulerOriginX) / scale
+                            var maximumValue = (viewportTopRuler.x + width - viewportTopRuler.rulerOriginX) / scale
+                            var firstValue = Math.floor(minimumValue / minor) * minor
+                            ctx.strokeStyle = Theme.textMuted
+                            ctx.fillStyle = Theme.textSecondary
+                            ctx.lineWidth = 1
+                            ctx.font = "9px sans-serif"
+                            ctx.textBaseline = "top"
+                            for (var value = firstValue; value <= maximumValue + minor / 2; value += minor) {
+                                var ratio = value / major
+                                var isMajor = Math.abs(ratio - Math.round(ratio)) < 0.001
+                                var px = viewportTopRuler.rulerOriginX - viewportTopRuler.x + value * scale
+                                ctx.beginPath()
+                                ctx.moveTo(Math.round(px) + 0.5, height)
+                                ctx.lineTo(Math.round(px) + 0.5, height - (isMajor ? 9 : 5))
+                                ctx.stroke()
+                                if (isMajor)
+                                    ctx.fillText(canvasWorkspace.rulerLabel(value, major), px + 3, 2)
+                            }
+                        }
+                    }
+
+                    Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.borderStrong }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.CrossCursor
+                        onClicked: mouse => {
+                            var canvasX = (viewportTopRuler.x + mouse.x - artboardFrame.x) / canvasWorkspace.actualScale
+                            if (canvasX >= 0 && canvasX <= workspace.canvasWidth)
+                                workspace.addGuide("vertical", canvasX)
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: viewportLeftRuler
+                    visible: window.hasOpenDocument && workspace.showRulers
+                    x: 0
+                    y: canvasWorkspace.rulerSize
+                    width: canvasWorkspace.rulerSize
+                    height: Math.max(0, canvasWorkspace.height - y)
+                    color: Theme.bgBar
+                    z: 40
+                    clip: true
+
+                    property real rulerOriginY: artboardFrame.y
+                    property real rulerScale: canvasWorkspace.actualScale
+
+                    onRulerOriginYChanged: viewportLeftRulerCanvas.requestPaint()
+                    onRulerScaleChanged: viewportLeftRulerCanvas.requestPaint()
+                    onHeightChanged: viewportLeftRulerCanvas.requestPaint()
+
+                    Canvas {
+                        id: viewportLeftRulerCanvas
+                        anchors.fill: parent
+                        onPaint: {
+                            var ctx = getContext("2d")
+                            ctx.clearRect(0, 0, width, height)
+                            var scale = Math.max(0.001, viewportLeftRuler.rulerScale)
+                            var major = canvasWorkspace.rulerMajorStep()
+                            var minor = major / 5
+                            var minimumValue = (viewportLeftRuler.y - viewportLeftRuler.rulerOriginY) / scale
+                            var maximumValue = (viewportLeftRuler.y + height - viewportLeftRuler.rulerOriginY) / scale
+                            var firstValue = Math.floor(minimumValue / minor) * minor
+                            ctx.strokeStyle = Theme.textMuted
+                            ctx.fillStyle = Theme.textSecondary
+                            ctx.lineWidth = 1
+                            ctx.font = "9px sans-serif"
+                            ctx.textBaseline = "top"
+                            for (var value = firstValue; value <= maximumValue + minor / 2; value += minor) {
+                                var ratio = value / major
+                                var isMajor = Math.abs(ratio - Math.round(ratio)) < 0.001
+                                var py = viewportLeftRuler.rulerOriginY - viewportLeftRuler.y + value * scale
+                                ctx.beginPath()
+                                ctx.moveTo(width, Math.round(py) + 0.5)
+                                ctx.lineTo(width - (isMajor ? 9 : 5), Math.round(py) + 0.5)
+                                ctx.stroke()
+                                if (isMajor) {
+                                    ctx.save()
+                                    ctx.translate(2, py - 3)
+                                    ctx.rotate(-Math.PI / 2)
+                                    ctx.fillText(canvasWorkspace.rulerLabel(value, major), 0, 0)
+                                    ctx.restore()
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { anchors.top: parent.top; anchors.right: parent.right; anchors.bottom: parent.bottom; width: 1; color: Theme.borderStrong }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.CrossCursor
+                        onClicked: mouse => {
+                            var canvasY = (viewportLeftRuler.y + mouse.y - artboardFrame.y) / canvasWorkspace.actualScale
+                            if (canvasY >= 0 && canvasY <= workspace.canvasHeight)
+                                workspace.addGuide("horizontal", canvasY)
+                        }
+                    }
+                }
+
+                Rectangle {
+                    id: rulerOriginCorner
+                    visible: window.hasOpenDocument && workspace.showRulers
+                    x: 0
+                    y: 0
+                    width: canvasWorkspace.rulerSize
+                    height: canvasWorkspace.rulerSize
+                    color: Theme.bgBar
+                    border.width: 1
+                    border.color: Theme.borderStrong
+                    z: 42
+
+                    Rectangle { anchors.centerIn: parent; width: 10; height: 1; color: Theme.textMuted }
+                    Rectangle { anchors.centerIn: parent; width: 1; height: 10; color: Theme.textMuted }
+                    ToolTip.visible: rulerCornerMouse.containsMouse
+                    ToolTip.text: "标尺原点"
+                    ToolTip.delay: 420
+                    MouseArea { id: rulerCornerMouse; anchors.fill: parent; hoverEnabled: true }
+                }
+
                 BusyIndicator {
                     anchors.centerIn: parent
                     running: workspace.busy
-                    visible: running
+                    visible: window.hasOpenDocument && running
                     palette.accent: Theme.accent
                 }
 
                 Column {
                     anchors.centerIn: parent
                     spacing: 8
-                    visible: layerModel.rowCount() === 0 && !workspace.busy
+                    visible: window.hasOpenDocument && layerModel.rowCount() === 0 && !workspace.busy
                     AppIcon { anchors.horizontalCenter: parent.horizontalCenter; glyph: "\uE91B"; iconSize: 24; iconColor: Theme.textMuted }
                     BodyLabel { text: "空白画布"; color: Theme.textMuted }
+                }
+
+                Column {
+                    objectName: "noDocumentState"
+                    anchors.centerIn: parent
+                    spacing: 18
+                    visible: !window.hasOpenDocument
+
+                    Column {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 7
+                        AppIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            glyph: "\uE7C9"
+                            iconSize: 30
+                            iconColor: Theme.textMuted
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "没有打开的文档"
+                            color: Theme.textPrimary
+                            font.family: Theme.displayFont
+                            font.pixelSize: 18
+                            font.weight: Font.DemiBold
+                        }
+                        BodyLabel {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "新建画布或打开现有项目"
+                            color: Theme.textMuted
+                        }
+                    }
+
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 8
+                        ExportButton {
+                            width: 116
+                            label: "新建画布"
+                            glyph: "\uE710"
+                            primary: true
+                            onClicked: newCanvasDialog.open()
+                        }
+                        ExportButton {
+                            width: 116
+                            label: "打开项目"
+                            glyph: "\uE8E5"
+                            onClicked: openDialog.open()
+                        }
+                    }
                 }
 
                 Rectangle {
@@ -4270,6 +4551,7 @@ ApplicationWindow {
                     color: "#d916191b"
                     border.width: 1
                     border.color: Theme.border
+                    visible: window.hasOpenDocument
                     Row {
                         id: canvasBadgeRow
                         anchors.centerIn: parent
@@ -6360,18 +6642,20 @@ ApplicationWindow {
 
                 Row {
                     spacing: 6
-                    Rectangle { width: 6; height: 6; radius: 3; color: workspace.busy ? Theme.amber : Theme.success; anchors.verticalCenter: parent.verticalCenter }
-                    TinyLabel { text: workspace.statusMessage; color: Theme.textSecondary; height: 28 }
+                    Rectangle { width: 6; height: 6; radius: 3; color: !window.hasOpenDocument ? Theme.textMuted : (workspace.busy ? Theme.amber : Theme.success); anchors.verticalCenter: parent.verticalCenter }
+                    TinyLabel { text: window.hasOpenDocument ? workspace.statusMessage : "没有打开的文档"; color: Theme.textSecondary; height: 28 }
                 }
-                Divider { Layout.preferredHeight: 14 }
-                TinyLabel { text: "RGBA / sRGB IEC61966-2.1"; height: 28 }
-                Divider { Layout.preferredHeight: 14 }
-                TinyLabel { text: "X " + workspace.selectedX + "  ·  Y " + workspace.selectedY; height: 28 }
+                Divider { Layout.preferredHeight: 14; visible: window.hasOpenDocument }
+                TinyLabel { text: "RGBA / sRGB IEC61966-2.1"; height: 28; visible: window.hasOpenDocument }
+                Divider { Layout.preferredHeight: 14; visible: window.hasOpenDocument }
+                TinyLabel { text: "X " + workspace.selectedX + "  ·  Y " + workspace.selectedY; height: 28; visible: window.hasOpenDocument }
 
                 Item { Layout.fillWidth: true }
 
                 Row {
                     spacing: 5
+                    enabled: window.hasOpenDocument
+                    opacity: enabled ? 1 : 0.32
                     IconButton {
                         glyph: "\uE738"; tooltip: "缩小"; buttonSize: 24
                         onClicked: workspace.setZoomFactor(workspace.zoomFactor / 1.1)
