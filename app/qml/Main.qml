@@ -29,7 +29,6 @@ ApplicationWindow {
     property string activeLayerName: workspace.selectedLayerName
     property bool layerShortcutsEnabled: !selectedTextEditor.editing && !workspace.operationsBlocked
     property string pendingCloseTitle: ""
-    property string pendingShapeType: "circle"
     property int contextDocumentIndex: -1
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
@@ -152,6 +151,19 @@ ApplicationWindow {
         })
     }
 
+    function revealLayerNameEditor() {
+        if (workspace.selectedLayerIndex < 0) return
+        inspectorTab = 0
+        var section = workspace.selectedIsLayerGroup ? groupSection : transformSection
+        var editor = workspace.selectedIsLayerGroup ? groupNameEditor : layerNameEditor
+        section.expanded = true
+        Qt.callLater(function() {
+            if (inspectorScroll.contentItem)
+                inspectorScroll.contentItem.contentY = Math.max(0, section.y - 8)
+            editor.beginEdit()
+        })
+    }
+
     function optionIndex(options, value) {
         for (var index = 0; index < options.length; index++) {
             if (options[index].value === value) return index
@@ -217,7 +229,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+V"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.pasteSelectedLayerStyle() }
     Shortcut { sequence: "Ctrl+A"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.selectAllLayers() }
     Shortcut { sequence: "Ctrl+L"; enabled: window.layerShortcutsEnabled; onActivated: workspace.addEmptyImageLayer() }
-    Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.openAddTextLayer() }
+    Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: textLayerDialog.openFresh() }
     Shortcut { sequence: "Ctrl+Up"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward; onActivated: workspace.moveSelectedLayer("forward") }
     Shortcut { sequence: "Ctrl+Down"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") }
     Shortcut { sequence: "Ctrl++"; onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
@@ -225,7 +237,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+0"; onActivated: workspace.resetView() }
     Shortcut { sequence: "V"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 0 }
     Shortcut { sequence: "H"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 1 }
-    Shortcut { sequence: "F2"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: legacyTools.renameSelectedLayer() }
+    Shortcut { sequence: "F2"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: window.revealLayerNameEditor() }
     Shortcut { sequence: "Delete"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.deleteSelectedLayers() }
 
     Shortcut {
@@ -388,6 +400,423 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: newCanvasDialog.close() }
                 ExportButton { Layout.preferredWidth: 112; label: "创建画布"; glyph: "\uE710"; primary: true; onClicked: newCanvasDialog.createCanvas() }
+            }
+        }
+    }
+
+    Dialog {
+        id: textLayerDialog
+        objectName: "textLayerDialog"
+        anchors.centerIn: parent
+        width: 560
+        height: Math.min(590, window.height - 48)
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        property string fontFamily: "Microsoft YaHei"
+        property string alignment: "left"
+        property string errorMessage: ""
+
+        function openFresh() {
+            textLayerNameInput.text = "新文字图层"
+            textLayerContentInput.text = "示例文字"
+            textLayerBindingInput.checked = true
+            fontFamily = "Microsoft YaHei"
+            textLayerFontSizeInput.text = "24"
+            textLayerColorInput.text = "#000000"
+            alignment = "left"
+            errorMessage = ""
+            open()
+            Qt.callLater(function() { textLayerNameInput.beginEdit() })
+        }
+
+        function createLayer() {
+            var success = workspace.addConfiguredTextLayer({
+                name: textLayerNameInput.text,
+                content: textLayerContentInput.text,
+                bindingEnabled: textLayerBindingInput.checked,
+                fontFamily: fontFamily,
+                fontSize: parseInt(textLayerFontSizeInput.text),
+                color: textLayerColorInput.text,
+                alignment: alignment
+            })
+            if (success) close()
+            else errorMessage = workspace.statusMessage
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "添加文字图层"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: textLayerDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 12
+
+                BodyLabel { text: "图层名称"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                ValueBox {
+                    id: textLayerNameInput
+                    Layout.fillWidth: true
+                    text: "新文字图层"
+                    onValueCommitted: value => text = value
+                }
+
+                BodyLabel { text: "内容模式"; color: Theme.textMuted }
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyLabel {
+                        text: textLayerBindingInput.checked ? "按行作为候选文案" : "整段保留真实换行"
+                        color: Theme.textSecondary
+                        Layout.fillWidth: true
+                    }
+                    ToggleSwitch { id: textLayerBindingInput; checked: true }
+                }
+            }
+
+            BodyLabel { text: "文字内容"; color: Theme.textMuted }
+            TextArea {
+                id: textLayerContentInput
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 130
+                text: "示例文字"
+                placeholderText: "输入文字内容"
+                color: Theme.textPrimary
+                placeholderTextColor: Theme.textMuted
+                selectionColor: Theme.accentPressed
+                selectedTextColor: Theme.textPrimary
+                font.family: Theme.bodyFont
+                font.pixelSize: 12
+                wrapMode: TextEdit.Wrap
+                selectByMouse: true
+                padding: 10
+                background: Rectangle {
+                    color: Theme.bgControl
+                    border.width: 1
+                    border.color: textLayerContentInput.activeFocus ? Theme.accent : Theme.borderStrong
+                    radius: Theme.radiusSmall
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 12
+
+                BodyLabel { text: "字体"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                FontSelectBox {
+                    Layout.fillWidth: true
+                    value: textLayerDialog.fontFamily
+                    options: [
+                        { label: "Microsoft YaHei", value: "Microsoft YaHei" },
+                        { label: "SimHei", value: "SimHei" },
+                        { label: "SimSun", value: "SimSun" },
+                        { label: "KaiTi", value: "KaiTi" },
+                        { label: "Arial", value: "Arial" }
+                    ]
+                    onActivated: value => textLayerDialog.fontFamily = value
+                }
+
+                BodyLabel { text: "字号与颜色"; color: Theme.textMuted }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    ValueBox { id: textLayerFontSizeInput; text: "24"; suffix: "px"; Layout.preferredWidth: 104 }
+                    ValueBox { id: textLayerColorInput; text: "#000000"; Layout.fillWidth: true }
+                    Rectangle {
+                        Layout.preferredWidth: Theme.controlHeight
+                        Layout.preferredHeight: Theme.controlHeight
+                        radius: Theme.radiusSmall
+                        color: window.hexToColor(textLayerColorInput.text)
+                        border.width: 1
+                        border.color: Theme.borderStrong
+                    }
+                }
+
+                BodyLabel { text: "对齐"; color: Theme.textMuted }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    CompactActionButton { label: "左对齐"; active: textLayerDialog.alignment === "left"; Layout.fillWidth: true; onClicked: textLayerDialog.alignment = "left" }
+                    CompactActionButton { label: "居中"; active: textLayerDialog.alignment === "center"; Layout.fillWidth: true; onClicked: textLayerDialog.alignment = "center" }
+                    CompactActionButton { label: "右对齐"; active: textLayerDialog.alignment === "right"; Layout.fillWidth: true; onClicked: textLayerDialog.alignment = "right" }
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                text: textLayerDialog.errorMessage
+                color: Theme.coral
+                visible: text.length > 0
+                wrapMode: Text.Wrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: textLayerDialog.close() }
+                ExportButton { Layout.preferredWidth: 112; label: "添加图层"; glyph: "\uE710"; primary: true; onClicked: textLayerDialog.createLayer() }
+            }
+        }
+    }
+
+    Dialog {
+        id: shapedLayerDialog
+        objectName: "shapedLayerDialog"
+        anchors.centerIn: parent
+        width: 620
+        height: Math.min(580, window.height - 48)
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        property string sourceMode: "none"
+        property string trapezoidSlopeSide: "right"
+        property string errorMessage: ""
+
+        function openFresh() {
+            shapedLayerNameInput.text = "异形图层"
+            shapedLayerTypeInput.currentIndex = 0
+            shapedLayerXInput.text = "0"
+            shapedLayerYInput.text = "0"
+            shapedLayerWidthInput.text = "200"
+            shapedLayerHeightInput.text = "200"
+            shapedLayerSourceInput.text = ""
+            shapedLayerUseOriginalInput.checked = false
+            shapedTrapezoidTopInput.text = "100"
+            shapedTrapezoidBottomInput.text = "80"
+            shapedPolygonRotationInput.text = "0"
+            shapedPolygonCornerInput.text = "0"
+            sourceMode = "none"
+            trapezoidSlopeSide = "right"
+            errorMessage = ""
+            open()
+            Qt.callLater(function() { shapedLayerNameInput.beginEdit() })
+        }
+
+        function createLayer() {
+            var success = workspace.addConfiguredShapedLayer({
+                name: shapedLayerNameInput.text,
+                shapeType: shapedLayerTypeInput.currentValue,
+                x: parseInt(shapedLayerXInput.text),
+                y: parseInt(shapedLayerYInput.text),
+                width: parseInt(shapedLayerWidthInput.text),
+                height: parseInt(shapedLayerHeightInput.text),
+                source: shapedLayerSourceInput.text,
+                sourceIsFolder: sourceMode === "folder",
+                useOriginalSize: shapedLayerUseOriginalInput.checked,
+                trapezoidTopRatio: parseInt(shapedTrapezoidTopInput.text),
+                trapezoidBottomRatio: parseInt(shapedTrapezoidBottomInput.text),
+                trapezoidSlopeSide: trapezoidSlopeSide,
+                polygonRotation: parseFloat(shapedPolygonRotationInput.text),
+                polygonCornerRadius: parseInt(shapedPolygonCornerInput.text)
+            })
+            if (success) close()
+            else errorMessage = workspace.statusMessage
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "添加异形图层"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: shapedLayerDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            ScrollView {
+                id: shapedFormScroll
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                ColumnLayout {
+                    width: shapedFormScroll.availableWidth
+                    spacing: 12
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        rowSpacing: 10
+                        columnSpacing: 12
+
+                        BodyLabel { text: "图层名称"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                        ValueBox { id: shapedLayerNameInput; Layout.fillWidth: true; text: "异形图层" }
+
+                        BodyLabel { text: "形状"; color: Theme.textMuted }
+                        SelectBox {
+                            id: shapedLayerTypeInput
+                            Layout.fillWidth: true
+                            model: [
+                                { label: "矩形", value: "rectangle" },
+                                { label: "直角梯形", value: "right_trapezoid" },
+                                { label: "圆形", value: "circle" },
+                                { label: "正五边形", value: "pentagon" },
+                                { label: "正六边形", value: "hexagon" }
+                            ]
+                        }
+                    }
+
+                    BodyLabel { text: "位置与尺寸"; color: Theme.textPrimary; font.weight: Font.DemiBold }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        BodyLabel { text: "位置"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                        ValueBox { id: shapedLayerXInput; text: "0"; suffix: "X"; Layout.fillWidth: true }
+                        ValueBox { id: shapedLayerYInput; text: "0"; suffix: "Y"; Layout.fillWidth: true }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        BodyLabel { text: "尺寸"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                        ValueBox { id: shapedLayerWidthInput; text: "200"; suffix: "W"; Layout.fillWidth: true }
+                        ValueBox { id: shapedLayerHeightInput; text: "200"; suffix: "H"; Layout.fillWidth: true }
+                    }
+
+                    BodyLabel { text: "内容源（可稍后设置）"; color: Theme.textPrimary; font.weight: Font.DemiBold }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        BodyLabel { text: "来源"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                        ValueBox {
+                            id: shapedLayerSourceInput
+                            Layout.fillWidth: true
+                            text: ""
+                            editable: false
+                        }
+                        IconButton {
+                            glyph: "\uE8B7"
+                            tooltip: "选择单张图片"
+                            onClicked: shapedLayerSourceFileDialog.open()
+                        }
+                        IconButton {
+                            glyph: "\uE838"
+                            tooltip: "选择素材文件夹"
+                            onClicked: shapedLayerSourceFolderDialog.open()
+                        }
+                        IconButton {
+                            glyph: "\uE711"
+                            tooltip: "清除内容源"
+                            enabled: shapedLayerDialog.sourceMode !== "none"
+                            onClicked: {
+                                shapedLayerDialog.sourceMode = "none"
+                                shapedLayerSourceInput.text = ""
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        BodyLabel { text: "源模式"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                        BodyLabel {
+                            text: shapedLayerDialog.sourceMode === "file" ? "单张图片" : shapedLayerDialog.sourceMode === "folder" ? "素材文件夹" : "尚未选择"
+                            color: shapedLayerDialog.sourceMode === "none" ? Theme.textMuted : Theme.textSecondary
+                            Layout.fillWidth: true
+                        }
+                        BodyLabel { text: "使用原始尺寸"; color: Theme.textMuted }
+                        ToggleSwitch {
+                            id: shapedLayerUseOriginalInput
+                            checked: false
+                            enabled: shapedLayerDialog.sourceMode === "file"
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: shapedLayerTypeInput.currentValue === "right_trapezoid"
+                        BodyLabel { text: "梯形参数"; color: Theme.textPrimary; font.weight: Font.DemiBold }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            BodyLabel { text: "上下底"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                            ValueBox { id: shapedTrapezoidTopInput; text: "100"; suffix: "% 上"; Layout.fillWidth: true }
+                            ValueBox { id: shapedTrapezoidBottomInput; text: "80"; suffix: "% 下"; Layout.fillWidth: true }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            BodyLabel { text: "斜边"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                            CompactActionButton { label: "右侧"; active: shapedLayerDialog.trapezoidSlopeSide === "right"; Layout.fillWidth: true; onClicked: shapedLayerDialog.trapezoidSlopeSide = "right" }
+                            CompactActionButton { label: "左侧"; active: shapedLayerDialog.trapezoidSlopeSide === "left"; Layout.fillWidth: true; onClicked: shapedLayerDialog.trapezoidSlopeSide = "left" }
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: shapedLayerTypeInput.currentValue === "pentagon" || shapedLayerTypeInput.currentValue === "hexagon"
+                        BodyLabel { text: "多边形参数"; color: Theme.textPrimary; font.weight: Font.DemiBold }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            BodyLabel { text: "外观"; color: Theme.textMuted; Layout.preferredWidth: 72 }
+                            ValueBox { id: shapedPolygonRotationInput; text: "0"; suffix: "°"; Layout.fillWidth: true }
+                            ValueBox { id: shapedPolygonCornerInput; text: "0"; suffix: "px 圆角"; Layout.fillWidth: true }
+                        }
+                    }
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                text: shapedLayerDialog.errorMessage
+                color: Theme.coral
+                visible: text.length > 0
+                wrapMode: Text.Wrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: shapedLayerDialog.close() }
+                ExportButton { Layout.preferredWidth: 112; label: "添加图层"; glyph: "\uE710"; primary: true; onClicked: shapedLayerDialog.createLayer() }
             }
         }
     }
@@ -1074,11 +1503,23 @@ ApplicationWindow {
     }
 
     FileDialog {
-        id: shapedImageDialog
+        id: shapedLayerSourceFileDialog
         title: "选择异形图层图片"
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
-        onAccepted: workspace.addShapedLayer(selectedFile.toString(), pendingShapeType)
+        onAccepted: {
+            shapedLayerDialog.sourceMode = "file"
+            shapedLayerSourceInput.text = selectedFile.toString()
+        }
+    }
+
+    FolderDialog {
+        id: shapedLayerSourceFolderDialog
+        title: "选择异形图层素材文件夹"
+        onAccepted: {
+            shapedLayerDialog.sourceMode = "folder"
+            shapedLayerSourceInput.text = selectedFolder.toString()
+        }
     }
 
     AppMenu {
@@ -1117,10 +1558,10 @@ ApplicationWindow {
         ShapeMenuItem { text: "新建空图片图层\tCtrl+L"; onTriggered: workspace.addEmptyImageLayer() }
         ShapeMenuItem { text: "导入图片为图层"; onTriggered: imageDialog.open() }
         ShapeMenuItem { text: "导入素材文件夹"; onTriggered: imageFolderDialog.open() }
-        ShapeMenuItem { text: "添加文字图层\tCtrl+T"; onTriggered: legacyTools.openAddTextLayer() }
-        ShapeMenuItem { text: "添加异形图层"; onTriggered: legacyTools.openAddShapedLayer() }
+        ShapeMenuItem { text: "添加文字图层\tCtrl+T"; onTriggered: textLayerDialog.openFresh() }
+        ShapeMenuItem { text: "添加异形图层"; onTriggered: shapedLayerDialog.openFresh() }
         MenuSeparator { }
-        ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.renameSelectedLayer() }
+        ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealLayerNameEditor() }
         ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
         ShapeMenuItem { text: "绑定管理"; onTriggered: legacyTools.openBindingManager() }
         ShapeMenuItem { text: "尺寸匹配管理"; onTriggered: legacyTools.openSizeMatchManager() }
@@ -1174,23 +1615,6 @@ ApplicationWindow {
         ShapeMenuItem { text: "恢复导出窗口"; onTriggered: legacyTools.restoreExportWindow(contextDocumentIndex) }
     }
 
-    Menu {
-        id: addShapeMenu
-        width: 168
-        padding: 5
-        background: Rectangle {
-            color: Theme.bgRaised
-            border.width: 1
-            border.color: Theme.borderStrong
-            radius: Theme.radiusSmall
-        }
-        ShapeMenuItem { text: "矩形"; onTriggered: { pendingShapeType = "rectangle"; shapedImageDialog.open() } }
-        ShapeMenuItem { text: "圆形"; onTriggered: { pendingShapeType = "circle"; shapedImageDialog.open() } }
-        ShapeMenuItem { text: "直角梯形"; onTriggered: { pendingShapeType = "right_trapezoid"; shapedImageDialog.open() } }
-        ShapeMenuItem { text: "正五边形"; onTriggered: { pendingShapeType = "pentagon"; shapedImageDialog.open() } }
-        ShapeMenuItem { text: "正六边形"; onTriggered: { pendingShapeType = "hexagon"; shapedImageDialog.open() } }
-    }
-
     FolderDialog {
         id: imageFolderDialog
         title: "添加素材文件夹"
@@ -1223,12 +1647,21 @@ ApplicationWindow {
         onAccepted: multiTabExport.outputDirectory = selectedFolder.toString()
     }
 
-    ColorDialog {
+    Dialog {
         id: effectColorDialog
+        objectName: "effectColorDialog"
+        anchors.centerIn: parent
+        width: 430
+        height: 310
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
         property string target: "stroke"
         property int colorIndex: 0
         property int rangeStart: 0
         property int rangeEnd: 0
+        property string errorMessage: ""
 
         title: {
             if (target === "stroke") return "选择描边颜色"
@@ -1245,12 +1678,19 @@ ApplicationWindow {
             colorIndex = index === undefined ? 0 : index
             rangeStart = start === undefined ? 0 : start
             rangeEnd = end === undefined ? 0 : end
-            selectedColor = window.hexToColor(colorValue)
+            effectColorInput.text = String(colorValue || "#000000").toUpperCase()
+            errorMessage = ""
             open()
+            Qt.callLater(function() { effectColorInput.beginEdit() })
         }
 
-        onAccepted: {
-            var hexValue = window.colorToHex(selectedColor)
+        function applyColor() {
+            var hexValue = String(effectColorInput.text || "").trim().toUpperCase()
+            if (hexValue.charAt(0) !== "#") hexValue = "#" + hexValue
+            if (!/^#[0-9A-F]{6}([0-9A-F]{2})?$/.test(hexValue)) {
+                errorMessage = "请输入 #RRGGBB 或 #RRGGBBAA 格式"
+                return
+            }
             if (target === "stroke") workspace.setSelectedStrokeColor(hexValue)
             else if (target === "overlay") workspace.setSelectedColorOverlayColor(hexValue)
             else if (target === "textFill") workspace.setSelectedTextColor(hexValue)
@@ -1259,6 +1699,84 @@ ApplicationWindow {
             else if (target === "textShadow") workspace.setSelectedTextShadowColor(hexValue)
             else if (target === "textRange") workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)
             else workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)
+            close()
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: effectColorDialog.title
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: effectColorDialog.close() }
+            }
+            Divider { Layout.fillWidth: true }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                Rectangle {
+                    Layout.preferredWidth: 58
+                    Layout.preferredHeight: 58
+                    radius: Theme.radiusSmall
+                    color: window.hexToColor(effectColorInput.text)
+                    border.width: 1
+                    border.color: Theme.borderStrong
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    BodyLabel { text: "颜色值"; color: Theme.textMuted }
+                    ValueBox { id: effectColorInput; Layout.fillWidth: true; text: "#000000" }
+                }
+            }
+            BodyLabel { text: "常用颜色"; color: Theme.textMuted }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Repeater {
+                    model: ["#000000", "#FFFFFF", "#46D7AD", "#4FA3FF", "#F7BD63", "#F1786D", "#65D88D", "#747D7A"]
+                    delegate: Rectangle {
+                        required property string modelData
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+                        radius: Theme.radiusSmall
+                        color: modelData
+                        border.width: 1
+                        border.color: paletteMouse.containsMouse ? Theme.accent : Theme.borderStrong
+                        MouseArea {
+                            id: paletteMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: effectColorInput.text = parent.modelData
+                        }
+                    }
+                }
+            }
+            TinyLabel { text: effectColorDialog.errorMessage; color: Theme.coral; visible: text.length > 0; Layout.fillWidth: true }
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: effectColorDialog.close() }
+                ExportButton { Layout.preferredWidth: 96; label: "应用"; primary: true; onClicked: effectColorDialog.applyColor() }
+            }
         }
     }
 
@@ -1626,6 +2144,7 @@ ApplicationWindow {
                 readOnly: !textEditorRoot.enabled
                 onActiveFocusChanged: {
                     if (activeFocus) {
+                        contentEditor.text = textEditorRoot.value
                         textEditorRoot.editingIndex = textEditorRoot.contextIndex
                     } else if (textEditorRoot.editingIndex >= 0) {
                         textEditorRoot.committed(text, textEditorRoot.editingIndex)
@@ -1654,7 +2173,7 @@ ApplicationWindow {
                 property: "text"
                 value: textEditorRoot.value
                 when: !contentEditor.activeFocus
-                restoreMode: Binding.RestoreBindingOrValue
+                restoreMode: Binding.RestoreNone
             }
         }
     }
@@ -2426,13 +2945,13 @@ ApplicationWindow {
                     MouseArea { id: addImageMouse; anchors.fill: parent; enabled: !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.addEmptyImageLayer() }
                 }
 
-                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: legacyTools.openAddTextLayer() }
+                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
                 IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
                 IconButton {
                     glyph: "\uF158"
                     tooltip: "添加异形图层"
                     enabled: !workspace.operationsBlocked
-                    onClicked: legacyTools.openAddShapedLayer()
+                    onClicked: shapedLayerDialog.openFresh()
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton {
@@ -2630,8 +3149,8 @@ ApplicationWindow {
 
                     ToolRailButton { toolIndex: 0; glyph: "\uE7C9"; label: "选择工具 (V)" }
                     ToolRailButton { toolIndex: 1; glyph: "\uE7C2"; label: "抓手工具 (H)" }
-                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)"; onTriggered: legacyTools.openAddTextLayer() }
-                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)"; onTriggered: legacyTools.openAddShapedLayer() }
+                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)"; onTriggered: textLayerDialog.openFresh() }
+                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)"; onTriggered: shapedLayerDialog.openFresh() }
                 }
 
                 Column {
@@ -4537,6 +5056,7 @@ ApplicationWindow {
                             }
 
                             PropertySection {
+                                id: groupSection
                                 width: parent.width
                                 title: "图层组"
                                 summary: workspace.selectedGroupChildCount + " 个图层"
@@ -4545,6 +5065,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "名称"
                                     ValueBox {
+                                        id: groupNameEditor
                                         value: workspace.selectedLayerName
                                         bindValue: true
                                         Layout.fillWidth: true
@@ -4594,6 +5115,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "名称"
                                     ValueBox {
+                                        id: layerNameEditor
                                         value: workspace.selectedLayerName; bindValue: true; Layout.fillWidth: true
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => workspace.setSelectedName(value)

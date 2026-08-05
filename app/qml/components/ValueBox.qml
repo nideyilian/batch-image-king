@@ -10,6 +10,14 @@ Rectangle {
     property bool editable: true
     signal valueCommitted(string value)
 
+    function beginEdit() {
+        if (!root.editable) return
+        if (root.bindValue)
+            input.text = String(root.value)
+        input.forceActiveFocus()
+        input.selectAll()
+    }
+
     implicitWidth: 94
     implicitHeight: Theme.controlHeight
     radius: Theme.radiusSmall
@@ -37,7 +45,19 @@ Rectangle {
         selectByMouse: true
         verticalAlignment: TextInput.AlignVCenter
         clip: true
+        onActiveFocusChanged: {
+            if (activeFocus) {
+                if (root.bindValue)
+                    text = String(root.value)
+                selectAll()
+            }
+        }
         onEditingFinished: root.valueCommitted(text)
+        Keys.onEscapePressed: {
+            if (root.bindValue)
+                text = String(root.value)
+            focus = false
+        }
     }
 
     Binding {
@@ -45,7 +65,7 @@ Rectangle {
         property: "text"
         value: root.value
         when: root.bindValue && !input.activeFocus
-        restoreMode: Binding.RestoreBindingOrValue
+        restoreMode: Binding.RestoreNone
     }
 
     Text {

@@ -71,9 +71,10 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspaceSessions.newDocument(widthValue, heightValue)' in qml_source
     assert 'id: closeConfirmDialog' in qml_source
     assert 'workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex' in qml_source
-    assert 'id: shapedImageDialog' in qml_source
-    assert 'id: addShapeMenu' in qml_source
-    assert 'workspace.addShapedLayer(selectedFile.toString(), pendingShapeType)' in qml_source
+    assert 'id: textLayerDialog' in qml_source
+    assert 'id: shapedLayerDialog' in qml_source
+    assert 'workspace.addConfiguredTextLayer(' in qml_source
+    assert 'workspace.addConfiguredShapedLayer(' in qml_source
     assert 'visible: workspace.selectedHasImageSource' in qml_source
     assert 'visible: workspace.selectedIsShapedLayer' in qml_source
     assert 'workspace.setSelectedShapeType(modelData.value)' in qml_source
@@ -160,8 +161,10 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'legacyTools.openCanvasPresetManager()' in qml_source
     assert 'legacyTools.openPresetManager()' in qml_source
     assert 'legacyTools.openNewDocument()' in qml_source
-    assert 'legacyTools.openAddTextLayer()' in qml_source
-    assert 'legacyTools.openAddShapedLayer()' in qml_source
+    assert 'legacyTools.openAddTextLayer()' not in qml_source
+    assert 'legacyTools.openAddShapedLayer()' not in qml_source
+    assert 'legacyTools.renameSelectedLayer()' not in qml_source
+    assert 'function revealLayerNameEditor()' in qml_source
     assert 'workspace.addEmptyImageLayer()' in qml_source
     assert 'workspace.setSelectedImageSourceMode(false)' in qml_source
     assert 'workspace.resetView()' in qml_source

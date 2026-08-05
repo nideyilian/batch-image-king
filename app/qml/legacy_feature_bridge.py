@@ -209,36 +209,6 @@ class LegacyFeatureBridge(QObject):
         return True
 
     @Slot(result=bool)
-    def openAddTextLayer(self) -> bool:
-        from app.ui.add_text_layer_dialog_simple import AddTextLayerDialog
-
-        dialog = AddTextLayerDialog()
-        if dialog.exec() != QDialog.Accepted:
-            return False
-        try:
-            self._workspace.document.add_text_layer(dialog.get_text_layer())
-            self._refresh_workspace("成功添加文字图层")
-            return True
-        except Exception as error:
-            self._status(f"添加文字图层失败：{error}")
-            return False
-
-    @Slot(result=bool)
-    def openAddShapedLayer(self) -> bool:
-        from app.ui.add_shaped_layer_dialog import AddShapedLayerDialog
-
-        dialog = AddShapedLayerDialog()
-        if dialog.exec() != QDialog.Accepted:
-            return False
-        try:
-            self._workspace.document.add_shaped_layer(dialog.get_created_layer())
-            self._refresh_workspace("成功添加异形图层")
-            return True
-        except Exception as error:
-            self._status(f"添加异形图层失败：{error}")
-            return False
-
-    @Slot(result=bool)
     def openBatchExport(self) -> bool:
         from app.ui.batch_export_dialog import BatchExportDialog
 
@@ -467,16 +437,6 @@ class LegacyFeatureBridge(QObject):
         self._workspace.layerModel.reset_from_document()
         self._workspace.selectionChanged.emit()
         return True
-
-    @Slot(result=bool)
-    def renameSelectedLayer(self) -> bool:
-        layer = self._workspace._selected_layer()
-        if layer is None:
-            return False
-        name, accepted = self._prompt_text("重命名图层", "请输入新名称:", layer.name)
-        if not accepted or not str(name).strip():
-            return False
-        return bool(self._workspace.setSelectedName(str(name).strip()))
 
     @Slot(result=bool)
     def renameCurrentTab(self) -> bool:

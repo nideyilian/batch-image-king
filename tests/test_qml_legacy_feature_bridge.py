@@ -7,9 +7,6 @@ from app.qml.legacy_feature_bridge import (
 )
 from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
-from app.models.shaped_layer_new import ShapedLayer
-from app.models.text_layer import TextLayer
-from PySide6.QtWidgets import QDialog
 
 
 def _workspace_with_sessions():
@@ -70,7 +67,7 @@ def test_legacy_bridge_copies_layers_between_qml_documents():
     assert target.selected_layer_index == 0
 
 
-def test_bridge_select_all_and_rename_commands_use_active_document(monkeypatch):
+def test_bridge_select_all_uses_active_document():
     workspace, sessions = _workspace_with_sessions()
     workspace.addTextLayer()
     workspace.addTextLayer()
@@ -79,51 +76,9 @@ def test_bridge_select_all_and_rename_commands_use_active_document(monkeypatch):
     assert bridge.selectAllLayers() is True
     assert workspace.selectedLayerCount == 2
 
-    monkeypatch.setattr(bridge, "_prompt_text", lambda *_args: ("新名称", True))
-    assert bridge.renameSelectedLayer() is True
-    assert workspace.selectedLayerName == "新名称"
-
-
-def test_bridge_uses_classic_creation_dialog_results(monkeypatch):
-    workspace, sessions = _workspace_with_sessions()
-    bridge = LegacyFeatureBridge(workspace, sessions)
-    text_layer = TextLayer(name="旧版文字", x=50, y=50, width=300, height=100)
-    shaped_layer = ShapedLayer(
-        name="旧版异形",
-        x=-20,
-        y=30,
-        width=240,
-        height=180,
-        image_source=None,
-        is_folder=True,
-    )
-
-    class FakeTextDialog:
-        def exec(self):
-            return QDialog.Accepted
-
-        def get_text_layer(self):
-            return text_layer
-
-    class FakeShapeDialog:
-        def exec(self):
-            return QDialog.Accepted
-
-        def get_created_layer(self):
-            return shaped_layer
-
-    import app.ui.add_shaped_layer_dialog as shape_dialog_module
-    import app.ui.add_text_layer_dialog_simple as text_dialog_module
-
-    monkeypatch.setattr(text_dialog_module, "AddTextLayerDialog", FakeTextDialog)
-    monkeypatch.setattr(shape_dialog_module, "AddShapedLayerDialog", FakeShapeDialog)
-
-    assert bridge.openAddTextLayer() is True
-    assert bridge.openAddShapedLayer() is True
-    assert workspace.document.layers == [text_layer, shaped_layer]
-    assert shaped_layer.image_source is None
-    assert shaped_layer.is_folder is True
-    assert (text_layer.x, text_layer.y, text_layer.width, text_layer.height) == (50, 50, 300, 100)
+    assert not hasattr(bridge, "openAddTextLayer")
+    assert not hasattr(bridge, "openAddShapedLayer")
+    assert not hasattr(bridge, "renameSelectedLayer")
 
 
 def test_bridge_new_document_uses_complete_classic_canvas_settings(monkeypatch):

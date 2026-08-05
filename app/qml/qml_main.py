@@ -22,6 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-multi-tab-export", action="store_true", help="展示多标签批量导出")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
     parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
+    parser.add_argument("--show-text-layer-dialog", action="store_true", help="展示原生文字图层创建弹窗")
+    parser.add_argument("--show-shaped-layer-dialog", action="store_true", help="展示原生异形图层创建弹窗")
     parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")
     parser.add_argument("--demo-effects", action="store_true", help="为选中图片图层应用演示效果")
     parser.add_argument("--select-layer", type=int, help="启动后选中指定图层索引")
@@ -396,6 +398,22 @@ def main() -> int:
 
         QTimer.singleShot(80, open_new_canvas)
 
+    if args.show_text_layer_dialog:
+        def open_text_layer_dialog() -> None:
+            dialog = window.findChild(QObject, "textLayerDialog")
+            if dialog is None or not QMetaObject.invokeMethod(dialog, "openFresh"):
+                debug("text layer dialog could not be opened")
+
+        QTimer.singleShot(80, open_text_layer_dialog)
+
+    if args.show_shaped_layer_dialog:
+        def open_shaped_layer_dialog() -> None:
+            dialog = window.findChild(QObject, "shapedLayerDialog")
+            if dialog is None or not QMetaObject.invokeMethod(dialog, "openFresh"):
+                debug("shaped layer dialog could not be opened")
+
+        QTimer.singleShot(80, open_shaped_layer_dialog)
+
     if args.show_close_confirm:
         def open_close_confirmation() -> None:
             workspace.document.is_modified = True
@@ -416,6 +434,8 @@ def main() -> int:
                     or args.show_batch_advanced
                     or args.show_multi_tab_export
                     or args.show_new_canvas
+                    or args.show_text_layer_dialog
+                    or args.show_shaped_layer_dialog
                     or args.show_close_confirm
                     or args.show_canvas_presets
                     or args.show_project_presets

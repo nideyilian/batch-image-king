@@ -17,6 +17,15 @@ Rectangle {
     }
     signal activated(string value)
 
+    function beginEdit() {
+        if (!root.enabled) return
+        fontInput.text = String(root.value)
+        root.query = fontInput.text
+        fontInput.forceActiveFocus()
+        fontInput.selectAll()
+        fontPopup.open()
+    }
+
     function choose(option) {
         if (!option) return
         root.activated(String(option.value || option.label || ""))
@@ -54,6 +63,7 @@ Rectangle {
 
         onActiveFocusChanged: {
             if (activeFocus) {
+                text = String(root.value)
                 root.query = text
                 selectAll()
                 fontPopup.open()
@@ -74,6 +84,7 @@ Rectangle {
         }
         Keys.onEscapePressed: {
             fontPopup.close()
+            text = String(root.value)
             focus = false
         }
     }
@@ -83,7 +94,7 @@ Rectangle {
         property: "text"
         value: root.value
         when: !fontInput.activeFocus
-        restoreMode: Binding.RestoreBindingOrValue
+        restoreMode: Binding.RestoreNone
     }
 
     AppIcon {

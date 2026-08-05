@@ -1758,7 +1758,7 @@ class WorkspaceViewModel(QObject):
     def _image_files(directory: str):
         if not directory or not os.path.isdir(directory):
             return []
-        extensions = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff"}
+        extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
         try:
             return sorted(
                 str(path)
@@ -2095,6 +2095,90 @@ class WorkspaceViewModel(QObject):
         self._set_status(f"已添加{shape_entry[1]}异形图层", toast=True)
         return True
 
+    @Slot("QVariantMap", result=bool)
+    def addConfiguredShapedLayer(self, config) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        config = dict(config or {})
+        name = str(config.get("name", "") or "").strip()[:120]
+        shape_id = str(config.get("shapeType", "rectangle") or "rectangle").strip().lower()
+        shape_entry = _SHAPE_TYPES.get(shape_id)
+        if not name:
+            self._set_status("图层名称不能为空", toast=True)
+            return False
+        if shape_entry is None:
+            self._set_status("不支持的异形类型", toast=True)
+            return False
+        try:
+            x = int(float(config.get("x", 0)))
+            y = int(float(config.get("y", 0)))
+            width = int(float(config.get("width", 200)))
+            height = int(float(config.get("height", 200)))
+        except (TypeError, ValueError):
+            self._set_status("异形图层的位置或尺寸无效", toast=True)
+            return False
+        if not 10 <= width <= 32768 or not 10 <= height <= 32768:
+            self._set_status("异形图层尺寸必须在 10 到 32768 像素之间", toast=True)
+            return False
+
+        source = str(config.get("source", "") or "").strip()
+        source_is_folder = bool(config.get("sourceIsFolder", True))
+        source_path = None
+        current_image_path = None
+        if source:
+            validated = self._validated_image_source(source)
+            if validated is None:
+                return False
+            source_path, actual_is_folder, current_image_path, _files = validated
+            if actual_is_folder != source_is_folder:
+                expected = "素材文件夹" if source_is_folder else "单张图片"
+                self._set_status(f"当前内容源模式需要选择{expected}", toast=True)
+                return False
+            source_is_folder = actual_is_folder
+
+        try:
+            layer = ShapedLayer(
+                name=name,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                image_source=source_path,
+                use_original_size=bool(config.get("useOriginalSize", False)) and not source_is_folder,
+                is_folder=source_is_folder,
+                current_image_path=current_image_path,
+                shape_type=shape_entry[0],
+            )
+            if shape_id == "right_trapezoid":
+                top_ratio = max(30, min(100, int(float(config.get("trapezoidTopRatio", 100)))))
+                bottom_ratio = max(30, min(100, int(float(config.get("trapezoidBottomRatio", 80)))))
+                slope_side = str(config.get("trapezoidSlopeSide", "right") or "right").lower()
+                layer.trapezoid_top_width = round(width * top_ratio / 100)
+                layer.trapezoid_bottom_width = round(width * bottom_ratio / 100)
+                layer.trapezoid_slope_side = slope_side if slope_side in ("left", "right") else "right"
+            elif shape_id in ("pentagon", "hexagon"):
+                layer.polygon_rotation = float(config.get("polygonRotation", 0)) % 360.0
+                layer.polygon_corner_radius = max(0, int(float(config.get("polygonCornerRadius", 0))))
+
+            with self._document_lock:
+                self._ensure_history_baseline()
+                self._document.add_shaped_layer(layer)
+                self._document.is_modified = True
+        except (TypeError, ValueError) as error:
+            self._set_status(f"异形图层参数无效：{error}", toast=True)
+            return False
+        except Exception as error:
+            self._set_status(f"添加异形图层失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"已添加{shape_entry[1]}异形图层", toast=True)
+        return True
+
     @Slot(str, result=bool)
     def setSelectedImageSource(self, source_path: str) -> bool:
         if not self._ensure_operations_available():
@@ -2202,6 +2286,70 @@ class WorkspaceViewModel(QObject):
         text_layer.auto_fit_text_box = False
 
         try:
+            with self._document_lock:
+                self._ensure_history_baseline()
+                self._document.add_text_layer(text_layer)
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加文字失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已添加文字图层", toast=True)
+        return True
+
+    @Slot("QVariantMap", result=bool)
+    def addConfiguredTextLayer(self, config) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        from app.models.text_layer import TextLayer
+
+        config = dict(config or {})
+        name = str(config.get("name", "") or "").strip()[:120]
+        content = str(config.get("content", "") or "")
+        font_family = str(config.get("fontFamily", "Microsoft YaHei") or "").strip()
+        alignment = str(config.get("alignment", "left") or "left").strip().lower()
+        color = self._parse_hex_color(str(config.get("color", "#000000") or "#000000"))
+        try:
+            font_size = int(float(config.get("fontSize", 24)))
+        except (TypeError, ValueError):
+            font_size = 0
+
+        if not name:
+            self._set_status("图层名称不能为空", toast=True)
+            return False
+        if not content.strip():
+            self._set_status("文字内容不能为空", toast=True)
+            return False
+        if not font_family:
+            self._set_status("字体名称不能为空", toast=True)
+            return False
+        if not 6 <= font_size <= 240:
+            self._set_status("字号必须在 6 到 240 像素之间", toast=True)
+            return False
+        if alignment not in _TEXT_ALIGNMENTS:
+            self._set_status("不支持的文字对齐方式", toast=True)
+            return False
+        if color is None:
+            self._set_status("文字颜色格式无效", toast=True)
+            return False
+
+        try:
+            text_layer = TextLayer(name=name, x=50, y=50, width=300, height=100)
+            text_layer.auto_fit_text_box = False
+            text_layer.text_binding_enabled = bool(config.get("bindingEnabled", True))
+            text_layer.font_family = font_family
+            text_layer.font_size = font_size
+            text_layer.text_color = color
+            text_layer.text_align = _TEXT_ALIGNMENTS[alignment][0]
+            lines = text_layer.parse_text_input_to_lines(content)
+            text_layer.set_text_lines(lines)
+            text_layer.set_current_text(lines[0], force=True)
+
             with self._document_lock:
                 self._ensure_history_baseline()
                 self._document.add_text_layer(text_layer)
