@@ -260,6 +260,83 @@ class WorkspaceViewModel(QObject):
         return max(0, min(int(getattr(layer, "width", 0)), int(getattr(layer, "height", 0))) // 2)
 
     @Property(bool, notify=selectionChanged)
+    def selectedSupportsColorOverlay(self) -> bool:
+        layer = self._selected_layer()
+        return all(
+            hasattr(layer, attr)
+            for attr in ("color_overlay_enabled", "color_overlay_color", "color_overlay_opacity")
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedColorOverlayEnabled(self) -> bool:
+        return self.selectedSupportsColorOverlay and bool(
+            getattr(self._selected_layer(), "color_overlay_enabled", False)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedColorOverlayColor(self) -> str:
+        if not self.selectedSupportsColorOverlay:
+            return "#000000"
+        return self._rgba_to_hex(
+            getattr(self._selected_layer(), "color_overlay_color", (255, 0, 0, 255))
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedColorOverlayOpacity(self) -> int:
+        if not self.selectedSupportsColorOverlay:
+            return 100
+        return round(float(getattr(self._selected_layer(), "color_overlay_opacity", 1.0)) * 100)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsGradientOverlay(self) -> bool:
+        layer = self._selected_layer()
+        return all(
+            hasattr(layer, attr)
+            for attr in (
+                "gradient_overlay_enabled",
+                "gradient_overlay_colors",
+                "gradient_overlay_opacity",
+                "gradient_overlay_angle",
+            )
+        )
+
+    def _selected_gradient_colors(self):
+        colors = getattr(self._selected_layer(), "gradient_overlay_colors", None)
+        if not isinstance(colors, (list, tuple)) or len(colors) < 2:
+            return [(0, 0, 0, 255), (255, 255, 255, 255)]
+        normalized = []
+        for color in colors[:2]:
+            parsed = self._parse_hex_color(self._rgba_to_hex(color))
+            normalized.append(parsed or (0, 0, 0, 255))
+        return normalized
+
+    @Property(bool, notify=selectionChanged)
+    def selectedGradientOverlayEnabled(self) -> bool:
+        return self.selectedSupportsGradientOverlay and bool(
+            getattr(self._selected_layer(), "gradient_overlay_enabled", False)
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedGradientStartColor(self) -> str:
+        return self._rgba_to_hex(self._selected_gradient_colors()[0])
+
+    @Property(str, notify=selectionChanged)
+    def selectedGradientEndColor(self) -> str:
+        return self._rgba_to_hex(self._selected_gradient_colors()[1])
+
+    @Property(int, notify=selectionChanged)
+    def selectedGradientOverlayOpacity(self) -> int:
+        if not self.selectedSupportsGradientOverlay:
+            return 100
+        return round(float(getattr(self._selected_layer(), "gradient_overlay_opacity", 1.0)) * 100)
+
+    @Property(float, notify=selectionChanged)
+    def selectedGradientOverlayAngle(self) -> float:
+        if not self.selectedSupportsGradientOverlay:
+            return 0.0
+        return float(getattr(self._selected_layer(), "gradient_overlay_angle", 0.0)) % 360.0
+
+    @Property(bool, notify=selectionChanged)
     def selectedVisible(self) -> bool:
         return bool(getattr(self._selected_layer(), "visible", False))
 
@@ -1271,6 +1348,101 @@ class WorkspaceViewModel(QObject):
             return False
         value = max(0, min(self.selectedCornerRadiusMax, int(value)))
         return self._set_layer_attr(self.selectedLayerIndex, "corner_radius", value, "修改圆角")
+
+    @Slot(bool, result=bool)
+    def setSelectedColorOverlayEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsColorOverlay:
+            self._set_status("当前图层不支持颜色叠加", toast=True)
+            return False
+        changes = {"color_overlay_enabled": bool(enabled)}
+        if enabled and self.selectedSupportsGradientOverlay:
+            changes["gradient_overlay_enabled"] = False
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "切换颜色叠加")
+
+    @Slot(str, result=bool)
+    def setSelectedColorOverlayColor(self, value: str) -> bool:
+        if not self.selectedSupportsColorOverlay:
+            self._set_status("当前图层不支持颜色叠加", toast=True)
+            return False
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("叠加颜色格式无效", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "color_overlay_color",
+            color,
+            "修改叠加颜色",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedColorOverlayOpacity(self, value: int) -> bool:
+        if not self.selectedSupportsColorOverlay:
+            self._set_status("当前图层不支持颜色叠加", toast=True)
+            return False
+        value = max(0, min(100, int(value)))
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "color_overlay_opacity",
+            value / 100.0,
+            "修改颜色叠加强度",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedGradientOverlayEnabled(self, enabled: bool) -> bool:
+        if not self.selectedSupportsGradientOverlay:
+            self._set_status("当前图层不支持渐变叠加", toast=True)
+            return False
+        changes = {"gradient_overlay_enabled": bool(enabled)}
+        if enabled and self.selectedSupportsColorOverlay:
+            changes["color_overlay_enabled"] = False
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "切换渐变叠加")
+
+    @Slot(int, str, result=bool)
+    def setSelectedGradientOverlayColor(self, index: int, value: str) -> bool:
+        if not self.selectedSupportsGradientOverlay:
+            self._set_status("当前图层不支持渐变叠加", toast=True)
+            return False
+        if index not in (0, 1):
+            self._set_status("渐变颜色端点无效", toast=True)
+            return False
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("渐变颜色格式无效", toast=True)
+            return False
+        colors = self._selected_gradient_colors()
+        colors[index] = color
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "gradient_overlay_colors",
+            colors,
+            "修改渐变颜色",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedGradientOverlayOpacity(self, value: int) -> bool:
+        if not self.selectedSupportsGradientOverlay:
+            self._set_status("当前图层不支持渐变叠加", toast=True)
+            return False
+        value = max(0, min(100, int(value)))
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "gradient_overlay_opacity",
+            value / 100.0,
+            "修改渐变叠加强度",
+        )
+
+    @Slot(float, result=bool)
+    def setSelectedGradientOverlayAngle(self, value: float) -> bool:
+        if not self.selectedSupportsGradientOverlay:
+            self._set_status("当前图层不支持渐变叠加", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "gradient_overlay_angle",
+            float(value) % 360.0,
+            "修改渐变角度",
+        )
 
     @Slot(int, result=bool)
     def toggleLayerVisible(self, index: int) -> bool:

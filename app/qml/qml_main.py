@@ -96,6 +96,11 @@ def main() -> int:
         workspace.setSelectedStrokeWidth(8)
         workspace.setSelectedStrokeColor("#46D7AD")
         workspace.setSelectedCornerRadius(48)
+        workspace.setSelectedGradientOverlayEnabled(True)
+        workspace.setSelectedGradientOverlayColor(0, "#173B32")
+        workspace.setSelectedGradientOverlayColor(1, "#46D7AD")
+        workspace.setSelectedGradientOverlayOpacity(38)
+        workspace.setSelectedGradientOverlayAngle(45.0)
     if args.duplicate_selected:
         workspace.duplicateSelectedLayer()
 

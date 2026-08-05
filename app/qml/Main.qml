@@ -143,9 +143,25 @@ ApplicationWindow {
     }
 
     ColorDialog {
-        id: strokeColorDialog
-        title: "选择描边颜色"
-        onAccepted: workspace.setSelectedStrokeColor(window.colorToHex(selectedColor))
+        id: effectColorDialog
+        property string target: "stroke"
+        property int colorIndex: 0
+
+        title: target === "stroke" ? "选择描边颜色" : target === "overlay" ? "选择叠加颜色" : "选择渐变颜色"
+
+        function openFor(targetName, colorValue, index) {
+            target = targetName
+            colorIndex = index === undefined ? 0 : index
+            selectedColor = window.hexToColor(colorValue)
+            open()
+        }
+
+        onAccepted: {
+            var hexValue = window.colorToHex(selectedColor)
+            if (target === "stroke") workspace.setSelectedStrokeColor(hexValue)
+            else if (target === "overlay") workspace.setSelectedColorOverlayColor(hexValue)
+            else workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)
+        }
     }
 
     component Divider: Rectangle {
@@ -1882,8 +1898,7 @@ ApplicationWindow {
                                             enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                             onClicked: {
-                                                strokeColorDialog.selectedColor = window.hexToColor(workspace.selectedStrokeColor)
-                                                strokeColorDialog.open()
+                                                effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)
                                             }
                                         }
                                     }
@@ -1917,6 +1932,199 @@ ApplicationWindow {
                                                     hoverEnabled: true
                                                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                                     onClicked: workspace.setSelectedStrokeColor(modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            PropertySection {
+                                width: parent.width
+                                title: "颜色叠加"
+                                summary: workspace.selectedColorOverlayEnabled ? workspace.selectedColorOverlayOpacity + "%" : "关闭"
+                                visible: workspace.selectedSupportsColorOverlay
+
+                                InspectorRow {
+                                    label: "启用"
+                                    BodyLabel { text: "统一图层色调"; color: Theme.textSecondary; Layout.fillWidth: true }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedColorOverlayEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedColorOverlayEnabled(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "颜色"
+                                    visible: workspace.selectedColorOverlayEnabled
+                                    Rectangle {
+                                        Layout.preferredWidth: 30
+                                        Layout.preferredHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: window.hexToColor(workspace.selectedColorOverlayColor)
+                                        border.width: 1
+                                        border.color: overlayColorMouse.containsMouse ? Theme.accent : Theme.borderStrong
+                                        MouseArea {
+                                            id: overlayColorMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: effectColorDialog.openFor("overlay", workspace.selectedColorOverlayColor)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedColorOverlayColor
+                                        bindValue: true
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => workspace.setSelectedColorOverlayColor(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "强度"
+                                    visible: workspace.selectedColorOverlayEnabled
+                                    ValueBox {
+                                        value: workspace.selectedColorOverlayOpacity.toString()
+                                        bindValue: true
+                                        suffix: "%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedColorOverlayOpacity(parsed)
+                                        }
+                                    }
+                                }
+                            }
+                            PropertySection {
+                                width: parent.width
+                                title: "渐变叠加"
+                                summary: workspace.selectedGradientOverlayEnabled ? workspace.selectedGradientOverlayOpacity + "% · " + Math.round(workspace.selectedGradientOverlayAngle) + "°" : "关闭"
+                                visible: workspace.selectedSupportsGradientOverlay
+
+                                InspectorRow {
+                                    label: "启用"
+                                    BodyLabel { text: "双端线性渐变"; color: Theme.textSecondary; Layout.fillWidth: true }
+                                    ToggleSwitch {
+                                        checked: workspace.selectedGradientOverlayEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onToggled: checkedValue => workspace.setSelectedGradientOverlayEnabled(checkedValue)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "起始"
+                                    visible: workspace.selectedGradientOverlayEnabled
+                                    Rectangle {
+                                        Layout.preferredWidth: 30
+                                        Layout.preferredHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: window.hexToColor(workspace.selectedGradientStartColor)
+                                        border.width: 1
+                                        border.color: gradientStartMouse.containsMouse ? Theme.accent : Theme.borderStrong
+                                        MouseArea {
+                                            id: gradientStartMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: effectColorDialog.openFor("gradient", workspace.selectedGradientStartColor, 0)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedGradientStartColor
+                                        bindValue: true
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => workspace.setSelectedGradientOverlayColor(0, value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "结束"
+                                    visible: workspace.selectedGradientOverlayEnabled
+                                    Rectangle {
+                                        Layout.preferredWidth: 30
+                                        Layout.preferredHeight: 30
+                                        radius: Theme.radiusSmall
+                                        color: window.hexToColor(workspace.selectedGradientEndColor)
+                                        border.width: 1
+                                        border.color: gradientEndMouse.containsMouse ? Theme.accent : Theme.borderStrong
+                                        MouseArea {
+                                            id: gradientEndMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: effectColorDialog.openFor("gradient", workspace.selectedGradientEndColor, 1)
+                                        }
+                                    }
+                                    ValueBox {
+                                        value: workspace.selectedGradientEndColor
+                                        bindValue: true
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => workspace.setSelectedGradientOverlayColor(1, value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "强度"
+                                    visible: workspace.selectedGradientOverlayEnabled
+                                    ValueBox {
+                                        value: workspace.selectedGradientOverlayOpacity.toString()
+                                        bindValue: true
+                                        suffix: "%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedGradientOverlayOpacity(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "角度"
+                                    visible: workspace.selectedGradientOverlayEnabled
+                                    ValueBox {
+                                        value: (Math.round(workspace.selectedGradientOverlayAngle * 10) / 10).toString()
+                                        bindValue: true
+                                        suffix: "°"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseFloat(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedGradientOverlayAngle(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "方向"
+                                    visible: workspace.selectedGradientOverlayEnabled
+                                    Row {
+                                        Layout.fillWidth: true
+                                        spacing: 4
+                                        Repeater {
+                                            model: [0, 45, 90, 135]
+                                            delegate: Rectangle {
+                                                required property int modelData
+                                                width: 42
+                                                height: 28
+                                                radius: Theme.radiusSmall
+                                                color: Math.round(workspace.selectedGradientOverlayAngle) === modelData ? Theme.accentSoft : Theme.bgControl
+                                                border.width: 1
+                                                border.color: Math.round(workspace.selectedGradientOverlayAngle) === modelData ? Theme.accentPressed : Theme.borderStrong
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData + "°"
+                                                    color: Math.round(workspace.selectedGradientOverlayAngle) === modelData ? Theme.accent : Theme.textSecondary
+                                                    font.family: Theme.bodyFont
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                    hoverEnabled: true
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: workspace.setSelectedGradientOverlayAngle(modelData)
                                                 }
                                             }
                                         }
