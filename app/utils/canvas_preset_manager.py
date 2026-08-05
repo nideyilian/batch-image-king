@@ -1,27 +1,28 @@
 import os
 import json
+import builtins
 from typing import List, Dict, Tuple, Optional
 
 def safe_print(message: str):
     """安全的打印函数，避免编码问题"""
     try:
-        safe_print(message)
+        builtins.print(message)
     except (UnicodeEncodeError, OSError):
         try:
             # 尝试使用ASCII编码
             ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            safe_print(f"[DEBUG] {ascii_message}")
+            builtins.print(f"[DEBUG] {ascii_message}")
         except Exception:
             # 最后的备选方案
-            safe_print("[DEBUG] Message encoding failed")
+            builtins.print("[DEBUG] Message encoding failed")
 
 
 class CanvasPresetManager:
     """画布尺寸预设管理器"""
     
-    def __init__(self):
+    def __init__(self, config_dir: Optional[str] = None):
         # 获取用户配置目录
-        self.config_dir = os.path.join(os.path.expanduser('~'), '.config', '批图王')
+        self.config_dir = config_dir or os.path.join(os.path.expanduser('~'), '.config', '批图王')
         self.presets_file = os.path.join(self.config_dir, 'canvas_presets.json')
         
         # 确保配置目录存在
@@ -116,6 +117,9 @@ class CanvasPresetManager:
     
     def add_custom_preset(self, name: str, width: int, height: int, category: str = "自定义") -> bool:
         """添加自定义预设"""
+        name = str(name or "").strip()
+        if not name:
+            return False
         # 检查名称是否已存在
         if self.preset_exists(name):
             return False
@@ -193,6 +197,10 @@ class CanvasPresetManager:
     
     def update_custom_preset(self, old_name: str, new_name: str, width: int, height: int, category: str = "自定义") -> bool:
         """更新自定义预设"""
+        old_name = str(old_name or "").strip()
+        new_name = str(new_name or "").strip()
+        if not old_name or not new_name or width <= 0 or height <= 0:
+            return False
         if "custom" not in self.user_presets:
             return False
         
@@ -209,4 +217,4 @@ class CanvasPresetManager:
                 preset["category"] = category
                 return self.save_user_presets()
         
-        return False 
+        return False

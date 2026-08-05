@@ -24,6 +24,7 @@ QtObject {
     readonly property color accentHover: "#65e5c0"
     readonly property color accentPressed: "#30b58f"
     readonly property color accentSoft: "#173b32"
+    readonly property color guide: "#4fa3ff"
     readonly property color amber: "#f7bd63"
     readonly property color coral: "#f1786d"
     readonly property color success: "#65d88d"

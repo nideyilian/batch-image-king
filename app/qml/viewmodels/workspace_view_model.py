@@ -196,6 +196,7 @@ class WorkspaceViewModel(QObject):
     styleClipboardChanged = Signal()
     cropEditChanged = Signal()
     vectorEditChanged = Signal()
+    viewSettingsChanged = Signal()
     toastRequested = Signal(str)
 
     def __init__(
@@ -271,6 +272,162 @@ class WorkspaceViewModel(QObject):
     @Property(int, notify=documentInfoChanged)
     def canvasHeight(self) -> int:
         return int(getattr(self._document, "canvas_height", 0))
+
+    @Property(bool, notify=viewSettingsChanged)
+    def showRulers(self) -> bool:
+        return bool(self._document.view_settings.get("show_rulers", True))
+
+    @Property(bool, notify=viewSettingsChanged)
+    def showGuides(self) -> bool:
+        return bool(self._document.view_settings.get("show_guides", True))
+
+    @Property(bool, notify=viewSettingsChanged)
+    def snapToGuides(self) -> bool:
+        return bool(self._document.view_settings.get("snap_to_guides", True))
+
+    @Property("QVariantList", notify=viewSettingsChanged)
+    def horizontalGuides(self):
+        return [float(value) for value in self._document.view_settings.get("horizontal_guides", [])]
+
+    @Property("QVariantList", notify=viewSettingsChanged)
+    def verticalGuides(self):
+        return [float(value) for value in self._document.view_settings.get("vertical_guides", [])]
+
+    def _set_view_setting(self, key: str, value, action: str) -> bool:
+        if not self._ensure_operations_available():
+            return False
+        if self._document.view_settings.get(key) == value:
+            return True
+        with self._document_lock:
+            self._ensure_history_baseline()
+            self._document.view_settings[key] = value
+            self._document.is_modified = True
+            self._document.save_state(action)
+            self._document.document_changed.emit()
+        self.viewSettingsChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        return True
+
+    @Slot(bool, result=bool)
+    def setShowRulers(self, enabled: bool) -> bool:
+        return self._set_view_setting("show_rulers", bool(enabled), "切换标尺显示")
+
+    @Slot(bool, result=bool)
+    def setShowGuides(self, enabled: bool) -> bool:
+        return self._set_view_setting("show_guides", bool(enabled), "切换参考线显示")
+
+    @Slot(bool, result=bool)
+    def setSnapToGuides(self, enabled: bool) -> bool:
+        return self._set_view_setting("snap_to_guides", bool(enabled), "切换参考线吸附")
+
+    @staticmethod
+    def _guide_key(orientation: str):
+        normalized = str(orientation or "").strip().lower()
+        if normalized in {"horizontal", "h"}:
+            return "horizontal_guides"
+        if normalized in {"vertical", "v"}:
+            return "vertical_guides"
+        return None
+
+    @Slot(str, float, result=bool)
+    def addGuide(self, orientation: str, position: float) -> bool:
+        key = self._guide_key(orientation)
+        limit = self.canvasHeight if key == "horizontal_guides" else self.canvasWidth
+        if key is None or not 0 <= float(position) <= limit:
+            return False
+        guides = list(self._document.view_settings.get(key, []))
+        guides.append(round(float(position), 2))
+        guides.sort()
+        return self._set_view_setting(key, guides, "添加参考线")
+
+    @Slot(str, int, float, result=bool)
+    def moveGuide(self, orientation: str, index: int, position: float) -> bool:
+        key = self._guide_key(orientation)
+        limit = self.canvasHeight if key == "horizontal_guides" else self.canvasWidth
+        guides = list(self._document.view_settings.get(key, [])) if key else []
+        if key is None or not 0 <= int(index) < len(guides) or not 0 <= float(position) <= limit:
+            return False
+        guides[int(index)] = round(float(position), 2)
+        return self._set_view_setting(key, guides, "移动参考线")
+
+    @Slot(str, int, result=bool)
+    def removeGuide(self, orientation: str, index: int) -> bool:
+        key = self._guide_key(orientation)
+        guides = list(self._document.view_settings.get(key, [])) if key else []
+        if key is None or not 0 <= int(index) < len(guides):
+            return False
+        guides.pop(int(index))
+        return self._set_view_setting(key, guides, "删除参考线")
+
+    @Slot(result=bool)
+    def clearGuides(self) -> bool:
+        horizontal = self._document.view_settings.get("horizontal_guides", [])
+        vertical = self._document.view_settings.get("vertical_guides", [])
+        if not horizontal and not vertical:
+            return True
+        if not self._ensure_operations_available():
+            return False
+        with self._document_lock:
+            self._ensure_history_baseline()
+            self._document.view_settings["horizontal_guides"] = []
+            self._document.view_settings["vertical_guides"] = []
+            self._document.is_modified = True
+            self._document.save_state("清空参考线")
+            self._document.document_changed.emit()
+        self.viewSettingsChanged.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        return True
+
+    @Slot(float, float, float, float, float, result="QVariantMap")
+    def snapPosition(self, x: float, y: float, width: float, height: float, tolerance: float = 6.0):
+        result = {"x": float(x), "y": float(y), "snappedX": False, "snappedY": False}
+        if not self.snapToGuides or not self.showGuides:
+            return result
+
+        def best_offset(origin, size, guides):
+            candidates = (origin, origin + size / 2.0, origin + size)
+            matches = [
+                (abs(float(guide) - edge), float(guide) - edge)
+                for guide in guides
+                for edge in candidates
+                if abs(float(guide) - edge) <= max(0.0, float(tolerance))
+            ]
+            return min(matches, default=None, key=lambda item: item[0])
+
+        x_match = best_offset(float(x), float(width), self.verticalGuides)
+        y_match = best_offset(float(y), float(height), self.horizontalGuides)
+        if x_match is not None:
+            result["x"] = float(x) + x_match[1]
+            result["snappedX"] = True
+        if y_match is not None:
+            result["y"] = float(y) + y_match[1]
+            result["snappedY"] = True
+        return result
+
+    @Slot(int, int, result=bool)
+    def resizeCanvas(self, width: int, height: int) -> bool:
+        width, height = int(width), int(height)
+        if width < 16 or height < 16 or width > 32768 or height > 32768:
+            self._set_status("画布尺寸必须在 16 到 32768 像素之间", toast=True)
+            return False
+        if width == self.canvasWidth and height == self.canvasHeight:
+            return True
+        with self._document_lock:
+            self._ensure_history_baseline()
+            self._document.canvas_width = width
+            self._document.canvas_height = height
+            self._document.is_modified = True
+            self._document._invalidate_render_cache()
+            self._document.bump_hit_test_version()
+            self._document.save_state("调整画布尺寸")
+            self._document.document_changed.emit()
+        self.documentInfoChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"画布已调整为 {width} x {height}", toast=True)
+        return True
 
     @Property(int, notify=selectionChanged)
     def selectedLayerIndex(self) -> int:
@@ -1308,6 +1465,7 @@ class WorkspaceViewModel(QObject):
         self.historyStateChanged.emit()
         self.cropEditChanged.emit()
         self.vectorEditChanged.emit()
+        self.viewSettingsChanged.emit()
         self.documentObjectChanged.emit(document)
 
     @Slot(object, result=bool)
@@ -2439,6 +2597,7 @@ class WorkspaceViewModel(QObject):
         self._document.document_changed.emit()
         self._layer_model.reset_from_document()
         self.selectionChanged.emit()
+        self.viewSettingsChanged.emit()
         self.documentInfoChanged.emit()
         self.historyStateChanged.emit()
         if render:
@@ -3729,6 +3888,7 @@ class WorkspaceViewModel(QObject):
             self._document.is_modified = True
         self._layer_model.reset_from_document()
         self.selectionChanged.emit()
+        self.viewSettingsChanged.emit()
         self.documentInfoChanged.emit()
         self.historyStateChanged.emit()
         self.requestPreview(force=True)

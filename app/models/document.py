@@ -1,4 +1,5 @@
 import os
+import copy
 import random
 import json
 import pickle
@@ -262,6 +263,7 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
             'layers': serialize_layer_tree(self.layers, lambda layer: layer.serialize()),
             'selected_layer_index': self.selected_layer_index,
             'selected_layer_indices': list(self.selected_layer_indices),
+            'view_settings': copy.deepcopy(self.view_settings),
         }
         self._history_manager.save_state(action_name, state)
 
@@ -297,6 +299,7 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         self.canvas_height = state.get('canvas_height', self.canvas_height)
         self.selected_layer_index = state.get('selected_layer_index', -1)
         self.selected_layer_indices = list(state.get('selected_layer_indices', []))
+        self.view_settings = copy.deepcopy(state.get('view_settings', self.view_settings))
 
         # 命中测试缓存需要随撤销/重做的结构变化失效
         self.bump_hit_test_version()

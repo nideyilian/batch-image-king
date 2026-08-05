@@ -238,12 +238,7 @@ ApplicationWindow {
                 columnSpacing: 8
 
                 Repeater {
-                    model: [
-                        { label: "商品竖图", size: "1080 x 1350", width: 1080, height: 1350 },
-                        { label: "方形主图", size: "1080 x 1080", width: 1080, height: 1080 },
-                        { label: "横版画面", size: "1920 x 1080", width: 1920, height: 1080 },
-                        { label: "竖版画面", size: "1080 x 1920", width: 1080, height: 1920 }
-                    ]
+                    model: canvasPresets.presets.slice(0, 4)
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
@@ -255,8 +250,8 @@ ApplicationWindow {
                         Column {
                             anchors.centerIn: parent
                             spacing: 2
-                            BodyLabel { text: modelData.label; color: Theme.textPrimary; anchors.horizontalCenter: parent.horizontalCenter }
-                            TinyLabel { text: modelData.size; anchors.horizontalCenter: parent.horizontalCenter }
+                            BodyLabel { text: modelData.name; color: Theme.textPrimary; anchors.horizontalCenter: parent.horizontalCenter; width: parent.parent.width - 12; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter }
+                            TinyLabel { text: modelData.width + " x " + modelData.height; anchors.horizontalCenter: parent.horizontalCenter }
                         }
                         MouseArea {
                             id: presetMouse
@@ -307,6 +302,168 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: newCanvasDialog.close() }
                 ExportButton { Layout.preferredWidth: 112; label: "创建画布"; glyph: "\uE710"; primary: true; onClicked: newCanvasDialog.createCanvas() }
+            }
+        }
+    }
+
+    Drawer {
+        id: canvasPresetDrawer
+        objectName: "canvasPresetDrawer"
+        edge: Qt.RightEdge
+        width: Math.min(420, Math.max(360, window.width * 0.27))
+        height: window.height
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        property int selectedPresetIndex: -1
+
+        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "画布预设"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: canvasPresetDrawer.close() }
+            }
+            TinyLabel { text: "当前画布  " + workspace.canvasWidth + " x " + workspace.canvasHeight }
+            Divider { Layout.fillWidth: true }
+
+            ListView {
+                id: canvasPresetList
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.max(240, canvasPresetDrawer.height - 420)
+                clip: true
+                spacing: 4
+                model: canvasPresets.presets
+                currentIndex: canvasPresetDrawer.selectedPresetIndex
+
+                delegate: Rectangle {
+                    required property int index
+                    required property var modelData
+                    width: ListView.view.width
+                    height: 52
+                    radius: Theme.radiusSmall
+                    color: index === canvasPresetDrawer.selectedPresetIndex ? Theme.accentSoft : (presetRowMouse.containsMouse ? Theme.bgHover : "transparent")
+                    border.width: index === canvasPresetDrawer.selectedPresetIndex ? 1 : 0
+                    border.color: Theme.accentPressed
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 6
+                        spacing: 8
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            BodyLabel { text: modelData.name; color: Theme.textPrimary; width: parent.width; elide: Text.ElideRight }
+                            TinyLabel { text: modelData.width + " x " + modelData.height + "  ·  " + modelData.category }
+                        }
+                        TinyLabel { text: modelData.is_builtin ? "内置" : "自定义"; color: modelData.is_builtin ? Theme.textMuted : Theme.accent }
+                        IconButton {
+                            glyph: "\uE768"
+                            tooltip: "应用预设"
+                            buttonSize: 30
+                            onClicked: {
+                                canvasPresets.applyPreset(index)
+                                canvasPresetDrawer.close()
+                            }
+                        }
+                    }
+                    MouseArea {
+                        id: presetRowMouse
+                        anchors.fill: parent
+                        anchors.rightMargin: 38
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            canvasPresetDrawer.selectedPresetIndex = index
+                            presetNameInput.text = modelData.name
+                            presetWidthInput.text = String(modelData.width)
+                            presetHeightInput.text = String(modelData.height)
+                        }
+                    }
+                }
+            }
+
+            Divider { Layout.fillWidth: true }
+            TextField {
+                id: presetNameInput
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                placeholderText: "预设名称"
+                color: Theme.textPrimary
+                selectByMouse: true
+                background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: presetNameInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                TextField {
+                    id: presetWidthInput
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    text: String(workspace.canvasWidth)
+                    placeholderText: "宽度"
+                    color: Theme.textPrimary
+                    validator: IntValidator { bottom: 16; top: 32768 }
+                    background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: presetWidthInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                }
+                TinyLabel { text: "x" }
+                TextField {
+                    id: presetHeightInput
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    text: String(workspace.canvasHeight)
+                    placeholderText: "高度"
+                    color: Theme.textPrimary
+                    validator: IntValidator { bottom: 16; top: 32768 }
+                    background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: presetHeightInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                ExportButton {
+                    Layout.fillWidth: true
+                    label: "新建预设"
+                    glyph: "\uE710"
+                    primary: true
+                    onClicked: {
+                        if (!canvasPresets.createPreset(presetNameInput.text, parseInt(presetWidthInput.text), parseInt(presetHeightInput.text)))
+                            showToast("名称已存在或尺寸无效")
+                    }
+                }
+                IconButton {
+                    glyph: "\uE70F"
+                    tooltip: "更新所选自定义预设"
+                    buttonSize: 36
+                    enabled: canvasPresetDrawer.selectedPresetIndex >= 0
+                             && !canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex].is_builtin
+                    onClicked: {
+                        var selected = canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex]
+                        if (!canvasPresets.renamePreset(selected.name, presetNameInput.text, parseInt(presetWidthInput.text), parseInt(presetHeightInput.text)))
+                            showToast("无法更新预设")
+                    }
+                }
+                IconButton {
+                    glyph: "\uE74D"
+                    tooltip: "删除所选自定义预设"
+                    buttonSize: 36
+                    enabled: canvasPresetDrawer.selectedPresetIndex >= 0
+                             && !canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex].is_builtin
+                    onClicked: {
+                        var selected = canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex]
+                        if (canvasPresets.deletePreset(selected.name)) {
+                            canvasPresetDrawer.selectedPresetIndex = -1
+                            presetNameInput.clear()
+                        }
+                    }
+                }
             }
         }
     }
@@ -1848,6 +2005,42 @@ ApplicationWindow {
                 property real marqueeCurrentX: 0
                 property real marqueeCurrentY: 0
 
+                Row {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: 10
+                    spacing: 3
+                    z: 30
+
+                    Rectangle {
+                        width: guideTools.width + 10
+                        height: 36
+                        radius: Theme.radiusSmall
+                        color: Theme.bgBar
+                        border.width: 1
+                        border.color: Theme.borderStrong
+                        Row {
+                            id: guideTools
+                            anchors.centerIn: parent
+                            spacing: 1
+                            IconButton { glyph: "\uE7C9"; tooltip: "显示标尺"; active: workspace.showRulers; buttonSize: 30; onClicked: workspace.setShowRulers(!workspace.showRulers) }
+                            IconButton { glyph: "\uE8EC"; tooltip: "显示参考线"; active: workspace.showGuides; buttonSize: 30; onClicked: workspace.setShowGuides(!workspace.showGuides) }
+                            IconButton { glyph: "\uE8B7"; tooltip: "吸附到参考线"; active: workspace.snapToGuides; buttonSize: 30; onClicked: workspace.setSnapToGuides(!workspace.snapToGuides) }
+                            IconButton { glyph: "\uE74D"; tooltip: "清空参考线"; buttonSize: 30; enabled: workspace.horizontalGuides.length + workspace.verticalGuides.length > 0; onClicked: workspace.clearGuides() }
+                            IconButton {
+                                glyph: "\uE8A5"
+                                tooltip: "画布预设"
+                                buttonSize: 30
+                                onClicked: {
+                                    presetWidthInput.text = String(workspace.canvasWidth)
+                                    presetHeightInput.text = String(workspace.canvasHeight)
+                                    canvasPresetDrawer.open()
+                                }
+                            }
+                        }
+                    }
+                }
+
                 function selectedLocalPoint(canvasX, canvasY) {
                     var aggregate = workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
                     var width = Math.max(1, aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth)
@@ -1977,6 +2170,9 @@ ApplicationWindow {
                     var finalY = Math.round(transientY)
                     var finalWidth = Math.round(transientWidth)
                     var finalHeight = Math.round(transientHeight)
+                    var snapped = workspace.snapPosition(finalX, finalY, finalWidth, finalHeight, 6 / canvasWorkspace.actualScale)
+                    finalX = Math.round(snapped.x)
+                    finalY = Math.round(snapped.y)
                     transformActive = false
                     transformMode = ""
                     if (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup)
@@ -2020,6 +2216,68 @@ ApplicationWindow {
                     anchors.centerIn: parent
 
                     Rectangle {
+                        id: topRuler
+                        visible: workspace.showRulers
+                        x: 0
+                        y: -22
+                        width: artboardFrame.width
+                        height: 20
+                        color: Theme.bgBar
+                        border.width: 1
+                        border.color: Theme.borderStrong
+                        clip: true
+                        z: 20
+
+                        Repeater {
+                            model: Math.floor(canvasWorkspace.safeCanvasWidth / 100) + 1
+                            delegate: Item {
+                                required property int index
+                                x: index * 100 * canvasWorkspace.actualScale
+                                width: 1
+                                height: topRuler.height
+                                Rectangle { anchors.bottom: parent.bottom; width: 1; height: 7; color: Theme.textMuted }
+                                TinyLabel { x: 3; y: 1; text: String(index * 100); font.pixelSize: 8 }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.CrossCursor
+                            onClicked: workspace.addGuide("vertical", mouse.x / canvasWorkspace.actualScale)
+                        }
+                    }
+
+                    Rectangle {
+                        id: leftRuler
+                        visible: workspace.showRulers
+                        x: -22
+                        y: 0
+                        width: 20
+                        height: artboardFrame.height
+                        color: Theme.bgBar
+                        border.width: 1
+                        border.color: Theme.borderStrong
+                        clip: true
+                        z: 20
+
+                        Repeater {
+                            model: Math.floor(canvasWorkspace.safeCanvasHeight / 100) + 1
+                            delegate: Item {
+                                required property int index
+                                y: index * 100 * canvasWorkspace.actualScale
+                                width: leftRuler.width
+                                height: 1
+                                Rectangle { anchors.right: parent.right; width: 7; height: 1; color: Theme.textMuted }
+                                TinyLabel { x: 2; y: 2; text: String(index * 100); font.pixelSize: 8; rotation: -90; transformOrigin: Item.TopLeft }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.CrossCursor
+                            onClicked: workspace.addGuide("horizontal", mouse.y / canvasWorkspace.actualScale)
+                        }
+                    }
+
+                    Rectangle {
                         id: artboard
                         objectName: "artboard"
                         width: canvasWorkspace.safeCanvasWidth
@@ -2038,6 +2296,64 @@ ApplicationWindow {
                             asynchronous: true
                             cache: false
                             smooth: true
+                        }
+
+                        Repeater {
+                            model: workspace.horizontalGuides
+                            delegate: Rectangle {
+                                id: horizontalGuide
+                                required property int index
+                                required property real modelData
+                                visible: workspace.showGuides
+                                x: 0
+                                y: modelData
+                                width: artboard.width
+                                height: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                color: Theme.guide
+                                z: 15
+                                MouseArea {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    height: Math.max(8, 8 / canvasWorkspace.actualScale)
+                                    cursorShape: Qt.SizeVerCursor
+                                    drag.target: horizontalGuide
+                                    drag.axis: Drag.YAxis
+                                    drag.minimumY: 0
+                                    drag.maximumY: artboard.height
+                                    onReleased: workspace.moveGuide("horizontal", index, horizontalGuide.y)
+                                    onDoubleClicked: workspace.removeGuide("horizontal", index)
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: workspace.verticalGuides
+                            delegate: Rectangle {
+                                id: verticalGuide
+                                required property int index
+                                required property real modelData
+                                visible: workspace.showGuides
+                                x: modelData
+                                y: 0
+                                width: Math.max(1, 1 / canvasWorkspace.actualScale)
+                                height: artboard.height
+                                color: Theme.guide
+                                z: 15
+                                MouseArea {
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: Math.max(8, 8 / canvasWorkspace.actualScale)
+                                    cursorShape: Qt.SizeHorCursor
+                                    drag.target: verticalGuide
+                                    drag.axis: Drag.XAxis
+                                    drag.minimumX: 0
+                                    drag.maximumX: artboard.width
+                                    onReleased: workspace.moveGuide("vertical", index, verticalGuide.x)
+                                    onDoubleClicked: workspace.removeGuide("vertical", index)
+                                }
+                            }
                         }
 
                         MouseArea {
