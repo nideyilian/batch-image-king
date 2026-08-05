@@ -18,6 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     parser.add_argument("--show-batch-advanced", action="store_true", help="展示批量导出高级策略")
+    parser.add_argument("--show-multi-tab-export", action="store_true", help="展示多标签批量导出")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
     parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
     parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")
@@ -74,6 +75,7 @@ def main() -> int:
     from app.qml.viewmodels.binding_manager_view_model import BindingManagerViewModel
     from app.qml.viewmodels.canvas_preset_view_model import CanvasPresetViewModel
     from app.qml.viewmodels.preset_manager_view_model import PresetManagerViewModel
+    from app.qml.viewmodels.multi_tab_export_view_model import MultiTabExportViewModel
     from app.qml.viewmodels.size_match_view_model import SizeMatchViewModel
     from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
@@ -217,6 +219,11 @@ def main() -> int:
         sessions=workspace_sessions,
         parent=engine,
     )
+    multi_tab_export = MultiTabExportViewModel(
+        workspace=workspace,
+        sessions=workspace_sessions,
+        parent=engine,
+    )
     if args.demo_tabs:
         workspace_sessions.newDocument(1080, 1080)
         workspace_sessions.newDocument(1920, 1080)
@@ -230,6 +237,7 @@ def main() -> int:
     engine.rootContext().setContextProperty("projectPresets", project_presets)
     engine.rootContext().setContextProperty("bindingManager", binding_manager)
     engine.rootContext().setContextProperty("sizeMatch", size_match)
+    engine.rootContext().setContextProperty("multiTabExport", multi_tab_export)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")
@@ -293,6 +301,14 @@ def main() -> int:
 
         QTimer.singleShot(80, open_batch_export)
 
+    if args.show_multi_tab_export:
+        def open_multi_tab_export() -> None:
+            drawer = window.findChild(QObject, "multiTabExportDrawer")
+            if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
+                debug("multi-tab export drawer could not be opened")
+
+        QTimer.singleShot(80, open_multi_tab_export)
+
     if args.show_canvas_presets:
         def open_canvas_presets() -> None:
             drawer = window.findChild(QObject, "canvasPresetDrawer")
@@ -347,6 +363,7 @@ def main() -> int:
                 if (
                     args.show_batch_export
                     or args.show_batch_advanced
+                    or args.show_multi_tab_export
                     or args.show_new_canvas
                     or args.show_close_confirm
                     or args.show_canvas_presets

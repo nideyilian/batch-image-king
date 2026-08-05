@@ -1019,6 +1019,12 @@ ApplicationWindow {
         onAccepted: batchExport.outputDirectory = selectedFolder.toString()
     }
 
+    FolderDialog {
+        id: multiOutputFolderDialog
+        title: "选择多标签批量导出目录"
+        onAccepted: multiTabExport.outputDirectory = selectedFolder.toString()
+    }
+
     ColorDialog {
         id: effectColorDialog
         property string target: "stroke"
@@ -1876,6 +1882,178 @@ ApplicationWindow {
         }
     }
 
+    Drawer {
+        id: multiTabExportDrawer
+        objectName: "multiTabExportDrawer"
+        edge: Qt.RightEdge
+        width: Math.min(540, Math.max(470, window.width * 0.34))
+        height: window.height
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+
+        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                Rectangle {
+                    Layout.preferredWidth: 32; Layout.preferredHeight: 32
+                    radius: Theme.radiusSmall; color: Theme.accentSoft
+                    AppIcon { anchors.centerIn: parent; glyph: "\uE8FD"; iconSize: 16; iconColor: Theme.accent }
+                }
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text { text: "多标签批量导出"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold }
+                    TinyLabel { text: multiTabExport.selectedDocumentCount + " 个标签页  ·  " + multiTabExport.totalImages + " 张" }
+                }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: multiTabExportDrawer.close() }
+            }
+            Divider { Layout.fillWidth: true }
+
+            RowLayout {
+                Layout.fillWidth: true
+                ExportField { Layout.fillWidth: true; text: multiTabExport.outputDirectory; placeholder: "选择总输出目录"; readOnly: true }
+                IconButton { glyph: "\uE8B7"; tooltip: "选择输出目录"; buttonSize: 36; active: true; onClicked: multiOutputFolderDialog.open() }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                ExportField {
+                    Layout.fillWidth: true
+                    text: multiTabExport.filenameTemplate
+                    placeholder: "image_{number:04d}"
+                    onCommitted: value => multiTabExport.filenameTemplate = value
+                }
+                SelectBox {
+                    Layout.preferredWidth: 104
+                    model: [
+                        { label: "PNG", value: "png" },
+                        { label: "JPG", value: "jpg" },
+                        { label: "WEBP", value: "webp" }
+                    ]
+                    currentIndex: window.optionIndex(model, multiTabExport.fileFormat)
+                    onActivated: multiTabExport.fileFormat = currentValue
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                BodyLabel { text: "避免重复组合"; Layout.fillWidth: true }
+                ToggleSwitch { checked: multiTabExport.avoidDuplicates; onToggled: checkedValue => multiTabExport.avoidDuplicates = checkedValue }
+                BodyLabel { text: "遍历模式"; Layout.leftMargin: 14 }
+                ToggleSwitch { checked: multiTabExport.traverseMode; onToggled: checkedValue => multiTabExport.traverseMode = checkedValue }
+            }
+
+            TinyLabel { text: "标签页任务"; color: Theme.textSecondary }
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(
+                    Math.max(220, multiTabExport.count * 103),
+                    Math.max(220, multiTabExportDrawer.height - 490)
+                )
+                Layout.maximumHeight: Layout.preferredHeight
+                clip: true
+                spacing: 5
+                model: multiTabExport
+
+                delegate: Rectangle {
+                    required property int index
+                    required property string title
+                    required property bool selectedForExport
+                    required property int exportCount
+                    required property int startIndex
+                    required property string subdirectory
+                    required property string status
+                    required property int progress
+                    required property string error
+                    required property string canvasSize
+                    width: ListView.view.width
+                    height: 98
+                    radius: Theme.radiusSmall
+                    color: selectedForExport ? Theme.bgControl : Theme.bgBar
+                    border.width: 1
+                    border.color: status === "失败" ? Theme.coral : (status === "导出中" ? Theme.accent : Theme.border)
+                    opacity: selectedForExport ? 1 : 0.55
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 7
+                        spacing: 5
+                        RowLayout {
+                            Layout.fillWidth: true
+                            ToggleSwitch { checked: selectedForExport; enabled: !multiTabExport.running; onToggled: checkedValue => multiTabExport.setDocumentEnabled(index, checkedValue) }
+                            BodyLabel { text: title; color: Theme.textPrimary; Layout.fillWidth: true; elide: Text.ElideRight }
+                            TinyLabel { text: canvasSize }
+                            TinyLabel { text: status; color: status === "失败" ? Theme.coral : (status === "完成" ? Theme.success : Theme.textMuted) }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            TinyLabel { text: "数量" }
+                            ExportField { Layout.preferredWidth: 64; text: String(exportCount); readOnly: multiTabExport.running; onCommitted: value => multiTabExport.setDocumentCount(index, parseInt(value) || 0) }
+                            TinyLabel { text: "起始" }
+                            ExportField { Layout.preferredWidth: 72; text: String(startIndex); readOnly: multiTabExport.running; onCommitted: value => multiTabExport.setDocumentStartIndex(index, parseInt(value) || 0) }
+                            TinyLabel { text: "子目录" }
+                            ExportField { Layout.fillWidth: true; text: subdirectory; readOnly: multiTabExport.running; onCommitted: value => multiTabExport.setDocumentSubdirectory(index, value) }
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 3
+                            visible: progress > 0
+                            color: Theme.borderStrong
+                            Rectangle { width: parent.width * Math.min(1, progress / Math.max(1, exportCount)); height: parent.height; color: status === "失败" ? Theme.coral : Theme.accent }
+                        }
+                    }
+                    ToolTip.visible: error.length > 0 && taskErrorMouse.containsMouse
+                    ToolTip.text: error
+                    MouseArea { id: taskErrorMouse; anchors.fill: parent; enabled: error.length > 0; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                }
+            }
+
+            ExportButton {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 38
+                label: multiTabExport.running ? "取消全部任务" : "开始多标签导出"
+                glyph: multiTabExport.running ? "\uE71A" : "\uE8FD"
+                primary: !multiTabExport.running && multiTabExport.selectedDocumentCount > 0 && multiTabExport.outputDirectory.length > 0
+                destructive: multiTabExport.running
+                enabled: multiTabExport.running || (multiTabExport.selectedDocumentCount > 0 && multiTabExport.outputDirectory.length > 0)
+                onClicked: multiTabExport.running ? multiTabExport.cancelExport() : multiTabExport.startExport()
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 46
+                radius: Theme.radiusSmall
+                color: multiTabExport.failureSummary.length > 0 ? "#35201f" : Theme.bgRaised
+                border.width: 1
+                border.color: multiTabExport.failureSummary.length > 0 ? "#70413d" : Theme.border
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        BodyLabel { text: multiTabExport.statusText; color: Theme.textPrimary }
+                        TinyLabel { text: multiTabExport.failureSummary.length > 0 ? multiTabExport.failureSummary : (multiTabExport.completedImages + " / " + multiTabExport.totalImages + " 张"); width: parent.width; elide: Text.ElideRight; color: multiTabExport.failureSummary.length > 0 ? Theme.coral : Theme.textMuted }
+                    }
+                    TinyLabel { text: Math.round(multiTabExport.progress * 100) + "%"; color: Theme.textSecondary }
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 4
+                visible: multiTabExport.running || multiTabExport.completedImages > 0
+                color: Theme.borderStrong
+                Rectangle { width: parent.width * multiTabExport.progress; height: parent.height; color: multiTabExport.canceled ? Theme.amber : Theme.accent }
+            }
+        }
+    }
+
     ColumnLayout {
         objectName: "captureRoot"
         anchors.fill: parent
@@ -2086,6 +2264,15 @@ ApplicationWindow {
                     buttonSize: 32
                     enabled: !workspace.operationsBlocked
                     onClicked: exportDialog.open()
+                }
+
+                IconButton {
+                    glyph: "\uE8FD"
+                    tooltip: "多标签批量导出"
+                    buttonSize: 32
+                    enabled: !workspace.operationsBlocked || multiTabExport.running
+                    active: multiTabExport.running
+                    onClicked: multiTabExportDrawer.open()
                 }
 
                 Rectangle {

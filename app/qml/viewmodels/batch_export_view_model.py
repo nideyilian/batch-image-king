@@ -593,6 +593,8 @@ class BatchExportViewModel(QObject):
 
     @Slot(str)
     def _on_file_exported(self, file_path: str) -> None:
+        if not self._running:
+            return
         self._last_file = str(file_path or "")
         self.stateChanged.emit()
 
