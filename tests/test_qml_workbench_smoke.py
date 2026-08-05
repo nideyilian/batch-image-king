@@ -79,6 +79,12 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedShapeType(modelData.value)' in qml_source
     assert 'workspace.setSelectedTrapezoidSlopeSide(modelData.value)' in qml_source
     assert 'workspace.setSelectedPolygonCornerRadius(parsed)' in qml_source
+    assert 'title: "图片布局"' in qml_source
+    assert 'model: window.imageFitOptions' in qml_source
+    assert 'workspace.setSelectedFitMode(currentValue)' in qml_source
+    assert 'workspace.setSelectedCropDirection(modelData.value)' in qml_source
+    assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
+    assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'enabled: index === 0' not in qml_source
 
 

@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Property, QRunnable, QThreadPool, QTimer, QU
 from PySide6.QtGui import QImage
 
 from app.models.document import Document
+from app.models.layer_new import Layer
 from app.models.layer_properties import ShapeType
 from app.models.shaped_layer_new import ShapedLayer
 from app.qml.preview_image_provider import PreviewImageProvider
@@ -34,6 +35,24 @@ _SHAPE_TYPES = {
     "circle": (ShapeType.CIRCLE, "圆形"),
     "pentagon": (ShapeType.PENTAGON, "正五边形"),
     "hexagon": (ShapeType.HEXAGON, "正六边形"),
+}
+
+_FIT_MODES = {
+    "crop": (Layer.FIT_SMART_CROP, "填满裁剪"),
+    "fit": (Layer.FIT_SMART_FIT, "完整显示"),
+    "original": (Layer.FIT_NO_SCALE, "原始尺寸"),
+}
+_FIT_MODE_IDS = {value: key for key, (value, _label) in _FIT_MODES.items()}
+
+_CROP_DIRECTIONS = {
+    "center": (Layer.CROP_CENTER, "居中"),
+    "top": (Layer.CROP_TOP, "顶部"),
+    "bottom": (Layer.CROP_BOTTOM, "底部"),
+    "left": (Layer.CROP_LEFT, "左侧"),
+    "right": (Layer.CROP_RIGHT, "右侧"),
+}
+_CROP_DIRECTION_IDS = {
+    value: key for key, (value, _label) in _CROP_DIRECTIONS.items()
 }
 
 
@@ -375,6 +394,48 @@ class WorkspaceViewModel(QObject):
     @Property(bool, notify=selectionChanged)
     def selectedHasImageSource(self) -> bool:
         return self.selectedIsImageLayer or self.selectedIsShapedLayer
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsImageFit(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedHasImageSource and all(
+            hasattr(layer, attr)
+            for attr in ("fit_mode", "crop_direction", "flip_horizontal", "flip_vertical")
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedFitModeId(self) -> str:
+        if not self.selectedSupportsImageFit:
+            return "crop"
+        value = int(getattr(self._selected_layer(), "fit_mode", Layer.FIT_SMART_CROP))
+        return _FIT_MODE_IDS.get(value, "crop")
+
+    @Property(str, notify=selectionChanged)
+    def selectedFitModeName(self) -> str:
+        return _FIT_MODES[self.selectedFitModeId][1]
+
+    @Property(str, notify=selectionChanged)
+    def selectedCropDirectionId(self) -> str:
+        if not self.selectedSupportsImageFit:
+            return "center"
+        value = int(getattr(self._selected_layer(), "crop_direction", Layer.CROP_CENTER))
+        return _CROP_DIRECTION_IDS.get(value, "center")
+
+    @Property(str, notify=selectionChanged)
+    def selectedCropDirectionName(self) -> str:
+        return _CROP_DIRECTIONS[self.selectedCropDirectionId][1]
+
+    @Property(bool, notify=selectionChanged)
+    def selectedFlipHorizontal(self) -> bool:
+        return self.selectedSupportsImageFit and bool(
+            getattr(self._selected_layer(), "flip_horizontal", False)
+        )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedFlipVertical(self) -> bool:
+        return self.selectedSupportsImageFit and bool(
+            getattr(self._selected_layer(), "flip_vertical", False)
+        )
 
     @Property(bool, notify=selectionChanged)
     def selectedIsTextLayer(self) -> bool:
@@ -1343,6 +1404,12 @@ class WorkspaceViewModel(QObject):
             self._ensure_history_baseline()
             for attr, value in effective_changes.items():
                 setattr(layer, attr, value)
+            if any(
+                attr in ("fit_mode", "crop_direction")
+                for attr in effective_changes
+            ):
+                layer.cached_image = None
+                layer._cache_valid = False
             self._document.is_modified = True
             if any(
                 attr in ("x", "y", "width", "height", "rotation", "visible", "locked")
@@ -1364,6 +1431,64 @@ class WorkspaceViewModel(QObject):
 
     def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
         return self._set_layer_attrs(index, {attr: value}, action, render=render)
+
+    @Slot(str, result=bool)
+    def setSelectedFitMode(self, mode_id: str) -> bool:
+        if not self.selectedSupportsImageFit:
+            self._set_status("当前图层不支持图片适配", toast=True)
+            return False
+        mode_id = str(mode_id or "").strip().lower()
+        mode = _FIT_MODES.get(mode_id)
+        if mode is None:
+            self._set_status("未知的图片适配模式", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "fit_mode",
+            mode[0],
+            "修改图片适配模式",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedCropDirection(self, direction_id: str) -> bool:
+        if not self.selectedSupportsImageFit:
+            self._set_status("当前图层不支持裁剪方向", toast=True)
+            return False
+        direction_id = str(direction_id or "").strip().lower()
+        direction = _CROP_DIRECTIONS.get(direction_id)
+        if direction is None:
+            self._set_status("未知的裁剪方向", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "crop_direction",
+            direction[0],
+            "修改裁剪方向",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedFlipHorizontal(self, enabled: bool) -> bool:
+        if not self.selectedSupportsImageFit:
+            self._set_status("当前图层不支持水平翻转", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "flip_horizontal",
+            bool(enabled),
+            "水平翻转图层",
+        )
+
+    @Slot(bool, result=bool)
+    def setSelectedFlipVertical(self, enabled: bool) -> bool:
+        if not self.selectedSupportsImageFit:
+            self._set_status("当前图层不支持垂直翻转", toast=True)
+            return False
+        return self._set_layer_attr(
+            self.selectedLayerIndex,
+            "flip_vertical",
+            bool(enabled),
+            "垂直翻转图层",
+        )
 
     def _selected_shaped_layer(self):
         layer = self._selected_layer()

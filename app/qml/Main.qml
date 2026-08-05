@@ -33,6 +33,18 @@ ApplicationWindow {
         { label: "柔光", value: "soft_light" },
         { label: "强光", value: "hard_light" }
     ]
+    readonly property var imageFitOptions: [
+        { label: "填满裁剪", value: "crop" },
+        { label: "完整显示", value: "fit" },
+        { label: "原始尺寸", value: "original" }
+    ]
+    readonly property var cropDirectionOptions: [
+        { glyph: "\u25CE", label: "居中裁剪", value: "center" },
+        { glyph: "\u2191", label: "保留顶部", value: "top" },
+        { glyph: "\u2193", label: "保留底部", value: "bottom" },
+        { glyph: "\u2190", label: "保留左侧", value: "left" },
+        { glyph: "\u2192", label: "保留右侧", value: "right" }
+    ]
 
     function showToast(message) {
         toastMessage = message
@@ -1956,6 +1968,76 @@ ApplicationWindow {
                                         glyph: "\uE8B7"
                                         enabled: !workspace.selectedLocked
                                         onClicked: replaceImageFolderDialog.open()
+                                    }
+                                }
+                            }
+
+                            PropertySection {
+                                width: parent.width
+                                title: "图片布局"
+                                summary: workspace.selectedFitModeName
+                                visible: workspace.selectedSupportsImageFit
+
+                                InspectorRow {
+                                    label: "适配"
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: window.imageFitOptions
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        currentIndex: {
+                                            for (var index = 0; index < window.imageFitOptions.length; index++) {
+                                                if (window.imageFitOptions[index].value === workspace.selectedFitModeId) return index
+                                            }
+                                            return 0
+                                        }
+                                        onActivated: workspace.setSelectedFitMode(currentValue)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "裁剪"
+                                    visible: workspace.selectedFitModeId === "crop"
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 4
+
+                                        Repeater {
+                                            model: window.cropDirectionOptions
+                                            delegate: IconButton {
+                                                required property var modelData
+                                                glyph: modelData.glyph
+                                                tooltip: modelData.label
+                                                buttonSize: 30
+                                                active: workspace.selectedCropDirectionId === modelData.value
+                                                enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                onClicked: workspace.setSelectedCropDirection(modelData.value)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "翻转"
+                                    BodyLabel {
+                                        text: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未翻转"
+                                        color: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? Theme.accent : Theme.textMuted
+                                        Layout.fillWidth: true
+                                    }
+                                    IconButton {
+                                        glyph: "\u2194"
+                                        tooltip: "水平翻转"
+                                        buttonSize: 30
+                                        active: workspace.selectedFlipHorizontal
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
+                                    }
+                                    IconButton {
+                                        glyph: "\u2195"
+                                        tooltip: "垂直翻转"
+                                        buttonSize: 30
+                                        active: workspace.selectedFlipVertical
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onClicked: workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)
                                     }
                                 }
                             }
