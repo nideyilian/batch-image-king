@@ -36,6 +36,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-guides", action="store_true", help="展示标尺与参考线")
     parser.add_argument("--show-canvas-presets", action="store_true", help="展示画布预设管理")
     parser.add_argument("--show-project-presets", action="store_true", help="展示项目预设管理")
+    parser.add_argument("--show-data-relations", action="store_true", help="展示绑定组管理")
+    parser.add_argument("--show-size-match", action="store_true", help="展示尺寸匹配管理")
     return parser.parse_args()
 
 
@@ -68,8 +70,10 @@ def main() -> int:
     from PySide6.QtQuick import QQuickItem
     from app.qml.preview_image_provider import PreviewImageProvider
     from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+    from app.qml.viewmodels.binding_manager_view_model import BindingManagerViewModel
     from app.qml.viewmodels.canvas_preset_view_model import CanvasPresetViewModel
     from app.qml.viewmodels.preset_manager_view_model import PresetManagerViewModel
+    from app.qml.viewmodels.size_match_view_model import SizeMatchViewModel
     from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
@@ -95,6 +99,8 @@ def main() -> int:
     )
     batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
     canvas_presets = CanvasPresetViewModel(workspace=workspace, parent=engine)
+    binding_manager = BindingManagerViewModel(workspace=workspace, parent=engine)
+    size_match = SizeMatchViewModel(workspace=workspace, parent=engine)
     engine.addImageProvider("documentPreview", preview_provider)
 
     if args.open_path:
@@ -221,6 +227,8 @@ def main() -> int:
     engine.rootContext().setContextProperty("batchExport", batch_export)
     engine.rootContext().setContextProperty("canvasPresets", canvas_presets)
     engine.rootContext().setContextProperty("projectPresets", project_presets)
+    engine.rootContext().setContextProperty("bindingManager", binding_manager)
+    engine.rootContext().setContextProperty("sizeMatch", size_match)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")
@@ -298,6 +306,18 @@ def main() -> int:
 
         QTimer.singleShot(80, open_project_presets)
 
+    if args.show_data_relations or args.show_size_match:
+        def open_data_relations() -> None:
+            drawer = window.findChild(QObject, "dataRelationsDrawer")
+            if drawer is None:
+                debug("data relations drawer could not be found")
+                return
+            drawer.setProperty("activeTab", 1 if args.show_size_match else 0)
+            if not QMetaObject.invokeMethod(drawer, "open"):
+                debug("data relations drawer could not be opened")
+
+        QTimer.singleShot(80, open_data_relations)
+
     if args.show_new_canvas:
         def open_new_canvas() -> None:
             dialog = window.findChild(QObject, "newCanvasDialog")
@@ -327,6 +347,8 @@ def main() -> int:
                     or args.show_close_confirm
                     or args.show_canvas_presets
                     or args.show_project_presets
+                    or args.show_data_relations
+                    or args.show_size_match
                 ):
                     image = window.grabWindow()
                     saved = not image.isNull() and image.save(str(output_path), "PNG")

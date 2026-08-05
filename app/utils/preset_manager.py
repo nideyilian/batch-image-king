@@ -259,6 +259,9 @@ class PresetManager:
                 'modified_at': datetime.datetime.now().isoformat(),
                 'version': 2,
                 'type': 'single_document',
+                'document_count': 1,
+                'canvas_sizes': [],
+                'total_layers': 0,
                 'tags': [],
                 'category': '未分类',
                 'thumbnail_path': '',
@@ -309,6 +312,9 @@ class PresetManager:
                 'modified_at': datetime.datetime.now().isoformat(),
                 'version': 2,
                 'type': 'single_document',
+                'document_count': 1,
+                'canvas_sizes': [f"{int(document.canvas_width)}x{int(document.canvas_height)}"],
+                'total_layers': len(getattr(document, 'layers', []) or []),
                 'tags': [],
                 'category': '未分类',
                 'thumbnail_path': '',
@@ -391,6 +397,12 @@ class PresetManager:
                 'version': 2,
                 'type': 'multi_document',
                 'document_count': len(documents),
+                'canvas_sizes': list(dict.fromkeys(
+                    f"{int(getattr(doc, 'canvas_width', 0))}x{int(getattr(doc, 'canvas_height', 0))}"
+                    for doc in documents
+                    if int(getattr(doc, 'canvas_width', 0)) > 0 and int(getattr(doc, 'canvas_height', 0)) > 0
+                )),
+                'total_layers': sum(len(getattr(doc, 'layers', []) or []) for doc in documents),
                 'tags': [],
                 'category': '未分类',
                 'thumbnail_path': '',

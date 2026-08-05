@@ -392,7 +392,10 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 3
                             BodyLabel { text: modelData.name; color: Theme.textPrimary; width: parent.width; elide: Text.ElideRight }
-                            TinyLabel { text: modelData.canvasSizes.join(" / ") + "  ·  " + modelData.totalLayers + " 图层" }
+                                TinyLabel {
+                                    text: (modelData.canvasSizes.length > 0 ? modelData.canvasSizes.join(" / ") : (modelData.documentCount > 1 ? modelData.documentCount + " 个标签页" : "单文档预设"))
+                                          + (modelData.totalLayers > 0 ? "  ·  " + modelData.totalLayers + " 图层" : "")
+                                }
                             TinyLabel { text: modelData.description || "无描述"; width: parent.width; elide: Text.ElideRight }
                         }
                         IconButton {
@@ -488,6 +491,241 @@ ApplicationWindow {
                         presetDeleteConfirm.presetId = projectPresetDrawer.selectedPresetId
                         presetDeleteConfirm.presetName = projectPresetName.text
                         presetDeleteConfirm.open()
+                    }
+                }
+            }
+        }
+    }
+
+    Drawer {
+        id: dataRelationsDrawer
+        objectName: "dataRelationsDrawer"
+        edge: Qt.RightEdge
+        width: Math.min(460, Math.max(400, window.width * 0.29))
+        height: window.height
+        modal: true
+        dim: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        padding: 0
+        property int activeTab: 0
+
+        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "数据关系"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: dataRelationsDrawer.close() }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                Repeater {
+                    model: ["绑定组", "尺寸匹配"]
+                    delegate: Rectangle {
+                        required property int index
+                        required property string modelData
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        radius: Theme.radiusSmall
+                        color: dataRelationsDrawer.activeTab === index ? Theme.accentSoft : "transparent"
+                        BodyLabel { anchors.centerIn: parent; text: modelData; color: dataRelationsDrawer.activeTab === index ? Theme.accent : Theme.textSecondary }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: dataRelationsDrawer.activeTab = index }
+                    }
+                }
+            }
+            Divider { Layout.fillWidth: true }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: dataRelationsDrawer.activeTab === 0
+                spacing: 10
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyLabel { text: "全局绑定"; color: Theme.textPrimary; Layout.fillWidth: true }
+                    ToggleSwitch { checked: bindingManager.globalEnabled; onToggled: checked => bindingManager.setGlobalEnabled(checked) }
+                }
+                TinyLabel { text: "绑定图层会按相同分类共同随机取图或取文案"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.max(160, dataRelationsDrawer.height - 430)
+                    clip: true
+                    spacing: 3
+                    model: bindingManager.groups
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ListView.view.width
+                        height: 64
+                        radius: Theme.radiusSmall
+                        color: Theme.bgControl
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 5
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 3
+                                BodyLabel { text: modelData.name; color: Theme.textPrimary }
+                                TinyLabel { text: modelData.layerNames.join(" · "); width: parent.width; elide: Text.ElideRight }
+                                TinyLabel { text: modelData.categoryCount + " 分类  ·  " + modelData.usedCombinations + " 已用组合" }
+                            }
+                            IconButton { glyph: "\uE72C"; tooltip: "重置组合历史"; buttonSize: 30; onClicked: bindingManager.resetCombinationHistory(modelData.id) }
+                            IconButton { glyph: "\uE74D"; tooltip: "删除绑定组"; buttonSize: 30; onClicked: bindingManager.deleteGroup(modelData.id) }
+                        }
+                    }
+                }
+                Divider { Layout.fillWidth: true }
+                TinyLabel { text: "当前选择 " + workspace.selectedLayerCount + " 个图层"; color: workspace.selectedLayerCount >= 2 ? Theme.accent : Theme.textMuted }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    TextField {
+                        id: bindingGroupName
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 36
+                        placeholderText: "绑定组名称"
+                        color: Theme.textPrimary
+                        background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: bindingGroupName.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                    }
+                    ExportButton {
+                        Layout.preferredWidth: 110
+                        label: "建立绑定"
+                        glyph: "\uE8B0"
+                        primary: true
+                        enabled: workspace.selectedLayerCount >= 2 && bindingGroupName.text.length > 0
+                        onClicked: {
+                            if (bindingManager.createGroup(bindingGroupName.text, workspace.selectedLayerIndices).length > 0)
+                                bindingGroupName.clear()
+                            else showToast("绑定组名称重复或选择无效")
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: dataRelationsDrawer.activeTab === 1
+                spacing: 10
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyLabel { text: "全局尺寸匹配"; color: Theme.textPrimary; Layout.fillWidth: true }
+                    ToggleSwitch { checked: sizeMatch.globalEnabled; onToggled: checked => sizeMatch.setGlobalEnabled(checked) }
+                }
+                TinyLabel { text: "根据源图层孔位临时调整目标图层，预览和导出共用同一规则"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.max(160, dataRelationsDrawer.height - 570)
+                    clip: true
+                    spacing: 3
+                    model: sizeMatch.relations
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ListView.view.width
+                        height: 60
+                        radius: Theme.radiusSmall
+                        color: Theme.bgControl
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 5
+                            Column {
+                                Layout.fillWidth: true
+                                spacing: 3
+                                BodyLabel { text: modelData.sourceName + "  →  " + modelData.targetNames.join("、"); color: Theme.textPrimary; width: parent.width; elide: Text.ElideRight }
+                                TinyLabel { text: "留白 " + modelData.padding + " px" + (modelData.autoMaskEnabled ? "  ·  自动遮罩" : "") + (modelData.autoRotate ? "  ·  自动旋转" : "") }
+                            }
+                            ToggleSwitch { checked: modelData.enabled; onToggled: checked => sizeMatch.setRelationEnabled(modelData.id, checked) }
+                            IconButton { glyph: "\uE74D"; tooltip: "删除关系"; buttonSize: 30; onClicked: sizeMatch.removeRelation(modelData.id) }
+                        }
+                    }
+                }
+                Divider { Layout.fillWidth: true }
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyLabel { text: "源图层"; Layout.preferredWidth: 54 }
+                    SelectBox {
+                        id: sizeSourceSelect
+                        Layout.fillWidth: true
+                        model: sizeMatch.layerNames.map(function(name) { return { label: name, value: name } })
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyLabel { text: "目标图层"; Layout.preferredWidth: 54 }
+                    SelectBox {
+                        id: sizeTargetSelect
+                        Layout.fillWidth: true
+                        model: sizeMatch.layerNames.map(function(name) { return { label: name, value: name } })
+                    }
+                    BodyLabel { text: "留白" }
+                    TextField {
+                        id: sizePaddingInput
+                        Layout.preferredWidth: 58
+                        Layout.preferredHeight: 34
+                        text: "1"
+                        color: Theme.textPrimary
+                        horizontalAlignment: Text.AlignHCenter
+                        validator: IntValidator { bottom: 0; top: 1000 }
+                        background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: sizePaddingInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    BodyLabel { text: "一对多"; Layout.fillWidth: true }
+                    ToggleSwitch { id: oneToManyToggle }
+                    BodyLabel { text: "自动旋转"; Layout.leftMargin: 12 }
+                    ToggleSwitch { id: autoRotateToggle }
+                    BodyLabel { text: "自动遮罩"; Layout.leftMargin: 12 }
+                    ToggleSwitch { id: autoMaskToggle }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: autoMaskToggle.checked
+                    BodyLabel { text: "阈值"; Layout.preferredWidth: 40 }
+                    TextField {
+                        id: maskThresholdInput
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        text: "32"
+                        color: Theme.textPrimary
+                        validator: IntValidator { bottom: 0; top: 255 }
+                        background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: Theme.borderStrong; radius: Theme.radiusSmall }
+                    }
+                    BodyLabel { text: "容差"; Layout.preferredWidth: 40 }
+                    TextField {
+                        id: maskToleranceInput
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        text: "18"
+                        color: Theme.textPrimary
+                        validator: IntValidator { bottom: 0; top: 255 }
+                        background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: Theme.borderStrong; radius: Theme.radiusSmall }
+                    }
+                }
+                ExportButton {
+                    Layout.fillWidth: true
+                    label: "添加尺寸匹配关系"
+                    glyph: "\uE710"
+                    primary: true
+                    enabled: sizeSourceSelect.currentValue !== sizeTargetSelect.currentValue && sizeMatch.layerNames.length >= 2
+                    onClicked: {
+                        var relationId = sizeMatch.addRelation(
+                            sizeSourceSelect.currentValue,
+                            [sizeTargetSelect.currentValue],
+                            parseInt(sizePaddingInput.text),
+                            oneToManyToggle.checked,
+                            autoRotateToggle.checked,
+                            autoMaskToggle.checked,
+                            parseInt(maskThresholdInput.text),
+                            parseInt(maskToleranceInput.text)
+                        )
+                        if (relationId.length === 0) showToast("尺寸匹配关系无效或已存在")
                     }
                 }
             }
@@ -1622,6 +1860,12 @@ ApplicationWindow {
                     tooltip: "项目预设"
                     enabled: !workspace.operationsBlocked
                     onClicked: projectPresetDrawer.open()
+                }
+                IconButton {
+                    glyph: "\uE8A9"
+                    tooltip: "绑定与尺寸匹配"
+                    enabled: !workspace.operationsBlocked
+                    onClicked: dataRelationsDrawer.open()
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }

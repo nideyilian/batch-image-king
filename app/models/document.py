@@ -264,6 +264,8 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
             'selected_layer_index': self.selected_layer_index,
             'selected_layer_indices': list(self.selected_layer_indices),
             'view_settings': copy.deepcopy(self.view_settings),
+            'binding_groups': copy.deepcopy(self.binding_manager.serialize()),
+            'layer_size_matches': copy.deepcopy(self.layer_size_match_manager.serialize()),
         }
         self._history_manager.save_state(action_name, state)
 
@@ -330,6 +332,14 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
                     continue
                 restored.append(layer)
         self.layers = restored
+        try:
+            self.binding_manager.deserialize(state.get('binding_groups', {}) or {}, self.layers)
+        except Exception as error:
+            logger.warning("撤销/重做恢复绑定组失败: %s", error)
+        try:
+            self.layer_size_match_manager.deserialize(state.get('layer_size_matches', {}) or {})
+        except Exception as error:
+            logger.warning("撤销/重做恢复尺寸匹配失败: %s", error)
 
     def create_new(self, width, height):
         """创建新文档"""

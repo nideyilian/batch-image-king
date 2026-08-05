@@ -29,7 +29,7 @@ class PresetManagerViewModel(QObject):
     def presets(self):
         result = []
         for preset in self._manager.get_all_presets():
-            summary = self._manager.get_preset_summary(preset.get("id")) or preset
+            summary = preset
             result.append(
                 {
                     "id": str(summary.get("id") or ""),
