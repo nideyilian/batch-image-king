@@ -48,6 +48,8 @@ def test_layer_model_exposes_stable_qml_roles(tmp_path: Path):
     assert model.data(image_index, roles["shown"]) is True
     assert model.data(text_index, roles["typeName"]) == "文字"
     assert model.data(text_index, roles["glyph"])
+    assert model.data(text_index, roles["iconName"]) == "type"
+    assert model.data(image_index, roles["iconName"]) == "image"
     assert model.data(text_index, roles["layerIndex"]) == 1
     assert model.data(image_index, roles["layerIndex"]) == 0
 

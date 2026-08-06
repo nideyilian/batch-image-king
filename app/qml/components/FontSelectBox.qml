@@ -38,8 +38,9 @@ Rectangle {
     radius: Theme.radiusSmall
     color: Theme.bgControl
     border.width: 1
-    border.color: fontInput.activeFocus || fontPopup.visible ? Theme.accent : Theme.borderStrong
-    opacity: enabled ? 1 : 0.42
+    border.color: fontInput.activeFocus || fontPopup.visible ? Theme.focusRing : Theme.borderStrong
+    opacity: enabled ? 1 : 0.56
+    activeFocusOnTab: enabled
 
     Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
 
@@ -104,8 +105,8 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 12
         height: 12
-        glyph: fontPopup.visible ? "\uE70E" : "\uE70D"
-        iconSize: 10
+        iconName: AppIcons.selectIndicator
+        iconSize: 12
         iconColor: root.enabled ? Theme.textMuted : Theme.textDisabled
     }
 
@@ -157,7 +158,7 @@ Rectangle {
                 }
                 background: Rectangle {
                     radius: Theme.radiusSmall
-                    color: parent.highlighted ? Theme.bgHover : "transparent"
+                    color: String(parent.modelData.value) === root.value ? Theme.accentSoft : (parent.highlighted ? Theme.bgHover : "transparent")
                 }
             }
         }

@@ -15,7 +15,7 @@ Item {
         id: header
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 38
+        height: Theme.sectionHeaderHeight
         color: mouseArea.containsMouse ? Theme.bgRaised : "transparent"
 
         Text {
@@ -44,9 +44,14 @@ Item {
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            glyph: root.expanded ? "\uE70D" : "\uE76C"
-            iconSize: 11
+            iconName: AppIcons.chevronDown
+            iconSize: 13
             iconColor: Theme.textMuted
+            rotation: root.expanded ? 0 : -90
+
+            Behavior on rotation {
+                NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic }
+            }
         }
 
         MouseArea {
@@ -77,4 +82,7 @@ Item {
         height: 1
         color: Theme.border
     }
+
+    Accessible.name: title
+    Accessible.role: Accessible.Grouping
 }

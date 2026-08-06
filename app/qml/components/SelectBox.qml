@@ -10,6 +10,7 @@ ComboBox {
     valueRole: "value"
     leftPadding: 10
     rightPadding: 30
+    focusPolicy: Qt.StrongFocus
 
     contentItem: Text {
         leftPadding: 0
@@ -27,8 +28,8 @@ ComboBox {
         y: (root.height - height) / 2
         width: 12
         height: 12
-        glyph: root.popup.visible ? "\uE70E" : "\uE70D"
-        iconSize: 10
+        iconName: AppIcons.selectIndicator
+        iconSize: 12
         iconColor: root.enabled ? Theme.textMuted : Theme.textDisabled
     }
 
@@ -36,7 +37,7 @@ ComboBox {
         radius: Theme.radiusSmall
         color: root.down || root.popup.visible ? Theme.bgHover : Theme.bgControl
         border.width: 1
-        border.color: root.activeFocus || root.popup.visible ? Theme.accent : Theme.borderStrong
+        border.color: root.activeFocus || root.popup.visible ? Theme.focusRing : Theme.borderStrong
 
         Behavior on color { ColorAnimation { duration: Theme.motionFast } }
         Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
@@ -62,7 +63,7 @@ ComboBox {
 
         background: Rectangle {
             radius: Theme.radiusSmall
-            color: parent.highlighted ? Theme.bgHover : "transparent"
+            color: root.currentIndex === parent.index ? Theme.accentSoft : (parent.highlighted ? Theme.bgHover : "transparent")
         }
     }
 
@@ -87,4 +88,7 @@ ComboBox {
             border.color: Theme.borderStrong
         }
     }
+
+    Accessible.name: displayText
+    Accessible.role: Accessible.ComboBox
 }

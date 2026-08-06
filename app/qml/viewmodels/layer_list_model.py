@@ -18,6 +18,7 @@ class LayerListModel(QAbstractListModel):
     ExpandedRole = Qt.UserRole + 10
     ParentExpandedRole = Qt.UserRole + 11
     LayerIndexRole = Qt.UserRole + 12
+    IconNameRole = Qt.UserRole + 13
 
     _ROLE_NAMES = {
         NameRole: QByteArray(b"name"),
@@ -32,6 +33,7 @@ class LayerListModel(QAbstractListModel):
         ExpandedRole: QByteArray(b"expanded"),
         ParentExpandedRole: QByteArray(b"parentExpanded"),
         LayerIndexRole: QByteArray(b"layerIndex"),
+        IconNameRole: QByteArray(b"iconName"),
     }
 
     def __init__(self, document=None, parent=None) -> None:
@@ -72,6 +74,8 @@ class LayerListModel(QAbstractListModel):
             return self.layer_type_name(layer)
         if role == self.GlyphRole:
             return self.layer_glyph(layer)
+        if role == self.IconNameRole:
+            return self.layer_icon_name(layer)
         if role == self.AccentRole:
             return self.layer_accent(layer)
         if role == self.ShownRole:
@@ -116,6 +120,15 @@ class LayerListModel(QAbstractListModel):
             "异形": "\uF158",
             "图片": "\uEB9F",
         }.get(type_name, "\uE91B")
+
+    @classmethod
+    def layer_icon_name(cls, layer) -> str:
+        return {
+            "图层组": "group",
+            "文字": "type",
+            "异形": "shapes",
+            "图片": "image",
+        }.get(cls.layer_type_name(layer), "circle-help")
 
     @classmethod
     def layer_accent(cls, layer) -> str:

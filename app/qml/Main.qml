@@ -55,11 +55,11 @@ ApplicationWindow {
         { label: "原始尺寸", value: "original" }
     ]
     readonly property var cropDirectionOptions: [
-        { glyph: "\u25CE", label: "居中裁剪", value: "center" },
-        { glyph: "\u2191", label: "保留顶部", value: "top" },
-        { glyph: "\u2193", label: "保留底部", value: "bottom" },
-        { glyph: "\u2190", label: "保留左侧", value: "left" },
-        { glyph: "\u2192", label: "保留右侧", value: "right" }
+        { iconName: AppIcons.circleDot, label: "居中裁剪", value: "center" },
+        { iconName: AppIcons.arrowUp, label: "保留顶部", value: "top" },
+        { iconName: AppIcons.arrowDown, label: "保留底部", value: "bottom" },
+        { iconName: AppIcons.arrowLeft, label: "保留左侧", value: "left" },
+        { iconName: AppIcons.arrowRight, label: "保留右侧", value: "right" }
     ]
     readonly property var vectorHandleLinkOptions: [
         { label: "镜像", value: "mirror" },
@@ -294,7 +294,7 @@ ApplicationWindow {
         onRejected: workspaceSessions.cancelClose()
     }
 
-    Dialog {
+    AppDialog {
         id: newCanvasDialog
         objectName: "newCanvasDialog"
         anchors.centerIn: parent
@@ -338,7 +338,7 @@ ApplicationWindow {
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: newCanvasDialog.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: newCanvasDialog.close() }
             }
 
             Divider { Layout.fillWidth: true }
@@ -351,7 +351,12 @@ ApplicationWindow {
                 columnSpacing: 8
 
                 Repeater {
-                    model: canvasPresets.presets.slice(0, 4)
+                    model: [
+                        { name: "商品主图", width: 800, height: 800 },
+                        { name: "高清方图", width: 1080, height: 1080 },
+                        { name: "商品竖图 4:5", width: 1080, height: 1350 },
+                        { name: "详情页切片", width: 750, height: 1000 }
+                    ]
                     delegate: Rectangle {
                         required property var modelData
                         Layout.fillWidth: true
@@ -382,7 +387,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 10
 
-                TextField {
+                AppTextField {
                     id: canvasWidthInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
@@ -394,7 +399,7 @@ ApplicationWindow {
                     background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: canvasWidthInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
                 }
                 TinyLabel { text: "x"; Layout.preferredWidth: 10; horizontalAlignment: Text.AlignHCenter }
-                TextField {
+                AppTextField {
                     id: canvasHeightInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
@@ -414,12 +419,12 @@ ApplicationWindow {
                 spacing: 8
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: newCanvasDialog.close() }
-                ExportButton { Layout.preferredWidth: 112; label: "创建画布"; glyph: "\uE710"; primary: true; onClicked: newCanvasDialog.createCanvas() }
+                ExportButton { Layout.preferredWidth: 112; label: "创建画布"; iconName: AppIcons.add; primary: true; onClicked: newCanvasDialog.createCanvas() }
             }
         }
     }
 
-    Dialog {
+    AppDialog {
         id: textLayerDialog
         objectName: "textLayerDialog"
         anchors.centerIn: parent
@@ -482,7 +487,7 @@ ApplicationWindow {
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: textLayerDialog.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: textLayerDialog.close() }
             }
 
             Divider { Layout.fillWidth: true }
@@ -509,12 +514,12 @@ ApplicationWindow {
                         color: Theme.textSecondary
                         Layout.fillWidth: true
                     }
-                    ToggleSwitch { id: textLayerBindingInput; checked: true }
+                    ToggleSwitch { id: textLayerBindingInput; accessibleName: "按行作为候选文案"; checked: true }
                 }
             }
 
             BodyLabel { text: "文字内容"; color: Theme.textMuted }
-            TextArea {
+            AppTextArea {
                 id: textLayerContentInput
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -597,12 +602,12 @@ ApplicationWindow {
                 spacing: 8
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: textLayerDialog.close() }
-                ExportButton { Layout.preferredWidth: 112; label: "添加图层"; glyph: "\uE710"; primary: true; onClicked: textLayerDialog.createLayer() }
+                ExportButton { Layout.preferredWidth: 112; label: "添加图层"; iconName: AppIcons.add; primary: true; onClicked: textLayerDialog.createLayer() }
             }
         }
     }
 
-    Dialog {
+    AppDialog {
         id: shapedLayerDialog
         objectName: "shapedLayerDialog"
         anchors.centerIn: parent
@@ -679,7 +684,7 @@ ApplicationWindow {
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: shapedLayerDialog.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: shapedLayerDialog.close() }
             }
 
             Divider { Layout.fillWidth: true }
@@ -746,17 +751,17 @@ ApplicationWindow {
                             editable: false
                         }
                         IconButton {
-                            glyph: "\uE8B7"
+                            iconName: AppIcons.image
                             tooltip: "选择单张图片"
                             onClicked: shapedLayerSourceFileDialog.open()
                         }
                         IconButton {
-                            glyph: "\uE838"
+                            iconName: AppIcons.folderInput
                             tooltip: "选择素材文件夹"
                             onClicked: shapedLayerSourceFolderDialog.open()
                         }
                         IconButton {
-                            glyph: "\uE711"
+                            iconName: AppIcons.close
                             tooltip: "清除内容源"
                             enabled: shapedLayerDialog.sourceMode !== "none"
                             onClicked: {
@@ -776,6 +781,7 @@ ApplicationWindow {
                         BodyLabel { text: "使用原始尺寸"; color: Theme.textMuted }
                         ToggleSwitch {
                             id: shapedLayerUseOriginalInput
+                            accessibleName: "使用原始尺寸"
                             checked: false
                             enabled: shapedLayerDialog.sourceMode === "file"
                         }
@@ -831,12 +837,12 @@ ApplicationWindow {
                 spacing: 8
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: shapedLayerDialog.close() }
-                ExportButton { Layout.preferredWidth: 112; label: "添加图层"; glyph: "\uE710"; primary: true; onClicked: shapedLayerDialog.createLayer() }
+                ExportButton { Layout.preferredWidth: 112; label: "添加图层"; iconName: AppIcons.add; primary: true; onClicked: shapedLayerDialog.createLayer() }
             }
         }
     }
 
-    Dialog {
+    AppDialog {
         id: presetDeleteConfirm
         anchors.centerIn: parent
         width: 390
@@ -870,7 +876,7 @@ ApplicationWindow {
         }
     }
 
-    Drawer {
+    AppDrawer {
         id: projectPresetDrawer
         objectName: "projectPresetDrawer"
         edge: Qt.RightEdge
@@ -882,7 +888,7 @@ ApplicationWindow {
         padding: 0
         property string selectedPresetId: ""
 
-        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
         contentItem: ColumnLayout {
             anchors.fill: parent
@@ -893,7 +899,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Text { text: "项目预设"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
                 TinyLabel { text: projectPresets.count + " 项" }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: projectPresetDrawer.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: projectPresetDrawer.close() }
             }
             TinyLabel { text: "保存完整文档结构，加载时追加为新标签页"; color: Theme.textMuted }
             Divider { Layout.fillWidth: true }
@@ -929,7 +935,7 @@ ApplicationWindow {
                             TinyLabel { text: modelData.description || "无描述"; width: parent.width; elide: Text.ElideRight }
                         }
                         IconButton {
-                            glyph: "\uE768"
+                            iconName: AppIcons.folderOpen
                             tooltip: "追加加载为新标签页"
                             buttonSize: 32
                             onClicked: {
@@ -968,7 +974,7 @@ ApplicationWindow {
                 }
             }
             Divider { Layout.fillWidth: true }
-            TextField {
+            AppTextField {
                 id: projectPresetName
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
@@ -977,7 +983,7 @@ ApplicationWindow {
                 selectByMouse: true
                 background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: projectPresetName.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
             }
-            TextField {
+            AppTextField {
                 id: projectPresetDescription
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
@@ -992,7 +998,7 @@ ApplicationWindow {
                 ExportButton {
                     Layout.fillWidth: true
                     label: "保存当前文档"
-                    glyph: "\uE74E"
+                    iconName: AppIcons.save
                     primary: true
                     onClicked: {
                         if (projectPresets.saveCurrent(projectPresetName.text, projectPresetDescription.text)) {
@@ -1003,7 +1009,7 @@ ApplicationWindow {
                     }
                 }
                 IconButton {
-                    glyph: "\uE70F"
+                    iconName: AppIcons.shuffle
                     tooltip: "更新所选预设名称与描述"
                     buttonSize: 36
                     enabled: projectPresetDrawer.selectedPresetId.length > 0
@@ -1013,7 +1019,7 @@ ApplicationWindow {
                     }
                 }
                 IconButton {
-                    glyph: "\uE74D"
+                    iconName: AppIcons.trash
                     tooltip: "删除所选预设"
                     buttonSize: 36
                     enabled: projectPresetDrawer.selectedPresetId.length > 0
@@ -1027,7 +1033,7 @@ ApplicationWindow {
         }
     }
 
-    Drawer {
+    AppDrawer {
         id: dataRelationsDrawer
         objectName: "dataRelationsDrawer"
         edge: Qt.RightEdge
@@ -1039,7 +1045,7 @@ ApplicationWindow {
         padding: 0
         property int activeTab: 0
 
-        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
         contentItem: ColumnLayout {
             anchors.fill: parent
@@ -1049,24 +1055,18 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Text { text: "数据关系"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: dataRelationsDrawer.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: dataRelationsDrawer.close() }
             }
-            RowLayout {
+            SegmentedControl {
                 Layout.fillWidth: true
-                spacing: 2
-                Repeater {
-                    model: ["绑定组", "尺寸匹配"]
-                    delegate: Rectangle {
-                        required property int index
-                        required property string modelData
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 34
-                        radius: Theme.radiusSmall
-                        color: dataRelationsDrawer.activeTab === index ? Theme.accentSoft : "transparent"
-                        BodyLabel { anchors.centerIn: parent; text: modelData; color: dataRelationsDrawer.activeTab === index ? Theme.accent : Theme.textSecondary }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: dataRelationsDrawer.activeTab = index }
-                    }
-                }
+                Layout.preferredHeight: 34
+                accessibleName: "数据关系类型"
+                options: [
+                    { label: "绑定组", value: 0 },
+                    { label: "尺寸匹配", value: 1 }
+                ]
+                value: dataRelationsDrawer.activeTab
+                onActivated: value => dataRelationsDrawer.activeTab = value
             }
             Divider { Layout.fillWidth: true }
 
@@ -1078,14 +1078,14 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     BodyLabel { text: "全局绑定"; color: Theme.textPrimary; Layout.fillWidth: true }
-                    ToggleSwitch { checked: bindingManager.globalEnabled; onToggled: checked => bindingManager.setGlobalEnabled(checked) }
+                    ToggleSwitch { accessibleName: "全局绑定"; checked: bindingManager.globalEnabled; onToggled: checked => bindingManager.setGlobalEnabled(checked) }
                 }
                 TinyLabel { text: "绑定图层会按相同分类共同随机取图或取文案"; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 ExportButton {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
                     label: "预览下一组"
-                    glyph: "\uE72C"
+                    iconName: AppIcons.shuffle
                     enabled: bindingManager.globalEnabled && bindingManager.groups.length > 0 && !workspace.operationsBlocked
                     onClicked: {
                         if (bindingManager.previewNextCombination() > 0)
@@ -1097,6 +1097,7 @@ ApplicationWindow {
                 ListView {
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.max(160, dataRelationsDrawer.height - 470)
+                    visible: bindingManager.groups.length > 0
                     clip: true
                     spacing: 3
                     model: bindingManager.groups
@@ -1123,17 +1124,56 @@ ApplicationWindow {
                                     elide: Text.ElideRight
                                 }
                             }
-                            IconButton { glyph: "\uE72C"; tooltip: "重置组合历史"; buttonSize: 30; onClicked: bindingManager.resetCombinationHistory(modelData.id) }
-                            IconButton { glyph: "\uE74D"; tooltip: "删除绑定组"; buttonSize: 30; onClicked: bindingManager.deleteGroup(modelData.id) }
+                    IconButton { iconName: AppIcons.history; tooltip: "重置组合历史"; buttonSize: 30; onClicked: bindingManager.resetCombinationHistory(modelData.id) }
+                            IconButton { iconName: AppIcons.trash; tooltip: "删除绑定组"; buttonSize: 30; onClicked: bindingManager.deleteGroup(modelData.id) }
+                        }
+                    }
+                }
+                Item {
+                    objectName: "bindingEmptyState"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.max(140, dataRelationsDrawer.height - 470)
+                    Layout.minimumHeight: 140
+                    visible: bindingManager.groups.length === 0
+
+                    Column {
+                        anchors.centerIn: parent
+                        width: Math.min(parent.width, 300)
+                        spacing: 8
+
+                        AppIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            iconName: AppIcons.layers
+                            iconSize: 24
+                            iconColor: Theme.textMuted
+                        }
+                        BodyLabel {
+                            width: parent.width
+                            text: "请先选择至少 2 个图层"
+                            color: Theme.textPrimary
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        TinyLabel {
+                            width: parent.width
+                            text: "关闭面板，在图层列表中按 Ctrl 或 Shift 多选后重新打开"
+                            wrapMode: Text.Wrap
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        AppButton {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "返回选择图层"
+                            iconName: AppIcons.layers
+                            onClicked: dataRelationsDrawer.close()
                         }
                     }
                 }
                 Divider { Layout.fillWidth: true }
                 TinyLabel { text: "当前选择 " + workspace.selectedLayerCount + " 个图层"; color: workspace.selectedLayerCount >= 2 ? Theme.accent : Theme.textMuted }
                 RowLayout {
+                    objectName: "bindingCreationFooter"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
-                    TextField {
+                    AppTextField {
                         id: bindingGroupName
                         Layout.fillWidth: true
                         Layout.preferredHeight: 36
@@ -1144,7 +1184,7 @@ ApplicationWindow {
                     ExportButton {
                         Layout.preferredWidth: 110
                         label: "建立绑定"
-                        glyph: "\uE8B0"
+                        iconName: AppIcons.link
                         primary: true
                         enabled: workspace.selectedLayerCount >= 2 && bindingGroupName.text.length > 0
                         onClicked: {
@@ -1164,7 +1204,7 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     BodyLabel { text: "全局尺寸匹配"; color: Theme.textPrimary; Layout.fillWidth: true }
-                    ToggleSwitch { checked: sizeMatch.globalEnabled; onToggled: checked => sizeMatch.setGlobalEnabled(checked) }
+                    ToggleSwitch { accessibleName: "全局尺寸匹配"; checked: sizeMatch.globalEnabled; onToggled: checked => sizeMatch.setGlobalEnabled(checked) }
                 }
                 TinyLabel { text: "根据源图层孔位临时调整目标图层，预览和导出共用同一规则"; Layout.fillWidth: true; wrapMode: Text.Wrap }
                 ListView {
@@ -1189,8 +1229,8 @@ ApplicationWindow {
                                 BodyLabel { text: modelData.sourceName + "  →  " + modelData.targetNames.join("、"); color: Theme.textPrimary; width: parent.width; elide: Text.ElideRight }
                                 TinyLabel { text: "留白 " + modelData.padding + " px" + (modelData.autoMaskEnabled ? "  ·  自动遮罩" : "") + (modelData.autoRotate ? "  ·  自动旋转" : "") }
                             }
-                            ToggleSwitch { checked: modelData.enabled; onToggled: checked => sizeMatch.setRelationEnabled(modelData.id, checked) }
-                            IconButton { glyph: "\uE74D"; tooltip: "删除关系"; buttonSize: 30; onClicked: sizeMatch.removeRelation(modelData.id) }
+                            ToggleSwitch { accessibleName: "启用尺寸匹配关系"; checked: modelData.enabled; onToggled: checked => sizeMatch.setRelationEnabled(modelData.id, checked) }
+                            IconButton { iconName: AppIcons.trash; tooltip: "删除关系"; buttonSize: 30; onClicked: sizeMatch.removeRelation(modelData.id) }
                         }
                     }
                 }
@@ -1213,7 +1253,7 @@ ApplicationWindow {
                         model: sizeMatch.layerNames.map(function(name) { return { label: name, value: name } })
                     }
                     BodyLabel { text: "留白" }
-                    TextField {
+                    AppTextField {
                         id: sizePaddingInput
                         Layout.preferredWidth: 58
                         Layout.preferredHeight: 34
@@ -1227,17 +1267,17 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     BodyLabel { text: "一对多"; Layout.fillWidth: true }
-                    ToggleSwitch { id: oneToManyToggle }
+                    ToggleSwitch { id: oneToManyToggle; accessibleName: "一对多" }
                     BodyLabel { text: "自动旋转"; Layout.leftMargin: 12 }
-                    ToggleSwitch { id: autoRotateToggle }
+                    ToggleSwitch { id: autoRotateToggle; accessibleName: "自动旋转" }
                     BodyLabel { text: "自动遮罩"; Layout.leftMargin: 12 }
-                    ToggleSwitch { id: autoMaskToggle }
+                    ToggleSwitch { id: autoMaskToggle; accessibleName: "自动遮罩" }
                 }
                 RowLayout {
                     Layout.fillWidth: true
                     visible: autoMaskToggle.checked
                     BodyLabel { text: "阈值"; Layout.preferredWidth: 40 }
-                    TextField {
+                    AppTextField {
                         id: maskThresholdInput
                         Layout.fillWidth: true
                         Layout.preferredHeight: 34
@@ -1247,7 +1287,7 @@ ApplicationWindow {
                         background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: Theme.borderStrong; radius: Theme.radiusSmall }
                     }
                     BodyLabel { text: "容差"; Layout.preferredWidth: 40 }
-                    TextField {
+                    AppTextField {
                         id: maskToleranceInput
                         Layout.fillWidth: true
                         Layout.preferredHeight: 34
@@ -1260,7 +1300,7 @@ ApplicationWindow {
                 ExportButton {
                     Layout.fillWidth: true
                     label: "添加尺寸匹配关系"
-                    glyph: "\uE710"
+                    iconName: AppIcons.add
                     primary: true
                     enabled: sizeSourceSelect.currentValue !== sizeTargetSelect.currentValue && sizeMatch.layerNames.length >= 2
                     onClicked: {
@@ -1281,7 +1321,7 @@ ApplicationWindow {
         }
     }
 
-    Drawer {
+    AppDrawer {
         id: canvasPresetDrawer
         objectName: "canvasPresetDrawer"
         edge: Qt.RightEdge
@@ -1293,7 +1333,7 @@ ApplicationWindow {
         padding: 0
         property int selectedPresetIndex: -1
 
-        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
 
         contentItem: ColumnLayout {
@@ -1304,7 +1344,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Text { text: "画布预设"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: canvasPresetDrawer.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: canvasPresetDrawer.close() }
             }
             TinyLabel { text: "当前画布  " + workspace.canvasWidth + " x " + workspace.canvasHeight }
             Divider { Layout.fillWidth: true }
@@ -1341,7 +1381,7 @@ ApplicationWindow {
                         }
                         TinyLabel { text: modelData.is_builtin ? "内置" : "自定义"; color: modelData.is_builtin ? Theme.textMuted : Theme.accent }
                         IconButton {
-                            glyph: "\uE768"
+                            iconName: AppIcons.check
                             tooltip: "应用预设"
                             buttonSize: 30
                             onClicked: {
@@ -1367,7 +1407,7 @@ ApplicationWindow {
             }
 
             Divider { Layout.fillWidth: true }
-            TextField {
+            AppTextField {
                 id: presetNameInput
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
@@ -1379,7 +1419,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
-                TextField {
+                AppTextField {
                     id: presetWidthInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
@@ -1390,7 +1430,7 @@ ApplicationWindow {
                     background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: presetWidthInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
                 }
                 TinyLabel { text: "x" }
-                TextField {
+                AppTextField {
                     id: presetHeightInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 36
@@ -1406,7 +1446,7 @@ ApplicationWindow {
                 ExportButton {
                     Layout.fillWidth: true
                     label: "新建预设"
-                    glyph: "\uE710"
+                    iconName: AppIcons.add
                     primary: true
                     onClicked: {
                         if (!canvasPresets.createPreset(presetNameInput.text, parseInt(presetWidthInput.text), parseInt(presetHeightInput.text)))
@@ -1414,7 +1454,7 @@ ApplicationWindow {
                     }
                 }
                 IconButton {
-                    glyph: "\uE70F"
+                    iconName: AppIcons.refresh
                     tooltip: "更新所选自定义预设"
                     buttonSize: 36
                     enabled: canvasPresetDrawer.selectedPresetIndex >= 0
@@ -1426,7 +1466,7 @@ ApplicationWindow {
                     }
                 }
                 IconButton {
-                    glyph: "\uE74D"
+                    iconName: AppIcons.trash
                     tooltip: "删除所选自定义预设"
                     buttonSize: 36
                     enabled: canvasPresetDrawer.selectedPresetIndex >= 0
@@ -1443,7 +1483,7 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: closeConfirmDialog
         anchors.centerIn: parent
         width: 430
@@ -1486,7 +1526,7 @@ ApplicationWindow {
                 ExportButton { Layout.preferredWidth: 86; label: "取消"; onClicked: { workspaceSessions.cancelClose(); closeConfirmDialog.close() } }
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 96; label: "不保存"; destructive: true; onClicked: { workspaceSessions.discardAndClose(workspaceSessions.pendingCloseIndex); closeConfirmDialog.close() } }
-                ExportButton { Layout.preferredWidth: 104; label: "保存"; glyph: "\uE74E"; primary: true; onClicked: { closeConfirmDialog.close(); workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex, "") } }
+                ExportButton { Layout.preferredWidth: 104; label: "保存"; iconName: AppIcons.save; primary: true; onClicked: { closeConfirmDialog.close(); workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex, "") } }
             }
         }
     }
@@ -1662,7 +1702,7 @@ ApplicationWindow {
         onAccepted: multiTabExport.outputDirectory = selectedFolder.toString()
     }
 
-    Dialog {
+    AppDialog {
         id: effectColorDialog
         objectName: "effectColorDialog"
         anchors.centerIn: parent
@@ -1739,7 +1779,7 @@ ApplicationWindow {
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 28; onClicked: effectColorDialog.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: effectColorDialog.close() }
             }
             Divider { Layout.fillWidth: true }
             RowLayout {
@@ -1823,81 +1863,6 @@ ApplicationWindow {
         verticalAlignment: Text.AlignVCenter
     }
 
-    component AlignmentGlyph: Canvas {
-        id: alignmentGlyph
-
-        property string mode: "left"
-        property color glyphColor: Theme.textSecondary
-
-        implicitWidth: 18
-        implicitHeight: 18
-
-        onModeChanged: requestPaint()
-        onGlyphColorChanged: requestPaint()
-        onPaint: {
-            var ctx = getContext("2d")
-            ctx.clearRect(0, 0, width, height)
-            ctx.strokeStyle = glyphColor
-            ctx.fillStyle = glyphColor
-            ctx.lineWidth = 1
-
-            function line(x1, y1, x2, y2) {
-                ctx.beginPath()
-                ctx.moveTo(Math.round(x1) + 0.5, Math.round(y1) + 0.5)
-                ctx.lineTo(Math.round(x2) + 0.5, Math.round(y2) + 0.5)
-                ctx.stroke()
-            }
-            function block(x, y, w, h) {
-                ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)))
-            }
-
-            if (mode === "left" || mode === "hcenter" || mode === "right") {
-                var axisX = mode === "left" ? 2 : (mode === "right" ? 16 : 9)
-                line(axisX, 1, axisX, 17)
-                if (mode === "left") {
-                    block(3, 4, 11, 3); block(3, 11, 7, 3)
-                } else if (mode === "right") {
-                    block(5, 4, 11, 3); block(9, 11, 7, 3)
-                } else {
-                    block(3, 4, 12, 3); block(5, 11, 8, 3)
-                }
-                return
-            }
-            if (mode === "top" || mode === "vcenter" || mode === "bottom") {
-                var axisY = mode === "top" ? 2 : (mode === "bottom" ? 16 : 9)
-                line(1, axisY, 17, axisY)
-                if (mode === "top") {
-                    block(4, 3, 3, 11); block(11, 3, 3, 7)
-                } else if (mode === "bottom") {
-                    block(4, 5, 3, 11); block(11, 9, 3, 7)
-                } else {
-                    block(4, 3, 3, 12); block(11, 5, 3, 8)
-                }
-                return
-            }
-            if (mode === "center") {
-                line(1, 9, 17, 9)
-                line(9, 1, 9, 17)
-                block(5, 5, 8, 8)
-                return
-            }
-            if (mode === "same_size") {
-                line(2, 2, 16, 2); line(16, 2, 16, 16)
-                line(16, 16, 2, 16); line(2, 16, 2, 2)
-                line(5, 5, 13, 5); line(13, 5, 13, 13)
-                line(13, 13, 5, 13); line(5, 13, 5, 5)
-                return
-            }
-            if (mode === "horizontal") {
-                block(1, 4, 3, 10); block(8, 2, 3, 14); block(15, 5, 3, 8)
-                line(4, 9, 8, 9); line(11, 9, 15, 9)
-                return
-            }
-            block(4, 1, 10, 3); block(2, 8, 14, 3); block(5, 15, 8, 3)
-            line(9, 4, 9, 8); line(9, 11, 9, 15)
-        }
-    }
-
     component AlignmentToolButton: Rectangle {
         id: alignmentButton
 
@@ -1905,6 +1870,18 @@ ApplicationWindow {
         property string distributionMode: ""
         property string tooltip: ""
         readonly property string iconMode: alignmentMode.length > 0 ? alignmentMode : distributionMode
+        readonly property string iconName: {
+            if (iconMode === "left") return AppIcons.alignLeft
+            if (iconMode === "hcenter") return AppIcons.alignCenterHorizontal
+            if (iconMode === "right") return AppIcons.alignRight
+            if (iconMode === "top") return AppIcons.alignTop
+            if (iconMode === "vcenter") return AppIcons.alignCenterVertical
+            if (iconMode === "bottom") return AppIcons.alignBottom
+            if (iconMode === "horizontal") return AppIcons.distributeHorizontal
+            if (iconMode === "vertical") return AppIcons.distributeVertical
+            if (iconMode === "same_size") return AppIcons.fitView
+            return AppIcons.circleDot
+        }
         signal clicked()
 
         implicitWidth: 28
@@ -1916,12 +1893,16 @@ ApplicationWindow {
             return alignmentMouse.containsMouse ? Theme.bgHover : "transparent"
         }
         opacity: enabled ? 1 : 0.32
+        border.width: activeFocus ? 1 : 0
+        border.color: Theme.focusRing
+        activeFocusOnTab: enabled
 
-        AlignmentGlyph {
+        AppIcon {
             anchors.centerIn: parent
-            mode: alignmentButton.iconMode
-            glyphColor: alignmentMouse.containsMouse && alignmentButton.enabled
-                        ? Theme.textPrimary : Theme.textSecondary
+            iconName: alignmentButton.iconName
+            iconSize: 16
+            iconColor: alignmentMouse.containsMouse && alignmentButton.enabled
+                       ? Theme.textPrimary : Theme.textSecondary
         }
 
         MouseArea {
@@ -1930,8 +1911,11 @@ ApplicationWindow {
             enabled: alignmentButton.enabled
             hoverEnabled: true
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onPressed: alignmentButton.forceActiveFocus(Qt.MouseFocusReason)
             onClicked: alignmentButton.clicked()
         }
+
+        Keys.onSpacePressed: clicked()
 
         ToolTip.visible: alignmentMouse.containsMouse && tooltip.length > 0
         ToolTip.text: tooltip
@@ -1943,22 +1927,23 @@ ApplicationWindow {
     component ToolRailButton: Rectangle {
         id: toolButton
         property int toolIndex: 0
-        property string glyph: ""
+        property string iconName: ""
         property string label: ""
         signal triggered()
 
-        width: 38
-        height: 38
-        radius: Theme.radius
+        width: Theme.railButtonSize
+        height: Theme.railButtonSize
+        radius: Theme.radiusSmall
         color: activeTool === toolIndex ? Theme.accentSoft : (toolMouse.containsMouse ? Theme.bgHover : "transparent")
         border.width: activeTool === toolIndex ? 1 : 0
-        border.color: "#2c7460"
+        border.color: activeFocus ? Theme.focusRing : Theme.accentPressed
         opacity: enabled ? 1 : 0.34
+        activeFocusOnTab: enabled
 
         AppIcon {
             anchors.centerIn: parent
-            glyph: toolButton.glyph
-            iconSize: 17
+            iconName: toolButton.iconName
+            iconSize: 18
             iconColor: activeTool === toolButton.toolIndex ? Theme.accent : Theme.textSecondary
         }
 
@@ -1968,11 +1953,14 @@ ApplicationWindow {
             enabled: toolButton.enabled
             hoverEnabled: true
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onPressed: toolButton.forceActiveFocus(Qt.MouseFocusReason)
             onClicked: {
                 activeTool = toolButton.toolIndex
                 toolButton.triggered()
             }
         }
+
+        Keys.onSpacePressed: triggered()
 
         ToolTip.visible: toolMouse.containsMouse
         ToolTip.text: toolButton.label
@@ -2107,17 +2095,6 @@ ApplicationWindow {
         }
     }
 
-    component AppMenu: Menu {
-        width: 250
-        padding: 5
-        background: Rectangle {
-            color: Theme.bgRaised
-            border.width: 1
-            border.color: Theme.borderStrong
-            radius: Theme.radiusSmall
-        }
-    }
-
     component ShapeMenuItem: MenuItem {
         id: shapeMenuItem
         implicitWidth: 158
@@ -2139,93 +2116,21 @@ ApplicationWindow {
         }
     }
 
-    component ExportField: Rectangle {
+    component ExportField: AppTextField {
         id: exportField
-        property alias text: exportInput.text
         property string placeholder: ""
-        property bool readOnly: false
         signal committed(string value)
 
         implicitHeight: 36
-        radius: Theme.radiusSmall
-        color: Theme.bgControl
-        border.width: 1
-        border.color: exportInput.activeFocus ? Theme.accent : Theme.borderStrong
-
-        TextInput {
-            id: exportInput
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            color: Theme.textPrimary
-            selectionColor: Theme.accentPressed
-            selectedTextColor: Theme.textPrimary
-            font.family: Theme.bodyFont
-            font.pixelSize: 12
-            verticalAlignment: TextInput.AlignVCenter
-            readOnly: exportField.readOnly
-            selectByMouse: true
-            clip: true
-            onEditingFinished: exportField.committed(text)
-
-            Text {
-                anchors.fill: parent
-                text: exportField.placeholder
-                visible: exportInput.text.length === 0 && !exportInput.activeFocus
-                color: Theme.textMuted
-                font: exportInput.font
-                verticalAlignment: Text.AlignVCenter
-            }
-        }
+        placeholderText: placeholder
+        font.pixelSize: 12
+        onEditingFinished: exportField.committed(text)
     }
 
-    component ExportButton: Rectangle {
+    component ExportButton: AppButton {
         id: exportButton
         property string label: ""
-        property string glyph: ""
-        property bool primary: false
-        property bool destructive: false
-        signal clicked()
-
-        implicitHeight: 38
-        radius: Theme.radiusSmall
-        color: {
-            if (!enabled) return Theme.bgControl
-            if (buttonMouse.pressed) return destructive ? "#b94d45" : (primary ? Theme.accentPressed : Theme.bgHover)
-            if (buttonMouse.containsMouse) return destructive ? "#e56f65" : (primary ? Theme.accentHover : Theme.bgHover)
-            return destructive ? Theme.coral : (primary ? Theme.accent : Theme.bgControl)
-        }
-        border.width: primary || destructive ? 0 : 1
-        border.color: Theme.borderStrong
-        opacity: enabled ? 1 : 0.42
-
-        Row {
-            anchors.centerIn: parent
-            spacing: 8
-            AppIcon {
-                glyph: exportButton.glyph
-                iconSize: 14
-                iconColor: exportButton.primary || exportButton.destructive ? "#09251d" : Theme.textPrimary
-                height: 20
-            }
-            Text {
-                text: exportButton.label
-                color: exportButton.primary || exportButton.destructive ? "#09251d" : Theme.textPrimary
-                font.family: Theme.bodyFont
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
-                height: 20
-                verticalAlignment: Text.AlignVCenter
-            }
-        }
-
-        MouseArea {
-            id: buttonMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: exportButton.clicked()
-        }
+        text: label
     }
 
     component ContentTextEditor: Rectangle {
@@ -2314,7 +2219,7 @@ ApplicationWindow {
         }
     }
 
-    Drawer {
+    AppDrawer {
         id: batchExportDrawer
         objectName: "batchExportDrawer"
         edge: Qt.RightEdge
@@ -2326,7 +2231,7 @@ ApplicationWindow {
         padding: 0
         property bool advancedOpen: false
 
-        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle {
             color: Theme.bgPanel
             border.width: 1
@@ -2349,7 +2254,7 @@ ApplicationWindow {
                         height: 32
                         radius: Theme.radiusSmall
                         color: Theme.accentSoft
-                        AppIcon { anchors.centerIn: parent; glyph: "\uEDE1"; iconSize: 16; iconColor: Theme.accent }
+                        AppIcon { anchors.centerIn: parent; iconName: AppIcons.exportAction; iconSize: 16; iconColor: Theme.accent }
                     }
                     Column {
                         Layout.fillWidth: true
@@ -2357,7 +2262,7 @@ ApplicationWindow {
                         Text { text: "批量导出"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold }
                         TinyLabel { text: workspace.documentTitle; color: Theme.textMuted }
                     }
-                    IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: batchExportDrawer.close() }
+                    IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: batchExportDrawer.close() }
                 }
 
                 Divider { Layout.fillWidth: true; Layout.topMargin: 10; Layout.bottomMargin: 18 }
@@ -2390,7 +2295,7 @@ ApplicationWindow {
                                     readOnly: true
                                 }
                                 IconButton {
-                                    glyph: "\uE8B7"
+                                    iconName: AppIcons.folderOpen
                                     tooltip: "选择输出目录"
                                     buttonSize: 36
                                     active: true
@@ -2487,6 +2392,7 @@ ApplicationWindow {
                                 anchors.rightMargin: 10
                                 BodyLabel { text: "避免重复组合"; color: Theme.textPrimary; Layout.fillWidth: true }
                                 ToggleSwitch {
+                                    accessibleName: "避免重复组合"
                                     checked: batchExport.avoidDuplicates
                                     onToggled: checkedValue => batchExport.avoidDuplicates = checkedValue
                                 }
@@ -2511,6 +2417,7 @@ ApplicationWindow {
                                     TinyLabel { text: "按可用组合顺序生成，而非随机抽样" }
                                 }
                                 ToggleSwitch {
+                                    accessibleName: "遍历全部组合"
                                     checked: batchExport.traverseMode
                                     onToggled: checkedValue => batchExport.traverseMode = checkedValue
                                 }
@@ -2534,7 +2441,7 @@ ApplicationWindow {
                                     anchors.rightMargin: 8
                                     BodyLabel { text: "高级策略"; color: Theme.textPrimary; Layout.fillWidth: true }
                                     TinyLabel { text: batchExport.memoryGuardMode === "off" ? "无内存保护" : "内存保护已启用" }
-                                    AppIcon { glyph: batchExportDrawer.advancedOpen ? "\uE70E" : "\uE70D"; iconSize: 11; iconColor: Theme.textMuted }
+                                    AppIcon { iconName: batchExportDrawer.advancedOpen ? AppIcons.chevronUp : AppIcons.chevronDown; iconSize: 11; iconColor: Theme.textMuted }
                                 }
                                 MouseArea {
                                     id: advancedMouse
@@ -2568,14 +2475,14 @@ ApplicationWindow {
                                 RowLayout {
                                     width: parent.width
                                     BodyLabel { text: "高性能管线"; Layout.fillWidth: true }
-                                    ToggleSwitch { checked: batchExport.useHighPerformance; onToggled: checkedValue => batchExport.useHighPerformance = checkedValue }
+                                    ToggleSwitch { accessibleName: "高性能管线"; checked: batchExport.useHighPerformance; onToggled: checkedValue => batchExport.useHighPerformance = checkedValue }
                                     BodyLabel { text: "预读素材"; Layout.leftMargin: 12 }
-                                    ToggleSwitch { checked: batchExport.preloadEnabled; onToggled: checkedValue => batchExport.preloadEnabled = checkedValue }
+                                    ToggleSwitch { accessibleName: "预读素材"; checked: batchExport.preloadEnabled; onToggled: checkedValue => batchExport.preloadEnabled = checkedValue }
                                 }
                                 RowLayout {
                                     width: parent.width
                                     BodyLabel { text: "独立 Worker"; Layout.fillWidth: true }
-                                    ToggleSwitch { checked: batchExport.externalWorkerEnabled; onToggled: checkedValue => batchExport.externalWorkerEnabled = checkedValue }
+                                    ToggleSwitch { accessibleName: "独立 Worker"; checked: batchExport.externalWorkerEnabled; onToggled: checkedValue => batchExport.externalWorkerEnabled = checkedValue }
                                     TinyLabel { text: "大批量隔离主界面"; Layout.leftMargin: 8 }
                                 }
                                 RowLayout {
@@ -2657,20 +2564,17 @@ ApplicationWindow {
                     Layout.topMargin: 18
                     spacing: 10
 
-                    Rectangle {
+                    StatusBanner {
                         Layout.fillWidth: true
                         Layout.preferredHeight: batchExport.errorMessage.length > 0 ? 60 : 48
-                        radius: Theme.radiusSmall
-                        color: batchExport.errorMessage.length > 0 ? "#35201f" : (batchExport.succeeded ? "#173126" : Theme.bgRaised)
-                        border.width: 1
-                        border.color: batchExport.errorMessage.length > 0 ? "#70413d" : (batchExport.succeeded ? "#28583e" : Theme.border)
+                        tone: batchExport.errorMessage.length > 0 ? "error" : (batchExport.succeeded ? "success" : "neutral")
 
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 10
                             spacing: 9
                             AppIcon {
-                                glyph: batchExport.errorMessage.length > 0 ? "\uEA39" : (batchExport.succeeded ? "\uE73E" : "\uE9D9")
+                                iconName: batchExport.errorMessage.length > 0 ? AppIcons.error : (batchExport.succeeded ? AppIcons.check : AppIcons.info)
                                 iconSize: 15
                                 iconColor: batchExport.errorMessage.length > 0 ? Theme.coral : (batchExport.succeeded ? Theme.success : Theme.accent)
                             }
@@ -2681,7 +2585,7 @@ ApplicationWindow {
                                 TinyLabel {
                                     width: parent.width
                                     text: batchExport.errorMessage.length > 0 ? batchExport.errorMessage : batchExport.stage
-                                    color: batchExport.errorMessage.length > 0 ? "#e7a09a" : Theme.textMuted
+                                    color: batchExport.errorMessage.length > 0 ? Theme.errorText : Theme.textMuted
                                     elide: Text.ElideRight
                                 }
                             }
@@ -2693,18 +2597,12 @@ ApplicationWindow {
                         }
                     }
 
-                    Rectangle {
+                    AppProgressBar {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 5
                         visible: batchExport.running || batchExport.current > 0
-                        radius: 2
-                        color: Theme.borderStrong
-                        Rectangle {
-                            width: parent.width * batchExport.progress
-                            height: parent.height
-                            radius: 2
-                            color: batchExport.canceled ? Theme.amber : Theme.accent
-                        }
+                        progress: batchExport.progress
+                        tone: batchExport.canceled ? "warning" : "accent"
                     }
 
                     TinyLabel {
@@ -2729,14 +2627,14 @@ ApplicationWindow {
                         ExportButton {
                             Layout.fillWidth: true
                             label: "打开目录"
-                            glyph: "\uE8B7"
+                            iconName: AppIcons.folderOpen
                             enabled: batchExport.outputDirectory.length > 0
                             onClicked: batchExport.openOutputDirectory()
                         }
                         ExportButton {
                             Layout.fillWidth: true
                             label: batchExport.running ? "取消导出" : (batchExport.canRetry ? "按原配置重试" : (batchExport.succeeded ? "再次导出" : "开始导出"))
-                            glyph: batchExport.running ? "\uE71A" : "\uEDE1"
+                            iconName: batchExport.running ? AppIcons.close : AppIcons.exportAction
                             primary: !batchExport.running
                             destructive: batchExport.running
                             onClicked: batchExport.running ? batchExport.cancelExport() : (batchExport.canRetry ? batchExport.retryExport() : batchExport.startExport())
@@ -2747,7 +2645,7 @@ ApplicationWindow {
         }
     }
 
-    Drawer {
+    AppDrawer {
         id: multiTabExportDrawer
         objectName: "multiTabExportDrawer"
         edge: Qt.RightEdge
@@ -2758,19 +2656,19 @@ ApplicationWindow {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
 
-        Overlay.modal: Rectangle { color: "#990a0c0d" }
+        Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
         contentItem: ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 10
+            anchors.margins: 12
+            spacing: 8
 
             RowLayout {
                 Layout.fillWidth: true
                 Rectangle {
                     Layout.preferredWidth: 32; Layout.preferredHeight: 32
                     radius: Theme.radiusSmall; color: Theme.accentSoft
-                    AppIcon { anchors.centerIn: parent; glyph: "\uE8FD"; iconSize: 16; iconColor: Theme.accent }
+                    AppIcon { anchors.centerIn: parent; iconName: AppIcons.listChecks; iconSize: 16; iconColor: Theme.accent }
                 }
                 Column {
                     Layout.fillWidth: true
@@ -2778,14 +2676,14 @@ ApplicationWindow {
                     Text { text: "多标签批量导出"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold }
                     TinyLabel { text: multiTabExport.selectedDocumentCount + " 个标签页  ·  " + multiTabExport.totalImages + " 张" }
                 }
-                IconButton { glyph: "\uE711"; tooltip: "关闭"; buttonSize: 30; onClicked: multiTabExportDrawer.close() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: multiTabExportDrawer.close() }
             }
             Divider { Layout.fillWidth: true }
 
             RowLayout {
                 Layout.fillWidth: true
                 ExportField { Layout.fillWidth: true; text: multiTabExport.outputDirectory; placeholder: "选择总输出目录"; readOnly: true }
-                IconButton { glyph: "\uE8B7"; tooltip: "选择输出目录"; buttonSize: 36; active: true; onClicked: multiOutputFolderDialog.open() }
+                IconButton { iconName: AppIcons.folderOpen; tooltip: "选择输出目录"; buttonSize: 36; active: true; onClicked: multiOutputFolderDialog.open() }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -2809,9 +2707,9 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 BodyLabel { text: "避免重复组合"; Layout.fillWidth: true }
-                ToggleSwitch { checked: multiTabExport.avoidDuplicates; onToggled: checkedValue => multiTabExport.avoidDuplicates = checkedValue }
+                ToggleSwitch { accessibleName: "多标签避免重复组合"; checked: multiTabExport.avoidDuplicates; onToggled: checkedValue => multiTabExport.avoidDuplicates = checkedValue }
                 BodyLabel { text: "遍历模式"; Layout.leftMargin: 14 }
-                ToggleSwitch { checked: multiTabExport.traverseMode; onToggled: checkedValue => multiTabExport.traverseMode = checkedValue }
+                ToggleSwitch { accessibleName: "多标签遍历模式"; checked: multiTabExport.traverseMode; onToggled: checkedValue => multiTabExport.traverseMode = checkedValue }
             }
 
             TinyLabel { text: "标签页任务"; color: Theme.textSecondary }
@@ -2819,7 +2717,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(
                     Math.max(220, multiTabExport.count * 103),
-                    Math.max(220, multiTabExportDrawer.height - 490)
+                    Math.max(220, multiTabExportDrawer.height - 520)
                 )
                 Layout.maximumHeight: Layout.preferredHeight
                 clip: true
@@ -2851,7 +2749,7 @@ ApplicationWindow {
                         spacing: 5
                         RowLayout {
                             Layout.fillWidth: true
-                            ToggleSwitch { checked: selectedForExport; enabled: !multiTabExport.running; onToggled: checkedValue => multiTabExport.setDocumentEnabled(index, checkedValue) }
+                            ToggleSwitch { accessibleName: "导出 " + title; checked: selectedForExport; enabled: !multiTabExport.running; onToggled: checkedValue => multiTabExport.setDocumentEnabled(index, checkedValue) }
                             BodyLabel { text: title; color: Theme.textPrimary; Layout.fillWidth: true; elide: Text.ElideRight }
                             TinyLabel { text: canvasSize }
                             TinyLabel { text: status; color: status === "失败" ? Theme.coral : (status === "完成" ? Theme.success : Theme.textMuted) }
@@ -2865,12 +2763,12 @@ ApplicationWindow {
                             TinyLabel { text: "子目录" }
                             ExportField { Layout.fillWidth: true; text: subdirectory; readOnly: multiTabExport.running; onCommitted: value => multiTabExport.setDocumentSubdirectory(index, value) }
                         }
-                        Rectangle {
+                        AppProgressBar {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 3
                             visible: progress > 0
-                            color: Theme.borderStrong
-                            Rectangle { width: parent.width * Math.min(1, progress / Math.max(1, exportCount)); height: parent.height; color: status === "失败" ? Theme.coral : Theme.accent }
+                            progress: Math.min(1, progress / Math.max(1, exportCount))
+                            tone: status === "失败" ? "danger" : "accent"
                         }
                     }
                     ToolTip.visible: error.length > 0 && taskErrorMouse.containsMouse
@@ -2883,20 +2781,17 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 38
                 label: multiTabExport.running ? "取消全部任务" : "开始多标签导出"
-                glyph: multiTabExport.running ? "\uE71A" : "\uE8FD"
+                iconName: multiTabExport.running ? AppIcons.close : AppIcons.listChecks
                 primary: !multiTabExport.running && multiTabExport.selectedDocumentCount > 0 && multiTabExport.outputDirectory.length > 0
                 destructive: multiTabExport.running
                 enabled: multiTabExport.running || (multiTabExport.selectedDocumentCount > 0 && multiTabExport.outputDirectory.length > 0)
                 onClicked: multiTabExport.running ? multiTabExport.cancelExport() : multiTabExport.startExport()
             }
 
-            Rectangle {
+            StatusBanner {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46
-                radius: Theme.radiusSmall
-                color: multiTabExport.failureSummary.length > 0 ? "#35201f" : Theme.bgRaised
-                border.width: 1
-                border.color: multiTabExport.failureSummary.length > 0 ? "#70413d" : Theme.border
+                tone: multiTabExport.failureSummary.length > 0 ? "error" : "neutral"
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 10
@@ -2909,12 +2804,12 @@ ApplicationWindow {
                     TinyLabel { text: Math.round(multiTabExport.progress * 100) + "%"; color: Theme.textSecondary }
                 }
             }
-            Rectangle {
+            AppProgressBar {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 4
                 visible: multiTabExport.running || multiTabExport.completedImages > 0
-                color: Theme.borderStrong
-                Rectangle { width: parent.width * multiTabExport.progress; height: parent.height; color: multiTabExport.canceled ? Theme.amber : Theme.accent }
+                progress: multiTabExport.progress
+                tone: multiTabExport.canceled ? "warning" : "accent"
             }
         }
     }
@@ -3008,9 +2903,9 @@ ApplicationWindow {
                         width: gpuRow.width + 18
                         height: 26
                         radius: 13
-                        color: "#192822"
+                        color: Theme.accentSoft
                         border.width: 1
-                        border.color: "#29473d"
+                        border.color: Theme.accentPressed
 
                         Row {
                             id: gpuRow
@@ -3021,7 +2916,7 @@ ApplicationWindow {
                         }
                     }
 
-                IconButton { glyph: "\uE713"; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
+                IconButton { iconName: AppIcons.panelRight; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                 }
             }
 
@@ -3040,51 +2935,42 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
-                IconButton { glyph: "\uE8E5"; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: openDialog.open() }
+                IconButton { iconName: AppIcons.folderOpen; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: openDialog.open() }
                 IconButton {
-                    glyph: "\uE74E"
+                    iconName: AppIcons.save
                     tooltip: "保存"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
                 }
                 IconButton {
-                    glyph: "\uE8F1"
+                    iconName: AppIcons.fileText
                     tooltip: "项目预设"
                     enabled: !workspace.operationsBlocked
                     onClicked: legacyTools.openPresetManager()
                 }
                 IconButton {
-                    glyph: "\uE8A9"
+                    iconName: AppIcons.link
                     tooltip: "绑定与尺寸匹配"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: dataRelationsMenu.popup(parent, 0, parent.height)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-                IconButton { glyph: "\uE7A7"; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
-                IconButton { glyph: "\uE7A6"; tooltip: "重做"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
+                IconButton { iconName: AppIcons.undo; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
+                IconButton { iconName: AppIcons.redo; tooltip: "重做"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
-                Rectangle {
+                AppButton {
                     Layout.preferredWidth: 106
-                    Layout.preferredHeight: 32
-                    radius: Theme.radiusSmall
-                    color: addImageMouse.containsMouse ? Theme.bgHover : Theme.bgControl
-                    border.width: 1
-                    border.color: Theme.borderStrong
-                    opacity: addImageMouse.enabled ? 1 : 0.38
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 7
-                        AppIcon { glyph: "\uE91B"; iconSize: 14; iconColor: Theme.textPrimary; height: 20 }
-                        BodyLabel { text: "新建图层"; color: Theme.textPrimary; height: 20 }
-                    }
-                    MouseArea { id: addImageMouse; anchors.fill: parent; enabled: window.hasOpenDocument && !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.addEmptyImageLayer() }
+                    text: "新建图层"
+                    iconName: AppIcons.imageAdd
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: workspace.addEmptyImageLayer()
                 }
 
-                IconButton { glyph: "\uE8D2"; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
-                IconButton { glyph: "\uE8B7"; tooltip: "添加素材文件夹"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
+                IconButton { iconName: AppIcons.type; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
+                IconButton { iconName: AppIcons.folderInput; tooltip: "添加素材文件夹"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
                 IconButton {
-                    glyph: "\uF158"
+                    iconName: AppIcons.shapes
                     tooltip: "添加异形图层"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: shapedLayerDialog.openFresh()
@@ -3124,23 +3010,16 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true }
 
-                Rectangle {
+                AppButton {
                     Layout.preferredWidth: 92
-                    Layout.preferredHeight: 32
-                    radius: Theme.radiusSmall
-                    color: Theme.bgControl
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        AppIcon { glyph: "\uE71E"; iconSize: 14; height: 20 }
-                        BodyLabel { text: "预览"; color: Theme.textPrimary; height: 20 }
-                    }
-                    opacity: previewMouse.enabled ? 1 : 0.38
-                    MouseArea { id: previewMouse; anchors.fill: parent; enabled: window.hasOpenDocument && !workspace.operationsBlocked; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: workspace.renderPreviewNow() }
+                    text: "预览"
+                    iconName: AppIcons.preview
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: workspace.renderPreviewNow()
                 }
 
                 IconButton {
-                    glyph: "\uE159"
+                    iconName: AppIcons.exportAction
                     tooltip: "导出当前画面"
                     buttonSize: 32
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
@@ -3148,26 +3027,20 @@ ApplicationWindow {
                 }
 
                 IconButton {
-                    glyph: "\uE8FD"
+                    iconName: AppIcons.listChecks
                     tooltip: "多标签批量导出"
                     buttonSize: 32
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running)
                     onClicked: legacyTools.openMultiTabExport()
                 }
 
-                Rectangle {
+                AppButton {
                     Layout.preferredWidth: 112
-                    Layout.preferredHeight: 32
-                    radius: Theme.radiusSmall
-                    color: exportMouse.pressed ? Theme.accentPressed : (exportMouse.containsMouse ? Theme.accentHover : Theme.accent)
-                    opacity: exportMouse.enabled ? 1 : 0.38
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        AppIcon { glyph: "\uEDE1"; iconSize: 14; iconColor: "#09251d"; height: 20 }
-                        Text { text: "批量导出"; color: "#09251d"; font.family: Theme.bodyFont; font.pixelSize: 12; font.weight: Font.DemiBold; height: 20; verticalAlignment: Text.AlignVCenter }
-                    }
-                    MouseArea { id: exportMouse; anchors.fill: parent; enabled: window.hasOpenDocument && !workspace.operationsBlocked; hoverEnabled: true; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: legacyTools.openBatchExport() }
+                    text: "批量导出"
+                    iconName: AppIcons.exportAction
+                    variant: "primary"
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: legacyTools.openBatchExport()
                 }
             }
 
@@ -3236,7 +3109,7 @@ ApplicationWindow {
                                 verticalAlignment: Text.AlignVCenter
                             }
                             IconButton {
-                                glyph: "\uE711"
+                                iconName: AppIcons.close
                                 tooltip: "关闭文档"
                                 buttonSize: 24
                                 onClicked: workspaceSessions.requestClose(documentTab.index)
@@ -3266,7 +3139,7 @@ ApplicationWindow {
                 }
 
                 IconButton {
-                    glyph: "\uE710"
+                    iconName: AppIcons.add
                     tooltip: "新建文档"
                     buttonSize: 36
                     Layout.preferredWidth: 40
@@ -3297,10 +3170,10 @@ ApplicationWindow {
                     anchors.topMargin: 10
                     spacing: 5
 
-                    ToolRailButton { toolIndex: 0; glyph: "\uE7C9"; label: "选择工具 (V)"; enabled: window.hasOpenDocument }
-                    ToolRailButton { toolIndex: 1; glyph: "\uE7C2"; label: "抓手工具 (H)"; enabled: window.hasOpenDocument }
-                    ToolRailButton { toolIndex: 2; glyph: "\uE8D2"; label: "文字工具 (T)"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
-                    ToolRailButton { toolIndex: 3; glyph: "\uF158"; label: "形状工具 (U)"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
+                    ToolRailButton { toolIndex: 0; iconName: AppIcons.pointer; label: "选择工具 (V)"; enabled: window.hasOpenDocument }
+                    ToolRailButton { toolIndex: 1; iconName: AppIcons.hand; label: "抓手工具 (H)"; enabled: window.hasOpenDocument }
+                    ToolRailButton { toolIndex: 2; iconName: AppIcons.type; label: "文字工具 (T)"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+                    ToolRailButton { toolIndex: 3; iconName: AppIcons.shapes; label: "形状工具 (U)"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
                 }
 
                 Column {
@@ -3310,9 +3183,9 @@ ApplicationWindow {
                     spacing: 6
 
                     Rectangle {
-                        width: 26; height: 26; radius: 4; color: "#15221e"; border.width: 1; border.color: Theme.borderStrong
-                        Rectangle { width: 15; height: 15; anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 3; color: Theme.accent; border.width: 1; border.color: "#84f0d0" }
-                        Rectangle { width: 15; height: 15; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; color: "#f3f1ea"; border.width: 1; border.color: Theme.borderStrong }
+                        width: 26; height: 26; radius: 4; color: Theme.swatchSurface; border.width: 1; border.color: Theme.borderStrong
+                        Rectangle { width: 15; height: 15; anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 3; color: Theme.accent; border.width: 1; border.color: Theme.swatchAccentBorder }
+                        Rectangle { width: 15; height: 15; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; color: Theme.swatchPaper; border.width: 1; border.color: Theme.borderStrong }
                     }
                 }
 
@@ -3321,7 +3194,7 @@ ApplicationWindow {
 
             Rectangle {
                 id: layerPanel
-                Layout.preferredWidth: window.width < 1320 ? 236 : 276
+                Layout.preferredWidth: window.width < 1320 ? 246 : 276
                 Layout.fillHeight: true
                 color: Theme.bgPanel
 
@@ -3344,7 +3217,7 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                             Layout.fillWidth: true
                         }
-                        IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
+                        IconButton { iconName: AppIcons.add; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -3363,7 +3236,7 @@ ApplicationWindow {
                             required property int index
                             required property string name
                             required property string typeName
-                            required property string glyph
+                            required property string iconName
                             required property color accent
                             required property bool shown
                             required property bool locked
@@ -3375,7 +3248,7 @@ ApplicationWindow {
                             required property int layerIndex
 
                             width: layerList.width
-                            height: parentExpanded ? 62 : 0
+                            height: parentExpanded ? 58 : 0
                             visible: parentExpanded
                             color: selected ? Theme.bgSelected : (layerMouse.containsMouse ? Theme.bgRaised : "transparent")
 
@@ -3392,7 +3265,7 @@ ApplicationWindow {
                                 anchors.left: parent.left
                                 anchors.leftMargin: 6 + layerDelegate.depth * 12
                                 anchors.verticalCenter: parent.verticalCenter
-                                glyph: layerDelegate.shown ? "\uE890" : "\uED1A"
+                                iconName: layerDelegate.shown ? AppIcons.eye : AppIcons.eyeOff
                                 tooltip: layerDelegate.shown ? "隐藏图层" : "显示图层"
                                 buttonSize: 28
                                 onClicked: workspace.toggleLayerVisible(layerDelegate.layerIndex)
@@ -3404,7 +3277,7 @@ ApplicationWindow {
                                 anchors.leftMargin: 1
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: layerDelegate.isGroup
-                                glyph: layerDelegate.expanded ? "\uE70D" : "\uE76C"
+                                iconName: layerDelegate.expanded ? AppIcons.chevronDown : AppIcons.chevronRight
                                 tooltip: layerDelegate.expanded ? "折叠图层组" : "展开图层组"
                                 buttonSize: 22
                                 onClicked: workspace.toggleLayerGroupExpanded(layerDelegate.layerIndex)
@@ -3414,16 +3287,16 @@ ApplicationWindow {
                                 anchors.left: layerDelegate.isGroup ? disclosureButton.right : eyeButton.right
                                 anchors.leftMargin: 4
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: 38
-                                height: 38
+                                width: 36
+                                height: 36
                                 radius: Theme.radiusSmall
-                                color: layerDelegate.layerIndex === 2 || layerDelegate.layerIndex === 4 ? "#d8d8d4" : Theme.bgControl
+                                color: Theme.bgControl
                                 border.width: 1
                                 border.color: Theme.borderStrong
 
                                 AppIcon {
                                     anchors.centerIn: parent
-                                    glyph: layerDelegate.glyph
+                                    iconName: layerDelegate.iconName
                                     iconSize: 16
                                     iconColor: layerDelegate.accent
                                 }
@@ -3445,7 +3318,7 @@ ApplicationWindow {
                                 anchors.right: parent.right
                                 anchors.rightMargin: 6
                                 anchors.verticalCenter: parent.verticalCenter
-                                glyph: layerDelegate.locked ? "\uE72E" : "\uE785"
+                                iconName: layerDelegate.locked ? AppIcons.lock : AppIcons.unlock
                                 tooltip: layerDelegate.locked ? "解锁图层" : "锁定图层"
                                 buttonSize: 28
                                 onClicked: workspace.toggleLayerLocked(layerDelegate.layerIndex)
@@ -3492,7 +3365,7 @@ ApplicationWindow {
                                 }
                             }
 
-                            Menu {
+                            AppMenu {
                                 id: layerContextMenu
                                 ShapeMenuItem {
                                     text: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
@@ -3534,9 +3407,9 @@ ApplicationWindow {
                         Row {
                             anchors.centerIn: parent
                             spacing: 5
-                            IconButton { glyph: "\uE710"; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
+                            IconButton { iconName: AppIcons.add; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                             IconButton {
-                                glyph: "\uE8C8"
+                                iconName: AppIcons.copy
                                 tooltip: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
                                 buttonSize: 28
                                 enabled: workspace.selectedLayerCount > 1 || workspace.canDuplicateLayer
@@ -3545,7 +3418,7 @@ ApplicationWindow {
                                            : workspace.duplicateSelectedLayer()
                             }
                             IconButton {
-                                glyph: "\uE8C8"
+                                iconName: AppIcons.copy
                                 tooltip: "复制图层样式"
                                 buttonSize: 28
                                 visible: workspace.selectedLayerCount <= 1
@@ -3553,7 +3426,7 @@ ApplicationWindow {
                                 onClicked: workspace.copySelectedLayerStyle()
                             }
                             IconButton {
-                                glyph: "\uE77F"
+                                iconName: AppIcons.paste
                                 tooltip: workspace.hasLayerStyleClipboard
                                          ? "粘贴图层样式 · " + workspace.layerStyleClipboardSummary
                                          : "粘贴图层样式 · 尚未复制"
@@ -3566,7 +3439,7 @@ ApplicationWindow {
                                 onClicked: workspace.pasteSelectedLayerStyle()
                             }
                             IconButton {
-                                glyph: "\uE8B0"
+                                iconName: AppIcons.group
                                 tooltip: "建立图层组"
                                 buttonSize: 28
                                 visible: workspace.selectedLayerCount > 1
@@ -3574,7 +3447,7 @@ ApplicationWindow {
                                 onClicked: workspace.groupSelectedLayers()
                             }
                             IconButton {
-                                glyph: "\uE8D7"
+                                iconName: AppIcons.ungroup
                                 tooltip: "解散图层组"
                                 buttonSize: 28
                                 visible: workspace.canUngroupSelectedLayers
@@ -3582,7 +3455,7 @@ ApplicationWindow {
                                 onClicked: workspace.ungroupSelectedGroups()
                             }
                             IconButton {
-                                glyph: "\uE70E"
+                            iconName: AppIcons.arrowDown
                                 tooltip: "后移一层 · Ctrl+["
                                 buttonSize: 28
                                 visible: workspace.selectedLayerCount <= 1
@@ -3590,7 +3463,7 @@ ApplicationWindow {
                                 onClicked: workspace.moveSelectedLayer("backward")
                             }
                             IconButton {
-                                glyph: "\uE70D"
+                            iconName: AppIcons.arrowUp
                                 tooltip: "前移一层 · Ctrl+]"
                                 buttonSize: 28
                                 visible: workspace.selectedLayerCount <= 1
@@ -3598,7 +3471,7 @@ ApplicationWindow {
                                 onClicked: workspace.moveSelectedLayer("forward")
                             }
                             IconButton {
-                                glyph: "\uE74D"
+                                iconName: AppIcons.trash
                                 tooltip: "删除图层"
                                 buttonSize: 28
                                 enabled: workspace.selectedLayerIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
@@ -3686,12 +3559,12 @@ ApplicationWindow {
                             id: guideTools
                             anchors.centerIn: parent
                             spacing: 1
-                            IconButton { glyph: "\uE7C9"; tooltip: "显示标尺"; active: workspace.showRulers; buttonSize: 30; onClicked: workspace.setShowRulers(!workspace.showRulers) }
-                            IconButton { glyph: "\uE8EC"; tooltip: "显示参考线"; active: workspace.showGuides; buttonSize: 30; onClicked: workspace.setShowGuides(!workspace.showGuides) }
-                            IconButton { glyph: "\uE8B7"; tooltip: "吸附到参考线"; active: workspace.snapToGuides; buttonSize: 30; onClicked: workspace.setSnapToGuides(!workspace.snapToGuides) }
-                            IconButton { glyph: "\uE74D"; tooltip: "清空参考线"; buttonSize: 30; enabled: workspace.horizontalGuides.length + workspace.verticalGuides.length > 0; onClicked: workspace.clearGuides() }
+                            IconButton { iconName: AppIcons.ruler; tooltip: "显示标尺"; active: workspace.showRulers; buttonSize: 30; onClicked: workspace.setShowRulers(!workspace.showRulers) }
+                            IconButton { iconName: AppIcons.guides; tooltip: "显示参考线"; active: workspace.showGuides; buttonSize: 30; onClicked: workspace.setShowGuides(!workspace.showGuides) }
+                            IconButton { iconName: AppIcons.magnet; tooltip: "吸附到参考线"; active: workspace.snapToGuides; buttonSize: 30; onClicked: workspace.setSnapToGuides(!workspace.snapToGuides) }
+                            IconButton { iconName: AppIcons.trash; tooltip: "清空参考线"; buttonSize: 30; enabled: workspace.horizontalGuides.length + workspace.verticalGuides.length > 0; onClicked: workspace.clearGuides() }
                             IconButton {
-                                glyph: "\uE8A5"
+                                iconName: AppIcons.fileImage
                                 tooltip: "画布预设"
                                 buttonSize: 30
                                 onClicked: {
@@ -3707,7 +3580,7 @@ ApplicationWindow {
                             }
                             IconButton {
                                 id: randomizeAllLayersButton
-                                glyph: "\uE72C"
+                                iconName: AppIcons.randomize
                                 tooltip: "随机化所有图层\n绑定的图层将选择匹配的图片"
                                 buttonSize: 30
                                 primary: enabled
@@ -3937,9 +3810,9 @@ ApplicationWindow {
                         height: canvasWorkspace.safeCanvasHeight
                         scale: canvasWorkspace.actualScale
                         transformOrigin: Item.TopLeft
-                        color: "#f4f3ef"
+                        color: Theme.canvasPaper
                         border.width: 1
-                        border.color: "#5c6260"
+                        border.color: Theme.canvasPaperBorder
 
                         Image {
                             id: documentPreview
@@ -4081,7 +3954,7 @@ ApplicationWindow {
                             y: Math.min(canvasWorkspace.marqueeStartY, canvasWorkspace.marqueeCurrentY)
                             width: Math.abs(canvasWorkspace.marqueeCurrentX - canvasWorkspace.marqueeStartX)
                             height: Math.abs(canvasWorkspace.marqueeCurrentY - canvasWorkspace.marqueeStartY)
-                            color: "#2330b58f"
+                            color: Theme.selectionFill
                             border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
                             border.color: Theme.accent
                             z: 8
@@ -4100,7 +3973,7 @@ ApplicationWindow {
                                     : Math.max(1, workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup ? workspace.selectionBoundsHeight : workspace.selectedHeight)
                             rotation: workspace.selectedLayerCount === 1 && !workspace.selectedIsLayerGroup && workspace.selectedCanRotate ? workspace.selectedRotation : 0
                             transformOrigin: Item.Center
-                            color: canvasWorkspace.transformActive ? "#153fd2aa" : "transparent"
+                            color: canvasWorkspace.transformActive ? Theme.transformFill : "transparent"
                             border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
                             border.color: workspace.selectedLocked ? Theme.textMuted : Theme.accent
 
@@ -4125,7 +3998,7 @@ ApplicationWindow {
                                     radius: modelData.edge.length === 1 ? 1 / canvasWorkspace.actualScale : width / 2
                                     x: modelData.x - width / 2
                                     y: modelData.y - height / 2
-                                    color: "#f4f7f5"
+                                    color: Theme.canvasHandle
                                     border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
                                     border.color: Theme.accentPressed
                                 }
@@ -4145,23 +4018,23 @@ ApplicationWindow {
 
                                 Rectangle {
                                     x: 0; y: 0; width: parent.width; height: cropOverlay.cropY
-                                    color: "#99090b0c"
+                                    color: Theme.canvasScrim
                                 }
                                 Rectangle {
                                     x: 0; y: cropOverlay.cropBottom; width: parent.width
                                     height: parent.height - cropOverlay.cropBottom
-                                    color: "#99090b0c"
+                                    color: Theme.canvasScrim
                                 }
                                 Rectangle {
                                     x: 0; y: cropOverlay.cropY; width: cropOverlay.cropX
                                     height: cropOverlay.cropBottom - cropOverlay.cropY
-                                    color: "#99090b0c"
+                                    color: Theme.canvasScrim
                                 }
                                 Rectangle {
                                     x: cropOverlay.cropRight; y: cropOverlay.cropY
                                     width: parent.width - cropOverlay.cropRight
                                     height: cropOverlay.cropBottom - cropOverlay.cropY
-                                    color: "#99090b0c"
+                                    color: Theme.canvasScrim
                                 }
                                 Rectangle {
                                     x: cropOverlay.cropX
@@ -4192,7 +4065,7 @@ ApplicationWindow {
                                         y: modelData.y - height / 2
                                         color: Theme.amber
                                         border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
-                                        border.color: "#231b0e"
+                                        border.color: Theme.cropAnchorBorder
                                         radius: modelData.edge.length === 1 ? 2 / canvasWorkspace.actualScale : width / 2
 
                                         MouseArea {
@@ -4327,7 +4200,7 @@ ApplicationWindow {
                                         x: -width / 2
                                         y: -height / 2
                                         radius: workspace.selectedVectorNodeIndex === parent.index ? width / 2 : 2 / canvasWorkspace.actualScale
-                                        color: workspace.selectedVectorNodeIndex === parent.index ? Theme.accent : "#f4f7f5"
+                                        color: workspace.selectedVectorNodeIndex === parent.index ? Theme.accent : Theme.canvasHandle
                                         border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
                                         border.color: Theme.accentPressed
                                         MouseArea {
@@ -4355,7 +4228,7 @@ ApplicationWindow {
                                 width: geometryLabel.implicitWidth + 14 / canvasWorkspace.actualScale
                                 height: 22 / canvasWorkspace.actualScale
                                 radius: 3 / canvasWorkspace.actualScale
-                                color: "#e91b2021"
+                                color: Theme.canvasLabelSurface
                                 border.width: Math.max(1, 1 / canvasWorkspace.actualScale)
                                 border.color: Theme.borderStrong
 
@@ -4530,7 +4403,7 @@ ApplicationWindow {
                     anchors.centerIn: parent
                     spacing: 8
                     visible: window.hasOpenDocument && layerModel.rowCount() === 0 && !workspace.busy
-                    AppIcon { anchors.horizontalCenter: parent.horizontalCenter; glyph: "\uE91B"; iconSize: 24; iconColor: Theme.textMuted }
+                    AppIcon { anchors.horizontalCenter: parent.horizontalCenter; iconName: AppIcons.image; iconSize: 24; iconColor: Theme.textMuted }
                     BodyLabel { text: "空白画布"; color: Theme.textMuted }
                 }
 
@@ -4545,7 +4418,7 @@ ApplicationWindow {
                         spacing: 7
                         AppIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            glyph: "\uE7C9"
+                            iconName: AppIcons.fileImage
                             iconSize: 30
                             iconColor: Theme.textMuted
                         }
@@ -4570,14 +4443,14 @@ ApplicationWindow {
                         ExportButton {
                             width: 116
                             label: "新建画布"
-                            glyph: "\uE710"
+                            iconName: AppIcons.add
                             primary: true
                             onClicked: newCanvasDialog.open()
                         }
                         ExportButton {
                             width: 116
                             label: "打开项目"
-                            glyph: "\uE8E5"
+                            iconName: AppIcons.folderOpen
                             onClicked: openDialog.open()
                         }
                     }
@@ -4589,7 +4462,7 @@ ApplicationWindow {
                     width: canvasBadgeRow.width + 20
                     height: 25
                     radius: 12
-                    color: "#d916191b"
+                    color: Theme.statusPillSurface
                     border.width: 1
                     border.color: Theme.border
                     visible: window.hasOpenDocument
@@ -4610,9 +4483,9 @@ ApplicationWindow {
                     width: toastRow.width + 28
                     height: 38
                     radius: Theme.radius
-                    color: "#ec222729"
+                    color: Theme.floatingPanelSurface
                     border.width: 1
-                    border.color: "#40504b"
+                    border.color: Theme.floatingPanelBorder
                     opacity: 0
 
                     Behavior on opacity { NumberAnimation { duration: Theme.motionNormal } }
@@ -4656,7 +4529,7 @@ ApplicationWindow {
                             TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
 
-                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; glyph: "\uE712"; tooltip: "打开更多参数"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
+                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; iconName: AppIcons.sliders; tooltip: "打开更多参数"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -4743,7 +4616,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     IconButton {
-                                        glyph: "\uE72C"
+                                        iconName: AppIcons.refresh
                                         tooltip: "换一张素材"
                                         buttonSize: 30
                                         enabled: workspace.selectedImageSourceIsFolder && workspace.selectedImageSourceCount > 1 && !workspace.selectedLocked
@@ -4755,14 +4628,14 @@ ApplicationWindow {
                                     ExportButton {
                                         Layout.fillWidth: true
                                         label: "图片"
-                                        glyph: "\uE91B"
+                                        iconName: AppIcons.image
                                         enabled: !workspace.selectedLocked
                                         onClicked: replaceImageDialog.open()
                                     }
                                     ExportButton {
                                         Layout.fillWidth: true
                                         label: "文件夹"
-                                        glyph: "\uE8B7"
+                                        iconName: AppIcons.folderOpen
                                         enabled: !workspace.selectedLocked
                                         onClicked: replaceImageFolderDialog.open()
                                     }
@@ -4802,6 +4675,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "闭合路径"
                                         checked: workspace.selectedVectorPathClosed
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedVectorPathClosed(checkedValue)
@@ -4837,21 +4711,21 @@ ApplicationWindow {
                                         elide: Text.ElideRight
                                     }
                                     IconButton {
-                                        glyph: "\uE710"
+                                        iconName: AppIcons.add
                                         tooltip: "在选中节点后插入"
                                         buttonSize: 30
                                         enabled: workspace.selectedVectorNodeIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.insertVectorNodeAfter(workspace.selectedVectorNodeIndex)
                                     }
                                     IconButton {
-                                        glyph: "\uE8D4"
+                                        iconName: AppIcons.refresh
                                         tooltip: "切换角点、平滑点和对称点"
                                         buttonSize: 30
                                         enabled: workspace.selectedVectorNodeIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.cycleSelectedVectorNodeType()
                                     }
                                     IconButton {
-                                        glyph: "\uE74D"
+                                        iconName: AppIcons.trash
                                         tooltip: "删除选中节点"
                                         buttonSize: 30
                                         enabled: workspace.selectedVectorNodeIndex >= 0
@@ -4895,6 +4769,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "使用原始尺寸"
                                         checked: workspace.selectedUseOriginalSize
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedUseOriginalSize(checkedValue)
@@ -4912,7 +4787,7 @@ ApplicationWindow {
                                             model: window.cropDirectionOptions
                                             delegate: IconButton {
                                                 required property var modelData
-                                                glyph: modelData.glyph
+                                                iconName: modelData.iconName
                                                 tooltip: modelData.label
                                                 buttonSize: 30
                                                 active: workspace.selectedCropDirectionId === modelData.value
@@ -4933,7 +4808,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     IconButton {
-                                        glyph: "\uE7A8"
+                                        iconName: AppIcons.crop
                                         tooltip: workspace.cropEditing ? "确认自由裁剪" : "开始自由裁剪"
                                         buttonSize: 30
                                         active: workspace.cropEditing
@@ -4943,7 +4818,7 @@ ApplicationWindow {
                                                    : workspace.startCropEdit()
                                     }
                                     IconButton {
-                                        glyph: workspace.cropEditing ? "\uE711" : "\uE72C"
+                                        iconName: workspace.cropEditing ? AppIcons.close : AppIcons.refresh
                                         tooltip: workspace.cropEditing ? "取消自由裁剪" : "重置自由裁剪"
                                         buttonSize: 30
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -5304,6 +5179,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "竖排文字"
                                         checked: workspace.selectedTextVerticalLayout
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedTextVerticalLayout(checkedValue)
@@ -5342,6 +5218,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "自动适配文本框"
                                         checked: workspace.selectedTextAutoFitTextBox
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedTextAutoFitTextBox(checkedValue)
@@ -5390,6 +5267,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "展开图层组"
                                         checked: workspace.selectedGroupExpanded
                                         enabled: !workspace.operationsBlocked
                                         onToggled: workspace.toggleLayerGroupExpanded(workspace.selectedLayerIndex)
@@ -5398,14 +5276,14 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "组状态"
                                     IconButton {
-                                        glyph: workspace.selectedLocked ? "\uE72E" : "\uE785"
+                                        iconName: workspace.selectedLocked ? AppIcons.lock : AppIcons.unlock
                                         tooltip: workspace.selectedLocked ? "解锁图层组" : "锁定图层组"
                                         buttonSize: 30
                                         active: workspace.selectedLocked
                                         onClicked: workspace.setSelectedLayersLocked(!workspace.selectedLocked)
                                     }
                                     IconButton {
-                                        glyph: "\uE8D7"
+                                        iconName: AppIcons.ungroup
                                         tooltip: "解散图层组"
                                         buttonSize: 30
                                         enabled: workspace.canUngroupSelectedLayers && !workspace.selectedLocked
@@ -5457,7 +5335,7 @@ ApplicationWindow {
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
                                     }
                                     IconButton {
-                                        glyph: workspace.selectedAspectRatioLocked ? "\uE72E" : "\uE785"
+                                        iconName: workspace.selectedAspectRatioLocked ? AppIcons.lock : AppIcons.unlock
                                         tooltip: workspace.selectedAspectRatioLocked ? "解除比例锁定" : "锁定宽高比例"
                                         buttonSize: 30
                                         active: workspace.selectedAspectRatioLocked
@@ -5532,7 +5410,7 @@ ApplicationWindow {
                                         }
                                     }
                                     IconButton {
-                                        glyph: "\uE72C"
+                                        iconName: AppIcons.rotateLeft
                                         tooltip: "重置旋转"
                                         buttonSize: 30
                                         enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
@@ -5548,7 +5426,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     IconButton {
-                                        glyph: "\u2194"
+                                        iconName: AppIcons.horizontal
                                         tooltip: "水平翻转"
                                         buttonSize: 30
                                         active: workspace.selectedFlipHorizontal
@@ -5556,7 +5434,7 @@ ApplicationWindow {
                                         onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
                                     }
                                     IconButton {
-                                        glyph: "\u2195"
+                                        iconName: AppIcons.vertical
                                         tooltip: "垂直翻转"
                                         buttonSize: 30
                                         active: workspace.selectedFlipVertical
@@ -5578,6 +5456,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "位置"
                                     ToggleSwitch {
+                                        accessibleName: "随机位置"
                                         checked: workspace.selectedRandomPositionEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedRandomPositionEnabled(checkedValue)
@@ -5597,6 +5476,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "缩放"
                                     ToggleSwitch {
+                                        accessibleName: "随机缩放"
                                         checked: workspace.selectedRandomScaleEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedRandomScaleEnabled(checkedValue)
@@ -5627,6 +5507,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "旋转"
                                     ToggleSwitch {
+                                        accessibleName: "随机旋转"
                                         checked: workspace.selectedRandomRotationEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedRandomRotationEnabled(checkedValue)
@@ -5652,7 +5533,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     IconButton {
-                                        glyph: "\uE72C"
+                                        iconName: AppIcons.randomize
                                         tooltip: "换一组随机变换"
                                         buttonSize: 30
                                         enabled: workspace.selectedRandomTransformEnabledCount > 0 && !workspace.selectedLocked && !workspace.operationsBlocked
@@ -5680,6 +5561,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "启用图层分身"
                                         checked: workspace.selectedCloneEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedCloneEnabled(checkedValue)
@@ -5761,6 +5643,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "分身自定义尺寸"
                                         checked: workspace.selectedCloneCustomSizeEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedCloneCustomSizeEnabled(checkedValue)
@@ -5803,6 +5686,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "分身填满画布"
                                         checked: workspace.selectedCloneFillEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedCloneFillEnabled(checkedValue)
@@ -6030,6 +5914,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "文字背景"
                                         checked: workspace.selectedTextBackgroundEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedTextBackgroundEnabled(checkedValue)
@@ -6090,6 +5975,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "文字阴影"
                                         checked: workspace.selectedTextShadowEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedTextShadowEnabled(checkedValue)
@@ -6182,6 +6068,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "文字发光"
                                         checked: workspace.selectedTextGlowEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedTextGlowEnabled(checkedValue)
@@ -6230,6 +6117,7 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                     }
                                     ToggleSwitch {
+                                        accessibleName: "描边"
                                         checked: workspace.selectedStrokeEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedStrokeEnabled(checkedValue)
@@ -6373,6 +6261,7 @@ ApplicationWindow {
                                     label: "启用"
                                     BodyLabel { text: "统一图层色调"; color: Theme.textSecondary; Layout.fillWidth: true }
                                     ToggleSwitch {
+                                        accessibleName: "颜色叠加"
                                         checked: workspace.selectedColorOverlayEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedColorOverlayEnabled(checkedValue)
@@ -6431,6 +6320,7 @@ ApplicationWindow {
                                     label: "启用"
                                     BodyLabel { text: "双端线性渐变"; color: Theme.textSecondary; Layout.fillWidth: true }
                                     ToggleSwitch {
+                                        accessibleName: "渐变叠加"
                                         checked: workspace.selectedGradientOverlayEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onToggled: checkedValue => workspace.setSelectedGradientOverlayEnabled(checkedValue)
@@ -6698,7 +6588,7 @@ ApplicationWindow {
                         Column {
                             anchors.centerIn: parent
                             spacing: 8
-                            AppIcon { anchors.horizontalCenter: parent.horizontalCenter; glyph: "\uE7C9"; iconSize: 22; iconColor: Theme.textMuted }
+                            AppIcon { anchors.horizontalCenter: parent.horizontalCenter; iconName: AppIcons.layers; iconSize: 22; iconColor: Theme.textMuted }
                             BodyLabel { text: "无选中图层"; color: Theme.textMuted }
                         }
                     }
@@ -6737,7 +6627,7 @@ ApplicationWindow {
                     enabled: window.hasOpenDocument
                     opacity: enabled ? 1 : 0.32
                     IconButton {
-                        glyph: "\uE738"; tooltip: "缩小"; buttonSize: 24
+                        iconName: AppIcons.zoomOut; tooltip: "缩小"; buttonSize: 24
                         onClicked: workspace.setZoomFactor(workspace.zoomFactor / 1.1)
                     }
                     Rectangle {
@@ -6750,7 +6640,7 @@ ApplicationWindow {
                         Rectangle { x: parent.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100) - 6; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
                     }
                     IconButton {
-                        glyph: "\uE8A3"; tooltip: "放大"; buttonSize: 24
+                        iconName: AppIcons.zoomIn; tooltip: "放大"; buttonSize: 24
                         onClicked: workspace.setZoomFactor(workspace.zoomFactor * 1.1)
                     }
                                     TinyLabel {

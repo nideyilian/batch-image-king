@@ -8,6 +8,8 @@ Rectangle {
     property bool bindValue: false
     property string suffix: ""
     property bool editable: true
+    property bool invalid: false
+    property string accessibleName: ""
     signal valueCommitted(string value)
 
     function beginEdit() {
@@ -23,7 +25,8 @@ Rectangle {
     radius: Theme.radiusSmall
     color: Theme.bgControl
     border.width: 1
-    border.color: input.activeFocus ? Theme.accent : Theme.borderStrong
+    border.color: root.invalid ? Theme.danger : (input.activeFocus ? Theme.focusRing : Theme.borderStrong)
+    opacity: enabled ? 1 : 0.56
 
     Behavior on border.color {
         ColorAnimation { duration: Theme.motionFast }
@@ -45,6 +48,7 @@ Rectangle {
         selectByMouse: true
         verticalAlignment: TextInput.AlignVCenter
         clip: true
+        enabled: root.enabled
         onActiveFocusChanged: {
             if (activeFocus) {
                 if (root.bindValue)
@@ -79,4 +83,9 @@ Rectangle {
         font.family: Theme.bodyFont
         font.pixelSize: 10
     }
+
+    Accessible.name: accessibleName.length > 0
+                     ? accessibleName
+                     : (suffix.length > 0 ? suffix + " 数值" : "数值")
+    Accessible.role: Accessible.EditableText
 }

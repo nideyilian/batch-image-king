@@ -10,6 +10,7 @@ a = Analysis(
         ('app/resources', 'app/resources'),
         ('app/qml/Main.qml', 'app/qml'),
         ('app/qml/components', 'app/qml/components'),
+        ('app/qml/icons', 'app/qml/icons'),
         ('app/qml/assets', 'app/qml/assets'),
     ],
     hiddenimports=[

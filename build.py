@@ -38,6 +38,7 @@ def build():
         '--add-data=app/resources;app/resources',
         '--add-data=app/qml/Main.qml;app/qml',
         '--add-data=app/qml/components;app/qml/components',
+        '--add-data=app/qml/icons;app/qml/icons',
         '--add-data=app/qml/assets;app/qml/assets',
         # 版本信息
         '--version-file=version_info.txt' if os.path.exists('version_info.txt') else None,

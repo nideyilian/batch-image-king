@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-06T10:59:20.8350808+08:00",
+  "title": "Design System: 批图王生产控制台",
+  "extensions": {
+    "colorMeta": {
+      "bg-app": { "role": "neutral", "displayName": "控制台底色", "canonical": "#0d1011", "tonalRamp": ["#0d1011", "#171c1e", "#242b2e", "#364043", "#53605e", "#788581", "#a9b3af", "#e7ecea"] },
+      "bg-bar": { "role": "neutral", "displayName": "工具栏黑", "canonical": "#111516", "tonalRamp": ["#0e1112", "#171c1d", "#252b2d", "#394245", "#55615f", "#7b8783", "#acb6b2", "#e8edeb"] },
+      "bg-panel": { "role": "neutral", "displayName": "面板钢黑", "canonical": "#151a1c", "tonalRamp": ["#101416", "#1b2224", "#293235", "#3e494c", "#5c6865", "#818e89", "#b0bbb6", "#e9eeec"] },
+      "bg-raised": { "role": "neutral", "displayName": "抬升钢灰", "canonical": "#1a2022", "tonalRamp": ["#111517", "#1d2426", "#2c3538", "#424e51", "#606e6b", "#86938e", "#b4beba", "#ebefed"] },
+      "bg-control": { "role": "neutral", "displayName": "控件钢灰", "canonical": "#20272a", "tonalRamp": ["#121719", "#20282b", "#303a3e", "#465356", "#65726f", "#899690", "#b7c0bc", "#ecf0ee"] },
+      "bg-hover": { "role": "neutral", "displayName": "悬停钢灰", "canonical": "#293235", "tonalRamp": ["#151a1c", "#252d30", "#354043", "#4c595c", "#6a7774", "#8e9b96", "#bbc4c0", "#edf1ef"] },
+      "bg-canvas": { "role": "neutral", "displayName": "画布黑", "canonical": "#090c0d", "tonalRamp": ["#090c0d", "#14191b", "#22292c", "#354043", "#52605d", "#788580", "#a9b3ae", "#e7ece9"] },
+      "bg-selected": { "role": "primary", "displayName": "选中深绿", "canonical": "#17352e", "tonalRamp": ["#0b211b", "#113128", "#16463a", "#1d6150", "#297d68", "#4ba18a", "#87c9b7", "#d7f0e8"] },
+      "border": { "role": "neutral", "displayName": "弱钢边界", "canonical": "#2b3437", "tonalRamp": ["#161b1d", "#273033", "#384347", "#505d60", "#6e7a77", "#929e99", "#bec7c3", "#eef2f0"] },
+      "border-strong": { "role": "neutral", "displayName": "强钢边界", "canonical": "#3b474a", "tonalRamp": ["#1a2022", "#2d373a", "#414d51", "#59676a", "#75827f", "#98a39f", "#c2cac7", "#f0f3f1"] },
+      "text-primary": { "role": "neutral", "displayName": "主文字白", "canonical": "#f3f6f5", "tonalRamp": ["#1a1e1d", "#303635", "#4b5350", "#68726f", "#89938f", "#aeb6b3", "#d3d9d7", "#f3f6f5"] },
+      "text-secondary": { "role": "neutral", "displayName": "次文字灰", "canonical": "#aab5b1", "tonalRamp": ["#17201d", "#2a3531", "#414d49", "#596762", "#74827d", "#909e99", "#b4bfbb", "#edf1ef"] },
+      "text-muted": { "role": "neutral", "displayName": "辅助文字灰", "canonical": "#84918c", "tonalRamp": ["#151d1a", "#27322e", "#3b4944", "#52605b", "#6b7974", "#87948f", "#afb9b5", "#ebefed"] },
+      "text-disabled": { "role": "neutral", "displayName": "禁用文字灰", "canonical": "#74807c", "tonalRamp": ["#141b19", "#252f2c", "#384540", "#4e5c57", "#65736e", "#818e89", "#abb5b1", "#e9edeb"] },
+      "accent": { "role": "primary", "displayName": "生产绿", "canonical": "#3bd5aa", "tonalRamp": ["#08251c", "#0b3c2d", "#105843", "#16775a", "#209873", "#3bd5aa", "#8ce8cf", "#def8f0"] },
+      "accent-hover": { "role": "primary", "displayName": "生产绿高亮", "canonical": "#67e6c1", "tonalRamp": ["#09261d", "#0d3f30", "#145b46", "#1e795e", "#2c9977", "#67e6c1", "#9befd8", "#e1faf3"] },
+      "accent-pressed": { "role": "primary", "displayName": "生产绿按下", "canonical": "#28b88f", "tonalRamp": ["#08241b", "#0b3a2c", "#10543f", "#176f55", "#1f8d6b", "#28b88f", "#81dcc2", "#dcf5ed"] },
+      "accent-soft": { "role": "primary", "displayName": "生产绿弱面", "canonical": "#17352e", "tonalRamp": ["#0b211b", "#113128", "#16463a", "#1d6150", "#297d68", "#4ba18a", "#87c9b7", "#d7f0e8"] },
+      "accent-foreground": { "role": "primary", "displayName": "强调色前景", "canonical": "#06271f", "tonalRamp": ["#061a15", "#082d24", "#0d4335", "#145c49", "#20765e", "#469b82", "#83c4b1", "#d7eee7"] },
+      "info": { "role": "secondary", "displayName": "信息蓝", "canonical": "#5ba7ff", "tonalRamp": ["#0e2440", "#173b64", "#22558c", "#2f70b6", "#418ce0", "#5ba7ff", "#9bcdff", "#e2f2ff"] },
+      "warning": { "role": "tertiary", "displayName": "作业黄", "canonical": "#f2b95f", "tonalRamp": ["#2b1f0b", "#493514", "#6b4c1c", "#916625", "#b98234", "#f2b95f", "#f8d69c", "#fdf1dc"] },
+      "danger": { "role": "tertiary", "displayName": "故障红", "canonical": "#f1786d", "tonalRamp": ["#32100e", "#521a17", "#762621", "#9c342e", "#c54d44", "#f1786d", "#f7ada6", "#fde5e2"] },
+      "success": { "role": "tertiary", "displayName": "完成绿", "canonical": "#65d88d", "tonalRamp": ["#0d2918", "#154326", "#1e6036", "#2a8049", "#3fa461", "#65d88d", "#a1e9b8", "#e2f8e9"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "任务标题", "purpose": "抽屉与独立任务标题，保持紧凑。" },
+      "title": { "displayName": "面板标题", "purpose": "属性分区、面板标题与重要字段。" },
+      "body": { "displayName": "界面正文", "purpose": "菜单、字段、按钮与说明正文。" },
+      "label": { "displayName": "辅助标签", "purpose": "单位、元数据、状态与空态说明。" },
+      "data": { "displayName": "数值数据", "purpose": "尺寸、坐标、缩放、数量和序号。" }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "state-fast", "value": "120ms", "purpose": "hover、focus、pressed 与颜色状态切换。" },
+      { "name": "panel-normal", "value": "180ms cubic-bezier(0.215, 0.61, 0.355, 1)", "purpose": "属性折叠和弹层过渡。" }
+    ],
+    "breakpoints": [
+      { "name": "minimum-workbench", "value": "1180x720" },
+      { "name": "compact-sidebar", "value": "1320px" },
+      { "name": "standard-workbench", "value": "1600x960" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "弹窗、抽屉和生产任务中的唯一主操作。",
+      "html": "<button class=\"ds-btn-primary\">开始导出</button>",
+      "css": ".ds-btn-primary{height:34px;padding:0 12px;border:1px solid #3bd5aa;border-radius:4px;background:#3bd5aa;color:#06271f;font:600 11px MiSans,'Microsoft YaHei UI',sans-serif;transition:background 120ms,border-color 120ms}.ds-btn-primary:hover,.ds-btn-primary:focus-visible{background:#67e6c1;border-color:#67e6c1;outline:none}.ds-btn-primary:active{background:#28b88f}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "保留上下文的普通命令和取消操作。",
+      "html": "<button class=\"ds-btn-secondary\">取消</button>",
+      "css": ".ds-btn-secondary{height:34px;padding:0 12px;border:1px solid #3b474a;border-radius:4px;background:#1a2022;color:#f3f6f5;font:600 11px MiSans,'Microsoft YaHei UI',sans-serif;transition:background 120ms,border-color 120ms}.ds-btn-secondary:hover{background:#293235}.ds-btn-secondary:focus-visible{border-color:#67e6c1;outline:none}.ds-btn-secondary:active{background:#20272a}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "标准单行输入，焦点只改变边界。",
+      "html": "<input class=\"ds-input\" value=\"image_{number:04d}\" aria-label=\"文件名模板\">",
+      "css": ".ds-input{height:30px;padding:0 9px;border:1px solid #3b474a;border-radius:4px;background:#20272a;color:#f3f6f5;font:400 11px MiSans,'Microsoft YaHei UI',sans-serif}.ds-input:hover{border-color:#536063}.ds-input:focus-visible{border-color:#67e6c1;outline:none}.ds-input::placeholder{color:#84918c}"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "工具栏中的 32px 语义图标命令。",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"保存\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z\"/><path d=\"M17 21v-8H7v8M7 3v5h8\"/></svg></button>",
+      "css": ".ds-icon-btn{width:32px;height:32px;padding:0;border:0;border-radius:4px;background:transparent;color:#aab5b1;display:grid;place-items:center;transition:background 120ms,color 120ms}.ds-icon-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.ds-icon-btn:hover{background:#293235;color:#f3f6f5}.ds-icon-btn:focus-visible{outline:1px solid #67e6c1;outline-offset:-1px}.ds-icon-btn:active{background:#20272a}"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "description": "2-4 个短标签模式的等宽互斥选择。",
+      "html": "<div class=\"ds-segmented\" role=\"tablist\"><button class=\"ds-segment is-active\">绑定组</button><button class=\"ds-segment\">尺寸匹配</button></div>",
+      "css": ".ds-segmented{height:30px;padding:2px;border:1px solid #2b3437;border-radius:4px;background:#20272a;display:flex;gap:2px}.ds-segment{flex:1;border:0;border-radius:3px;background:transparent;color:#aab5b1;font:400 10px MiSans,'Microsoft YaHei UI',sans-serif}.ds-segment:hover{background:#293235}.ds-segment:focus-visible{outline:1px solid #67e6c1}.ds-segment.is-active{border:1px solid #28b88f;background:#17352e;color:#3bd5aa;font-weight:600}"
+    },
+    {
+      "name": "Layer Row",
+      "kind": "custom",
+      "description": "固定 56px 的图层列表行，选中态由底色与强调线共同表达。",
+      "html": "<div class=\"ds-layer-row is-selected\"><span class=\"ds-eye\">●</span><span class=\"ds-thumb\">T</span><span class=\"ds-layer-copy\"><strong>限量腕表</strong><small>文字</small></span><span class=\"ds-lock\">▣</span></div>",
+      "css": ".ds-layer-row{height:56px;padding:0 10px;border-left:2px solid transparent;background:#151a1c;color:#aab5b1;display:flex;align-items:center;gap:10px;font-family:MiSans,'Microsoft YaHei UI',sans-serif}.ds-layer-row.is-selected{border-left-color:#3bd5aa;background:#17352e}.ds-thumb{width:34px;height:34px;border:1px solid #3b474a;border-radius:4px;background:#20272a;display:grid;place-items:center;color:#3bd5aa}.ds-layer-copy{min-width:0;display:grid;gap:3px;flex:1}.ds-layer-copy strong{color:#f3f6f5;font-size:11px}.ds-layer-copy small{color:#84918c;font-size:9px}.ds-eye,.ds-lock{font-size:10px;color:#aab5b1}"
+    },
+    {
+      "name": "Status Banner",
+      "kind": "custom",
+      "description": "在当前任务中常驻展示运行、成功或失败状态。",
+      "html": "<div class=\"ds-status\"><span class=\"ds-status-dot\"></span><span><strong>配置导出任务</strong><small>等待开始</small></span></div>",
+      "css": ".ds-status{min-height:48px;padding:0 12px;border:1px solid #2b3437;border-radius:4px;background:#1a2022;color:#f3f6f5;display:flex;align-items:center;gap:10px;font-family:MiSans,'Microsoft YaHei UI',sans-serif}.ds-status-dot{width:8px;height:8px;border:2px solid #3bd5aa;border-radius:50%}.ds-status span:last-child{display:grid;gap:3px}.ds-status strong{font-size:11px}.ds-status small{color:#84918c;font-size:9px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "生产控制台",
+    "overview": "批图王不是展示型设计软件，而是长时间、高频率使用的电商图片生产工作台。视觉系统以深色设备控制台为参照：层级清楚、信息紧凑、反馈直接，画布与任务结果始终比界面装饰更重要。品牌存在于精准的生产绿、统一的 Lucide 线性图标和稳定的状态语言中，不依赖渐变、发光或大面积装饰。界面采用 Operate 模式，高频命令一步可达，复杂能力渐进呈现。",
+    "keyCharacteristics": ["高密度、低干扰，适合连续生产。", "画布优先，侧栏与弹层不抢夺作品注意力。", "单一生产绿承担主操作、选中与进度语义。", "依靠色阶与 1 px 边界建立层级，不使用装饰阴影。", "全部图标来自统一的 Lucide 语义注册表。", "1180 × 720 到 1600 × 960 之间保持任务完整可达。"],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "同一视图只有生产绿可表示主操作；状态色只表达状态，不能与主操作竞争。", "section": "colors" },
+      { "name": "The Meaning Beyond Color Rule", "body": "任何状态都必须同时提供文字、图标或位置上下文，不能只靠颜色传达。", "section": "colors" },
+      { "name": "The Compact Type Rule", "body": "工具界面不使用 hero 级字号；层级优先来自字重、间距和表面位置。", "section": "typography" },
+      { "name": "The Zero Tracking Rule", "body": "所有界面文字字距为 0，不使用负字距，也不随窗口宽度缩放字号。", "section": "typography" },
+      { "name": "The Canvas Priority Rule", "body": "侧栏不得用固定总宽度挤出横向滚动，任何弹层都不得遮断其自身的完成路径。", "section": "layout" },
+      { "name": "The Flat Production Rule", "body": "静止表面保持平坦；只有弹层边界、遮罩和交互状态负责建立层级。", "section": "elevation" }
+    ],
+    "dos": ["Do 让当前文档、选中对象、修改状态和导出状态持续可见。", "Do 优先复用 AppButton、AppIcon、IconButton、输入、分段、菜单、弹窗和抽屉组件。", "Do 在 1180 × 720、1280 × 760、1600 × 960 以及 Windows 125%/150% 缩放下检查完整任务路径。", "Do 为所有纯图标按钮、开关和模式控件提供可访问名称与可见键盘焦点。", "Do 保持高频命令一步可达，把高级能力放在正确的上下文中渐进展开。"],
+    "donts": ["Don't 在业务 QML 中新增界面色十六进制字面量或直接图标资源路径。", "Don't 使用 Unicode 图标、Emoji、渐变装饰、玻璃模糊、发光边缘或大圆角卡片。", "Don't 把页面区段包装成卡片，也不要嵌套卡片。", "Don't 为视觉统一改变 ViewModel、快捷键、.cmp 格式、渲染或导出契约。", "Don't 让弹层内容在最小窗口下遮挡输入、错误说明或最终操作。"]
+  }
+}

@@ -1,8 +1,18 @@
 module BatchImageKing.Prototype.Components
 singleton Theme 1.0 Theme.qml
+singleton AppIcons 1.0 AppIcons.qml
+AppButton 1.0 AppButton.qml
+AppDialog 1.0 AppDialog.qml
+AppDrawer 1.0 AppDrawer.qml
 AppIcon 1.0 AppIcon.qml
+AppMenu 1.0 AppMenu.qml
+AppProgressBar 1.0 AppProgressBar.qml
 IconButton 1.0 IconButton.qml
+AppTextArea 1.0 AppTextArea.qml
+AppTextField 1.0 AppTextField.qml
 PropertySection 1.0 PropertySection.qml
+SegmentedControl 1.0 SegmentedControl.qml
+StatusBanner 1.0 StatusBanner.qml
 ValueBox 1.0 ValueBox.qml
 ToggleSwitch 1.0 ToggleSwitch.qml
 SelectBox 1.0 SelectBox.qml
