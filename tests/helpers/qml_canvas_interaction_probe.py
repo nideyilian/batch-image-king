@@ -133,10 +133,74 @@ def main() -> int:
             )
             app.exit(6)
             return
+
+        image_layer.locked = False
+        workspace.selectLayer(0)
+        workspace.selectionChanged.emit()
+        app.processEvents()
+
+        opacity_slider = window.findChild(QQuickItem, "opacitySlider")
+        if opacity_slider is None:
+            print("opacity slider not found", file=sys.stderr)
+            app.exit(7)
+            return
+
+        inspector_scroll = window.findChild(QQuickItem, "inspectorScroll")
+        inspector_flickable = (
+            inspector_scroll.property("contentItem")
+            if inspector_scroll is not None
+            else None
+        )
+        if inspector_flickable is None:
+            print("inspector scroll content not found", file=sys.stderr)
+            app.exit(7)
+            return
+
+        slider_origin = opacity_slider.mapToScene(QPointF(0, 0))
+        viewport_origin = inspector_flickable.mapToScene(QPointF(0, 0))
+        current_content_y = float(inspector_flickable.property("contentY") or 0)
+        viewport_height = float(inspector_flickable.property("height") or 0)
+        target_content_y = (
+            current_content_y
+            + slider_origin.y()
+            - viewport_origin.y()
+            - viewport_height / 2
+        )
+        inspector_flickable.setProperty("contentY", max(0, target_content_y))
+        app.processEvents()
+
+        slider_width = float(opacity_slider.property("width"))
+        slider_height = float(opacity_slider.property("height"))
+        opacity_start = opacity_slider.mapToScene(
+            QPointF(slider_width - 7, slider_height / 2)
+        )
+        opacity_end = opacity_slider.mapToScene(
+            QPointF(slider_width * 0.35, slider_height / 2)
+        )
+        opacity_start_point = QPoint(round(opacity_start.x()), round(opacity_start.y()))
+        opacity_end_point = QPoint(round(opacity_end.x()), round(opacity_end.y()))
+        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, opacity_start_point)
+        QTest.mouseMove(window, opacity_end_point, 30)
+        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, opacity_end_point)
+
+        opacity_percent = round(float(image_layer.opacity) * 100)
+        if not 32 <= opacity_percent <= 38:
+            print(
+                f"opacity slider mismatch: expected about 35%, got {opacity_percent}%; "
+                f"size=({slider_width:.1f}, {slider_height:.1f}), "
+                f"enabled={opacity_slider.property('enabled')}, "
+                f"visible={opacity_slider.property('visible')}, "
+                f"scene=({opacity_start.x():.1f}, {opacity_start.y():.1f})"
+                f"->({opacity_end.x():.1f}, {opacity_end.y():.1f})",
+                file=sys.stderr,
+            )
+            app.exit(8)
+            return
         print(
             f"dragged layer to ({moved_x}, {moved_y}); "
             f"resized to ({resized_width}, {resized_height}); "
-            f"locked image ratio {resized_ratio:.4f}"
+            f"locked image ratio {resized_ratio:.4f}; "
+            f"opacity {opacity_percent}%"
         )
         app.exit(0)
 

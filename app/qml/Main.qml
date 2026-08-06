@@ -5663,16 +5663,52 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "不透明度"
-                                    Rectangle {
+                                    Slider {
+                                        id: opacitySlider
+                                        objectName: "opacitySlider"
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 4
-                                        radius: 2
-                                        color: Theme.borderStrong
-                                        Rectangle { width: parent.width * workspace.selectedOpacity / 100; height: parent.height; radius: 2; color: Theme.accent }
-                                        Rectangle { x: parent.width * workspace.selectedOpacity / 100 - 7; anchors.verticalCenter: parent.verticalCenter; width: 14; height: 14; radius: 7; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
+                                        Layout.preferredHeight: Theme.controlHeight
+                                        from: 0
+                                        to: 100
+                                        stepSize: 1
+                                        snapMode: Slider.SnapAlways
+                                        value: workspace.selectedOpacity
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onMoved: workspace.setSelectedOpacity(Math.round(value))
+
+                                        background: Rectangle {
+                                            x: opacitySlider.leftPadding
+                                            y: opacitySlider.topPadding + opacitySlider.availableHeight / 2 - height / 2
+                                            width: opacitySlider.availableWidth
+                                            height: 4
+                                            radius: 2
+                                            color: Theme.borderStrong
+
+                                            Rectangle {
+                                                width: opacitySlider.visualPosition * parent.width
+                                                height: parent.height
+                                                radius: parent.radius
+                                                color: opacitySlider.enabled ? Theme.accent : Theme.textDisabled
+                                            }
+                                        }
+
+                                        handle: Rectangle {
+                                            x: opacitySlider.leftPadding
+                                               + opacitySlider.visualPosition * (opacitySlider.availableWidth - width)
+                                            y: opacitySlider.topPadding + opacitySlider.availableHeight / 2 - height / 2
+                                            width: 14
+                                            height: 14
+                                            radius: 7
+                                            color: opacitySlider.enabled ? Theme.textPrimary : Theme.textDisabled
+                                            border.width: 2
+                                            border.color: opacitySlider.activeFocus ? Theme.focusRing : Theme.accentPressed
+                                        }
+
+                                        Accessible.name: "图层不透明度"
                                     }
                                     ValueBox {
                                         value: workspace.selectedOpacity.toString(); bindValue: true; suffix: "%"; Layout.preferredWidth: 66
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedOpacity(parsed) }
                                     }
                                 }
