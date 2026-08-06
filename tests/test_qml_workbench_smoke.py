@@ -12,7 +12,7 @@ import pytest
 @pytest.mark.integration
 def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     repo_root = Path(__file__).resolve().parents[1]
-    launcher = repo_root / "app" / "qml" / "qml_main.py"
+    launcher = repo_root / "start_qml.py"
     screenshot = tmp_path / "qml-workbench.png"
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "offscreen"
@@ -181,12 +181,15 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
 def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
     repo_root = Path(__file__).resolve().parents[1]
     main_source = (repo_root / "main.py").read_text(encoding="utf-8")
+    qml_launcher_source = (repo_root / "start_qml.py").read_text(encoding="utf-8")
     build_source = (repo_root / "build.py").read_text(encoding="utf-8")
     spec_source = (repo_root / "批图王.spec").read_text(encoding="utf-8")
 
     assert 'if "--classic" in sys.argv:' in main_source
     assert "from app.qml.qml_main import main as qml_main" in main_source
     assert "sys.exit(qml_main())" in main_source
+    assert "from app.qml.qml_main import main" in qml_launcher_source
+    assert "raise SystemExit(main())" in qml_launcher_source
     for source in (build_source, spec_source):
         assert "app/qml/Main.qml" in source
         assert "app/qml/components" in source

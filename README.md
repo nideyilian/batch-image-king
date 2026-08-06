@@ -37,7 +37,7 @@ cd 批图王极速版20260520
 pip install -r requirements.txt
 
 # 3. 启动主程序
-python main.py
+python start_qml.py
 ```
 
 ### 直接运行（终端用户）
