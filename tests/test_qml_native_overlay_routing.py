@@ -31,6 +31,23 @@ def test_qml_routes_business_popups_to_native_overlays():
 
 
 @pytest.mark.unit
+def test_toolbar_exposes_binding_and_size_match_as_direct_buttons():
+    qml_source = (REPO_ROOT / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
+    command_bar = qml_source.split("id: commandBar", 1)[1].split(
+        "id: documentTabs", 1
+    )[0]
+
+    assert 'iconName: AppIcons.link' in command_bar
+    assert 'tooltip: "图层绑定管理"' in command_bar
+    assert 'onClicked: window.openDataRelations(0)' in command_bar
+    assert 'iconName: AppIcons.fitView' in command_bar
+    assert 'tooltip: "图层尺寸匹配"' in command_bar
+    assert 'onClicked: window.openDataRelations(1)' in command_bar
+    assert "dataRelationsMenu.popup" not in command_bar
+    assert "id: dataRelationsMenu" not in qml_source
+
+
+@pytest.mark.unit
 def test_resize_canvas_supports_all_native_dialog_adjustment_modes():
     workspace = WorkspaceViewModel(auto_render=False)
     assert workspace.newDocument(200, 100) is True

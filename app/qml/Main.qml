@@ -1938,12 +1938,6 @@ ApplicationWindow {
     }
 
     AppMenu {
-        id: dataRelationsMenu
-        ShapeMenuItem { text: "图层绑定管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(0) }
-        ShapeMenuItem { text: "图层尺寸匹配"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(1) }
-    }
-
-    AppMenu {
         id: viewMenu
         ShapeMenuItem { text: "放大\tCtrl++"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
         ShapeMenuItem { text: "缩小\tCtrl+-"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
@@ -3255,9 +3249,15 @@ ApplicationWindow {
                 }
                 IconButton {
                     iconName: AppIcons.link
-                    tooltip: "绑定与尺寸匹配"
+                    tooltip: "图层绑定管理"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: dataRelationsMenu.popup(parent, 0, parent.height)
+                    onClicked: window.openDataRelations(0)
+                }
+                IconButton {
+                    iconName: AppIcons.fitView
+                    tooltip: "图层尺寸匹配"
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: window.openDataRelations(1)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton { iconName: AppIcons.undo; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
