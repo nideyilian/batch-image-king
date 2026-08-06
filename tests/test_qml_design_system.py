@@ -194,3 +194,30 @@ def test_compact_inspector_fields_keep_readable_layout_widths():
     assert "Layout.preferredWidth: 52" in main_source
     assert "Layout.minimumWidth: 52" in main_source
     assert "Layout.maximumWidth: 52" in main_source
+
+
+@pytest.mark.unit
+def test_inspector_tab_switch_keeps_a_stable_single_axis_layout():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+    scroll_block = next(
+        block
+        for block in _qml_component_blocks(main_source, "ScrollView")
+        if 'objectName: "inspectorScroll"' in block
+    )
+    grid_block = next(
+        block
+        for block in _qml_component_blocks(main_source, "GridLayout")
+        if "id: propertyInspectorColumn" in block
+    )
+    ordered_sections = [
+        block
+        for block in _qml_component_blocks(grid_block, "PropertySection")
+        if "Layout.row:" in block
+    ]
+
+    assert "contentWidth: availableWidth" in scroll_block
+    assert "width: inspectorScroll.contentWidth" in grid_block
+    assert len(ordered_sections) >= 10
+    assert all("Layout.fillWidth: true" in block for block in ordered_sections)
+    assert "contentItem.contentX = 0" in main_source
+    assert "contentItem.contentY = 0" in main_source

@@ -166,8 +166,11 @@ ApplicationWindow {
     function selectInspectorTab(index) {
         inspectorTab = index
         Qt.callLater(function() {
-            if (inspectorScroll.contentItem)
+            if (inspectorScroll.contentItem) {
+                inspectorScroll.contentItem.contentX = 0
                 inspectorScroll.contentItem.contentY = 0
+                inspectorScroll.contentItem.returnToBounds()
+            }
         })
     }
 
@@ -4862,19 +4865,22 @@ ApplicationWindow {
                         Layout.fillHeight: true
                         visible: selectedLayer >= 0
                         clip: true
+                        contentWidth: availableWidth
                         contentHeight: propertyInspectorColumn.implicitHeight
                                        + (inspectorTab === 0 ? effectInspectorColumn.implicitHeight : 0)
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                        ScrollBar.horizontal.interactive: false
 
                         GridLayout {
                             id: propertyInspectorColumn
-                            width: inspectorScroll.availableWidth
+                            width: inspectorScroll.contentWidth
                             columns: 1
+                            columnSpacing: 0
                             rowSpacing: 0
 
                             PropertySection {
                                 id: imageSourceSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 10
                                 title: "图像源"
                                 summary: workspace.selectedImageSource
@@ -4945,7 +4951,7 @@ ApplicationWindow {
                             }
 
                             PropertySection {
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 21
                                 title: "矢量路径"
                                 summary: workspace.selectedVectorPathEnabled
@@ -5041,7 +5047,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: advancedSettingsSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 20
                                 title: "高级设置"
                                 summary: workspace.selectedFitModeName
@@ -5134,7 +5140,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: shapeSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 30
                                 title: "形状"
                                 summary: workspace.selectedShapeTypeName
@@ -5270,7 +5276,7 @@ ApplicationWindow {
                             }
 
                             PropertySection {
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 10
                                 title: "文字内容"
                                 summary: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条候选" : "整段排版"
@@ -5377,7 +5383,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: textFontSection
                                 objectName: "textFontSection"
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 20
                                 title: "字体"
                                 summary: workspace.selectedTextFontSize + " px"
@@ -5427,7 +5433,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: textTypographySection
                                 objectName: "textTypographySection"
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 30
                                 title: "排版"
                                 summary: workspace.selectedTextTypographySummary
@@ -5544,7 +5550,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: groupSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 0
                                 title: "图层组"
                                 summary: workspace.selectedGroupChildCount + " 个图层"
@@ -5596,7 +5602,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: basicPropertiesSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 0
                                 title: "基本属性"
                                 summary: workspace.selectedWidth + " × " + workspace.selectedHeight
@@ -5649,7 +5655,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: appearanceSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 40
                                 title: "外观"
                                 summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
@@ -5690,7 +5696,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: layerTransformSection
                                 objectName: "layerTransformSection"
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 20
                                 title: "图层变换"
                                 summary: Math.abs(workspace.selectedRotation) > 0.001
@@ -5748,7 +5754,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: randomTransformSection
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 30
                                 title: "随机变换"
                                 summary: workspace.selectedRandomTransformEnabledCount > 0
@@ -5847,7 +5853,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: clonePropertiesSection
                                 objectName: "clonePropertiesSection"
-                                width: parent.width
+                                Layout.fillWidth: true
                                 Layout.row: 10
                                 title: "图层分身"
                                 summary: workspace.selectedCloneEnabled
