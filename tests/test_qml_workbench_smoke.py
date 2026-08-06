@@ -182,6 +182,7 @@ def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
     repo_root = Path(__file__).resolve().parents[1]
     main_source = (repo_root / "main.py").read_text(encoding="utf-8")
     qml_launcher_source = (repo_root / "start_qml.py").read_text(encoding="utf-8")
+    windows_launcher_source = (repo_root / "启动QML版.cmd").read_text(encoding="utf-8")
     build_source = (repo_root / "build.py").read_text(encoding="utf-8")
     spec_source = (repo_root / "批图王.spec").read_text(encoding="utf-8")
 
@@ -190,6 +191,9 @@ def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
     assert "sys.exit(qml_main())" in main_source
     assert "from app.qml.qml_main import main" in qml_launcher_source
     assert "raise SystemExit(main())" in qml_launcher_source
+    assert 'cd /d "%~dp0"' in windows_launcher_source
+    assert '"%~dp0start_qml.py" %*' in windows_launcher_source
+    assert "if not errorlevel 1" in windows_launcher_source
     for source in (build_source, spec_source):
         assert "app/qml/Main.qml" in source
         assert "app/qml/components" in source

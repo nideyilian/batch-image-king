@@ -40,6 +40,8 @@ pip install -r requirements.txt
 python start_qml.py
 ```
 
+Windows 也可以直接双击根目录的 `启动QML版.cmd`。
+
 ### 直接运行（终端用户）
 
 下载发布页的 `批图王.exe`，双击即可，无需任何安装。
