@@ -182,3 +182,15 @@ def test_binding_drawer_keeps_empty_state_and_creation_footer_accessible():
     assert 'text: "返回选择图层"' in main_source
     assert 'objectName: "bindingCreationFooter"' in main_source
     assert "Layout.preferredHeight: Math.max(140, dataRelationsDrawer.height - 470)" in main_source
+
+
+@pytest.mark.unit
+def test_compact_inspector_fields_keep_readable_layout_widths():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+    value_box_source = (QML_ROOT / "components" / "ValueBox.qml").read_text(encoding="utf-8")
+
+    assert "import QtQuick.Layouts" in value_box_source
+    assert "Layout.minimumWidth: 64" in value_box_source
+    assert "Layout.preferredWidth: 52" in main_source
+    assert "Layout.minimumWidth: 52" in main_source
+    assert "Layout.maximumWidth: 52" in main_source

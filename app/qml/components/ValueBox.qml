@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 
 Rectangle {
     id: root
@@ -22,6 +23,7 @@ Rectangle {
 
     implicitWidth: 94
     implicitHeight: Theme.controlHeight
+    Layout.minimumWidth: 64
     radius: Theme.radiusSmall
     color: Theme.bgControl
     border.width: 1

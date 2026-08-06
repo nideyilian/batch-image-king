@@ -1977,6 +1977,9 @@ ApplicationWindow {
             text: parent.label
             color: Theme.textMuted
             Layout.preferredWidth: 52
+            Layout.minimumWidth: 52
+            Layout.maximumWidth: 52
+            elide: Text.ElideRight
         }
     }
 
