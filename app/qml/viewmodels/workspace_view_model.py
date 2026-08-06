@@ -462,15 +462,46 @@ class WorkspaceViewModel(QObject):
         return result
 
     @Slot(int, int, result=bool)
-    def resizeCanvas(self, width: int, height: int) -> bool:
+    @Slot(int, int, int, result=bool)
+    def resizeCanvas(self, width: int, height: int, mode: int = 3) -> bool:
         width, height = int(width), int(height)
+        mode = int(mode)
         if width < 16 or height < 16 or width > 32768 or height > 32768:
             self._set_status("画布尺寸必须在 16 到 32768 像素之间", toast=True)
             return False
+        if mode not in (0, 1, 2, 3):
+            self._set_status("不支持的画布调整方式", toast=True)
+            return False
         if width == self.canvasWidth and height == self.canvasHeight:
             return True
+        if not self._ensure_operations_available():
+            return False
+        old_width = max(1, self.canvasWidth)
+        old_height = max(1, self.canvasHeight)
+        layers_adjusted = mode in (0, 1, 2)
         with self._document_lock:
             self._ensure_history_baseline()
+            width_scale = width / old_width
+            height_scale = height / old_height
+            for layer in self._document.layers:
+                if not layers_adjusted or not all(
+                    hasattr(layer, attr) for attr in ("x", "y", "width", "height")
+                ):
+                    continue
+                if mode == 0:
+                    layer.x = int(round(layer.x * width_scale))
+                    layer.y = int(round(layer.y * height_scale))
+                    layer.width = max(1, int(round(layer.width * width_scale)))
+                    layer.height = max(1, int(round(layer.height * height_scale)))
+                elif mode == 1:
+                    layer.x = int(round((width - layer.width) / 2))
+                    layer.y = int(round((height - layer.height) / 2))
+                else:
+                    layer.x = 0
+                    layer.y = 0
+                for cache_name in ("_cached_image", "cached_image"):
+                    if hasattr(layer, cache_name):
+                        setattr(layer, cache_name, None)
             self._document.canvas_width = width
             self._document.canvas_height = height
             self._document.is_modified = True
@@ -478,6 +509,9 @@ class WorkspaceViewModel(QObject):
             self._document.bump_hit_test_version()
             self._document.save_state("调整画布尺寸")
             self._document.document_changed.emit()
+        if layers_adjusted:
+            self._layer_model.reset_from_document()
+            self.selectionChanged.emit()
         self.documentInfoChanged.emit()
         self.historyStateChanged.emit()
         self.requestPreview(force=True)

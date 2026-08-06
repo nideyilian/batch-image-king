@@ -109,6 +109,60 @@ ApplicationWindow {
         toastTimer.restart()
     }
 
+    function openNewCanvasDialog() {
+        if (!workspace.operationsBlocked)
+            newCanvasDialog.open()
+    }
+
+    function openBatchExportDrawer() {
+        if (window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running))
+            batchExportDrawer.open()
+    }
+
+    function openMultiTabExportDrawer() {
+        if (window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running))
+            multiTabExportDrawer.open()
+    }
+
+    function openProjectPresetDrawer() {
+        if (!workspace.operationsBlocked)
+            projectPresetDrawer.open()
+    }
+
+    function openCanvasPresetDrawer() {
+        if (window.hasOpenDocument && !workspace.operationsBlocked)
+            canvasPresetDrawer.open()
+    }
+
+    function openDataRelations(tab) {
+        if (!window.hasOpenDocument || workspace.operationsBlocked) return
+        dataRelationsDrawer.activeTab = tab
+        dataRelationsDrawer.open()
+    }
+
+    function openResizeCanvasDialog() {
+        if (window.hasOpenDocument && !workspace.operationsBlocked)
+            resizeCanvasDialog.openForDocument()
+    }
+
+    function openRenameDocumentDialog(index) {
+        if (!workspace.operationsBlocked)
+            renameDocumentDialog.openForDocument(index)
+    }
+
+    function restoreExportSurface(index) {
+        if (multiTabExport.running) {
+            multiTabExportDrawer.open()
+            return true
+        }
+        if (batchExport.running && index === workspaceSessions.activeIndex) {
+            batchExportDrawer.open()
+            return true
+        }
+        showToast("当前标签页没有正在后台运行的导出任务")
+        return false
+    }
+
     function selectInspectorTab(index) {
         inspectorTab = index
         Qt.callLater(function() {
@@ -227,15 +281,15 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequence: "Ctrl+N"; onActivated: legacyTools.openNewDocument() }
+    Shortcut { sequence: "Ctrl+N"; enabled: !workspace.operationsBlocked; onActivated: window.openNewCanvasDialog() }
     Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
     Shortcut { sequence: "Ctrl+S"; enabled: window.hasOpenDocument; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
     Shortcut { sequence: "Ctrl+Shift+S"; enabled: window.hasOpenDocument; onActivated: saveDialog.open() }
     Shortcut { sequence: "Ctrl+W"; enabled: window.hasOpenDocument; onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
     Shortcut { sequence: "Ctrl+E"; enabled: window.hasOpenDocument; onActivated: exportDialog.open() }
-    Shortcut { sequence: "Ctrl+Shift+E"; enabled: window.hasOpenDocument; onActivated: legacyTools.openMultiTabExport() }
-    Shortcut { sequence: "Ctrl+P"; onActivated: legacyTools.openPresetManager() }
-    Shortcut { sequence: "Ctrl+R"; enabled: window.hasOpenDocument; onActivated: legacyTools.openResizeCanvas() }
+    Shortcut { sequence: "Ctrl+Shift+E"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onActivated: window.openMultiTabExportDrawer() }
+    Shortcut { sequence: "Ctrl+P"; enabled: !workspace.operationsBlocked; onActivated: window.openProjectPresetDrawer() }
+    Shortcut { sequence: "Ctrl+R"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onActivated: window.openResizeCanvasDialog() }
     Shortcut { sequence: "Ctrl+Z"; enabled: workspace.canUndo; onActivated: workspace.undo() }
     Shortcut { sequence: "Ctrl+Y"; enabled: workspace.canRedo; onActivated: workspace.redo() }
     Shortcut { sequence: "Ctrl+C"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.copySelectedLayers() }
@@ -425,6 +479,252 @@ ApplicationWindow {
     }
 
     AppDialog {
+        id: resizeCanvasDialog
+        objectName: "resizeCanvasDialog"
+        anchors.centerIn: parent
+        width: 500
+        height: 350
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        property int adjustmentMode: 0
+        property string errorMessage: ""
+
+        function openForDocument() {
+            resizeCanvasWidthInput.text = String(workspace.canvasWidth)
+            resizeCanvasHeightInput.text = String(workspace.canvasHeight)
+            adjustmentMode = 0
+            errorMessage = ""
+            open()
+            Qt.callLater(function() { resizeCanvasWidthInput.forceActiveFocus() })
+        }
+
+        function applyResize() {
+            var widthValue = parseInt(resizeCanvasWidthInput.text)
+            var heightValue = parseInt(resizeCanvasHeightInput.text)
+            if (isNaN(widthValue) || isNaN(heightValue)
+                    || widthValue < 16 || heightValue < 16
+                    || widthValue > 32768 || heightValue > 32768) {
+                errorMessage = "宽度和高度必须在 16 到 32768 像素之间"
+                return
+            }
+            if (workspace.resizeCanvas(widthValue, heightValue, adjustmentMode))
+                close()
+            else
+                errorMessage = workspace.statusMessage
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 3
+                    Text {
+                        text: "修改画布尺寸"
+                        color: Theme.textPrimary
+                        font.family: Theme.displayFont
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
+                    }
+                    TinyLabel { text: "当前 " + workspace.canvasWidth + " x " + workspace.canvasHeight + " px" }
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: resizeCanvasDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+                rowSpacing: 10
+                columnSpacing: 12
+
+                BodyLabel { text: "新尺寸"; color: Theme.textMuted; Layout.preferredWidth: 68 }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    AppTextField {
+                        id: resizeCanvasWidthInput
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        placeholderText: "宽度"
+                        color: Theme.textPrimary
+                        selectByMouse: true
+                        validator: IntValidator { bottom: 16; top: 32768 }
+                        background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: resizeCanvasWidthInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                    }
+                    TinyLabel { text: "x"; Layout.preferredWidth: 10; horizontalAlignment: Text.AlignHCenter }
+                    AppTextField {
+                        id: resizeCanvasHeightInput
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
+                        placeholderText: "高度"
+                        color: Theme.textPrimary
+                        selectByMouse: true
+                        validator: IntValidator { bottom: 16; top: 32768 }
+                        background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: resizeCanvasHeightInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                        Keys.onReturnPressed: resizeCanvasDialog.applyResize()
+                    }
+                    TinyLabel { text: "px"; Layout.preferredWidth: 18; horizontalAlignment: Text.AlignRight }
+                }
+
+                BodyLabel { text: "图层处理"; color: Theme.textMuted }
+                SegmentedControl {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    accessibleName: "画布调整方式"
+                    options: [
+                        { label: "比例缩放", value: 0 },
+                        { label: "居中保留", value: 1 },
+                        { label: "左上保留", value: 2 }
+                    ]
+                    value: resizeCanvasDialog.adjustmentMode
+                    onActivated: value => resizeCanvasDialog.adjustmentMode = value
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 56
+                radius: Theme.radiusSmall
+                color: Theme.bgRaised
+                border.width: 1
+                border.color: Theme.border
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    AppIcon { iconName: AppIcons.info; iconSize: 15; iconColor: Theme.accent }
+                    TinyLabel {
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        color: Theme.textSecondary
+                        text: resizeCanvasDialog.adjustmentMode === 0
+                              ? "按宽高比例同步调整全部图层的位置与尺寸"
+                              : (resizeCanvasDialog.adjustmentMode === 1
+                                 ? "保留图层尺寸，并将每个图层移动到新画布中心"
+                                 : "保留图层尺寸，并将每个图层的左上角对齐画布原点")
+                    }
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: resizeCanvasDialog.errorMessage
+                color: Theme.coral
+                wrapMode: Text.Wrap
+            }
+
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 84; label: "取消"; onClicked: resizeCanvasDialog.close() }
+                ExportButton { Layout.preferredWidth: 112; label: "应用尺寸"; iconName: AppIcons.check; primary: true; onClicked: resizeCanvasDialog.applyResize() }
+            }
+        }
+    }
+
+    AppDialog {
+        id: renameDocumentDialog
+        objectName: "renameDocumentDialog"
+        anchors.centerIn: parent
+        width: 430
+        height: 220
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        property int documentIndex: -1
+        property string errorMessage: ""
+
+        function openForDocument(index) {
+            if (index < 0 || index >= workspaceSessions.count) return
+            documentIndex = index
+            renameDocumentInput.text = workspaceSessions.titleAt(index)
+            errorMessage = ""
+            open()
+            Qt.callLater(function() {
+                renameDocumentInput.forceActiveFocus()
+                renameDocumentInput.selectAll()
+            })
+        }
+
+        function submit() {
+            var titleValue = renameDocumentInput.text.trim()
+            if (titleValue.length === 0) {
+                errorMessage = "标签页名称不能为空"
+                return
+            }
+            if (workspaceSessions.renameDocument(documentIndex, titleValue))
+                close()
+            else
+                errorMessage = "无法重命名当前标签页"
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 22
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "重命名标签页"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: renameDocumentDialog.close() }
+            }
+            Divider { Layout.fillWidth: true }
+            BodyLabel { text: "标签页名称"; color: Theme.textMuted }
+            AppTextField {
+                id: renameDocumentInput
+                Layout.fillWidth: true
+                Layout.preferredHeight: 38
+                color: Theme.textPrimary
+                selectByMouse: true
+                placeholderText: "输入名称"
+                background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: renameDocumentInput.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
+                Keys.onReturnPressed: renameDocumentDialog.submit()
+            }
+            TinyLabel { Layout.fillWidth: true; visible: text.length > 0; text: renameDocumentDialog.errorMessage; color: Theme.coral }
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 84; label: "取消"; onClicked: renameDocumentDialog.close() }
+                ExportButton { Layout.preferredWidth: 96; label: "确认"; iconName: AppIcons.check; primary: true; onClicked: renameDocumentDialog.submit() }
+            }
+        }
+    }
+
+    AppDialog {
         id: textLayerDialog
         objectName: "textLayerDialog"
         anchors.centerIn: parent
@@ -434,6 +734,7 @@ ApplicationWindow {
         focus: true
         padding: 0
         closePolicy: Popup.CloseOnEscape
+        // impeccable-disable-next-line design-system-font: output-content font, not UI typography
         property string fontFamily: "Microsoft YaHei"
         property string alignment: "left"
         property string errorMessage: ""
@@ -442,6 +743,7 @@ ApplicationWindow {
             textLayerNameInput.text = "新文字图层"
             textLayerContentInput.text = "示例文字"
             textLayerBindingInput.checked = true
+            // impeccable-disable-next-line design-system-font: output-content font, not UI typography
             fontFamily = "Microsoft YaHei"
             textLayerFontSizeInput.text = "24"
             textLayerColorInput.text = "#000000"
@@ -1579,7 +1881,7 @@ ApplicationWindow {
 
     AppMenu {
         id: fileMenu
-        ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: legacyTools.openNewDocument() }
+        ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
         ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
         MenuSeparator { }
         ShapeMenuItem { text: "保存\tCtrl+S"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
@@ -1589,8 +1891,8 @@ ApplicationWindow {
         ShapeMenuItem { text: "复制当前标签"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
         MenuSeparator { }
         ShapeMenuItem { text: "导出当前画面\tCtrl+E"; enabled: window.hasOpenDocument; onTriggered: exportDialog.open() }
-        ShapeMenuItem { text: "完整批量导出"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openBatchExport() }
-        ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openMultiTabExport() }
+        ShapeMenuItem { text: "完整批量导出"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running); onTriggered: window.openBatchExportDrawer() }
+        ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onTriggered: window.openMultiTabExportDrawer() }
         MenuSeparator { }
         ShapeMenuItem { text: "退出"; onTriggered: window.close() }
     }
@@ -1618,24 +1920,24 @@ ApplicationWindow {
         MenuSeparator { }
         ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealLayerNameEditor() }
         ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
-        ShapeMenuItem { text: "绑定管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openBindingManager() }
-        ShapeMenuItem { text: "尺寸匹配管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openSizeMatchManager() }
+        ShapeMenuItem { text: "绑定管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(0) }
+        ShapeMenuItem { text: "尺寸匹配管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(1) }
         MenuSeparator { }
         ShapeMenuItem { text: "删除所选图层\tDelete"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.deleteSelectedLayers() }
     }
 
     AppMenu {
         id: canvasMenu
-        ShapeMenuItem { text: "修改画布尺寸\tCtrl+R"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openResizeCanvas() }
-        ShapeMenuItem { text: "画布预设管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openCanvasPresetManager() }
+        ShapeMenuItem { text: "修改画布尺寸\tCtrl+R"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openResizeCanvasDialog() }
+        ShapeMenuItem { text: "画布预设管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openCanvasPresetDrawer() }
         MenuSeparator { }
-        ShapeMenuItem { text: "项目预设中心\tCtrl+P"; onTriggered: legacyTools.openPresetManager() }
+        ShapeMenuItem { text: "项目预设中心\tCtrl+P"; enabled: !workspace.operationsBlocked; onTriggered: window.openProjectPresetDrawer() }
     }
 
     AppMenu {
         id: dataRelationsMenu
-        ShapeMenuItem { text: "图层绑定管理"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openBindingManager() }
-        ShapeMenuItem { text: "图层尺寸匹配"; enabled: window.hasOpenDocument; onTriggered: legacyTools.openSizeMatchManager() }
+        ShapeMenuItem { text: "图层绑定管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(0) }
+        ShapeMenuItem { text: "图层尺寸匹配"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(1) }
     }
 
     AppMenu {
@@ -1656,10 +1958,7 @@ ApplicationWindow {
         ShapeMenuItem { text: "复制标签页"; onTriggered: workspaceSessions.duplicateDocument(contextDocumentIndex) }
         ShapeMenuItem {
             text: "重命名标签页"
-            onTriggered: {
-                workspaceSessions.activateDocument(contextDocumentIndex)
-                Qt.callLater(function() { legacyTools.renameCurrentTab() })
-            }
+            onTriggered: window.openRenameDocumentDialog(contextDocumentIndex)
         }
         MenuSeparator { }
         ShapeMenuItem { text: "向左移动"; enabled: contextDocumentIndex > 0; onTriggered: workspaceSessions.moveDocument(contextDocumentIndex, contextDocumentIndex - 1) }
@@ -1667,7 +1966,7 @@ ApplicationWindow {
         MenuSeparator { }
         ShapeMenuItem { text: "关闭其他标签页"; enabled: workspaceSessions.count > 1; onTriggered: workspaceSessions.closeOtherDocuments(contextDocumentIndex) }
         ShapeMenuItem { text: "关闭标签页"; onTriggered: workspaceSessions.requestClose(contextDocumentIndex) }
-        ShapeMenuItem { text: "恢复导出窗口"; onTriggered: legacyTools.restoreExportWindow(contextDocumentIndex) }
+        ShapeMenuItem { text: "恢复导出面板"; onTriggered: window.restoreExportSurface(contextDocumentIndex) }
     }
 
     FolderDialog {
@@ -2949,7 +3248,7 @@ ApplicationWindow {
                     iconName: AppIcons.fileText
                     tooltip: "项目预设"
                     enabled: !workspace.operationsBlocked
-                    onClicked: legacyTools.openPresetManager()
+                    onClicked: window.openProjectPresetDrawer()
                 }
                 IconButton {
                     iconName: AppIcons.link
@@ -3034,7 +3333,7 @@ ApplicationWindow {
                     tooltip: "多标签批量导出"
                     buttonSize: 32
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running)
-                    onClicked: legacyTools.openMultiTabExport()
+                    onClicked: window.openMultiTabExportDrawer()
                 }
 
                 AppButton {
@@ -3042,8 +3341,8 @@ ApplicationWindow {
                     text: "批量导出"
                     iconName: AppIcons.exportAction
                     variant: "primary"
-                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: legacyTools.openBatchExport()
+                    enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running)
+                    onClicked: window.openBatchExportDrawer()
                 }
             }
 
@@ -3146,7 +3445,7 @@ ApplicationWindow {
                     tooltip: "新建文档"
                     buttonSize: 36
                     Layout.preferredWidth: 40
-                    onClicked: legacyTools.openNewDocument()
+                    onClicked: window.openNewCanvasDialog()
                 }
             }
 

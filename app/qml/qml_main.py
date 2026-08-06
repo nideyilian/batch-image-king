@@ -22,6 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-multi-tab-export", action="store_true", help="展示多标签批量导出")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
     parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
+    parser.add_argument("--show-resize-canvas", action="store_true", help="展示原生画布尺寸弹窗")
+    parser.add_argument("--show-rename-document", action="store_true", help="展示原生标签页重命名弹窗")
     parser.add_argument("--show-text-layer-dialog", action="store_true", help="展示原生文字图层创建弹窗")
     parser.add_argument("--show-shaped-layer-dialog", action="store_true", help="展示原生异形图层创建弹窗")
     parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")
@@ -70,7 +72,7 @@ def main() -> int:
         sys.path.insert(0, str(repo_root))
 
     debug("importing Qt modules")
-    from PySide6.QtCore import QMetaObject, QObject, QThreadPool, QTimer, QUrl
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QThreadPool, QTimer, QUrl
     from PySide6.QtGui import QIcon
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuick import QQuickItem
@@ -425,6 +427,26 @@ def main() -> int:
 
         QTimer.singleShot(80, open_new_canvas)
 
+    if args.show_resize_canvas:
+        def open_resize_canvas() -> None:
+            dialog = window.findChild(QObject, "resizeCanvasDialog")
+            if dialog is None or not QMetaObject.invokeMethod(dialog, "openForDocument"):
+                debug("resize canvas dialog could not be opened")
+
+        QTimer.singleShot(80, open_resize_canvas)
+
+    if args.show_rename_document:
+        def open_rename_document() -> None:
+            dialog = window.findChild(QObject, "renameDocumentDialog")
+            if dialog is None or not QMetaObject.invokeMethod(
+                dialog,
+                "openForDocument",
+                Q_ARG("QVariant", int(workspace_sessions.activeIndex)),
+            ):
+                debug("rename document dialog could not be opened")
+
+        QTimer.singleShot(80, open_rename_document)
+
     if args.show_text_layer_dialog:
         def open_text_layer_dialog() -> None:
             dialog = window.findChild(QObject, "textLayerDialog")
@@ -461,6 +483,8 @@ def main() -> int:
                     or args.show_batch_advanced
                     or args.show_multi_tab_export
                     or args.show_new_canvas
+                    or args.show_resize_canvas
+                    or args.show_rename_document
                     or args.show_text_layer_dialog
                     or args.show_shaped_layer_dialog
                     or args.show_close_confirm

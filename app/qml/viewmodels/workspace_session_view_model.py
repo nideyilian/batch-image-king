@@ -136,6 +136,13 @@ class WorkspaceSessionViewModel(QAbstractListModel):
             return os.path.basename(path)
         return f"未命名-{session.untitled_number}.cmp"
 
+    @Slot(int, result=str)
+    def titleAt(self, index: int) -> str:
+        index = int(index)
+        if not 0 <= index < len(self._sessions):
+            return ""
+        return self._title_for(self._sessions[index])
+
     def _set_pending_close_index(self, index: int) -> None:
         index = int(index)
         if index != self._pending_close_index:
