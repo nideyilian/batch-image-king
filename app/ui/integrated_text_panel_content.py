@@ -353,7 +353,8 @@ class IntegratedTextPanelContent(object):
             self._font_change_guard = False
 
     def _font_display_name(self, font_name: str) -> str:
-        cn_name = self.FONT_CN_ALIAS.get(font_name)
+        cn_map = getattr(self, "_font_cn_names", None) or {}
+        cn_name = cn_map.get(font_name) or self.FONT_CN_ALIAS.get(font_name)
         if cn_name:
             return cn_name
         return font_name
@@ -368,10 +369,12 @@ class IntegratedTextPanelContent(object):
         name = (font_name or "").strip()
         if not name:
             return name
-        reverse_map = {v: k for k, v in self.FONT_CN_ALIAS.items()}
+        cn_map = getattr(self, "_font_cn_names", None) or {}
+        reverse_map = {v: k for k, v in cn_map.items()}
+        reverse_map.update({v: k for k, v in self.FONT_CN_ALIAS.items()})
         if name in reverse_map:
             return reverse_map[name]
-        if name in self.FONT_CN_ALIAS:
+        if name in cn_map or name in self.FONT_CN_ALIAS:
             return name
         if name.endswith(")") and " (" in name:
             inside = name.rsplit(" (", 1)[-1].rstrip(")")
@@ -484,23 +487,25 @@ class IntegratedTextPanelContent(object):
             from app.models.text_layer import TextLayer
             temp_layer = TextLayer()
             fonts = temp_layer.get_system_fonts()
+            self._font_cn_names = temp_layer.get_font_cn_names()
+            categorized = temp_layer.get_categorized_fonts()
             self.font_combo.clear()
             self._all_fonts = list(fonts)
 
-            # 添加常用中文字体优先
-            chinese_fonts = [f for f in fonts if any(kw in f.lower() for kw in ['microsoft', 'sim', 'chinese', 'yahei', 'simsun', 'kaiti', 'fangsong'])]
-            other_fonts = [f for f in fonts if f not in chinese_fonts]
+            # 中文字体优先，其次英文字体
+            chinese_fonts = categorized.get('chinese', [])
+            other_fonts = categorized.get('english', [])
 
             # 先添加中文字体
-            for font in sorted(chinese_fonts):
+            for font in chinese_fonts:
                 self.font_combo.addItem(self._font_display_name(font), font)
 
             # 添加分隔线
             if chinese_fonts and other_fonts:
                 self.font_combo.insertSeparator(len(chinese_fonts))
 
-            # 添加其他字体
-            for font in sorted(other_fonts):
+            # 添加英文字体
+            for font in other_fonts:
                 self.font_combo.addItem(self._font_display_name(font), font)
 
             # 设置默认字体

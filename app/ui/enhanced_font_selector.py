@@ -14,22 +14,9 @@ from pathlib import Path
 
 
 class EnhancedFontSelector(QWidget):
-    """增强字体选择器组件"""
+    """增强字体选择器组件：中文 / 英文 两个分类 Tab"""
 
     font_changed = Signal(str)  # 字体变更信号
-    FONT_CN_ALIAS = {
-        "Microsoft YaHei": "微软雅黑",
-        "Microsoft JhengHei": "微软正黑体",
-        "SimSun": "宋体",
-        "NSimSun": "新宋体",
-        "SimHei": "黑体",
-        "KaiTi": "楷体",
-        "FangSong": "仿宋",
-        "DengXian": "等线",
-        "YouYuan": "幼圆",
-        "STSong": "华文宋体",
-        "STKaiti": "华文楷体",
-    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -38,6 +25,7 @@ class EnhancedFontSelector(QWidget):
         self.recent_fonts = []
         self.font_categories = {}
         self.all_fonts = []
+        self.cn_names = {}
         self._syncing_selection = False
 
         # 创建预览更新定时器（防抖机制）
@@ -118,11 +106,18 @@ class EnhancedFontSelector(QWidget):
 
         layout.addLayout(search_layout)
 
-        # 主内容区域 - 使用标签页
+        # 主内容区域 - 中文 / 英文 两个分类 Tab
         self.tab_widget = QTabWidget()
 
-        # 分类标签页
-        self.create_category_tabs()
+        self.chinese_fonts_list = QListWidget()
+        self.chinese_fonts_list.itemClicked.connect(self.on_font_selected)
+        self.chinese_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.chinese_fonts_list))
+        self.tab_widget.addTab(self.chinese_fonts_list, f"中文 (0)")
+
+        self.english_fonts_list = QListWidget()
+        self.english_fonts_list.itemClicked.connect(self.on_font_selected)
+        self.english_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.english_fonts_list))
+        self.tab_widget.addTab(self.english_fonts_list, f"英文 (0)")
 
         layout.addWidget(self.tab_widget)
 
@@ -175,49 +170,16 @@ class EnhancedFontSelector(QWidget):
 
         layout.addWidget(preview_group)
 
-    def create_category_tabs(self):
-        """创建分类标签页"""
-        # 所有字体
-        self.all_fonts_list = QListWidget()
-        self.all_fonts_list.itemClicked.connect(self.on_font_selected)
-        self.all_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.all_fonts_list))
-        self.tab_widget.addTab(self.all_fonts_list, f"所有字体 (0)")
-
-        # 中文字体
-        self.chinese_fonts_list = QListWidget()
-        self.chinese_fonts_list.itemClicked.connect(self.on_font_selected)
-        self.chinese_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.chinese_fonts_list))
-        self.tab_widget.addTab(self.chinese_fonts_list, f"中文 (0)")
-
-        # 等宽字体
-        self.monospace_fonts_list = QListWidget()
-        self.monospace_fonts_list.itemClicked.connect(self.on_font_selected)
-        self.monospace_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.monospace_fonts_list))
-        self.tab_widget.addTab(self.monospace_fonts_list, f"等宽 (0)")
-
-        # 收藏字体
-        self.favorite_fonts_list = QListWidget()
-        self.favorite_fonts_list.itemClicked.connect(self.on_font_selected)
-        self.favorite_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.favorite_fonts_list))
-        self.tab_widget.addTab(self.favorite_fonts_list, f"收藏 (0)")
-
-        # 最近使用
-        self.recent_fonts_list = QListWidget()
-        self.recent_fonts_list.itemClicked.connect(self.on_font_selected)
-        self.recent_fonts_list.itemSelectionChanged.connect(lambda: self._on_current_item_changed(self.recent_fonts_list))
-        self.tab_widget.addTab(self.recent_fonts_list, f"最近 (0)")
-
     def load_fonts(self):
         """加载字体列表"""
         # 创建临时TextLayer获取字体
         from app.models.text_layer import TextLayer
         text_layer = TextLayer()
 
-        # 获取所有字体
+        # 获取所有字体与分类
         self.all_fonts = text_layer.get_system_fonts()
-
-        # 获取分类字体
         self.font_categories = text_layer.get_categorized_fonts()
+        self.cn_names = text_layer.get_font_cn_names()
 
         # 填充列表
         self.populate_font_lists()
@@ -227,16 +189,6 @@ class EnhancedFontSelector(QWidget):
 
     def populate_font_lists(self):
         """填充字体列表"""
-        # 所有字体
-        self.all_fonts_list.clear()
-        for font in self.all_fonts:
-            display = self._font_display_name(font)
-            item = QListWidgetItem(display)
-            item.setData(Qt.UserRole, font)
-            if font in self.favorite_fonts:
-                item.setText(f"★ {display}")
-            self.all_fonts_list.addItem(item)
-
         # 中文字体
         self.chinese_fonts_list.clear()
         for font in self.font_categories.get('chinese', []):
@@ -247,22 +199,24 @@ class EnhancedFontSelector(QWidget):
                 item.setText(f"★ {display}")
             self.chinese_fonts_list.addItem(item)
 
-        # 等宽字体
-        self.monospace_fonts_list.clear()
-        for font in self.font_categories.get('monospace', []):
+        # 英文字体
+        self.english_fonts_list.clear()
+        for font in self.font_categories.get('english', []):
             display = self._font_display_name(font)
             item = QListWidgetItem(display)
             item.setData(Qt.UserRole, font)
             if font in self.favorite_fonts:
                 item.setText(f"★ {display}")
-            self.monospace_fonts_list.addItem(item)
+            self.english_fonts_list.addItem(item)
 
-        # 收藏字体
+        # 收藏/最近列表
         self.update_favorite_list()
         self.update_recent_list()
 
     def update_favorite_list(self):
         """更新收藏字体列表"""
+        if not hasattr(self, "favorite_fonts_list"):
+            return
         self.favorite_fonts_list.clear()
         for font in self.favorite_fonts:
             if font in self.all_fonts:
@@ -272,6 +226,8 @@ class EnhancedFontSelector(QWidget):
 
     def update_recent_list(self):
         """更新最近字体列表"""
+        if not hasattr(self, "recent_fonts_list"):
+            return
         was_syncing = self._syncing_selection
         was_blocked = self.recent_fonts_list.blockSignals(True)
         self._syncing_selection = True
@@ -288,28 +244,14 @@ class EnhancedFontSelector(QWidget):
 
     def update_tab_titles(self):
         """更新标签页标题"""
-        self.tab_widget.setTabText(0, f"所有字体 ({len(self.all_fonts)})")
-        self.tab_widget.setTabText(1, f"中文 ({len(self.font_categories.get('chinese', []))})")
-        self.tab_widget.setTabText(2, f"等宽 ({len(self.font_categories.get('monospace', []))})")
-        self.tab_widget.setTabText(3, f"收藏 ({len(self.favorite_fonts)})")
-        self.tab_widget.setTabText(4, f"最近 ({len(self.recent_fonts)})")
+        self.tab_widget.setTabText(0, f"中文 ({len(self.font_categories.get('chinese', []))})")
+        self.tab_widget.setTabText(1, f"英文 ({len(self.font_categories.get('english', []))})")
 
     def filter_fonts(self, text):
         """过滤字体"""
         if not text.strip():
             self.populate_font_lists()
             return
-
-        # 在所有字体列表中过滤
-        self.all_fonts_list.clear()
-        for font in self.all_fonts:
-            if self._font_match(font, text):
-                display = self._font_display_name(font)
-                item = QListWidgetItem(display)
-                item.setData(Qt.UserRole, font)
-                if font in self.favorite_fonts:
-                    item.setText(f"★ {display}")
-                self.all_fonts_list.addItem(item)
 
         # 在中文字体列表中过滤
         self.chinese_fonts_list.clear()
@@ -322,32 +264,34 @@ class EnhancedFontSelector(QWidget):
                     item.setText(f"★ {display}")
                 self.chinese_fonts_list.addItem(item)
 
-        # 在等宽字体列表中过滤
-        self.monospace_fonts_list.clear()
-        for font in self.font_categories.get('monospace', []):
+        # 在英文字体列表中过滤
+        self.english_fonts_list.clear()
+        for font in self.font_categories.get('english', []):
             if self._font_match(font, text):
                 display = self._font_display_name(font)
                 item = QListWidgetItem(display)
                 item.setData(Qt.UserRole, font)
                 if font in self.favorite_fonts:
                     item.setText(f"★ {display}")
-                self.monospace_fonts_list.addItem(item)
+                self.english_fonts_list.addItem(item)
 
         # 在收藏字体列表中过滤
-        self.favorite_fonts_list.clear()
-        for font in self.favorite_fonts:
-            if font in self.all_fonts and self._font_match(font, text):
-                item = QListWidgetItem(f"★ {self._font_display_name(font)}")
-                item.setData(Qt.UserRole, font)
-                self.favorite_fonts_list.addItem(item)
+        if hasattr(self, "favorite_fonts_list"):
+            self.favorite_fonts_list.clear()
+            for font in self.favorite_fonts:
+                if font in self.all_fonts and self._font_match(font, text):
+                    item = QListWidgetItem(f"★ {self._font_display_name(font)}")
+                    item.setData(Qt.UserRole, font)
+                    self.favorite_fonts_list.addItem(item)
 
         # 在最近字体列表中过滤
-        self.recent_fonts_list.clear()
-        for font in self.recent_fonts:
-            if font in self.all_fonts and self._font_match(font, text):
-                item = QListWidgetItem(self._font_display_name(font))
-                item.setData(Qt.UserRole, font)
-                self.recent_fonts_list.addItem(item)
+        if hasattr(self, "recent_fonts_list"):
+            self.recent_fonts_list.clear()
+            for font in self.recent_fonts:
+                if font in self.all_fonts and self._font_match(font, text):
+                    item = QListWidgetItem(self._font_display_name(font))
+                    item.setData(Qt.UserRole, font)
+                    self.recent_fonts_list.addItem(item)
 
     def on_font_selected(self, item):
         """字体被选中"""
@@ -398,11 +342,12 @@ class EnhancedFontSelector(QWidget):
         was_syncing = self._syncing_selection
         self._syncing_selection = True
         try:
-            self._select_font_in_list(self.all_fonts_list, font_name)
             self._select_font_in_list(self.chinese_fonts_list, font_name)
-            self._select_font_in_list(self.monospace_fonts_list, font_name)
-            self._select_font_in_list(self.favorite_fonts_list, font_name)
-            self._select_font_in_list(self.recent_fonts_list, font_name)
+            self._select_font_in_list(self.english_fonts_list, font_name)
+            for list_name in ("favorite_fonts_list", "recent_fonts_list"):
+                widget = getattr(self, list_name, None)
+                if widget is not None:
+                    self._select_font_in_list(widget, font_name)
         finally:
             self._syncing_selection = was_syncing
 
@@ -422,7 +367,6 @@ class EnhancedFontSelector(QWidget):
 
         self.save_favorites()
         self.populate_font_lists()
-        self.update_tab_titles()
         self.update_favorite_button()
 
     def update_preview(self):
@@ -498,7 +442,6 @@ class EnhancedFontSelector(QWidget):
         self.recent_fonts.insert(0, font_name)
         self.recent_fonts = self.recent_fonts[:12]
         self.update_recent_list()
-        self.update_tab_titles()
         self.save_recent_fonts()
 
     def save_recent_fonts(self):
@@ -514,7 +457,7 @@ class EnhancedFontSelector(QWidget):
             pass
 
     def _font_display_name(self, font_name: str) -> str:
-        cn_name = self.FONT_CN_ALIAS.get(font_name)
+        cn_name = self.cn_names.get(font_name)
         if cn_name:
             return f"{cn_name} ({font_name})"
         return font_name

@@ -58,6 +58,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.text_layer = None
         self._font_change_guard = False
         self._all_fonts = []
+        self._font_cn_names = {}
         self._recent_font_limit = 8
         self._recent_font_display_limit = 4
         self._recent_fonts = []
