@@ -554,9 +554,6 @@ def main() -> int:
     # 启动后延迟静默检查更新；发现新版本时由 QML 横幅提示
     QTimer.singleShot(4000, update_manager.checkForUpdatesSilent)
 
-    # 新版下载完成并启动自升级实例后，短暂等待后退出主进程以便完成替换
-    update_manager.restartRequested.connect(lambda: QTimer.singleShot(500, app.quit))
-
     exit_code = app.exec()
     debug(f"event loop exited with code {exit_code}")
     return exit_code

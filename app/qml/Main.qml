@@ -33,6 +33,7 @@ ApplicationWindow {
     property int contextDocumentIndex: -1
     property bool updateBannerDismissed: false
     property string updateBannerText: ""
+    property bool pendingUpdateInstall: false
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
         { label: "正片叠底", value: "multiply" },
@@ -303,6 +304,16 @@ ApplicationWindow {
             closeSaveDialog.open()
         }
         function onApplicationCloseReady() {
+            if (pendingUpdateInstall) {
+                if (updateManager.installDownloadedUpdate()) {
+                    Qt.callLater(function() { window.close() })
+                } else {
+                    pendingUpdateInstall = false
+                    workspaceSessions.cancelClose()
+                    updateDialog.open()
+                }
+                return
+            }
             Qt.callLater(function() { window.close() })
         }
     }
@@ -316,7 +327,7 @@ ApplicationWindow {
         }
         function onUpdateFinished(ok, message) {
             if (ok) {
-                showToast("更新下载完成，程序即将重启并完成替换")
+                showToast(message)
             } else {
                 showToast("更新失败：" + message)
             }
@@ -387,7 +398,10 @@ ApplicationWindow {
             workspaceSessions.pendingCloseIndex,
             selectedFile.toString()
         )
-        onRejected: workspaceSessions.cancelClose()
+        onRejected: {
+            pendingUpdateInstall = false
+            workspaceSessions.cancelClose()
+        }
     }
 
     AppDialog {
@@ -1830,7 +1844,10 @@ ApplicationWindow {
         focus: true
         padding: 0
         closePolicy: Popup.CloseOnEscape
-        onRejected: workspaceSessions.cancelClose()
+        onRejected: {
+            pendingUpdateInstall = false
+            workspaceSessions.cancelClose()
+        }
 
         background: Rectangle {
             color: Theme.bgPanel
@@ -1861,7 +1878,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
-                ExportButton { Layout.preferredWidth: 86; label: "取消"; onClicked: { workspaceSessions.cancelClose(); closeConfirmDialog.close() } }
+                ExportButton { Layout.preferredWidth: 86; label: "取消"; onClicked: { pendingUpdateInstall = false; workspaceSessions.cancelClose(); closeConfirmDialog.close() } }
                 Item { Layout.fillWidth: true }
                 ExportButton { Layout.preferredWidth: 96; label: "不保存"; destructive: true; onClicked: { workspaceSessions.discardAndClose(workspaceSessions.pendingCloseIndex); closeConfirmDialog.close() } }
                 ExportButton { Layout.preferredWidth: 104; label: "保存"; iconName: AppIcons.save; primary: true; onClicked: { closeConfirmDialog.close(); workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex, "") } }
@@ -2073,6 +2090,24 @@ ApplicationWindow {
                 }
             }
 
+            StatusBanner {
+                Layout.fillWidth: true
+                Layout.preferredHeight: updateManager.readyToInstall ? 56 : 0
+                visible: updateManager.readyToInstall
+                tone: "neutral"
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    AppIcon { iconName: AppIcons.info; iconSize: 15; iconColor: Theme.accent }
+                    BodyLabel {
+                        text: "新版已下载，保存当前工作后即可安装并重启"
+                        color: Theme.textPrimary
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
             Column {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -2114,14 +2149,28 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 ExportButton {
                     label: "打开下载页"
-                    visible: updateManager.updateAvailable && !updateManager.downloading
+                    visible: updateManager.updateAvailable && !updateManager.downloading && !updateManager.readyToInstall
                     onClicked: updateManager.openReleasePage()
                 }
                 ExportButton {
-                    label: updateManager.downloading ? "正在下载…" : "立即更新"
+                    label: updateManager.downloading
+                           ? "正在下载…"
+                           : (updateManager.readyToInstall ? "立即安装并重启" : "下载更新")
                     primary: updateManager.updateAvailable && !updateManager.downloading
                     enabled: updateManager.updateAvailable && !updateManager.downloading
-                    onClicked: updateManager.downloadAndInstall()
+                    onClicked: {
+                        if (updateManager.readyToInstall) {
+                            pendingUpdateInstall = true
+                            updateDialog.close()
+                            var closeStarted = workspaceSessions.requestApplicationClose()
+                            if (!closeStarted && !workspaceSessions.applicationClosePending) {
+                                pendingUpdateInstall = false
+                                updateDialog.open()
+                            }
+                        } else {
+                            updateManager.downloadAndInstall()
+                        }
+                    }
                 }
                 ExportButton {
                     label: "关闭"

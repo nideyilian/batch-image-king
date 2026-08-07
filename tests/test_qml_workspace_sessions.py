@@ -271,3 +271,18 @@ def test_cancel_close_aborts_application_shutdown():
     assert sessions.applicationClosePending is False
     assert sessions.applicationCloseApproved is False
     assert sessions.pendingCloseIndex == -1
+
+
+@pytest.mark.unit
+def test_cancel_close_resets_previous_application_close_approval():
+    workspace = _workspace()
+    sessions = WorkspaceSessionViewModel(workspace)
+    workspace.document.is_modified = False
+
+    assert sessions.requestApplicationClose() is True
+    assert sessions.applicationCloseApproved is True
+
+    sessions.cancelClose()
+
+    assert sessions.applicationClosePending is False
+    assert sessions.applicationCloseApproved is False

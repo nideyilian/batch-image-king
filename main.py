@@ -16,7 +16,7 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--export-worker":
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--apply-update":
     from app.utils.updater import apply_update, parse_apply_update_args
-    new_exe, wait_pid, relaunch = parse_apply_update_args(sys.argv[2:])
+    new_exe, wait_pid, relaunch = parse_apply_update_args(sys.argv[1:])
     sys.exit(apply_update(new_exe, wait_pid=wait_pid, relaunch=relaunch))
 
 from app.utils.crash_session import begin_crash_session, mark_clean_exit

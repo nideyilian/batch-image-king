@@ -146,6 +146,34 @@ def test_parse_apply_update_args():
 
 
 @pytest.mark.unit
+def test_main_forwards_apply_update_flag_to_argument_parser():
+    source = (REPO_ROOT / "main.py").read_text(encoding="utf-8")
+
+    assert "parse_apply_update_args(sys.argv[1:])" in source
+
+
+@pytest.mark.unit
+def test_apply_update_stops_when_main_process_does_not_exit(tmp_path, monkeypatch):
+    current_exe = tmp_path / "batch-image-king.exe"
+    new_exe = tmp_path / "batch-image-king_new.exe"
+    current_exe.write_bytes(b"old")
+    new_exe.write_bytes(b"new")
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    monkeypatch.setattr(updater, "wait_for_process", lambda *args, **kwargs: False)
+
+    result = updater.apply_update(
+        new_exe,
+        current_exe=current_exe,
+        wait_pid=1234,
+        relaunch=False,
+    )
+
+    assert result == 4
+    assert current_exe.read_bytes() == b"old"
+    assert new_exe.read_bytes() == b"new"
+
+
+@pytest.mark.unit
 def test_wait_for_process_returns_when_pid_gone():
     proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait()
@@ -163,6 +191,63 @@ def test_qml_registers_update_manager():
     assert 'id: "updateDialog"' in main_qml or "id: updateDialog" in main_qml
     assert "id: helpMenu" in main_qml
     assert "id: updateBanner" in main_qml
+    assert "updateManager.readyToInstall" in main_qml
+    assert "updateManager.installDownloadedUpdate()" in main_qml
+    assert "pendingUpdateInstall" in main_qml
+    assert "restartRequested.connect" not in qml_main
+
+
+@pytest.mark.unit
+def test_download_completion_waits_for_explicit_install(tmp_path, monkeypatch):
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
+
+    downloaded_exe = tmp_path / "batch-image-king_new.exe"
+    downloaded_exe.write_bytes(b"new")
+    spawn_calls = []
+    finished = []
+    restarts = []
+    monkeypatch.setattr(updater, "new_exe_path", lambda: downloaded_exe)
+    monkeypatch.setattr(
+        updater,
+        "spawn_apply_update",
+        lambda **kwargs: spawn_calls.append(kwargs) or True,
+    )
+    view_model = UpdateViewModel()
+    view_model.updateFinished.connect(lambda ok, message: finished.append((ok, message)))
+    view_model.restartRequested.connect(lambda: restarts.append(True))
+
+    view_model._on_download_done(True, "")
+
+    assert view_model.readyToInstall is True
+    assert spawn_calls == []
+    assert finished and finished[-1][0] is True
+
+    assert view_model.installDownloadedUpdate() is True
+    assert len(spawn_calls) == 1
+    assert spawn_calls[0]["new_exe"] == downloaded_exe
+    assert restarts == [True]
+
+
+@pytest.mark.unit
+def test_install_failure_keeps_application_open(tmp_path, monkeypatch):
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
+
+    downloaded_exe = tmp_path / "batch-image-king_new.exe"
+    downloaded_exe.write_bytes(b"new")
+    monkeypatch.setattr(updater, "new_exe_path", lambda: downloaded_exe)
+    monkeypatch.setattr(updater, "spawn_apply_update", lambda **kwargs: False)
+    view_model = UpdateViewModel()
+    failures = []
+    restarts = []
+    view_model.updateFinished.connect(lambda ok, message: failures.append((ok, message)))
+    view_model.restartRequested.connect(lambda: restarts.append(True))
+    view_model._on_download_done(True, "")
+
+    assert view_model.installDownloadedUpdate() is False
+    assert view_model.readyToInstall is True
+    assert view_model.errorMessage
+    assert failures[-1][0] is False
+    assert restarts == []
 
 
 @pytest.mark.unit

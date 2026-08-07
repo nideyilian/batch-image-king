@@ -1,9 +1,11 @@
 """更新检测/下载 ViewModel，桥接 app.utils.updater 到 QML。
 
 向 QML 暴露：
-- 属性：checking / downloading / updateAvailable / currentVersion / latestVersion /
-         releaseNotes / required / errorMessage / downloadProgress / progressText
-- 槽：checkForUpdates() / checkForUpdatesSilent() / downloadAndInstall() / openReleasePage()
+- 属性：checking / downloading / readyToInstall / updateAvailable / currentVersion /
+         latestVersion / releaseNotes / required / errorMessage / downloadProgress /
+         progressText
+- 槽：checkForUpdates() / checkForUpdatesSilent() / downloadAndInstall() /
+      installDownloadedUpdate() / openReleasePage()
 - 信号：stateChanged() / progressChanged() / updateFinished(bool, str) /
         autoUpdateDetected(str) / restartRequested()
 """
@@ -79,6 +81,7 @@ class UpdateViewModel(QObject):
         super().__init__(parent)
         self._checking = False
         self._downloading = False
+        self._ready_to_install = False
         self._update_available = False
         self._current_version = updater.get_current_version()
         self._latest_version = ""
@@ -117,6 +120,10 @@ class UpdateViewModel(QObject):
         return self._downloading
 
     @Property(bool, notify=stateChanged)
+    def readyToInstall(self) -> bool:
+        return self._ready_to_install
+
+    @Property(bool, notify=stateChanged)
     def updateAvailable(self) -> bool:
         return self._update_available
 
@@ -142,7 +149,7 @@ class UpdateViewModel(QObject):
 
     def _start_check(self, silent: bool) -> None:
         with self._lock:
-            if self._checking or self._downloading:
+            if self._checking or self._downloading or self._ready_to_install:
                 return
             self._checking = True
             self._error_message = ""
@@ -177,6 +184,8 @@ class UpdateViewModel(QObject):
         if self._downloading or self._info is None or not self._info.download_url:
             return
         self._downloading = True
+        self._ready_to_install = False
+        self._error_message = ""
         self._download_progress = 0
         self._progress_text = "准备下载…"
         self.stateChanged.emit()
@@ -201,21 +210,41 @@ class UpdateViewModel(QObject):
 
     @Slot(bool, str)
     def _on_download_done(self, ok: bool, message: str) -> None:
+        self._active_task = None
         self._downloading = False
-        self.progressChanged.emit()
         if ok:
-            self._launch_apply_update()
+            self._ready_to_install = True
+            self._download_progress = 100
+            self._progress_text = "下载完成，等待安装"
+            self._error_message = ""
+            self.stateChanged.emit()
+            self.progressChanged.emit()
+            self.updateFinished.emit(True, "新版已下载，请点击“立即安装并重启”完成更新")
         else:
+            self._ready_to_install = False
+            self.stateChanged.emit()
+            self.progressChanged.emit()
             self.updateFinished.emit(False, message or "下载失败")
 
     @Slot(str)
     def _on_download_failed(self, message: str) -> None:
+        self._active_task = None
         self._downloading = False
+        self._ready_to_install = False
         self._error_message = message
         self.stateChanged.emit()
         self.updateFinished.emit(False, message)
 
-    def _launch_apply_update(self) -> None:
+    @Slot(result=bool)
+    def installDownloadedUpdate(self) -> bool:
+        if not self._ready_to_install:
+            self._error_message = "尚未下载可安装的新版"
+            self.stateChanged.emit()
+            self.updateFinished.emit(False, self._error_message)
+            return False
+        return self._launch_apply_update()
+
+    def _launch_apply_update(self) -> bool:
         try:
             spawned = updater.spawn_apply_update(
                 wait_pid=os.getpid(),
@@ -224,12 +253,16 @@ class UpdateViewModel(QObject):
         except Exception:
             spawned = False
         if spawned:
+            self._ready_to_install = False
+            self.stateChanged.emit()
             self.restartRequested.emit()
-        else:
-            self.updateFinished.emit(
-                False,
-                "新版已下载，但当前运行环境不支持自动替换。请手动关闭程序后运行同目录下的批图王_new.exe。",
-            )
+            return True
+        self._error_message = (
+            "无法启动自动安装程序。新版已保留在程序目录，请重试或手动运行批图王_new.exe。"
+        )
+        self.stateChanged.emit()
+        self.updateFinished.emit(False, self._error_message)
+        return False
 
     @Slot(result=bool)
     def openReleasePage(self) -> bool:

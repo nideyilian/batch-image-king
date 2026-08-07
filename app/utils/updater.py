@@ -192,15 +192,19 @@ def apply_update(
 ) -> int:
     """在 `--apply-update` 模式下执行替换。
 
-    返回码：0=成功；1=非冻结环境跳过；2=新版文件缺失；3=替换失败。
+    返回码：0=成功；1=非冻结环境跳过；2=新版文件缺失；3=替换失败；
+    4=等待主进程退出超时。
     """
     if not is_frozen():
         return 1
     current = Path(current_exe or exe_path()).resolve()
-    new = Path(new_exe).resolve()
-    if not new.exists():
+    if not str(new_exe):
         return 2
-    wait_for_process(wait_pid, timeout=timeout)
+    new = Path(new_exe).resolve()
+    if not new.is_file():
+        return 2
+    if not wait_for_process(wait_pid, timeout=timeout):
+        return 4
     backup = current.with_name(current.name + ".bak")
     try:
         if backup.exists():
@@ -232,7 +236,7 @@ def spawn_apply_update(
         return False
     current = Path(current_exe or exe_path()).resolve()
     new = Path(new_exe).resolve()
-    if not new.exists():
+    if not new.is_file():
         return False
     flags = 0
     if os.name == "nt":

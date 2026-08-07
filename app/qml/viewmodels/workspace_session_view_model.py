@@ -481,9 +481,10 @@ class WorkspaceSessionViewModel(QAbstractListModel):
     def cancelClose(self) -> None:
         self._set_pending_close_index(-1)
         self._close_others_keep_document = None
-        if self._application_close_pending:
-            self._application_close_pending = False
-            self._application_close_approved = False
+        state_changed = self._application_close_pending or self._application_close_approved
+        self._application_close_pending = False
+        self._application_close_approved = False
+        if state_changed:
             self.applicationCloseStateChanged.emit()
 
     @Slot(int, result=bool)
