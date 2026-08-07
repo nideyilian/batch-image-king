@@ -112,12 +112,15 @@ class IntegratedTextPanelContent(object):
         pos_layout.addWidget(self.size_box)
         self.pos_group.add_content_layout(pos_layout)
         self._sync_position_summary()
-        parent_layout.addWidget(self.pos_group)
 
-        # 效果和样式组 - 补充完整内容
-        self.effects_group = CollapsibleGroupBox("效果和样式", collapsed=True)
+        # 文字阴影和发光与背景同属低频视觉效果，集中放在“更多参数”页顶部。
+        self.effects_group = CollapsibleGroupBox("文字阴影与发光", collapsed=False)
+        self.effects_group.title_frame.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
+        self.effects_group.container_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        self.effects_group.container_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
         self.create_effects_content(self.effects_group)
         parent_layout.addWidget(self.effects_group)
+        parent_layout.addWidget(self.pos_group)
 
         # 文字内容管理功能已移除 - 只保留图层属性中的编辑按钮
 

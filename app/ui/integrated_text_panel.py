@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QSlider, QFrame,
                                QToolButton, QButtonGroup, QSizePolicy, QCheckBox,
                                QTextEdit, QLineEdit, QComboBox, QScrollArea, QDialog, QCompleter,
-                               QGridLayout)
+                               QGridLayout, QTabWidget)
 from PySide6.QtCore import Qt, Signal, QSize, QStringListModel, QRectF
 from PySide6.QtGui import QColor, QFont, QPixmap, QPainter, QIcon
 
@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.collapsible_group import CollapsibleGroupBox
+from app.ui.design_tokens import Tokens
 from app.ui.property_panel_a2 import PropertyPanelA2
 
 
@@ -73,29 +74,98 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.setMinimumWidth(0)
         self.setObjectName("IntegratedTextPanel")
-        self.setStyleSheet(self._panel_stylesheet())
+        self.setStyleSheet(self._panel_stylesheet() + self._tab_stylesheet())
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(*(PropertyPanelA2.PANEL_MARGIN,) * 4)
-        main_layout.setSpacing(PropertyPanelA2.CARD_GAP)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.parameter_tabs = QTabWidget()
+        self.parameter_tabs.setObjectName("textLayerPropertyTabs")
+        self.parameter_tabs.setDocumentMode(True)
+        self.parameter_tabs.tabBar().setExpanding(True)
+        self.parameter_tabs.tabBar().setUsesScrollButtons(False)
+        self.basic_scroll_area, self.basic_tab_content, self.basic_layout = self._create_parameter_tab("基本参数")
+        self.more_scroll_area, self.more_tab_content, self.more_layout = self._create_parameter_tab("更多参数")
+        main_layout.addWidget(self.parameter_tabs)
 
         # 1. 文字内容区：创建、编辑、绑定和候选文案入口合并展示
-        self.create_text_content_card(main_layout)
+        self.create_text_content_card(self.basic_layout)
 
         # 2. 字体、排版、外观分层展示，替代单个臃肿核心参数卡片
-        self.create_font_card(main_layout)
-        self.create_typography_card(main_layout)
-        self.create_appearance_card(main_layout)
+        self.create_font_card(self.basic_layout)
+        self.create_typography_card(self.basic_layout)
+        self.create_appearance_card(self.basic_layout)
 
-        # 3. 高级设置区域
-        self.create_advanced_settings(main_layout)
+        # 3. 低频视觉效果和几何参数统一收纳到“更多参数”页
+        self.create_background_card(self.more_layout)
+        self.create_advanced_settings(self.more_layout)
         self._sync_panel_summaries()
 
-        # 添加弹性空间
-        main_layout.addStretch()
+        self.basic_layout.addStretch()
+        self.more_layout.addStretch()
 
     def _panel_stylesheet(self):
         """Photoshop 风格的深色属性面板统一样式。"""
         return PropertyPanelA2.stylesheet("#IntegratedTextPanel")
+
+    def _tab_stylesheet(self):
+        return f"""
+            #IntegratedTextPanel QTabWidget#textLayerPropertyTabs {{
+                background-color: {PropertyPanelA2.PANEL_BG};
+                border: none;
+            }}
+            #IntegratedTextPanel QTabWidget#textLayerPropertyTabs::pane {{
+                background-color: {PropertyPanelA2.PANEL_BG};
+                border: none;
+                border-top: 1px solid {Tokens.BORDER_SUBTLE};
+            }}
+            #IntegratedTextPanel QTabWidget#textLayerPropertyTabs QTabBar::tab {{
+                min-height: 38px;
+                max-height: 38px;
+                margin: 0;
+                padding: 0 16px;
+                background-color: {PropertyPanelA2.CARD_BG};
+                color: {PropertyPanelA2.TEXT_MUTED};
+                border: none;
+                border-bottom: 2px solid transparent;
+                font-size: {Tokens.FONT_SIZE_BASE}px;
+                font-weight: {Tokens.FONT_WEIGHT_MEDIUM};
+            }}
+            #IntegratedTextPanel QTabWidget#textLayerPropertyTabs QTabBar::tab:hover {{
+                color: {PropertyPanelA2.TEXT_PRIMARY};
+                background-color: {PropertyPanelA2.CONTROL_BG_HOVER};
+            }}
+            #IntegratedTextPanel QTabWidget#textLayerPropertyTabs QTabBar::tab:selected {{
+                color: {PropertyPanelA2.TEXT_PRIMARY};
+                background-color: {PropertyPanelA2.PANEL_BG};
+                border-bottom-color: {PropertyPanelA2.ACCENT};
+                font-weight: {Tokens.FONT_WEIGHT_BOLD};
+            }}
+            #IntegratedTextPanel QScrollArea {{
+                background: {PropertyPanelA2.PANEL_BG};
+                border: none;
+            }}
+        """
+
+    def _create_parameter_tab(self, label):
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+
+        content = QWidget()
+        content.setObjectName("textParameterTabContent")
+        content.setAttribute(Qt.WA_StyledBackground, True)
+        content.setStyleSheet(f"QWidget#textParameterTabContent {{ background-color: {PropertyPanelA2.PANEL_BG}; }}")
+        content.setMinimumWidth(0)
+        content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(*(PropertyPanelA2.PANEL_MARGIN,) * 4)
+        layout.setSpacing(PropertyPanelA2.CARD_GAP)
+        scroll_area.setWidget(content)
+        self.parameter_tabs.addTab(scroll_area, label)
+        return scroll_area, content, layout
 
     def _make_section_card(self, title_text, reset_handler=None):
         """创建 A v2 风格的模块卡片：标题栏带右侧摘要，正文保持紧凑。"""
@@ -710,8 +780,17 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         stroke_layout.addLayout(self._make_param_row("描边宽", self.stroke_width_spin, self.stroke_color_button, self.stroke_color, stretch_last=False))
         card_layout.addWidget(self.stroke_controls)
 
-        card_layout.addWidget(self._make_core_divider())
-        card_layout.addWidget(self._muted_label("背景"))
+        parent_layout.addWidget(card)
+
+    def create_background_card(self, parent_layout):
+        """创建文字背景卡片；该低频效果仅出现在“更多参数”页。"""
+        card, card_layout = self._make_section_card("文字背景")
+        self.background_card = card
+        self.background_card_title = card.title_label
+        self.background_summary_label = card.summary_label
+        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
+        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
+
         background_layout, self.background_button_group, self.background_mode_buttons = self._make_segment_row(
             [("无", "none"), ("纯色", "solid"), ("渐变", "gradient")],
             "none",
@@ -904,7 +983,9 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
             )
         text_fill_label = {"none": "无文字", "solid": "纯色文字", "gradient": "渐变文字"}.get(text_fill_mode, "纯色文字")
         background_label = {"none": "无背景", "solid": "纯色背景", "gradient": "渐变背景"}.get(background_mode, "无背景")
-        self._set_summary_text("appearance_summary_label", f"{text_fill_label} · {background_label}")
+        stroke_label = "描边开启" if getattr(self, "stroke_enable_check", None) and self.stroke_enable_check.isChecked() else "描边关闭"
+        self._set_summary_text("appearance_summary_label", f"{text_fill_label} · {stroke_label}")
+        self._set_summary_text("background_summary_label", background_label)
 
     def create_core_params_card(self, parent_layout):
         """创建核心参数卡片。"""
@@ -1129,4 +1210,3 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
 # 以下方法实现位于各个 mixin 模块中，通过多重继承组合进来。
 # 主类仅保留类声明、类级属性、__init__ 与 Qt 事件重写 resizeEvent。
-

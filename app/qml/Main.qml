@@ -197,17 +197,16 @@ ApplicationWindow {
     }
 
     function revealTextAppearance() {
-        inspectorTab = 0
-        textFillSection.expanded = true
+        inspectorTab = 1
         textBackgroundSection.expanded = true
         Qt.callLater(function() {
             if (inspectorScroll.contentItem)
-                inspectorScroll.contentItem.contentY = Math.max(0, textFillSection.y - 8)
+                inspectorScroll.contentItem.contentY = Math.max(0, textBackgroundSection.y - 8)
         })
     }
 
     function revealTextEffects() {
-        inspectorTab = 0
+        inspectorTab = 1
         textShadowSection.expanded = true
         textGlowSection.expanded = true
         Qt.callLater(function() {
@@ -2241,8 +2240,8 @@ ApplicationWindow {
         id: effectColorDialog
         objectName: "effectColorDialog"
         anchors.centerIn: parent
-        width: 430
-        height: 310
+        width: 780
+        height: 550
         modal: true
         focus: true
         padding: 0
@@ -2252,6 +2251,12 @@ ApplicationWindow {
         property int rangeStart: 0
         property int rangeEnd: 0
         property string errorMessage: ""
+        property color currentColor: "#000000"
+        property real hue: 0
+        property real saturation: 0
+        property real brightness: 0
+        property real alphaValue: 1
+        readonly property color selectedColor: Qt.hsva(hue, saturation, brightness, alphaValue)
 
         title: {
             if (target === "stroke") return "选择描边颜色"
@@ -2268,19 +2273,82 @@ ApplicationWindow {
             colorIndex = index === undefined ? 0 : index
             rangeStart = start === undefined ? 0 : start
             rangeEnd = end === undefined ? 0 : end
-            effectColorInput.text = String(colorValue || "#000000").toUpperCase()
+            currentColor = window.hexToColor(colorValue || "#000000")
+            setFromColor(currentColor)
             errorMessage = ""
             open()
-            Qt.callLater(function() { effectColorInput.beginEdit() })
         }
 
-        function applyColor() {
-            var hexValue = String(effectColorInput.text || "").trim().toUpperCase()
+        function clamp(value, minimum, maximum) {
+            return Math.max(minimum, Math.min(maximum, value))
+        }
+
+        function hexByte(value) {
+            var text = Math.round(clamp(value, 0, 255)).toString(16).toUpperCase()
+            return text.length < 2 ? "0" + text : text
+        }
+
+        function colorToHex(colorValue) {
+            var result = "#" + hexByte(colorValue.r * 255)
+                    + hexByte(colorValue.g * 255)
+                    + hexByte(colorValue.b * 255)
+            if (colorValue.a < 0.999) result += hexByte(colorValue.a * 255)
+            return result
+        }
+
+        function setFromColor(colorValue) {
+            var nextHue = colorValue.hsvHue
+            if (nextHue >= 0) hue = nextHue
+            saturation = colorValue.hsvSaturation
+            brightness = colorValue.hsvValue
+            alphaValue = colorValue.a
+            effectColorInput.value = colorToHex(colorValue)
+            errorMessage = ""
+        }
+
+        function setFromHex(textValue) {
+            var hexValue = String(textValue || "").trim().toUpperCase()
             if (hexValue.charAt(0) !== "#") hexValue = "#" + hexValue
             if (!/^#[0-9A-F]{6}([0-9A-F]{2})?$/.test(hexValue)) {
                 errorMessage = "请输入 #RRGGBB 或 #RRGGBBAA 格式"
-                return
+                return false
             }
+            setFromColor(window.hexToColor(hexValue))
+            return true
+        }
+
+        function setHsv(nextHue, nextSaturation, nextBrightness) {
+            if (isNaN(nextHue)) nextHue = hue
+            if (isNaN(nextSaturation)) nextSaturation = saturation
+            if (isNaN(nextBrightness)) nextBrightness = brightness
+            hue = clamp(nextHue, 0, 1)
+            saturation = clamp(nextSaturation, 0, 1)
+            brightness = clamp(nextBrightness, 0, 1)
+            effectColorInput.value = colorToHex(selectedColor)
+            errorMessage = ""
+        }
+
+        function setRgb(red, green, blue) {
+            if (isNaN(red)) red = selectedColor.r * 255
+            if (isNaN(green)) green = selectedColor.g * 255
+            if (isNaN(blue)) blue = selectedColor.b * 255
+            setFromColor(Qt.rgba(
+                clamp(red, 0, 255) / 255,
+                clamp(green, 0, 255) / 255,
+                clamp(blue, 0, 255) / 255,
+                alphaValue
+            ))
+        }
+
+        function setAlpha(alpha) {
+            if (isNaN(alpha)) return
+            alphaValue = clamp(alpha, 0, 255) / 255
+            effectColorInput.value = colorToHex(selectedColor)
+        }
+
+        function applyColor() {
+            if (!setFromHex(effectColorInput.text)) return
+            var hexValue = colorToHex(selectedColor)
             if (target === "stroke") workspace.setSelectedStrokeColor(hexValue)
             else if (target === "overlay") workspace.setSelectedColorOverlayColor(hexValue)
             else if (target === "textFill") workspace.setSelectedTextColor(hexValue)
@@ -2302,7 +2370,7 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             anchors.fill: parent
             anchors.margins: 20
-            spacing: 14
+            spacing: 12
 
             RowLayout {
                 Layout.fillWidth: true
@@ -2317,50 +2385,197 @@ ApplicationWindow {
                 IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: effectColorDialog.close() }
             }
             Divider { Layout.fillWidth: true }
+
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 12
+                Layout.fillHeight: true
+                spacing: 14
+
                 Rectangle {
-                    Layout.preferredWidth: 58
-                    Layout.preferredHeight: 58
+                    id: saturationValueField
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumWidth: 360
+                    Layout.minimumHeight: 330
                     radius: Theme.radiusSmall
-                    color: window.hexToColor(effectColorInput.text)
+                    color: "white"
                     border.width: 1
                     border.color: Theme.borderStrong
-                }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 5
-                    BodyLabel { text: "颜色值"; color: Theme.textMuted }
-                    ValueBox { id: effectColorInput; Layout.fillWidth: true; text: "#000000" }
-                }
-            }
-            BodyLabel { text: "常用颜色"; color: Theme.textMuted }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: ["#000000", "#FFFFFF", "#46D7AD", "#4FA3FF", "#F7BD63", "#F1786D", "#65D88D", "#747D7A"]
-                    delegate: Rectangle {
-                        required property string modelData
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 28
-                        radius: Theme.radiusSmall
-                        color: modelData
-                        border.width: 1
-                        border.color: paletteMouse.containsMouse ? Theme.accent : Theme.borderStrong
-                        MouseArea {
-                            id: paletteMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: effectColorInput.text = parent.modelData
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: "white" }
+                            GradientStop { position: 1; color: Qt.hsva(effectColorDialog.hue, 1, 1, 1) }
                         }
                     }
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        gradient: Gradient {
+                            GradientStop { position: 0; color: "transparent" }
+                            GradientStop { position: 1; color: "black" }
+                        }
+                    }
+                    Rectangle {
+                        x: 1 + effectColorDialog.saturation * Math.max(0, parent.width - width - 2)
+                        y: 1 + (1 - effectColorDialog.brightness) * Math.max(0, parent.height - height - 2)
+                        width: 14
+                        height: 14
+                        radius: 7
+                        color: "transparent"
+                        border.width: 2
+                        border.color: "white"
+                        Rectangle { anchors.fill: parent; anchors.margins: -1; radius: width / 2; color: "transparent"; border.width: 1; border.color: "black" }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.CrossCursor
+                        function pick(mouse) {
+                            effectColorDialog.setHsv(
+                                effectColorDialog.hue,
+                                effectColorDialog.clamp(mouse.x / width, 0, 1),
+                                1 - effectColorDialog.clamp(mouse.y / height, 0, 1)
+                            )
+                        }
+                        onPressed: mouse => pick(mouse)
+                        onPositionChanged: mouse => { if (pressed) pick(mouse) }
+                    }
+                }
+
+                Rectangle {
+                    id: hueStrip
+                    Layout.preferredWidth: 28
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 330
+                    border.width: 1
+                    border.color: Theme.borderStrong
+                    gradient: Gradient {
+                        GradientStop { position: 0.00; color: "#FF0000" }
+                        GradientStop { position: 0.17; color: "#FFFF00" }
+                        GradientStop { position: 0.33; color: "#00FF00" }
+                        GradientStop { position: 0.50; color: "#00FFFF" }
+                        GradientStop { position: 0.67; color: "#0000FF" }
+                        GradientStop { position: 0.83; color: "#FF00FF" }
+                        GradientStop { position: 1.00; color: "#FF0000" }
+                    }
+                    Rectangle {
+                        x: -4
+                        y: effectColorDialog.hue * Math.max(0, parent.height - height)
+                        width: parent.width + 8
+                        height: 4
+                        color: "transparent"
+                        border.width: 1
+                        border.color: "white"
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        function pick(mouse) {
+                            effectColorDialog.setHsv(
+                                effectColorDialog.clamp(mouse.y / height, 0, 1),
+                                effectColorDialog.saturation,
+                                effectColorDialog.brightness
+                            )
+                        }
+                        onPressed: mouse => pick(mouse)
+                        onPositionChanged: mouse => { if (pressed) pick(mouse) }
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.preferredWidth: 260
+                    Layout.fillHeight: true
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        ColumnLayout {
+                            spacing: 4
+                            BodyLabel { text: "新的"; color: Theme.textMuted; Layout.alignment: Qt.AlignHCenter }
+                            Rectangle { Layout.preferredWidth: 72; Layout.preferredHeight: 62; radius: Theme.radiusSmall; color: effectColorDialog.selectedColor; border.width: 1; border.color: Theme.borderStrong }
+                        }
+                        ColumnLayout {
+                            spacing: 4
+                            BodyLabel { text: "当前"; color: Theme.textMuted; Layout.alignment: Qt.AlignHCenter }
+                            Rectangle { Layout.preferredWidth: 72; Layout.preferredHeight: 62; radius: Theme.radiusSmall; color: effectColorDialog.currentColor; border.width: 1; border.color: Theme.borderStrong }
+                        }
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2
+                        columnSpacing: 8
+                        rowSpacing: 6
+
+                        ValueBox { value: Math.round(effectColorDialog.hue * 359).toString(); bindValue: true; suffix: "H°"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(parseFloat(value) / 359, effectColorDialog.saturation, effectColorDialog.brightness) }
+                        ValueBox { value: Math.round(effectColorDialog.selectedColor.r * 255).toString(); bindValue: true; suffix: "R"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(parseFloat(value), effectColorDialog.selectedColor.g * 255, effectColorDialog.selectedColor.b * 255) }
+                        ValueBox { value: Math.round(effectColorDialog.saturation * 100).toString(); bindValue: true; suffix: "S%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, parseFloat(value) / 100, effectColorDialog.brightness) }
+                        ValueBox { value: Math.round(effectColorDialog.selectedColor.g * 255).toString(); bindValue: true; suffix: "G"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, parseFloat(value), effectColorDialog.selectedColor.b * 255) }
+                        ValueBox { value: Math.round(effectColorDialog.brightness * 100).toString(); bindValue: true; suffix: "B%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, effectColorDialog.saturation, parseFloat(value) / 100) }
+                        ValueBox { value: Math.round(effectColorDialog.selectedColor.b * 255).toString(); bindValue: true; suffix: "B"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, effectColorDialog.selectedColor.g * 255, parseFloat(value)) }
+                        ValueBox { value: Math.round(effectColorDialog.alphaValue * 255).toString(); bindValue: true; suffix: "A"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setAlpha(parseFloat(value)) }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        BodyLabel { text: "#"; color: Theme.textMuted }
+                        ValueBox {
+                            id: effectColorInput
+                            Layout.fillWidth: true
+                            value: "#000000"
+                            bindValue: true
+                            accessibleName: "十六进制颜色"
+                            onValueCommitted: value => effectColorDialog.setFromHex(value)
+                        }
+                    }
+
+                    BodyLabel { text: "常用颜色"; color: Theme.textMuted }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 8
+                        columnSpacing: 5
+                        rowSpacing: 5
+                        Repeater {
+                            model: [
+                                "#000000", "#404040", "#808080", "#BFBFBF", "#FFFFFF", "#7F0000", "#FF0000", "#FF7F7F",
+                                "#7F3F00", "#FF7F00", "#FFFF00", "#007F00", "#00FF00", "#007F7F", "#00FFFF", "#0000FF",
+                                "#7F00FF", "#FF00FF", "#46D7AD", "#4FA3FF", "#F7BD63", "#F1786D", "#65D88D", "#747D7A"
+                            ]
+                            delegate: Rectangle {
+                                required property string modelData
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 24
+                                radius: Theme.radiusSmall
+                                color: modelData
+                                border.width: effectColorDialog.colorToHex(effectColorDialog.selectedColor).slice(0, 7) === modelData ? 2 : 1
+                                border.color: paletteMouse.containsMouse || border.width === 2 ? Theme.accent : Theme.borderStrong
+                                MouseArea {
+                                    id: paletteMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        var preset = window.hexToColor(parent.modelData)
+                                        effectColorDialog.setFromColor(Qt.rgba(
+                                            preset.r,
+                                            preset.g,
+                                            preset.b,
+                                            effectColorDialog.alphaValue
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Item { Layout.fillHeight: true }
                 }
             }
             TinyLabel { text: effectColorDialog.errorMessage; color: Theme.coral; visible: text.length > 0; Layout.fillWidth: true }
-            Item { Layout.fillHeight: true }
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
@@ -5164,7 +5379,7 @@ ApplicationWindow {
                         clip: true
                         contentWidth: availableWidth
                         contentHeight: propertyInspectorColumn.implicitHeight
-                                       + (inspectorTab === 0 ? effectInspectorColumn.implicitHeight : 0)
+                                       + effectInspectorColumn.implicitHeight
                         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                         ScrollBar.horizontal.interactive: false
 
@@ -6364,7 +6579,7 @@ ApplicationWindow {
                             id: effectInspectorColumn
                             width: inspectorScroll.availableWidth
                             y: propertyInspectorColumn.implicitHeight
-                            visible: inspectorTab === 0
+                            visible: selectedLayer >= 0
 
                             PropertySection {
                                 id: textFillSection
@@ -6372,7 +6587,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字填充"
                                 summary: workspace.selectedTextFillSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "模式"
@@ -6506,7 +6721,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字背景"
                                 summary: workspace.selectedTextBackgroundSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "启用"
@@ -6562,7 +6777,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字阴影"
                                 summary: workspace.selectedTextShadowSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "启用"
@@ -6650,7 +6865,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字发光"
                                 summary: workspace.selectedTextGlowSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "启用"
@@ -6695,7 +6910,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "描边"
                                 summary: workspace.selectedStrokeEnabled ? workspace.selectedStrokeWidth + " px" : "关闭"
-                                visible: workspace.selectedSupportsStroke
+                                visible: inspectorTab === 0 && workspace.selectedSupportsStroke
                                 InspectorRow {
                                     label: "启用"
                                     TrailingToggle {
@@ -6824,7 +7039,8 @@ ApplicationWindow {
                                          : workspace.selectedOverlayMode === "gradient"
                                            ? "渐变 · " + workspace.selectedGradientOverlayOpacity + "% · " + Math.round(workspace.selectedGradientOverlayAngle) + "°"
                                            : "关闭"
-                                visible: workspace.selectedSupportsColorOverlay || workspace.selectedSupportsGradientOverlay
+                                visible: inspectorTab === 0
+                                         && (workspace.selectedSupportsColorOverlay || workspace.selectedSupportsGradientOverlay)
 
                                 InspectorRow {
                                     label: "模式"
@@ -6954,7 +7170,7 @@ ApplicationWindow {
                                 summary: workspace.selectedCornerMode === "independent"
                                          ? "独立四角"
                                          : workspace.selectedCornerRadius + " px"
-                                visible: workspace.selectedSupportsCornerRadius
+                                visible: inspectorTab === 0 && workspace.selectedSupportsCornerRadius
 
                                 InspectorRow {
                                     label: "模式"

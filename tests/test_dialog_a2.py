@@ -65,6 +65,9 @@ class DialogA2Test(unittest.TestCase):
         self.assertEqual(dialog.blue_spin.value(), 56)
         self.assertEqual(dialog.alpha_spin.value(), 128)
         self.assertEqual(dialog.hex_edit.text(), "#0c2238")
+        self.assertTrue(hasattr(dialog, "color_field"))
+        self.assertTrue(hasattr(dialog, "hue_strip"))
+        self.assertEqual(dialog.current_preview._color, QColor(12, 34, 56, 128))
         self.assertEqual(dialog.ok_button.text(), "确定")
         self.assertEqual(dialog.cancel_button.text(), "取消")
 
@@ -90,6 +93,18 @@ class DialogA2Test(unittest.TestCase):
 
         selected = dialog.selected_color()
         self.assertEqual((selected.red(), selected.green(), selected.blue()), (51, 102, 153))
+
+    def test_color_picker_hsv_controls_update_rgb_and_new_preview(self):
+        dialog = ColorPickerDialogA2(QColor(0, 0, 0, 255))
+
+        dialog.hue_spin.setValue(120)
+        dialog.saturation_spin.setValue(100)
+        dialog.value_spin.setValue(100)
+        QApplication.processEvents()
+
+        selected = dialog.selected_color()
+        self.assertEqual((selected.red(), selected.green(), selected.blue()), (0, 255, 0))
+        self.assertEqual(dialog.new_preview._color, selected)
 
     def test_font_picker_wraps_existing_selector_in_dialog_a2_shell(self):
         dialog = FontPickerDialogA2(

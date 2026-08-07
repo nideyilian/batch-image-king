@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pytest
 
@@ -30,3 +31,38 @@ def test_qml_inspector_uses_basic_and_more_parameter_tabs():
     assert 'title: "内容源"' not in source
     assert 'title: "渐变叠加"' not in source
     assert 'model: ["属性", "效果"]' not in source
+
+
+@pytest.mark.unit
+def test_qml_text_background_shadow_and_glow_live_in_more_parameters():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    for section_id in ("textBackgroundSection", "textShadowSection", "textGlowSection"):
+        match = re.search(
+            rf"id: {section_id}.*?visible: inspectorTab === 1 && workspace\.selectedIsTextLayer",
+            source,
+            re.S,
+        )
+        assert match is not None, section_id
+
+    assert re.search(
+        r"id: textFillSection.*?visible: inspectorTab === 0 && workspace\.selectedIsTextLayer",
+        source,
+        re.S,
+    )
+
+
+@pytest.mark.unit
+def test_qml_color_picker_has_photoshop_style_controls():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    for marker in (
+        "id: saturationValueField",
+        "id: hueStrip",
+        "function setHsv",
+        "function setRgb",
+        'BodyLabel { text: "新的"',
+        'BodyLabel { text: "当前"',
+        'accessibleName: "十六进制颜色"',
+    ):
+        assert marker in source

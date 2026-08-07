@@ -28,7 +28,18 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
         self.assertEqual(self.panel.font_card_title.text(), "字体")
         self.assertEqual(self.panel.typography_card_title.text(), "排版")
         self.assertEqual(self.panel.appearance_card_title.text(), "外观")
+        self.assertEqual(self.panel.background_card_title.text(), "文字背景")
+        self.assertEqual(self.panel.effects_group.title_label.text(), "文字阴影与发光")
         self.assertEqual(self.panel.pos_group.title_label.text(), "位置和尺寸")
+
+    def test_text_parameters_are_split_between_basic_and_more_tabs(self):
+        self.assertEqual(self.panel.parameter_tabs.count(), 2)
+        self.assertEqual(self.panel.parameter_tabs.tabText(0), "基本参数")
+        self.assertEqual(self.panel.parameter_tabs.tabText(1), "更多参数")
+        self.assertIs(self.panel.appearance_card.parentWidget(), self.panel.basic_tab_content)
+        self.assertIs(self.panel.background_card.parentWidget(), self.panel.more_tab_content)
+        self.assertIs(self.panel.effects_group.parentWidget(), self.panel.more_tab_content)
+        self.assertIs(self.panel.pos_group.parentWidget(), self.panel.more_tab_content)
 
     def test_mode_buttons_and_visibility_helpers_exist(self):
         self.assertEqual(
@@ -58,6 +69,7 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
         self.assertIn("24px", self.panel.font_summary_label.text())
         self.assertIn("左对齐", self.panel.typography_summary_label.text())
         self.assertIn("纯色文字", self.panel.appearance_summary_label.text())
+        self.assertEqual(self.panel.background_summary_label.text(), "无背景")
 
     def test_a_v2_uses_compact_full_width_controls(self):
         self.assertTrue(all(
@@ -78,19 +90,23 @@ class IntegratedTextPanelA2UiTest(unittest.TestCase):
         self.assertTrue(self.panel.background_controls.isHidden())
 
     def test_a_v2_dimensions_follow_property_panel_spec(self):
-        self.assertEqual(self.panel.layout().getContentsMargins(), (
+        self.assertEqual(self.panel.layout().getContentsMargins(), (0, 0, 0, 0))
+        self.assertEqual(self.panel.basic_layout.getContentsMargins(), (
             PropertyPanelA2.PANEL_MARGIN,
             PropertyPanelA2.PANEL_MARGIN,
             PropertyPanelA2.PANEL_MARGIN,
             PropertyPanelA2.PANEL_MARGIN,
         ))
-        self.assertEqual(self.panel.layout().spacing(), PropertyPanelA2.CARD_GAP)
+        self.assertEqual(self.panel.more_layout.getContentsMargins(), self.panel.basic_layout.getContentsMargins())
+        self.assertEqual(self.panel.basic_layout.spacing(), PropertyPanelA2.CARD_GAP)
+        self.assertEqual(self.panel.more_layout.spacing(), PropertyPanelA2.CARD_GAP)
 
         for card in (
             self.panel.content_card,
             self.panel.font_card,
             self.panel.typography_card,
             self.panel.appearance_card,
+            self.panel.background_card,
         ):
             self.assertEqual(card.header_frame.minimumHeight(), PropertyPanelA2.HEADER_HEIGHT)
             self.assertEqual(card.header_frame.maximumHeight(), PropertyPanelA2.HEADER_HEIGHT)
