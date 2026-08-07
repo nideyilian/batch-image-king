@@ -77,7 +77,7 @@ def is_newer(latest: str, current: str) -> bool:
 def fetch_update_info(manifest_url: str = "") -> UpdateInfo:
     """拉取并解析更新清单。网络/JSON 异常会向上抛出，由调用方处理。"""
     url = manifest_url or get_manifest_url()
-    timeout = float(os.environ.get("BTPW_UPDATE_TIMEOUT", "8"))
+    timeout = float(os.environ.get("BTPW_UPDATE_TIMEOUT", "15"))
     with url_request.urlopen(url, timeout=timeout) as response:
         raw = response.read().decode("utf-8")
     payload = json.loads(raw)
