@@ -288,7 +288,7 @@ ApplicationWindow {
         }
         function onSavePathRequested(index, title) {
             pendingCloseTitle = title
-            closeSaveDialog.open()
+            pathInputDialog.openFor("closeSave", "")
         }
         function onApplicationCloseReady() {
             Qt.callLater(function() { window.close() })
@@ -312,11 +312,11 @@ ApplicationWindow {
     }
 
     Shortcut { sequence: "Ctrl+N"; enabled: !workspace.operationsBlocked; onActivated: window.openNewCanvasDialog() }
-    Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
-    Shortcut { sequence: "Ctrl+S"; enabled: window.hasOpenDocument; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-    Shortcut { sequence: "Ctrl+Shift+S"; enabled: window.hasOpenDocument; onActivated: saveDialog.open() }
+    Shortcut { sequence: "Ctrl+O"; onActivated: pathInputDialog.openFor("openProject", "") }
+    Shortcut { sequence: "Ctrl+S"; enabled: window.hasOpenDocument; onActivated: workspace.hasFilePath ? workspace.saveDocument() : pathInputDialog.openFor("saveProject", "") }
+    Shortcut { sequence: "Ctrl+Shift+S"; enabled: window.hasOpenDocument; onActivated: pathInputDialog.openFor("saveProject", "") }
     Shortcut { sequence: "Ctrl+W"; enabled: window.hasOpenDocument; onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
-    Shortcut { sequence: "Ctrl+E"; enabled: window.hasOpenDocument; onActivated: exportDialog.open() }
+    Shortcut { sequence: "Ctrl+E"; enabled: window.hasOpenDocument; onActivated: pathInputDialog.openFor("exportImage", "") }
     Shortcut { sequence: "Ctrl+Shift+E"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onActivated: window.openMultiTabExportDrawer() }
     Shortcut { sequence: "Ctrl+P"; enabled: !workspace.operationsBlocked; onActivated: window.openProjectPresetDrawer() }
     Shortcut { sequence: "Ctrl+R"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onActivated: window.openResizeCanvasDialog() }
@@ -362,7 +362,7 @@ ApplicationWindow {
         title: "打开批图王项目"
         fileMode: FileDialog.OpenFile
         nameFilters: ["批图王项目 (*.cmp)"]
-        onAccepted: workspaceSessions.openDocument(selectedFile.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
     }
 
     FileDialog {
@@ -371,10 +371,7 @@ ApplicationWindow {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "cmp"
         nameFilters: ["批图王项目 (*.cmp)"]
-        onAccepted: workspaceSessions.saveAndClose(
-            workspaceSessions.pendingCloseIndex,
-            selectedFile.toString()
-        )
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
         onRejected: workspaceSessions.cancelClose()
     }
 
@@ -1085,12 +1082,12 @@ ApplicationWindow {
                         IconButton {
                             iconName: AppIcons.image
                             tooltip: "选择单张图片"
-                            onClicked: shapedLayerSourceFileDialog.open()
+                            onClicked: pathInputDialog.openFor("shapeFile", shapedLayerSourceInput.text)
                         }
                         IconButton {
                             iconName: AppIcons.folderInput
                             tooltip: "选择素材文件夹"
-                            onClicked: shapedLayerSourceFolderDialog.open()
+                            onClicked: pathInputDialog.openFor("shapeFolder", shapedLayerSourceInput.text)
                         }
                         IconButton {
                             iconName: AppIcons.close
@@ -1869,7 +1866,7 @@ ApplicationWindow {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "cmp"
         nameFilters: ["批图王项目 (*.cmp)"]
-        onAccepted: workspace.saveDocumentTo(selectedFile.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
     }
 
     FileDialog {
@@ -1878,7 +1875,7 @@ ApplicationWindow {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "png"
         nameFilters: ["PNG 图片 (*.png)", "JPEG 图片 (*.jpg *.jpeg)", "WebP 图片 (*.webp)"]
-        onAccepted: workspace.exportImageTo(selectedFile.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
     }
 
     FileDialog {
@@ -1886,7 +1883,7 @@ ApplicationWindow {
         title: "添加图片图层"
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
-        onAccepted: workspace.addImageLayer(selectedFile.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
     }
 
     FileDialog {
@@ -1894,33 +1891,27 @@ ApplicationWindow {
         title: "选择异形图层图片"
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
-        onAccepted: {
-            shapedLayerDialog.sourceMode = "file"
-            shapedLayerSourceInput.text = selectedFile.toString()
-        }
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
     }
 
     FolderDialog {
         id: shapedLayerSourceFolderDialog
         title: "选择异形图层素材文件夹"
-        onAccepted: {
-            shapedLayerDialog.sourceMode = "folder"
-            shapedLayerSourceInput.text = selectedFolder.toString()
-        }
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFolder.toString())
     }
 
     AppMenu {
         id: fileMenu
         ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
-        ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
+        ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: pathInputDialog.openFor("openProject", "") }
         MenuSeparator { }
-        ShapeMenuItem { text: "保存\tCtrl+S"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-        ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; enabled: window.hasOpenDocument; onTriggered: saveDialog.open() }
+        ShapeMenuItem { text: "保存\tCtrl+S"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : pathInputDialog.openFor("saveProject", "") }
+        ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; enabled: window.hasOpenDocument; onTriggered: pathInputDialog.openFor("saveProject", workspace.documentPath) }
         MenuSeparator { }
         ShapeMenuItem { text: "关闭当前标签\tCtrl+W"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
         ShapeMenuItem { text: "复制当前标签"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
         MenuSeparator { }
-        ShapeMenuItem { text: "导出当前画面\tCtrl+E"; enabled: window.hasOpenDocument; onTriggered: exportDialog.open() }
+        ShapeMenuItem { text: "导出当前画面\tCtrl+E"; enabled: window.hasOpenDocument; onTriggered: pathInputDialog.openFor("exportImage", "") }
         ShapeMenuItem { text: "完整批量导出"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running); onTriggered: window.openBatchExportDrawer() }
         ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onTriggered: window.openMultiTabExportDrawer() }
         MenuSeparator { }
@@ -1943,8 +1934,8 @@ ApplicationWindow {
     AppMenu {
         id: layerMenu
         ShapeMenuItem { text: "新建空图片图层\tCtrl+L"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
-        ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
-        ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: imageFolderDialog.open() }
+        ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: pathInputDialog.openFor("addImage", "") }
+        ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: pathInputDialog.openFor("imageFolder", "") }
         ShapeMenuItem { text: "添加文字图层\tCtrl+T"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
         ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
         MenuSeparator { }
@@ -2207,7 +2198,7 @@ ApplicationWindow {
     FolderDialog {
         id: imageFolderDialog
         title: "添加素材文件夹"
-        onAccepted: workspace.addImageFolder(selectedFolder.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFolder.toString())
     }
 
     FileDialog {
@@ -2215,25 +2206,160 @@ ApplicationWindow {
         title: "替换图片源"
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff)"]
-        onAccepted: workspace.setSelectedImageSource(selectedFile.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFile.toString())
     }
 
     FolderDialog {
         id: replaceImageFolderDialog
         title: "选择素材文件夹"
-        onAccepted: workspace.setSelectedImageSource(selectedFolder.toString())
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFolder.toString())
     }
 
     FolderDialog {
         id: outputFolderDialog
         title: "选择批量导出目录"
-        onAccepted: batchExport.outputDirectory = selectedFolder.toString()
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFolder.toString())
     }
 
     FolderDialog {
         id: multiOutputFolderDialog
         title: "选择多标签批量导出目录"
-        onAccepted: multiTabExport.outputDirectory = selectedFolder.toString()
+        onAccepted: pathInputDialog.setPathFromBrowse(selectedFolder.toString())
+    }
+
+    AppDialog {
+        id: pathInputDialog
+        objectName: "pathInputDialog"
+        anchors.centerIn: parent
+        width: 620
+        height: 250
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+
+        property string mode: ""
+        property string pathText: ""
+        property string errorMessage: ""
+
+        title: {
+            if (mode === "openProject") return "打开项目"
+            if (mode === "saveProject") return "保存项目"
+            if (mode === "closeSave") return "保存后关闭 " + pendingCloseTitle
+            if (mode === "exportImage") return "导出当前画面"
+            if (mode === "addImage") return "添加图片图层"
+            if (mode === "shapeFile") return "选择异形图层图片"
+            if (mode === "shapeFolder") return "选择异形图层素材文件夹"
+            if (mode === "imageFolder") return "添加素材文件夹"
+            if (mode === "replaceImage") return "替换图片源"
+            if (mode === "replaceImageFolder") return "选择素材文件夹"
+            if (mode === "outputFolder") return "选择批量导出目录"
+            if (mode === "multiOutputFolder") return "选择多标签批量导出目录"
+            return "输入地址"
+        }
+
+        function openFor(nextMode, currentPath) {
+            mode = nextMode
+            pathText = String(currentPath || "")
+            errorMessage = ""
+            open()
+            Qt.callLater(function() { pathInputValue.beginEdit() })
+        }
+
+        function setPathFromBrowse(pathValue) {
+            pathText = String(pathValue || "")
+            errorMessage = ""
+            open()
+        }
+
+        function browse() {
+            close()
+            Qt.callLater(function() {
+                if (mode === "openProject") openDialog.open()
+                else if (mode === "saveProject") saveDialog.open()
+                else if (mode === "closeSave") closeSaveDialog.open()
+                else if (mode === "exportImage") exportDialog.open()
+                else if (mode === "addImage") imageDialog.open()
+                else if (mode === "shapeFile") shapedLayerSourceFileDialog.open()
+                else if (mode === "shapeFolder") shapedLayerSourceFolderDialog.open()
+                else if (mode === "imageFolder") imageFolderDialog.open()
+                else if (mode === "replaceImage") replaceImageDialog.open()
+                else if (mode === "replaceImageFolder") replaceImageFolderDialog.open()
+                else if (mode === "outputFolder") outputFolderDialog.open()
+                else if (mode === "multiOutputFolder") multiOutputFolderDialog.open()
+            })
+        }
+
+        function applyPath() {
+            var value = String(pathInputValue.text || pathText || "").trim()
+            if (!value.length) {
+                errorMessage = "请输入文件或文件夹地址"
+                return
+            }
+            pathText = value
+            if (mode === "openProject") workspaceSessions.openDocument(value)
+            else if (mode === "saveProject") workspace.saveDocumentTo(value)
+            else if (mode === "closeSave") workspaceSessions.saveAndClose(workspaceSessions.pendingCloseIndex, value)
+            else if (mode === "exportImage") workspace.exportImageTo(value)
+            else if (mode === "addImage") workspace.addImageLayer(value)
+            else if (mode === "shapeFile") { shapedLayerDialog.sourceMode = "file"; shapedLayerSourceInput.text = value }
+            else if (mode === "shapeFolder") { shapedLayerDialog.sourceMode = "folder"; shapedLayerSourceInput.text = value }
+            else if (mode === "imageFolder") workspace.addImageFolder(value)
+            else if (mode === "replaceImage") workspace.setSelectedImageSource(value)
+            else if (mode === "replaceImageFolder") workspace.setSelectedImageSource(value)
+            else if (mode === "outputFolder") batchExport.outputDirectory = value
+            else if (mode === "multiOutputFolder") multiTabExport.outputDirectory = value
+            close()
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: pathInputDialog.title
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: pathInputDialog.close() }
+            }
+            Divider { Layout.fillWidth: true }
+            BodyLabel { text: "可直接粘贴本地路径、UNC 地址或 file:/// 链接"; color: Theme.textMuted; Layout.fillWidth: true }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                ValueBox {
+                    id: pathInputValue
+                    Layout.fillWidth: true
+                    value: pathInputDialog.pathText
+                    bindValue: true
+                    editable: true
+                    accessibleName: "文件或文件夹地址"
+                    onValueCommitted: value => pathInputDialog.pathText = value
+                }
+                ExportButton { Layout.preferredWidth: 92; label: "浏览…"; iconName: AppIcons.folderOpen; onClicked: pathInputDialog.browse() }
+            }
+            TinyLabel { text: pathInputDialog.errorMessage; color: Theme.coral; visible: text.length > 0; Layout.fillWidth: true }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 88; label: "取消"; onClicked: pathInputDialog.close() }
+                ExportButton { Layout.preferredWidth: 112; label: "使用此地址"; primary: true; onClicked: pathInputDialog.applyPath() }
+            }
+        }
     }
 
     AppDialog {
@@ -3071,7 +3197,7 @@ ApplicationWindow {
                                     tooltip: "选择输出目录"
                                     buttonSize: 36
                                     active: true
-                                    onClicked: outputFolderDialog.open()
+                                    onClicked: pathInputDialog.openFor("outputFolder", batchExport.outputDirectory)
                                 }
                             }
                         }
@@ -3455,7 +3581,7 @@ ApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
                 ExportField { Layout.fillWidth: true; text: multiTabExport.outputDirectory; placeholder: "选择总输出目录"; readOnly: true }
-                IconButton { iconName: AppIcons.folderOpen; tooltip: "选择输出目录"; buttonSize: 36; active: true; onClicked: multiOutputFolderDialog.open() }
+                IconButton { iconName: AppIcons.folderOpen; tooltip: "选择输出目录"; buttonSize: 36; active: true; onClicked: pathInputDialog.openFor("multiOutputFolder", multiTabExport.outputDirectory) }
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -3711,12 +3837,12 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
-                IconButton { iconName: AppIcons.folderOpen; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: openDialog.open() }
+                IconButton { iconName: AppIcons.folderOpen; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: pathInputDialog.openFor("openProject", "") }
                 IconButton {
                     iconName: AppIcons.save
                     tooltip: "保存"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
+                    onClicked: workspace.hasFilePath ? workspace.saveDocument() : pathInputDialog.openFor("saveProject", "")
                 }
                 IconButton {
                     iconName: AppIcons.fileText
@@ -3750,7 +3876,7 @@ ApplicationWindow {
                 }
 
                 IconButton { iconName: AppIcons.type; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
-                IconButton { iconName: AppIcons.folderInput; tooltip: "添加素材文件夹"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
+                IconButton { iconName: AppIcons.folderInput; tooltip: "添加素材文件夹"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: pathInputDialog.openFor("imageFolder", "") }
                 IconButton {
                     iconName: AppIcons.shapes
                     tooltip: "添加异形图层"
@@ -3805,7 +3931,7 @@ ApplicationWindow {
                     tooltip: "导出当前画面"
                     buttonSize: 32
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: exportDialog.open()
+                    onClicked: pathInputDialog.openFor("exportImage", "")
                 }
 
                 IconButton {
@@ -5233,7 +5359,7 @@ ApplicationWindow {
                             width: 116
                             label: "打开项目"
                             iconName: AppIcons.folderOpen
-                            onClicked: openDialog.open()
+                            onClicked: pathInputDialog.openFor("openProject", "")
                         }
                     }
                 }
@@ -5433,14 +5559,14 @@ ApplicationWindow {
                                         label: "图片"
                                         iconName: AppIcons.image
                                         enabled: !workspace.selectedLocked
-                                        onClicked: replaceImageDialog.open()
+                                        onClicked: pathInputDialog.openFor("replaceImage", workspace.selectedImageSource)
                                     }
                                     ExportButton {
                                         Layout.fillWidth: true
                                         label: "文件夹"
                                         iconName: AppIcons.folderOpen
                                         enabled: !workspace.selectedLocked
-                                        onClicked: replaceImageFolderDialog.open()
+                                        onClicked: pathInputDialog.openFor("replaceImageFolder", workspace.selectedImageSource)
                                     }
                                 }
                             }

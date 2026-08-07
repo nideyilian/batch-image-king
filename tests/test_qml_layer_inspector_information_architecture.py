@@ -66,3 +66,54 @@ def test_qml_color_picker_has_photoshop_style_controls():
         'accessibleName: "十六进制颜色"',
     ):
         assert marker in source
+
+
+@pytest.mark.unit
+def test_qml_path_inputs_cover_all_file_and_folder_entry_points():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    for marker in (
+        "id: pathInputDialog",
+        "function openFor(nextMode, currentPath)",
+        "function setPathFromBrowse(pathValue)",
+        "function applyPath()",
+        "可直接粘贴本地路径、UNC 地址或 file:/// 链接",
+    ):
+        assert marker in source
+
+    expected_modes = (
+        "openProject",
+        "saveProject",
+        "closeSave",
+        "exportImage",
+        "addImage",
+        "shapeFile",
+        "shapeFolder",
+        "imageFolder",
+        "replaceImage",
+        "replaceImageFolder",
+        "outputFolder",
+        "multiOutputFolder",
+    )
+    for mode in expected_modes:
+        assert f'pathInputDialog.openFor("{mode}"' in source
+
+    # 原生选择器只应由“浏览…”按钮调用，所有业务入口统一先进入可编辑地址弹窗。
+    browse_block = re.search(r"function browse\(\).*?\n        }", source, re.S)
+    assert browse_block is not None
+    source_without_browse = source.replace(browse_block.group(0), "")
+    for dialog_id in (
+        "openDialog",
+        "saveDialog",
+        "closeSaveDialog",
+        "exportDialog",
+        "imageDialog",
+        "shapedLayerSourceFileDialog",
+        "shapedLayerSourceFolderDialog",
+        "imageFolderDialog",
+        "replaceImageDialog",
+        "replaceImageFolderDialog",
+        "outputFolderDialog",
+        "multiOutputFolderDialog",
+    ):
+        assert f"{dialog_id}.open()" not in source_without_browse
