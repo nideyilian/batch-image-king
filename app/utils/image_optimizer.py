@@ -27,12 +27,6 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
 
-try:
-    import scipy.ndimage as ndimage
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-
 
 class ImageOptimizer:
     """图像处理优化器"""

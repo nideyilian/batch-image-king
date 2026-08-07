@@ -42,16 +42,6 @@ except ImportError:
     if os.getenv('DEBUG_MODE') == '1':
         safe_print("[WARNING] OpenCV不可用，部分高级功能将被禁用")
 
-try:
-    import scipy.ndimage as ndimage
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    # 只在调试模式下显示详细警告
-    import os
-    if os.getenv('DEBUG_MODE') == '1':
-        safe_print("[WARNING] SciPy不可用，部分高级功能将被禁用")
-
 
 # 颜色空间转换常量 - 用于线性颜色空间混合
 SRGB_THRESHOLD = 0.04045

@@ -10,7 +10,7 @@ import threading
 from typing import Optional
 import uuid
 
-from PySide6.QtCore import QObject, QPointF, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QMetaObject, QObject, QPointF, Property, QRunnable, QThreadPool, QTimer, QUrl, Qt, Q_ARG, Signal, Slot
 from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage, QPainterPath
 
 from app.models.document import Document
@@ -216,6 +216,7 @@ class WorkspaceViewModel(QObject):
     vectorEditChanged = Signal()
     viewSettingsChanged = Signal()
     toastRequested = Signal(str)
+    fontCatalogReady = Signal()
 
     def __init__(
         self,
@@ -243,6 +244,7 @@ class WorkspaceViewModel(QObject):
         self._text_font_names_cache = None
         self._text_font_options_cache = None
         self._text_font_tree_options_cache = None
+        self._font_catalog_loading = False
         self._layer_style_clipboard = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
@@ -1420,8 +1422,9 @@ class WorkspaceViewModel(QObject):
 
         return TextLayer()
 
-    def _load_text_font_options(self):
-        layer = self._font_catalog_layer()
+    def _load_text_font_options(self, layer=None):
+        if layer is None:
+            layer = self._font_catalog_layer()
         try:
             font_names = self._load_text_font_names(layer)
         except Exception:
@@ -1477,8 +1480,9 @@ class WorkspaceViewModel(QObject):
             label = "常规"
         return f"{label} 斜体" if italic and "italic" not in label else label
 
-    def _load_text_font_tree_options(self):
-        layer = self._font_catalog_layer()
+    def _load_text_font_tree_options(self, layer=None):
+        if layer is None:
+            layer = self._font_catalog_layer()
         try:
             faces_by_family = layer.get_font_faces()
         except Exception:
@@ -1490,8 +1494,9 @@ class WorkspaceViewModel(QObject):
         except Exception:
             logger.debug("读取字体中文名失败", exc_info=True)
 
+        options = self._load_text_font_options(layer)
         groups = []
-        for family_option in self.textFontOptions:
+        for family_option in options:
             family = str(family_option.get("value", "") or "").strip()
             if not family:
                 continue
@@ -1526,17 +1531,65 @@ class WorkspaceViewModel(QObject):
             })
         return groups
 
-    @Property("QVariantList", notify=selectionChanged)
+    @Property("QVariantList", notify=[selectionChanged, fontCatalogReady])
     def textFontOptions(self):
         if self._text_font_options_cache is None:
-            self._text_font_options_cache = self._load_text_font_options()
+            if self.selectedIsTextLayer:
+                self._text_font_options_cache = self._load_text_font_options()
+            else:
+                if not self._font_catalog_loading:
+                    self.startFontCatalogPreload()
+                return []
         return list(self._text_font_options_cache)
 
-    @Property("QVariantList", notify=selectionChanged)
+    @Property("QVariantList", notify=[selectionChanged, fontCatalogReady])
     def textFontTreeOptions(self):
         if self._text_font_tree_options_cache is None:
-            self._text_font_tree_options_cache = self._load_text_font_tree_options()
+            if self.selectedIsTextLayer:
+                self._text_font_tree_options_cache = self._load_text_font_tree_options()
+            else:
+                if not self._font_catalog_loading:
+                    self.startFontCatalogPreload()
+                return []
         return list(self._text_font_tree_options_cache)
+
+    def startFontCatalogPreload(self):
+        if self._font_catalog_loading or self._text_font_tree_options_cache is not None:
+            return
+        self._font_catalog_loading = True
+        thread = threading.Thread(target=self._font_catalog_worker, daemon=True)
+        thread.start()
+
+    def _font_catalog_worker(self):
+        options = []
+        tree = []
+        try:
+            from app.models.text_layer_font import TextLayerFontMixin, get_fonts_cache_file
+
+            class _Scanner(TextLayerFontMixin):
+                _fonts_cache_file = get_fonts_cache_file()
+
+            scanner = _Scanner()
+            options = self._load_text_font_options(scanner)
+            tree = self._load_text_font_tree_options(scanner)
+        except Exception:
+            logger.debug("后台预加载字体目录失败", exc_info=True)
+        QMetaObject.invokeMethod(
+            self,
+            "_onFontCatalogLoaded",
+            Qt.QueuedConnection,
+            Q_ARG("QVariantList", options),
+            Q_ARG("QVariantList", tree),
+        )
+
+    @Slot("QVariantList", "QVariantList")
+    def _onFontCatalogLoaded(self, options, tree):
+        self._font_catalog_loading = False
+        if options:
+            self._text_font_options_cache = list(options)
+        if tree:
+            self._text_font_tree_options_cache = list(tree)
+        self.fontCatalogReady.emit()
 
     @Property("QVariantList", notify=selectionChanged)
     def selectedTextFontOptions(self):

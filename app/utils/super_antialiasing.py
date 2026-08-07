@@ -33,18 +33,6 @@ except ImportError:
     if os.getenv('DEBUG_MODE') == '1':
         safe_print("[INFO] OpenCV不可用，超级抗锯齿将使用基础实现")
 
-# SciPy是可选依赖
-try:
-    import scipy.ndimage as ndimage
-    from scipy import signal
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    # 只在调试模式下显示详细信息
-    import os
-    if os.getenv('DEBUG_MODE') == '1':
-        safe_print("[INFO] SciPy不可用，部分高级抗锯齿功能将被禁用")
-
 
 class SuperAntialiasing:
     """超级抗锯齿系统"""

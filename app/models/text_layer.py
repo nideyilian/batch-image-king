@@ -13,7 +13,7 @@ from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
 
-from app.models.text_layer_font import TextLayerFontMixin
+from app.models.text_layer_font import TextLayerFontMixin, get_fonts_cache_file
 from app.models.text_layer_render import TextLayerRenderMixin
 from app.models.text_layer_serialize import TextLayerSerializeMixin
 
@@ -113,7 +113,7 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         # 缓存
         self._cached_image = None
         self._font_cache = {}  # 字体对象缓存
-        self._fonts_cache_file = "fonts_cache.json"  # 字体缓存文件
+        self._fonts_cache_file = get_fonts_cache_file()  # 字体缓存文件（用户数据目录，避免打包后只读）
 
         # 渲染质量优化
         self._supersample_enabled = True

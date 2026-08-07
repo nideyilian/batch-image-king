@@ -132,6 +132,7 @@ def main() -> int:
         auto_render=auto_render,
         parent=engine,
     )
+    workspace.startFontCatalogPreload()
     batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
     canvas_presets = CanvasPresetViewModel(workspace=workspace, parent=engine)
     binding_manager = BindingManagerViewModel(workspace=workspace, parent=engine)

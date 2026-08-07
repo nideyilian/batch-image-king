@@ -19,6 +19,27 @@ from app.models.text_layer_enums import (
 logger = logging.getLogger(__name__)
 
 
+def get_user_data_dir() -> str:
+    """返回用户数据目录（打包安装后程序目录只读，必须写入用户目录）。"""
+    try:
+        if os.name == 'nt':  # Windows
+            base_dir = os.environ.get('APPDATA', os.path.expanduser('~'))
+        else:  # Linux/Mac
+            base_dir = os.environ.get('XDG_CONFIG_HOME', os.path.join(os.path.expanduser('~'), '.config'))
+        app_data_dir = os.path.join(base_dir, '批图王')
+        os.makedirs(app_data_dir, exist_ok=True)
+        return app_data_dir
+    except Exception:
+        logger.warning("获取用户数据目录失败，回退到临时目录", exc_info=True)
+        import tempfile
+        return tempfile.gettempdir()
+
+
+def get_fonts_cache_file() -> str:
+    """字体缓存文件路径：优先用户数据目录，避免安装到 Program Files 后只读写失败。"""
+    return os.path.join(get_user_data_dir(), 'fonts_cache.json')
+
+
 class TextLayerFontMixin:
 
     def _get_default_font(self):
