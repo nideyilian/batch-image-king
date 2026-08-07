@@ -2251,33 +2251,6 @@ class WorkspaceViewModel(QObject):
         self._publish_content_change(index, f"已更新图片源 · {description}")
         return True
 
-    @Slot(bool, result=bool)
-    def setSelectedImageSourceMode(self, is_folder: bool) -> bool:
-        if not self._ensure_operations_available():
-            return False
-        layer = self._selected_layer()
-        if not self.selectedHasImageSource or layer is None:
-            return False
-        if bool(getattr(layer, "locked", False)):
-            self._set_status("图层已锁定", toast=True)
-            return False
-        is_folder = bool(is_folder)
-        if bool(getattr(layer, "is_folder", False)) == is_folder:
-            return True
-        index = self.selectedLayerIndex
-        with self._document_lock:
-            self._ensure_history_baseline()
-            layer.is_folder = is_folder
-            layer.current_image_path = None
-            self._clear_image_layer_cache(layer)
-            self._document.is_modified = True
-            self._document.bump_hit_test_version()
-            self._document._invalidate_render_cache()
-            self._document.save_state("切换图像源类型")
-        mode_name = "素材文件夹" if is_folder else "单文件"
-        self._publish_content_change(index, f"已切换为{mode_name}模式")
-        return True
-
     @Slot(result=bool)
     def showNextSelectedImage(self) -> bool:
         if not self._ensure_operations_available():

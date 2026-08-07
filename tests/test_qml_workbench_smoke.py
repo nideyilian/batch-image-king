@@ -167,7 +167,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'legacyTools.renameSelectedLayer()' not in qml_source
     assert 'function revealLayerNameEditor()' in qml_source
     assert 'workspace.addEmptyImageLayer()' in qml_source
-    assert 'workspace.setSelectedImageSourceMode(false)' in qml_source
+    assert 'workspace.setSelectedImageSourceMode(' not in qml_source
     assert 'workspace.resetView()' in qml_source
     assert 'workspaceSessions.requestApplicationClose()' in qml_source
     assert 'workspaceSessions.duplicateDocument(contextDocumentIndex)' in qml_source

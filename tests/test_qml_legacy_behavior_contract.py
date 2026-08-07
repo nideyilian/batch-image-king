@@ -38,22 +38,27 @@ def test_empty_image_layer_preserves_classic_creation_contract():
 
 
 @pytest.mark.unit
-def test_image_source_mode_can_change_without_selecting_a_source(tmp_path: Path):
+def test_selecting_image_source_automatically_sets_its_mode(tmp_path: Path):
     source = tmp_path / "source.png"
+    replacement = tmp_path / "replacement.png"
+    folder = tmp_path / "assets"
+    folder.mkdir()
     Image.new("RGBA", (20, 20), (255, 0, 0, 255)).save(source)
+    Image.new("RGBA", (20, 20), (0, 255, 0, 255)).save(replacement)
+    Image.new("RGBA", (20, 20), (0, 0, 255, 255)).save(folder / "folder-source.png")
     workspace = _workspace()
     assert workspace.addImageLayer(str(source)) is True
 
-    assert workspace.setSelectedImageSourceMode(True) is True
+    assert workspace.setSelectedImageSource(str(folder)) is True
     layer = workspace.document.layers[0]
     assert layer.is_folder is True
-    assert layer.image_source == str(source)
-    assert layer.current_image_path is None
+    assert layer.image_source == str(folder)
+    assert layer.current_image_path == str(folder / "folder-source.png")
 
-    assert workspace.setSelectedImageSourceMode(False) is True
+    assert workspace.setSelectedImageSource(str(replacement)) is True
     assert layer.is_folder is False
-    assert layer.image_source == str(source)
-    assert layer.current_image_path is None
+    assert layer.image_source == str(replacement)
+    assert layer.current_image_path == str(replacement)
 
 
 @pytest.mark.unit

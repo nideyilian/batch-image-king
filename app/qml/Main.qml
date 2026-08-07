@@ -4889,23 +4889,6 @@ ApplicationWindow {
                                 visible: inspectorTab === 0 && workspace.selectedHasImageSource
 
                                 InspectorRow {
-                                    label: "模式"
-                                    CompactActionButton {
-                                        Layout.fillWidth: true
-                                        label: "单文件"
-                                        active: !workspace.selectedImageSourceIsFolder
-                                        enabled: !workspace.selectedLocked
-                                        onClicked: workspace.setSelectedImageSourceMode(false)
-                                    }
-                                    CompactActionButton {
-                                        Layout.fillWidth: true
-                                        label: "文件夹"
-                                        active: workspace.selectedImageSourceIsFolder
-                                        enabled: !workspace.selectedLocked
-                                        onClicked: workspace.setSelectedImageSourceMode(true)
-                                    }
-                                }
-                                InspectorRow {
                                     label: "路径"
                                     ValueBox {
                                         Layout.fillWidth: true
