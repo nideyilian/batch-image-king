@@ -547,7 +547,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
     ) -> List['LayerCombination']:
         """组合规划阶段：按模式生成组合。"""
         if traverse_mode:
-            return self._generate_standard_combinations_v2(
+            return self._generate_exhaustive_combinations_v2(
                 target_count, avoid_duplicates, cancel_callback=cancel_callback, progress_start=precompute_start
             )
         if self.export_mode == 'binding':

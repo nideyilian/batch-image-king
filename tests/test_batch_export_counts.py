@@ -153,6 +153,135 @@ class BatchExportCountTest(unittest.TestCase):
         diagnostic_reasons = (plan.precompute_diagnostics or {}).get("adjustment_reasons", [])
         self.assertTrue(any("唯一组合不足" in reason for reason in diagnostic_reasons))
 
+    def test_traverse_mode_generates_all_cartesian_combinations(self):
+        """遍历模式应穷举全部笛卡尔组合，与旧版 _generate_exhaustive_combinations 一致。"""
+        with tempfile.TemporaryDirectory() as dir_a, tempfile.TemporaryDirectory() as dir_b:
+            _touch_images(dir_a, "alpha", [".jpg", ".jpg", ".jpg"])
+            _touch_images(dir_b, "beta", [".jpg", ".jpg"])
+            layer_a = _folder_layer("图层A", dir_a)
+            layer_b = _folder_layer("图层B", dir_b)
+            document = SimpleNamespace(
+                layers=[layer_a, layer_b],
+                export_settings={},
+                file_path="",
+                binding_manager=None,
+            )
+            analysis = {
+                "binding_enabled": False,
+                "binding_categories": [],
+                "layer_analysis": {
+                    "visible_layers": [layer_a, layer_b],
+                    "bound_layers": [],
+                    "unbound_layers": [layer_a, layer_b],
+                },
+                "export_mode": "standard",
+            }
+
+            precomputer = get_batch_precomputer_v2(document, analysis)
+            precomputer.analyze_document_with_context()
+
+            with tempfile.TemporaryDirectory() as output:
+                plan = precomputer.create_export_plan(
+                    directory=output,
+                    count=99,
+                    filename_template="image_{number:04d}",
+                    file_format="png",
+                    start_index=1,
+                    avoid_duplicates=True,
+                    traverse_mode=True,
+                )
+
+            self.assertEqual(plan.total_count, 6)
+            self.assertEqual(plan.unique_combinations, 6)
+            hashes = {t.combination.combination_hash for t in plan.tasks}
+            self.assertEqual(len(hashes), 6)
+
+    def test_traverse_mode_respects_upper_bound_count(self):
+        """遍历模式在 count 小于全组合数时只生成前 count 个。"""
+        with tempfile.TemporaryDirectory() as dir_a, tempfile.TemporaryDirectory() as dir_b:
+            _touch_images(dir_a, "alpha", [".jpg", ".jpg", ".jpg"])
+            _touch_images(dir_b, "beta", [".jpg", ".jpg"])
+            layer_a = _folder_layer("图层A", dir_a)
+            layer_b = _folder_layer("图层B", dir_b)
+            document = SimpleNamespace(
+                layers=[layer_a, layer_b],
+                export_settings={},
+                file_path="",
+                binding_manager=None,
+            )
+            analysis = {
+                "binding_enabled": False,
+                "binding_categories": [],
+                "layer_analysis": {
+                    "visible_layers": [layer_a, layer_b],
+                    "bound_layers": [],
+                    "unbound_layers": [layer_a, layer_b],
+                },
+                "export_mode": "standard",
+            }
+
+            precomputer = get_batch_precomputer_v2(document, analysis)
+            precomputer.analyze_document_with_context()
+
+            with tempfile.TemporaryDirectory() as output:
+                plan = precomputer.create_export_plan(
+                    directory=output,
+                    count=2,
+                    filename_template="image_{number:04d}",
+                    file_format="png",
+                    start_index=1,
+                    avoid_duplicates=True,
+                    traverse_mode=True,
+                )
+
+            self.assertEqual(plan.total_count, 2)
+            self.assertEqual(plan.unique_combinations, 2)
+
+    def test_traverse_mode_plans_stable_unique_hashes(self):
+        """遍历模式两次生成的组合顺序与哈希应一致（确定性）。"""
+        with tempfile.TemporaryDirectory() as dir_a, tempfile.TemporaryDirectory() as dir_b:
+            _touch_images(dir_a, "alpha", [".jpg", ".jpg"])
+            _touch_images(dir_b, "beta", [".jpg", ".jpg"])
+            layer_a = _folder_layer("图层A", dir_a)
+            layer_b = _folder_layer("图层B", dir_b)
+            document = SimpleNamespace(
+                layers=[layer_a, layer_b],
+                export_settings={},
+                file_path="",
+                binding_manager=None,
+            )
+            analysis = {
+                "binding_enabled": False,
+                "binding_categories": [],
+                "layer_analysis": {
+                    "visible_layers": [layer_a, layer_b],
+                    "bound_layers": [],
+                    "unbound_layers": [layer_a, layer_b],
+                },
+                "export_mode": "standard",
+            }
+
+            plans = []
+            for _ in range(2):
+                precomputer = get_batch_precomputer_v2(document, analysis)
+                precomputer.analyze_document_with_context()
+                with tempfile.TemporaryDirectory() as output:
+                    plan = precomputer.create_export_plan(
+                        directory=output,
+                        count=10,
+                        filename_template="image_{number:04d}",
+                        file_format="png",
+                        start_index=1,
+                        avoid_duplicates=True,
+                        traverse_mode=True,
+                    )
+                    plans.append(plan)
+
+            hash_a = [t.combination.combination_hash for t in plans[0].tasks]
+            hash_b = [t.combination.combination_hash for t in plans[1].tasks]
+            self.assertEqual(hash_a, hash_b)
+            self.assertEqual(len(set(hash_a)), 4)
+
 
 if __name__ == "__main__":
     unittest.main()

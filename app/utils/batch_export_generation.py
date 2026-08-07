@@ -22,6 +22,81 @@ logger = logging.getLogger(__name__)
 
 
 class BatchExportGenerationMixin:
+    def _generate_exhaustive_combinations_v2(self, count: int, avoid_duplicates: bool,
+                                             cancel_callback: Optional[Callable[[], bool]] = None,
+                                             progress_start: Optional[float] = None) -> List['LayerCombination']:
+        """穷举遍历组合（遍历模式）：按图层池笛卡尔积顺序生成全部组合。
+
+        与旧版 batch_export_precomputer._generate_exhaustive_combinations 行为一致，
+        按 itertools.product 顺序逐一枚举，天然无重复、覆盖全部组合空间；
+        同时补齐新版 LayerCombination 的 random_transforms / layer_parameters / clone 元数据。
+        """
+        import itertools
+
+        layer_pools = []
+        layer_indices = []
+        for layer_idx in sorted(self.layer_image_pools.keys()):
+            image_pool = self.layer_image_pools.get(layer_idx) or []
+            if image_pool:
+                layer_pools.append(list(dict.fromkeys(image_pool)))
+                layer_indices.append(layer_idx)
+
+        if not layer_pools or count <= 0:
+            self._set_precompute_diagnostics({
+                "mode": "standard",
+                "dedup_strategy": "exhaustive",
+                "requested_count": int(count),
+                "generated_count": 0,
+                "attempts": 0,
+                "duplicate_attempts": 0,
+                "dedup_hits": {"hash": 0, "file_layers": 0, "file_layers_category": 0, "other": 0},
+                "deterministic_enumeration_used": False,
+                "dynamic_budget": {},
+                "combination_space": {"total_possible_estimate": 0},
+            })
+            return []
+
+        progress_start = progress_start or time.time()
+        self._render_progress_line("预计算", 0, count, progress_start, force=True)
+
+        product_iter = itertools.product(*layer_pools)
+        combinations = []
+        for i, combo_tuple in enumerate(product_iter):
+            if count is not None and count > 0 and i >= count:
+                break
+            if cancel_callback and cancel_callback():
+                self._was_canceled = True
+                self._render_progress_line("预计算", len(combinations), count, progress_start, force=True)
+                self._finish_progress_line()
+                break
+
+            layer_states = {}
+            for j, selected_image in enumerate(combo_tuple):
+                layer_states[layer_indices[j]] = selected_image
+
+            combination_hash = self._generate_deterministic_hash(layer_states)
+            random_transforms, layer_parameters, layer_clone_settings = self._build_combination_runtime_metadata(
+                layer_states=layer_states,
+                combination_index=len(combinations),
+                category=None
+            )
+            combination = LayerCombination(
+                index=len(combinations),
+                layer_states=layer_states,
+                layer_clone_settings=layer_clone_settings,
+                combination_hash=combination_hash,
+                is_unique=True,
+                random_transforms=random_transforms,
+                layer_parameters=layer_parameters,
+            )
+            combinations.append(combination)
+            self._render_progress_line("预计算", len(combinations), count, progress_start)
+
+        self._render_progress_line("预计算", len(combinations), count, progress_start, force=True)
+        self._finish_progress_line()
+        print(f"[V2] 遍历模式穷举生成组合: {len(combinations)} 个 (上限 {count})")
+        return combinations
+
     def _generate_binding_combinations_v2(self, count: int, avoid_duplicates: bool,
                                           cancel_callback: Optional[Callable[[], bool]] = None,
                                           progress_start: Optional[float] = None) -> List['LayerCombination']:
