@@ -196,6 +196,17 @@ ApplicationWindow {
         })
     }
 
+    function revealTextContentEditing() {
+        if (workspace.selectedLayerIndex < 0)
+            return
+        inspectorTab = 0
+        textContentSection.expanded = true
+        Qt.callLater(function() {
+            if (inspectorScroll.contentItem)
+                inspectorScroll.contentItem.contentY = Math.max(0, textContentSection.y - 8)
+            selectedTextEditor.beginEdit()
+        })
+    }
     function revealTextAppearance() {
         inspectorTab = 1
         textBackgroundSection.expanded = true
@@ -3048,6 +3059,11 @@ ApplicationWindow {
                 contentEditor.focus = false
         }
 
+        function beginEdit() {
+            if (!textEditorRoot.enabled)
+                return
+            contentEditor.forceActiveFocus()
+        }
         function selectRange(start, end) {
             contentEditor.select(start, end)
             contentEditor.forceActiveFocus()
@@ -4854,6 +4870,12 @@ ApplicationWindow {
                                 canvasWorkspace.cancelTransform()
                                 canvasWorkspace.marqueeActive = false
                             }
+                            onDoubleClicked: mouse => {
+                                if (workspace.cropEditing || canvasWorkspace.transformActive)
+                                    return
+                                if (workspace.beginTextEditAt(mouse.x, mouse.y))
+                                    window.revealTextContentEditing()
+                            }
                         }
 
                         Rectangle {
@@ -5895,6 +5917,7 @@ ApplicationWindow {
                             }
 
                             PropertySection {
+                                id: textContentSection
                                 Layout.fillWidth: true
                                 Layout.row: 10
                                 title: "文字内容"
