@@ -207,6 +207,7 @@ ApplicationWindow {
             selectedTextEditor.beginEdit()
         })
     }
+
     function revealTextAppearance() {
         inspectorTab = 1
         textBackgroundSection.expanded = true
@@ -2932,6 +2933,7 @@ ApplicationWindow {
                 return
             contentEditor.forceActiveFocus()
         }
+
         function selectRange(start, end) {
             contentEditor.select(start, end)
             contentEditor.forceActiveFocus()

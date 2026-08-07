@@ -3727,6 +3727,23 @@ class WorkspaceViewModel(QObject):
         self.clearSelection()
         return -1
 
+    @Slot(float, float, result=bool)
+    def beginTextEditAt(self, x: float, y: float) -> bool:
+        if self.cropEditing or self._export_running:
+            return False
+        hits = self.hitTestLayersAt(x, y)
+        if not hits:
+            return False
+        index = int(hits[0])
+        layer = self._document.layers[index]
+        if self._layer_model.layer_type_name(layer) != "文字":
+            return False
+        if is_effectively_locked(layer, self._document.layers):
+            self._set_status("图层已锁定，无法编辑文字", toast=True)
+            return False
+        self.selectLayer(index)
+        return True
+
     def _ensure_history_baseline(self) -> None:
         manager = self._document._history_manager
         if manager.get_history_count() == 0:

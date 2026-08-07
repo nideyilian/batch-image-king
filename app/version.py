@@ -8,4 +8,4 @@
 """
 
 APP_NAME = "批图王"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1.1"
