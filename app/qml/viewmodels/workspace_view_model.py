@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 import os
 from pathlib import Path
@@ -29,6 +30,9 @@ from app.utils.layer_tree import (
     is_layer_group,
     set_parent_group_id,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 _BLEND_MODES = {
@@ -236,6 +240,7 @@ class WorkspaceViewModel(QObject):
         self._render_pending = False
         self._active_render_task = None
         self._text_font_names_cache = None
+        self._text_font_options_cache = None
         self._layer_style_clipboard = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
@@ -1380,45 +1385,92 @@ class WorkspaceViewModel(QObject):
         return str(getattr(self._selected_layer(), "font_family", "") or "")
 
     def _load_text_font_names(self, layer):
+        try:
+            font_names = layer.get_system_fonts()
+            if font_names:
+                return font_names
+        except Exception:
+            logger.debug("加载文字图层本地字体目录失败，回退 Qt 字体库", exc_info=True)
         if QGuiApplication.instance() is not None:
             return QFontDatabase.families()
-        return layer.get_system_fonts()
+        return []
+
+    def _font_catalog_layer(self):
+        if self.selectedIsTextLayer:
+            return self._selected_layer()
+        from app.models.text_layer import TextLayer
+
+        return TextLayer()
+
+    def _load_text_font_options(self):
+        layer = self._font_catalog_layer()
+        try:
+            font_names = self._load_text_font_names(layer)
+        except Exception:
+            logger.debug("构建本地字体选项失败", exc_info=True)
+            font_names = []
+        try:
+            chinese_names = layer.get_font_cn_names()
+        except Exception:
+            logger.debug("读取本地字体中文名映射失败", exc_info=True)
+            chinese_names = {}
+        fallbacks = [
+            "Microsoft YaHei",
+            "SimHei",
+            "SimSun",
+            "Arial",
+            "Segoe UI",
+        ]
+        options = []
+        seen = set()
+        for name in list(font_names or []) or fallbacks:
+            family = str(name or "").strip()
+            key = family.casefold()
+            if not family or key in seen:
+                continue
+            seen.add(key)
+            chinese_name = str(chinese_names.get(family, "") or "").strip()
+            label = f"{chinese_name} ({family})" if chinese_name and chinese_name != family else family
+            options.append({"label": label, "value": family})
+        return options
+
+    @Property("QVariantList", notify=selectionChanged)
+    def textFontOptions(self):
+        if self._text_font_options_cache is None:
+            self._text_font_options_cache = self._load_text_font_options()
+        return list(self._text_font_options_cache)
 
     @Property("QVariantList", notify=selectionChanged)
     def selectedTextFontOptions(self):
         if not self.selectedIsTextLayer:
             return []
-        layer = self._selected_layer()
-        if self._text_font_names_cache is None:
-            try:
-                font_names = self._load_text_font_names(layer)
-            except Exception:
-                font_names = []
-            fallbacks = [
-                "Microsoft YaHei",
-                "SimHei",
-                "SimSun",
-                "Arial",
-                "Segoe UI",
-            ]
-            unique_names = []
-            seen = set()
-            candidates = list(font_names or []) or fallbacks
-            for name in candidates:
-                normalized = str(name or "").strip()
-                if not normalized or normalized.casefold() in seen:
-                    continue
-                seen.add(normalized.casefold())
-                unique_names.append(normalized)
-            self._text_font_names_cache = unique_names
-
         current = self.selectedTextFontFamily
-        names = [current] if current else []
-        names.extend(
-            name for name in self._text_font_names_cache
-            if name.casefold() != current.casefold()
+        options = self.textFontOptions
+        if not current:
+            return options
+        current_key = current.casefold()
+        current_option = next(
+            (option for option in options if str(option.get("value", "")).casefold() == current_key),
+            {"label": current, "value": current},
         )
-        return [{"label": name, "value": name} for name in names]
+        return [current_option] + [
+            option for option in options
+            if str(option.get("value", "")).casefold() != current_key
+        ]
+
+    def _canonical_text_font_family(self, family: str) -> str:
+        requested = str(family or "").strip()
+        requested_key = requested.casefold()
+        for option in self.textFontOptions:
+            value = str(option.get("value", "") or "").strip()
+            label = str(option.get("label", value) or value).strip()
+            aliases = {value.casefold(), label.casefold()}
+            suffix = f" ({value})"
+            if value and label.endswith(suffix):
+                aliases.add(label[:-len(suffix)].strip().casefold())
+            if requested_key in aliases:
+                return value
+        return requested
 
     def _selected_text_style_name(self) -> str:
         if not self.selectedIsTextLayer:
@@ -2501,7 +2553,7 @@ class WorkspaceViewModel(QObject):
 
     @Slot(str, result=bool)
     def setSelectedTextFontFamily(self, family: str) -> bool:
-        family = str(family or "").strip()
+        family = self._canonical_text_font_family(family)
         if not family:
             self._set_status("字体名称不能为空", toast=True)
             return False

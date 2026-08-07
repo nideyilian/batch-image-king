@@ -60,6 +60,42 @@ def test_text_font_options_and_style_combinations(monkeypatch):
 
 
 @pytest.mark.unit
+def test_local_font_catalog_uses_canonical_family_names_and_chinese_labels(monkeypatch):
+    workspace, layer = _workspace()
+    monkeypatch.setattr(
+        workspace,
+        "_load_text_font_names",
+        lambda selected_layer: ["Microsoft YaHei", "Local Poster Font", "Microsoft YaHei"],
+    )
+    monkeypatch.setattr(
+        layer,
+        "get_font_cn_names",
+        lambda: {"Microsoft YaHei": "微软雅黑", "Local Poster Font": "本地海报体"},
+    )
+    workspace._text_font_options_cache = None
+
+    assert workspace.textFontOptions == [
+        {"label": "微软雅黑 (Microsoft YaHei)", "value": "Microsoft YaHei"},
+        {"label": "本地海报体 (Local Poster Font)", "value": "Local Poster Font"},
+    ]
+    assert workspace.selectedTextFontOptions[0] == {
+        "label": "微软雅黑 (Microsoft YaHei)",
+        "value": "Microsoft YaHei",
+    }
+
+    assert workspace.setSelectedTextFontFamily("本地海报体") is True
+    assert layer.font_family == "Local Poster Font"
+
+
+@pytest.mark.unit
+def test_new_text_dialog_uses_local_font_catalog():
+    qml_source = (Path(__file__).resolve().parents[1] / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
+
+    assert "options: workspace.textFontOptions" in qml_source
+    assert '{ label: "Microsoft YaHei", value: "Microsoft YaHei" }' not in qml_source
+
+
+@pytest.mark.unit
 def test_text_layout_properties_and_commands_are_mapped():
     workspace, layer = _workspace()
 

@@ -896,13 +896,7 @@ ApplicationWindow {
                 FontSelectBox {
                     Layout.fillWidth: true
                     value: textLayerDialog.fontFamily
-                    options: [
-                        { label: "Microsoft YaHei", value: "Microsoft YaHei" },
-                        { label: "SimHei", value: "SimHei" },
-                        { label: "SimSun", value: "SimSun" },
-                        { label: "KaiTi", value: "KaiTi" },
-                        { label: "Arial", value: "Arial" }
-                    ]
+                    options: workspace.textFontOptions
                     onActivated: value => textLayerDialog.fontFamily = value
                 }
 
