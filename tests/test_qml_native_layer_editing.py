@@ -47,6 +47,23 @@ def test_focus_sensitive_qml_editors_preserve_the_current_value():
 
 
 @pytest.mark.unit
+def test_font_selector_opens_full_catalog_before_the_user_types():
+    font_box = (REPO_ROOT / "app/qml/components/FontSelectBox.qml").read_text(
+        encoding="utf-8"
+    )
+
+    focus_handler = font_box.split("onActiveFocusChanged:", 1)[1].split(
+        "onTextEdited:", 1
+    )[0]
+    assert font_box.count('root.query = ""') >= 2
+    assert "root.query = fontInput.text" not in font_box
+    assert 'root.query = ""' in focus_handler
+    assert "root.query = text" not in focus_handler
+    assert "root.query = text" in font_box
+    assert "fontInput.focus = false" in font_box
+
+
+@pytest.mark.unit
 def test_layer_ui_uses_native_qml_dialogs_and_inline_rename():
     main_qml = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     bridge = (REPO_ROOT / "app/qml/legacy_feature_bridge.py").read_text(encoding="utf-8")

@@ -20,7 +20,7 @@ Rectangle {
     function beginEdit() {
         if (!root.enabled) return
         fontInput.text = String(root.value)
-        root.query = fontInput.text
+        root.query = ""
         fontInput.forceActiveFocus()
         fontInput.selectAll()
         fontPopup.open()
@@ -65,7 +65,7 @@ Rectangle {
         onActiveFocusChanged: {
             if (activeFocus) {
                 text = String(root.value)
-                root.query = text
+                root.query = ""
                 selectAll()
                 fontPopup.open()
             }
@@ -118,9 +118,15 @@ Rectangle {
         enabled: root.enabled
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: {
-            fontInput.forceActiveFocus()
-            if (fontPopup.visible) fontPopup.close()
-            else fontPopup.open()
+            if (fontPopup.visible) {
+                fontPopup.close()
+                fontInput.focus = false
+            } else {
+                root.query = ""
+                fontInput.forceActiveFocus()
+                fontInput.selectAll()
+                fontPopup.open()
+            }
         }
     }
 
