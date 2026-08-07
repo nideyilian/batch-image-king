@@ -69,51 +69,34 @@ def test_qml_color_picker_has_photoshop_style_controls():
 
 
 @pytest.mark.unit
-def test_qml_path_inputs_cover_all_file_and_folder_entry_points():
+def test_qml_export_directory_fields_accept_direct_paths_without_replacing_pickers():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
-    for marker in (
-        "id: pathInputDialog",
-        "function openFor(nextMode, currentPath)",
-        "function setPathFromBrowse(pathValue)",
-        "function applyPath()",
-        "可直接粘贴本地路径、UNC 地址或 file:/// 链接",
+    assert "pathInputDialog" not in source
+    for picker_call in (
+        "openDialog.open()",
+        "imageDialog.open()",
+        "imageFolderDialog.open()",
+        "replaceImageDialog.open()",
+        "replaceImageFolderDialog.open()",
+        "outputFolderDialog.open()",
+        "multiOutputFolderDialog.open()",
     ):
-        assert marker in source
+        assert picker_call in source
 
-    expected_modes = (
-        "openProject",
-        "saveProject",
-        "closeSave",
-        "exportImage",
-        "addImage",
-        "shapeFile",
-        "shapeFolder",
-        "imageFolder",
-        "replaceImage",
-        "replaceImageFolder",
-        "outputFolder",
-        "multiOutputFolder",
+    batch_output = re.search(
+        r"ExportField \{.*?text: batchExport\.outputDirectory.*?"
+        r"onCommitted: value => batchExport\.outputDirectory = value.*?\}",
+        source,
+        re.S,
     )
-    for mode in expected_modes:
-        assert f'pathInputDialog.openFor("{mode}"' in source
+    assert batch_output is not None
+    assert "readOnly: true" not in batch_output.group(0)
 
-    # 原生选择器只应由“浏览…”按钮调用，所有业务入口统一先进入可编辑地址弹窗。
-    browse_block = re.search(r"function browse\(\).*?\n        }", source, re.S)
-    assert browse_block is not None
-    source_without_browse = source.replace(browse_block.group(0), "")
-    for dialog_id in (
-        "openDialog",
-        "saveDialog",
-        "closeSaveDialog",
-        "exportDialog",
-        "imageDialog",
-        "shapedLayerSourceFileDialog",
-        "shapedLayerSourceFolderDialog",
-        "imageFolderDialog",
-        "replaceImageDialog",
-        "replaceImageFolderDialog",
-        "outputFolderDialog",
-        "multiOutputFolderDialog",
-    ):
-        assert f"{dialog_id}.open()" not in source_without_browse
+    multi_output = re.search(
+        r"ExportField \{.*?text: multiTabExport\.outputDirectory.*?"
+        r"onCommitted: value => multiTabExport\.outputDirectory = value.*?\}",
+        source,
+        re.S,
+    )
+    assert multi_output is not None
