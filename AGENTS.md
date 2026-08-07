@@ -312,7 +312,10 @@ pyinstaller 批图王.spec
   `app/qml/viewmodels/update_view_model.py`。
 - 自升级：下载 `批图王_new.exe` 到程序目录，以 `--apply-update` 启动临时实例，主进程退出后完成替换并重启。
 - 发版流程：改 `app/version.py` → `python build.py` → 创建 GitHub Release 并上传
-  `批图王.exe` 与 `批图王-Setup.exe` → 将代码（含 `update/update.json`）推送到 `main` 分支。
+  `batch-image-king.exe`（对应本地 `dist/批图王.exe`）与 `batch-image-king-setup.exe`
+  （对应本地 `dist/批图王-Setup.exe`）→ 将代码（含 `update/update.json`）推送到 `main` 分支。
+- ⚠️ GitHub Release 资产名不接受非 ASCII 字符（中文名会被剥离），上传资产必须用上述两个 ASCII 名，
+  `build.py` 生成清单时已按此命名。
 - 测试可用环境变量覆盖更新源：`BTPW_UPDATE_URL`（可用 `file://` 指向本地 JSON）。
 
 ## 维护注意事项

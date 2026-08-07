@@ -11,6 +11,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent
 APP_NAME = "批图王"
 GITHUB_REPO = "nideyilian/batch-image-king"
+# 注意：GitHub Release 资产名不接受非 ASCII 字符，上传时统一使用 ASCII 文件名
+RELEASE_EXE_NAME = "batch-image-king.exe"
+RELEASE_SETUP_NAME = "batch-image-king-setup.exe"
 NSIS_EXE_CANDIDATES = [
     r"C:\Program Files (x86)\NSIS\makensis.exe",
     r"C:\Program Files\NSIS\makensis.exe",
@@ -90,8 +93,8 @@ def write_update_manifest(version: str) -> Path:
     payload = {
         "version": version,
         "release_notes": f"批图王 v{version}\n请查看仓库更新日志了解本次更新内容。",
-        "download_url": release_asset_url(version, f"{APP_NAME}.exe"),
-        "installer_url": release_asset_url(version, f"{APP_NAME}-Setup.exe"),
+        "download_url": release_asset_url(version, RELEASE_EXE_NAME),
+        "installer_url": release_asset_url(version, RELEASE_SETUP_NAME),
         "required": False,
         "published_at": str(date.today()),
     }
