@@ -66,6 +66,7 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         
         # 字体属性
         self._font_family = self._get_default_font()  # 字体名称
+        self._font_face = ""  # 实际字体子样式；空值兼容旧项目的合成样式
         self._font_size = 24  # 字体大小
         self._font_style = FontStyle.NORMAL  # 字体样式
         
@@ -224,6 +225,19 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
     def font_family(self, value):
         if self._font_family != value:
             self._font_family = value
+            self._cached_image = None
+            self._update_text_box_size_if_needed()
+            self.changed.emit()
+
+    @Property(str)
+    def font_face(self):
+        return self._font_face
+
+    @font_face.setter
+    def font_face(self, value):
+        normalized = str(value or "").strip()
+        if self._font_face != normalized:
+            self._font_face = normalized
             self._cached_image = None
             self._update_text_box_size_if_needed()
             self.changed.emit()

@@ -39,7 +39,9 @@ def test_text_font_options_and_style_combinations(monkeypatch):
             "english": ["Arial"],
         },
     )
+    monkeypatch.setattr(layer, "get_font_faces", lambda: {})
     workspace._text_font_options_cache = None
+    workspace._text_font_tree_options_cache = None
 
     assert workspace.selectedTextFontFamily == layer.font_family
     assert [item["value"] for item in workspace.selectedTextFontOptions] == [
@@ -116,10 +118,62 @@ def test_non_chinese_current_font_is_not_added_to_the_visible_catalog(monkeypatc
 
 
 @pytest.mark.unit
+def test_font_tree_groups_faces_and_maps_bold_italic_to_real_faces(monkeypatch):
+    workspace, layer = _workspace()
+    layer.font_face = "Regular"
+    monkeypatch.setattr(
+        layer,
+        "get_categorized_fonts",
+        lambda: {"chinese": ["Demo Sans SC"], "english": []},
+    )
+    monkeypatch.setattr(
+        layer,
+        "get_font_faces",
+        lambda: {
+            "Demo Sans SC": [
+                {"style": "Regular", "path": "regular.ttf", "weight": 400, "italic": False},
+                {"style": "Light", "path": "light.ttf", "weight": 300, "italic": False},
+                {"style": "Bold", "path": "bold.ttf", "weight": 700, "italic": False},
+                {"style": "Italic", "path": "italic.ttf", "weight": 400, "italic": True},
+                {"style": "Bold Italic", "path": "bold-italic.ttf", "weight": 700, "italic": True},
+            ]
+        },
+    )
+    workspace._text_font_options_cache = None
+    workspace._text_font_tree_options_cache = None
+
+    tree = workspace.textFontTreeOptions
+    assert tree[0]["value"] == "Demo Sans SC"
+    assert [face["value"] for face in tree[0]["children"]] == [
+        "Light",
+        "Regular",
+        "Italic",
+        "Bold",
+        "Bold Italic",
+    ]
+
+    assert workspace.setSelectedTextFontFace("Demo Sans SC", "Bold") is True
+    assert layer.font_family == "Demo Sans SC"
+    assert layer.font_face == "Bold"
+    assert layer.font_style == "NORMAL"
+    assert workspace.selectedTextBold is True
+    assert workspace.selectedTextItalic is False
+
+    assert workspace.setSelectedTextItalic(True) is True
+    assert layer.font_face == "Bold Italic"
+    assert workspace.selectedTextBold is True
+    assert workspace.selectedTextItalic is True
+
+    assert workspace.setSelectedTextBold(False) is True
+    assert layer.font_face == "Italic"
+    assert layer.font_style == "NORMAL"
+
+
+@pytest.mark.unit
 def test_new_text_dialog_uses_local_font_catalog():
     qml_source = (Path(__file__).resolve().parents[1] / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
 
-    assert "options: workspace.textFontOptions" in qml_source
+    assert "options: workspace.textFontTreeOptions" in qml_source
     assert '{ label: "Microsoft YaHei", value: "Microsoft YaHei" }' not in qml_source
 
 

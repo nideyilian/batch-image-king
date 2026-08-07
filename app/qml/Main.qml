@@ -792,6 +792,7 @@ ApplicationWindow {
         closePolicy: Popup.CloseOnEscape
         // impeccable-disable-next-line design-system-font: output-content font, not UI typography
         property string fontFamily: "Microsoft YaHei"
+        property string fontFace: ""
         property string alignment: "left"
         property string errorMessage: ""
 
@@ -801,6 +802,7 @@ ApplicationWindow {
             textLayerBindingInput.checked = true
             // impeccable-disable-next-line design-system-font: output-content font, not UI typography
             fontFamily = "Microsoft YaHei"
+            fontFace = ""
             textLayerFontSizeInput.text = "24"
             textLayerColorInput.text = "#000000"
             alignment = "left"
@@ -815,6 +817,7 @@ ApplicationWindow {
                 content: textLayerContentInput.text,
                 bindingEnabled: textLayerBindingInput.checked,
                 fontFamily: fontFamily,
+                fontFace: fontFace,
                 fontSize: parseInt(textLayerFontSizeInput.text),
                 color: textLayerColorInput.text,
                 alignment: alignment
@@ -911,8 +914,12 @@ ApplicationWindow {
                 FontSelectBox {
                     Layout.fillWidth: true
                     value: textLayerDialog.fontFamily
-                    options: workspace.textFontOptions
-                    onActivated: value => textLayerDialog.fontFamily = value
+                    face: textLayerDialog.fontFace
+                    options: workspace.textFontTreeOptions
+                    onActivated: function(value, face) {
+                        textLayerDialog.fontFamily = value
+                        textLayerDialog.fontFace = face
+                    }
                 }
 
                 BodyLabel { text: "字号与颜色"; color: Theme.textMuted }
@@ -6110,10 +6117,13 @@ ApplicationWindow {
                                     label: "字体"
                                     FontSelectBox {
                                         Layout.fillWidth: true
-                                        options: workspace.selectedTextFontOptions
+                                        options: workspace.selectedTextFontTreeOptions
                                         value: workspace.selectedTextFontFamily
+                                        face: workspace.selectedTextFontFace
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onActivated: value => workspace.setSelectedTextFontFamily(value)
+                                        onActivated: function(value, face) {
+                                            workspace.setSelectedTextFontFace(value, face)
+                                        }
                                     }
                                 }
                                 InspectorRow {

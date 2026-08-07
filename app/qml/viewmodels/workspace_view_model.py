@@ -129,6 +129,7 @@ _COMMON_STYLE_ATTRIBUTES = (
 
 _TEXT_STYLE_ATTRIBUTES = (
     "font_family",
+    "font_face",
     "font_size",
     "font_style",
     "text_color",
@@ -241,6 +242,7 @@ class WorkspaceViewModel(QObject):
         self._active_render_task = None
         self._text_font_names_cache = None
         self._text_font_options_cache = None
+        self._text_font_tree_options_cache = None
         self._layer_style_clipboard = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
@@ -1450,11 +1452,91 @@ class WorkspaceViewModel(QObject):
             options.append({"label": label, "value": family})
         return options
 
+    @staticmethod
+    def _font_face_label(style: str) -> str:
+        normalized = str(style or "Regular").strip()
+        key = normalized.casefold().replace("-", " ").replace("_", " ")
+        italic = "italic" in key or "oblique" in key or "slanted" in key
+        if "extra light" in key or "extralight" in key or "ultra light" in key:
+            label = "特细"
+        elif "thin" in key or "hairline" in key:
+            label = "极细"
+        elif "light" in key:
+            label = "细体"
+        elif "medium" in key:
+            label = "中等"
+        elif "semi bold" in key or "semibold" in key or "demi bold" in key:
+            label = "半粗体"
+        elif "extra bold" in key or "extrabold" in key or "ultra bold" in key:
+            label = "特粗"
+        elif "black" in key or "heavy" in key:
+            label = "黑体"
+        elif "bold" in key:
+            label = "粗体"
+        else:
+            label = "常规"
+        return f"{label} 斜体" if italic and "italic" not in label else label
+
+    def _load_text_font_tree_options(self):
+        layer = self._font_catalog_layer()
+        try:
+            faces_by_family = layer.get_font_faces()
+        except Exception:
+            logger.debug("构建字体字重目录失败", exc_info=True)
+            faces_by_family = {}
+        chinese_names = {}
+        try:
+            chinese_names = layer.get_font_cn_names()
+        except Exception:
+            logger.debug("读取字体中文名失败", exc_info=True)
+
+        groups = []
+        for family_option in self.textFontOptions:
+            family = str(family_option.get("value", "") or "").strip()
+            if not family:
+                continue
+            faces = []
+            for face in faces_by_family.get(family, []) or []:
+                style = str(face.get("style", "Regular") or "Regular").strip()
+                faces.append({
+                    "label": self._font_face_label(style),
+                    "value": style,
+                    "face": style,
+                    "family": family,
+                    "weight": int(face.get("weight", 400) or 400),
+                    "italic": bool(face.get("italic", False)),
+                    "synthetic": False,
+                })
+            if not faces:
+                faces = [{
+                    "label": "常规",
+                    "value": "Regular",
+                    "face": "Regular",
+                    "family": family,
+                    "weight": 400,
+                    "italic": False,
+                    "synthetic": True,
+                }]
+            faces.sort(key=lambda item: (item["weight"], item["italic"], item["value"].casefold()))
+            groups.append({
+                "label": str(chinese_names.get(family, "") or family),
+                "value": family,
+                "family": family,
+                "children": faces,
+            })
+        return groups
+
     @Property("QVariantList", notify=selectionChanged)
     def textFontOptions(self):
         if self._text_font_options_cache is None:
             self._text_font_options_cache = self._load_text_font_options()
         return list(self._text_font_options_cache)
+
+    @Property("QVariantList", notify=selectionChanged)
+    def textFontTreeOptions(self):
+        if self._text_font_tree_options_cache is None:
+            self._text_font_tree_options_cache = self._load_text_font_tree_options()
+        return list(self._text_font_tree_options_cache)
 
     @Property("QVariantList", notify=selectionChanged)
     def selectedTextFontOptions(self):
@@ -1475,6 +1557,45 @@ class WorkspaceViewModel(QObject):
             option for option in options
             if str(option.get("value", "")).casefold() != current_key
         ]
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedTextFontTreeOptions(self):
+        return self.textFontTreeOptions if self.selectedIsTextLayer else []
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextFontFace(self) -> str:
+        if not self.selectedIsTextLayer:
+            return ""
+        return str(getattr(self._selected_layer(), "font_face", "") or "")
+
+    def _selected_font_face(self, family: str = "", face: str = ""):
+        family = family or self.selectedTextFontFamily
+        face = face or self.selectedTextFontFace
+        for group in self.textFontTreeOptions:
+            if str(group.get("family", "")).casefold() != str(family).casefold():
+                continue
+            for item in group.get("children", []) or []:
+                if str(item.get("face", "")).casefold() == str(face).casefold():
+                    return item
+        return None
+
+    def _nearest_font_face(self, bold: bool, italic: bool):
+        family = self.selectedTextFontFamily
+        candidates = []
+        for group in self.textFontTreeOptions:
+            if str(group.get("family", "")).casefold() == family.casefold():
+                candidates = [
+                    item for item in (group.get("children", []) or [])
+                    if not bool(item.get("synthetic", False))
+                ]
+                break
+        if not candidates:
+            return None
+        same_italic = [item for item in candidates if bool(item.get("italic")) == bool(italic)]
+        if same_italic:
+            candidates = same_italic
+        target_weight = 700 if bold else 400
+        return min(candidates, key=lambda item: abs(int(item.get("weight", 400)) - target_weight))
 
     def _canonical_text_font_family(self, family: str) -> str:
         requested = str(family or "").strip()
@@ -1497,10 +1618,16 @@ class WorkspaceViewModel(QObject):
 
     @Property(bool, notify=selectionChanged)
     def selectedTextBold(self) -> bool:
+        face = self._selected_font_face()
+        if face is not None:
+            return int(face.get("weight", 400)) >= 600
         return self._selected_text_style_name() in ("BOLD", "BOLD_ITALIC")
 
     @Property(bool, notify=selectionChanged)
     def selectedTextItalic(self) -> bool:
+        face = self._selected_font_face()
+        if face is not None:
+            return bool(face.get("italic", False))
         return self._selected_text_style_name() in ("ITALIC", "BOLD_ITALIC")
 
     @Property(str, notify=selectionChanged)
@@ -2479,6 +2606,7 @@ class WorkspaceViewModel(QObject):
             text_layer.auto_fit_text_box = False
             text_layer.text_binding_enabled = bool(config.get("bindingEnabled", True))
             text_layer.font_family = font_family
+            text_layer.font_face = str(config.get("fontFace", "") or "").strip()
             text_layer.font_size = font_size
             text_layer.text_color = color
             text_layer.text_align = _TEXT_ALIGNMENTS[alignment][0]
@@ -2577,8 +2705,30 @@ class WorkspaceViewModel(QObject):
             return False
         return self._change_selected_text(
             "修改文字字体",
-            lambda layer: setattr(layer, "font_family", family),
+            lambda layer: (setattr(layer, "font_family", family), setattr(layer, "font_face", "")),
             f"文字字体 · {family}",
+        )
+
+    @Slot(str, str, result=bool)
+    def setSelectedTextFontFace(self, family: str, face: str) -> bool:
+        family = self._canonical_text_font_family(family)
+        face = str(face or "").strip()
+        if not family or not face:
+            self._set_status("字体字重不能为空", toast=True)
+            return False
+        if self._selected_font_face(family, face) is None:
+            self._set_status("未找到所选字体字重", toast=True)
+            return False
+
+        def apply(layer) -> None:
+            layer.font_family = family
+            layer.font_face = face
+            layer.font_style = "NORMAL"
+
+        return self._change_selected_text(
+            "修改文字字体字重",
+            apply,
+            f"文字字重 · {family} · {self._font_face_label(face)}",
         )
 
     @staticmethod
@@ -2593,7 +2743,11 @@ class WorkspaceViewModel(QObject):
 
     @Slot(bool, result=bool)
     def setSelectedTextBold(self, enabled: bool) -> bool:
-        style = self._font_style_name(bool(enabled), self.selectedTextItalic)
+        enabled = bool(enabled)
+        face = self._nearest_font_face(enabled, self.selectedTextItalic)
+        if face is not None:
+            return self.setSelectedTextFontFace(self.selectedTextFontFamily, face["face"])
+        style = self._font_style_name(enabled, self.selectedTextItalic)
         return self._change_selected_text(
             "切换文字粗体",
             lambda layer: setattr(layer, "font_style", style),
@@ -2602,7 +2756,11 @@ class WorkspaceViewModel(QObject):
 
     @Slot(bool, result=bool)
     def setSelectedTextItalic(self, enabled: bool) -> bool:
-        style = self._font_style_name(self.selectedTextBold, bool(enabled))
+        enabled = bool(enabled)
+        face = self._nearest_font_face(self.selectedTextBold, enabled)
+        if face is not None:
+            return self.setSelectedTextFontFace(self.selectedTextFontFamily, face["face"])
+        style = self._font_style_name(self.selectedTextBold, enabled)
         return self._change_selected_text(
             "切换文字斜体",
             lambda layer: setattr(layer, "font_style", style),

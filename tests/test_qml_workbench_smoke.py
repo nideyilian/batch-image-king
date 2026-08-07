@@ -116,8 +116,8 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source
     assert 'workspace.regenerateSelectedRandomTransform()' in qml_source
     assert 'FontSelectBox {' in qml_source
-    assert 'options: workspace.selectedTextFontOptions' in qml_source
-    assert 'workspace.setSelectedTextFontFamily(value)' in qml_source
+    assert 'options: workspace.selectedTextFontTreeOptions' in qml_source
+    assert 'workspace.setSelectedTextFontFace(value, face)' in qml_source
     assert 'workspace.setSelectedTextBold(!workspace.selectedTextBold)' in qml_source
     assert 'workspace.setSelectedTextItalic(!workspace.selectedTextItalic)' in qml_source
     assert 'workspace.setSelectedTextAlignment(parent.modelData.value)' in qml_source

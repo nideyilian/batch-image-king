@@ -64,6 +64,21 @@ def test_font_selector_opens_full_catalog_before_the_user_types():
 
 
 @pytest.mark.unit
+def test_font_selector_supports_family_rows_and_face_leaf_selection():
+    font_box = (REPO_ROOT / "app/qml/components/FontSelectBox.qml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "property string face" in font_box
+    assert "property var expandedFamilies" in font_box
+    assert "children" in font_box
+    assert "kind: \"family\"" in font_box
+    assert "kind: \"face\"" in font_box
+    assert "signal activated(string value, string face)" in font_box
+    assert "root.activated(row.family, row.face)" in font_box
+
+
+@pytest.mark.unit
 def test_layer_ui_uses_native_qml_dialogs_and_inline_rename():
     main_qml = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     bridge = (REPO_ROOT / "app/qml/legacy_feature_bridge.py").read_text(encoding="utf-8")
@@ -99,6 +114,7 @@ def test_configured_text_layer_matches_the_classic_creation_contract():
             "content": "新品上市\n限时特惠",
             "bindingEnabled": True,
             "fontFamily": "Arial",
+            "fontFace": "Bold",
             "fontSize": 36,
             "color": "#123456CC",
             "alignment": "center",
@@ -113,6 +129,7 @@ def test_configured_text_layer_matches_the_classic_creation_contract():
     assert layer.current_text == "新品上市"
     assert layer.text_binding_enabled is True
     assert layer.font_family == "Arial"
+    assert layer.font_face == "Bold"
     assert layer.font_size == 36
     assert layer.text_color == (0x12, 0x34, 0x56, 0xCC)
     assert str(layer.text_align).upper().endswith("CENTER")

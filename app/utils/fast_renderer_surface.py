@@ -1789,6 +1789,7 @@ class FastRendererSurface(object):
         parts.extend([
             f"text_lines:{hashlib.md5(str(text_lines or '').encode('utf-8')).hexdigest()[:10]}",
             f"font_family:{getattr(layer, 'font_family', '')}",
+            f"font_face:{getattr(layer, 'font_face', '')}",
             f"font_size:{getattr(layer, 'font_size', '')}",
             f"font_style:{getattr(layer, 'font_style', '')}",
             f"text_color:{getattr(layer, 'text_color', '')}",

@@ -282,7 +282,10 @@ class IntelligentRenderCache:
                     text_value = getattr(layer, 'current_text', '') or ''
                     text_hash = hashlib.md5(text_value.encode('utf-8')).hexdigest()[:8]
                     layer_parts.append(f"text:{text_hash}")
-                    layer_parts.append(f"font:{getattr(layer, 'font_family', '')}")
+                    layer_parts.append(
+                        f"font:{getattr(layer, 'font_family', '')}:"
+                        f"{getattr(layer, 'font_face', '')}"
+                    )
                     layer_parts.append(f"fs:{getattr(layer, 'font_size', 0)}")
                     layer_parts.append(f"fst:{getattr(layer, 'font_style', '')}")
                     layer_parts.append(f"align:{getattr(layer, 'text_align', '')}")

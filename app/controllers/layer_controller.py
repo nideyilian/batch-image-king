@@ -225,7 +225,7 @@ class LayerController(QObject):
             'rotation', 'flip_horizontal', 'flip_vertical'
         ]
         text_attrs = [
-            'text_color', 'font_family', 'font_size', 'font_style', 'text_align',
+            'text_color', 'font_family', 'font_face', 'font_size', 'font_style', 'text_align',
             'line_spacing', 'gradient_enabled', 'gradient_type', 'gradient_direction',
             'gradient_start_color', 'gradient_end_color', 'gradient_center_x',
             'gradient_center_y', 'background_enabled', 'background_color',
@@ -705,6 +705,7 @@ class LayerController(QObject):
                 text_style_data = {
                     'text_color': getattr(layer, 'text_color', (0, 0, 0, 255)),
                     'font_family': getattr(layer, 'font_family', 'Arial'),
+                    'font_face': getattr(layer, 'font_face', ''),
                     'font_size': getattr(layer, 'font_size', 16),
                     'font_style': getattr(layer, 'font_style', 'NORMAL'),
                     'text_align': getattr(layer, 'text_align', 'LEFT'),

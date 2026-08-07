@@ -676,13 +676,19 @@ class TextLayerFontMixin:
 
     def _get_font_object(self):
         """获取PIL字体对象，使用缓存（增强中文与斜体支持）"""
-        cache_key = f"{self._font_family}_{self._font_size}_{self._font_style.name}"
+        cache_key = (
+            f"{self._font_family}_{getattr(self, '_font_face', '')}_"
+            f"{self._font_size}_{self._font_style.name}"
+        )
 
         if cache_key in self._font_cache:
             return self._font_cache[cache_key]
 
         # 优先根据字体家族定位文件路径
-        font_path = self._find_font_path(self._font_family)
+        font_path = self._find_font_path(
+            self._font_family,
+            getattr(self, '_font_face', ''),
+        )
 
         # 如果按家族找不到，针对常见中文字体进行映射尝试
         if not font_path:
@@ -721,8 +727,25 @@ class TextLayerFontMixin:
         self._font_cache[cache_key] = font
         return font
 
-    def _find_font_path(self, font_name: str) -> str:
-        """查找字体文件路径，考虑字体样式"""
+    def _find_font_path(self, font_name: str, face_style: str = '') -> str:
+        """查找字体文件路径；显式 face 优先于旧版合成样式。"""
+        requested_face = str(face_style or '').strip().casefold()
+        if requested_face:
+            cached_faces = getattr(self, '_cached_font_faces', None)
+            if not cached_faces:
+                try:
+                    self.get_system_fonts()
+                except Exception:
+                    cached_faces = {}
+                else:
+                    cached_faces = getattr(self, '_cached_font_faces', None)
+            for face in (cached_faces or {}).get(font_name, []) or []:
+                if str(face.get('style') or '').strip().casefold() != requested_face:
+                    continue
+                path = str(face.get('path') or '')
+                if path and os.path.exists(path):
+                    return path
+
         # 优先使用扫描时记录的字体文件路径缓存
         cached_paths = getattr(self, '_cached_font_paths', None)
         if cached_paths:

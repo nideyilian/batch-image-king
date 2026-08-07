@@ -75,3 +75,47 @@ class TestTextLayerSerialize:
         # 原图层未被影响
         assert layer.get_text_lines() == ["A", "B"]
         assert copy.get_text_lines() == ["X", "Y", "Z"]
+
+    def test_font_face_round_trip_duplicate_and_legacy_default(self):
+        layer = TextLayer(name="weighted")
+        layer.font_family = "Demo Sans SC"
+        layer.font_face = "SemiBold"
+
+        data = layer.serialize()
+        assert data["font_face"] == "SemiBold"
+
+        restored = TextLayer.deserialize(data)
+        assert restored.font_family == "Demo Sans SC"
+        assert restored.font_face == "SemiBold"
+
+        duplicate = layer.duplicate()
+        assert duplicate.font_face == "SemiBold"
+        duplicate.font_face = "Light"
+        assert layer.font_face == "SemiBold"
+
+        legacy_data = dict(data)
+        legacy_data.pop("font_face")
+        legacy = TextLayer.deserialize(legacy_data)
+        assert legacy.font_face == ""
+
+    def test_font_face_invalidates_render_cache_and_selects_exact_path(self, tmp_path):
+        regular = tmp_path / "Demo-Regular.ttf"
+        bold = tmp_path / "Demo-Bold.ttf"
+        regular.write_bytes(b"regular")
+        bold.write_bytes(b"bold")
+        layer = TextLayer()
+        layer.font_family = "Demo Sans SC"
+        layer._cached_image = object()
+        layer._cached_font_paths = {"Demo Sans SC": str(regular)}
+        layer._cached_font_faces = {
+            "Demo Sans SC": [
+                {"style": "Regular", "path": str(regular), "weight": 400, "italic": False},
+                {"style": "Bold", "path": str(bold), "weight": 700, "italic": False},
+            ]
+        }
+
+        layer.font_face = "Bold"
+
+        assert layer._cached_image is None
+        assert layer._find_font_path("Demo Sans SC", "Bold") == str(bold)
+        assert layer._find_font_path("Demo Sans SC", "Missing") == str(regular)

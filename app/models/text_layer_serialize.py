@@ -241,6 +241,7 @@ class TextLayerSerializeMixin:
             'random_mode': self._random_mode,
             'text_binding_enabled': self._text_binding_enabled,
             'font_family': self._font_family,
+            'font_face': self._font_face,
             'font_size': self._font_size,
             'font_style': self._font_style.name,
             'text_color': self._text_color,
@@ -298,6 +299,7 @@ class TextLayerSerializeMixin:
         layer._random_mode = data.get('random_mode', False)
         layer._text_binding_enabled = data.get('text_binding_enabled', True)
         layer._font_family = data.get('font_family', layer._get_default_font())
+        layer._font_face = str(data.get('font_face', '') or '')
         layer._font_size = data.get('font_size', 24)
         layer._font_style = FontStyle[data.get('font_style', 'NORMAL')]
         layer._text_color = tuple(data.get('text_color', (0, 0, 0, 255)))
@@ -388,6 +390,7 @@ class TextLayerSerializeMixin:
 
         # 复制字体属性
         new_layer._font_family = self._font_family
+        new_layer._font_face = self._font_face
         new_layer._font_size = self._font_size
         new_layer._font_style = self._font_style
 
