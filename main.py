@@ -14,6 +14,11 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--export-worker":
     from app.workers.export_worker import main as export_worker_main
     sys.exit(export_worker_main(sys.argv[2:]))
 
+if len(sys.argv) >= 2 and sys.argv[1] == "--apply-update":
+    from app.utils.updater import apply_update, parse_apply_update_args
+    new_exe, wait_pid, relaunch = parse_apply_update_args(sys.argv[2:])
+    sys.exit(apply_update(new_exe, wait_pid=wait_pid, relaunch=relaunch))
+
 from app.utils.crash_session import begin_crash_session, mark_clean_exit
 
 def _safe_print(message):
@@ -312,7 +317,13 @@ def main() -> int:
 
         # 设置应用信息
         app.setApplicationName("批图王")
-        app.setApplicationVersion("1.0.0")
+        try:
+            from app.version import APP_VERSION
+
+            app_version = str(APP_VERSION)
+        except Exception:
+            app_version = "1.0.0"
+        app.setApplicationVersion(app_version)
         app.setOrganizationName("批图王")
 
         # 创建并显示主窗口

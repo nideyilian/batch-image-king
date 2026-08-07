@@ -86,6 +86,7 @@ def main() -> int:
     from app.qml.viewmodels.preset_manager_view_model import PresetManagerViewModel
     from app.qml.viewmodels.multi_tab_export_view_model import MultiTabExportViewModel
     from app.qml.viewmodels.size_match_view_model import SizeMatchViewModel
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
     from app.qml.viewmodels.workspace_session_view_model import WorkspaceSessionViewModel
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
@@ -93,6 +94,12 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("批图王 QML")
     app.setOrganizationName("BatchImageKing")
+    try:
+        from app.version import APP_VERSION
+
+        app.setApplicationVersion(str(APP_VERSION))
+    except Exception:
+        pass
 
     def cleanup_runtime() -> None:
         QThreadPool.globalInstance().waitForDone(5000)
@@ -129,6 +136,7 @@ def main() -> int:
     canvas_presets = CanvasPresetViewModel(workspace=workspace, parent=engine)
     binding_manager = BindingManagerViewModel(workspace=workspace, parent=engine)
     size_match = SizeMatchViewModel(workspace=workspace, parent=engine)
+    update_manager = UpdateViewModel(parent=engine)
     engine.addImageProvider("documentPreview", preview_provider)
 
     demo_requested = bool(
@@ -309,6 +317,7 @@ def main() -> int:
     engine.rootContext().setContextProperty("sizeMatch", size_match)
     engine.rootContext().setContextProperty("multiTabExport", multi_tab_export)
     engine.rootContext().setContextProperty("legacyTools", legacy_tools)
+    engine.rootContext().setContextProperty("updateManager", update_manager)
 
     qml_path = qml_dir / "Main.qml"
     debug(f"loading {qml_path}")
@@ -541,6 +550,12 @@ def main() -> int:
                 app.exit(3)
 
         QTimer.singleShot(1800, capture)
+
+    # 启动后延迟静默检查更新；发现新版本时由 QML 横幅提示
+    QTimer.singleShot(4000, update_manager.checkForUpdatesSilent)
+
+    # 新版下载完成并启动自升级实例后，短暂等待后退出主进程以便完成替换
+    update_manager.restartRequested.connect(lambda: QTimer.singleShot(500, app.quit))
 
     exit_code = app.exec()
     debug(f"event loop exited with code {exit_code}")

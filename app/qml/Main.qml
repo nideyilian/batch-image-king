@@ -31,6 +31,8 @@ ApplicationWindow {
     property bool layerShortcutsEnabled: hasOpenDocument && !selectedTextEditor.editing && !workspace.operationsBlocked
     property string pendingCloseTitle: ""
     property int contextDocumentIndex: -1
+    property bool updateBannerDismissed: false
+    property string updateBannerText: ""
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
         { label: "正片叠底", value: "multiply" },
@@ -148,6 +150,16 @@ ApplicationWindow {
     function openRenameDocumentDialog(index) {
         if (!workspace.operationsBlocked)
             renameDocumentDialog.openForDocument(index)
+    }
+
+    function openUpdateDialog() {
+        if (!updateManager.downloading)
+            updateManager.checkForUpdates()
+        updateDialog.open()
+    }
+
+    function openAboutDialog() {
+        aboutDialog.open()
     }
 
     function restoreExportSurface(index) {
@@ -281,6 +293,22 @@ ApplicationWindow {
         }
         function onApplicationCloseReady() {
             Qt.callLater(function() { window.close() })
+        }
+    }
+
+    Connections {
+        target: updateManager
+        function onAutoUpdateDetected(version) {
+            updateBannerDismissed = false
+            updateBannerText = "发现新版本 v" + version
+            updateDialog.open()
+        }
+        function onUpdateFinished(ok, message) {
+            if (ok) {
+                showToast("更新下载完成，程序即将重启并完成替换")
+            } else {
+                showToast("更新失败：" + message)
+            }
         }
     }
 
@@ -1951,6 +1979,217 @@ ApplicationWindow {
     }
 
     AppMenu {
+        id: helpMenu
+        ShapeMenuItem { text: "检查更新"; onTriggered: window.openUpdateDialog() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
+    }
+
+    AppDialog {
+        id: updateDialog
+        objectName: "updateDialog"
+        anchors.centerIn: parent
+        width: 460
+        height: 440
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+
+        onOpened: {
+            if (!updateManager.downloading && !updateManager.checking && !updateManager.updateAvailable && updateManager.errorMessage.length === 0)
+                updateManager.checkForUpdates()
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            spacing: 14
+            anchors.margins: 20
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "检查更新"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: updateDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 16
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    BodyLabel { text: "当前版本"; color: Theme.textMuted }
+                    BodyLabel { text: "v" + updateManager.currentVersion; color: Theme.textPrimary; font.weight: Font.DemiBold }
+                }
+                AppIcon { iconName: AppIcons.refresh; iconSize: 16; iconColor: Theme.textMuted }
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 4
+                    BodyLabel { text: "最新版本"; color: Theme.textMuted }
+                    BodyLabel {
+                        text: updateManager.latestVersion.length > 0 ? "v" + updateManager.latestVersion : "-"
+                        color: updateManager.updateAvailable ? Theme.accent : Theme.textPrimary
+                        font.weight: Font.DemiBold
+                    }
+                }
+            }
+
+            StatusBanner {
+                Layout.fillWidth: true
+                Layout.preferredHeight: updateManager.errorMessage.length > 0 ? 56 : 0
+                visible: updateManager.errorMessage.length > 0
+                tone: "error"
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    AppIcon { iconName: AppIcons.error; iconSize: 15; iconColor: Theme.coral }
+                    BodyLabel { text: updateManager.errorMessage; color: Theme.textPrimary; Layout.fillWidth: true; wrapMode: Text.Wrap }
+                }
+            }
+
+            StatusBanner {
+                Layout.fillWidth: true
+                Layout.preferredHeight: updateManager.checking ? 44 : 0
+                visible: updateManager.checking
+                tone: "neutral"
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    AppIcon { iconName: AppIcons.info; iconSize: 15; iconColor: Theme.accent }
+                    BodyLabel { text: "正在检查更新…"; color: Theme.textPrimary }
+                }
+            }
+
+            Column {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                visible: updateManager.updateAvailable
+                spacing: 8
+                BodyLabel { text: "更新说明"; color: Theme.textPrimary; font.weight: Font.DemiBold }
+                Rectangle {
+                    width: parent.width
+                    Layout.fillWidth: true
+                    height: 150
+                    radius: Theme.radiusSmall
+                    color: Theme.bgControl
+                    border.width: 1
+                    border.color: Theme.borderStrong
+                    clip: true
+                    Flickable {
+                        id: releaseNotesScroller
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        contentHeight: releaseNotesText.height
+                        clip: true
+                        ScrollBar.vertical: ScrollBar { }
+                        Text {
+                            id: releaseNotesText
+                            width: releaseNotesScroller.width - 20
+                            text: updateManager.releaseNotes
+                            color: Theme.textSecondary
+                            font.family: Theme.bodyFont
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton {
+                    label: "打开下载页"
+                    visible: updateManager.updateAvailable && !updateManager.downloading
+                    onClicked: updateManager.openReleasePage()
+                }
+                ExportButton {
+                    label: updateManager.downloading ? "正在下载…" : "立即更新"
+                    primary: updateManager.updateAvailable && !updateManager.downloading
+                    enabled: updateManager.updateAvailable && !updateManager.downloading
+                    onClicked: updateManager.downloadAndInstall()
+                }
+                ExportButton {
+                    label: "关闭"
+                    enabled: !updateManager.downloading
+                    onClicked: updateDialog.close()
+                }
+            }
+
+            Column {
+                Layout.fillWidth: true
+                visible: updateManager.downloading
+                spacing: 6
+                RowLayout {
+                    Layout.fillWidth: true
+                    TinyLabel { text: updateManager.progressText; color: Theme.textSecondary; Layout.fillWidth: true }
+                    TinyLabel { text: updateManager.downloadProgress + "%"; color: Theme.textSecondary }
+                }
+                AppProgressBar {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 5
+                    progress: updateManager.downloadProgress / 100
+                    tone: "accent"
+                }
+            }
+        }
+    }
+
+    AppDialog {
+        id: aboutDialog
+        objectName: "aboutDialog"
+        anchors.centerIn: parent
+        width: 380
+        height: 220
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+            anchors.margins: 24
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "关于批图王"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: aboutDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            BodyLabel { text: "批图王"; color: Theme.textPrimary; font.pixelSize: 20; font.weight: Font.DemiBold }
+            BodyLabel { text: "版本 v" + updateManager.currentVersion; color: Theme.textSecondary }
+            BodyLabel { text: "图像批量合成与批量导出工具"; color: Theme.textMuted }
+
+            Item { Layout.fillHeight: true }
+
+            ExportButton {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                label: "确定"
+                onClicked: aboutDialog.close()
+            }
+        }
+    }
+
+    AppMenu {
         id: documentTabMenu
         ShapeMenuItem { text: "复制标签页"; onTriggered: workspaceSessions.duplicateDocument(contextDocumentIndex) }
         ShapeMenuItem {
@@ -3209,6 +3448,10 @@ ApplicationWindow {
                     MenuLabel {
                         height: 42; text: "视图"; hovered: viewMenuMouse.containsMouse
                         MouseArea { id: viewMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: viewMenu.popup(parent, 0, parent.height) }
+                    }
+                    MenuLabel {
+                        height: 42; text: "帮助"; hovered: helpMenuMouse.containsMouse
+                        MouseArea { id: helpMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: helpMenu.popup(parent, 0, parent.height) }
                     }
                 }
 
@@ -4826,6 +5069,41 @@ ApplicationWindow {
                         id: toastTimer
                         interval: 1800
                         onTriggered: toast.opacity = 0
+                    }
+                }
+
+                StatusBanner {
+                    id: updateBanner
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.topMargin: 12
+                    anchors.rightMargin: 12
+                    width: 340
+                    visible: updateManager.updateAvailable && !updateManager.downloading && !updateDialog.opened && !updateBannerDismissed
+                    tone: "success"
+                    z: 20
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 9
+                        AppIcon { iconName: AppIcons.info; iconSize: 15; iconColor: Theme.accent }
+                        Column {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            BodyLabel { text: updateBannerText.length > 0 ? updateBannerText : "发现新版本"; color: Theme.textPrimary; elide: Text.ElideRight }
+                            TinyLabel { text: "点击查看更新说明"; color: Theme.textMuted }
+                        }
+                        IconButton { iconName: AppIcons.close; tooltip: "忽略本次"; buttonSize: 22; onClicked: updateBannerDismissed = true }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            updateBannerDismissed = false
+                            updateDialog.open()
+                        }
                     }
                 }
             }

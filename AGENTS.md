@@ -288,19 +288,32 @@ python build.py
 `build.py` 会：
 
 - 清理旧 `dist/` 和 `build/`。
-- 检查 `app/resources`。
+- 从 `app/version.py` 读取 `APP_VERSION`（版本号唯一来源），据此生成 PyInstaller 版本信息。
 - 使用 PyInstaller 单文件窗口模式打包。
 - 程序名为 `批图王`。
 - 图标使用 `app/resources/app_icon.ico`。
 - 添加 `app/resources` 和 `presets`。
-- 添加隐藏导入：PySide6、PIL、cv2、numpy、scipy。
-- 如果存在 `version_info.txt`，会传入版本信息。
+- 添加隐藏导入：PySide6、PIL、cv2、numpy、scipy、psutil。
+- 刷新 `update/update.json` 自动更新清单。
+- 若本机安装 NSIS，自动编译安装版 `dist/批图王-Setup.exe`。
 
 也可以直接使用：
 
 ```powershell
 pyinstaller 批图王.spec
 ```
+
+### 版本与自动更新
+
+- 版本号唯一来源：`app/version.py` 的 `APP_VERSION`；发版时修改此处即可。
+- 更新清单：`update/update.json`，由 `build.py` 生成，客户端通过
+  `raw.githubusercontent.com/nideyilian/batch-image-king/main/update/update.json` 检测新版本。
+- 更新核心逻辑在 `app/utils/updater.py`（纯 Python，可单测）；QML 桥接在
+  `app/qml/viewmodels/update_view_model.py`。
+- 自升级：下载 `批图王_new.exe` 到程序目录，以 `--apply-update` 启动临时实例，主进程退出后完成替换并重启。
+- 发版流程：改 `app/version.py` → `python build.py` → 创建 GitHub Release 并上传
+  `批图王.exe` 与 `批图王-Setup.exe` → 将代码（含 `update/update.json`）推送到 `main` 分支。
+- 测试可用环境变量覆盖更新源：`BTPW_UPDATE_URL`（可用 `file://` 指向本地 JSON）。
 
 ## 维护注意事项
 
