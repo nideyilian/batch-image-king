@@ -155,9 +155,11 @@ def test_qml_icon_assets_are_included_in_both_packaging_paths():
 def test_all_toggle_switches_have_accessible_names():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     toggle_blocks = _qml_component_blocks(main_source, "ToggleSwitch")
+    trailing_toggle_blocks = _qml_component_blocks(main_source, "TrailingToggle")
 
-    assert len(toggle_blocks) == 33
-    assert all("accessibleName:" in block for block in toggle_blocks)
+    assert len(toggle_blocks) == 20
+    assert len(trailing_toggle_blocks) == 8
+    assert all("accessibleName:" in block for block in toggle_blocks + trailing_toggle_blocks)
 
 
 @pytest.mark.unit

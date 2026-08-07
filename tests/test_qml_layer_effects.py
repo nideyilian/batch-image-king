@@ -99,25 +99,28 @@ def test_image_layer_overlay_properties_and_commands(tmp_path: Path):
     assert workspace.selectedColorOverlayOpacity == 100
     assert workspace.selectedSupportsGradientOverlay is True
     assert workspace.selectedGradientOverlayEnabled is False
+    assert workspace.selectedOverlayMode == "none"
     assert workspace.selectedGradientStartColor == "#000000"
     assert workspace.selectedGradientEndColor == "#FFFFFF"
     assert workspace.selectedGradientOverlayOpacity == 100
     assert workspace.selectedGradientOverlayAngle == pytest.approx(90.0)
 
-    assert workspace.setSelectedColorOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("color") is True
     assert workspace.setSelectedColorOverlayColor("#173B32") is True
     assert workspace.setSelectedColorOverlayOpacity(37) is True
     assert layer.color_overlay_enabled is True
+    assert workspace.selectedOverlayMode == "color"
     assert layer.color_overlay_color == (23, 59, 50, 255)
     assert layer.color_overlay_opacity == pytest.approx(0.37)
 
-    assert workspace.setSelectedGradientOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("gradient") is True
     assert workspace.setSelectedGradientOverlayColor(0, "#46D7AD") is True
     assert workspace.setSelectedGradientOverlayColor(1, "#F7BD63CC") is True
     assert workspace.setSelectedGradientOverlayOpacity(64) is True
     assert workspace.setSelectedGradientOverlayAngle(-45.0) is True
     assert layer.color_overlay_enabled is False
     assert layer.gradient_overlay_enabled is True
+    assert workspace.selectedOverlayMode == "gradient"
     assert layer.gradient_overlay_colors == [(70, 215, 173, 255), (247, 189, 99, 204)]
     assert layer.gradient_overlay_opacity == pytest.approx(0.64)
     assert layer.gradient_overlay_angle == pytest.approx(315.0)
@@ -127,12 +130,13 @@ def test_image_layer_overlay_properties_and_commands(tmp_path: Path):
 def test_overlay_mode_switch_is_atomic_and_validated(tmp_path: Path):
     workspace = _effects_workspace(tmp_path)
 
-    assert workspace.setSelectedGradientOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("gradient") is True
     assert workspace.document.layers[0].gradient_overlay_enabled is True
-    assert workspace.setSelectedColorOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("color") is True
     layer = workspace.document.layers[0]
     assert layer.color_overlay_enabled is True
     assert layer.gradient_overlay_enabled is False
+    assert workspace.selectedOverlayMode == "color"
 
     assert workspace.undo() is True
     layer = workspace.document.layers[0]
@@ -143,6 +147,9 @@ def test_overlay_mode_switch_is_atomic_and_validated(tmp_path: Path):
     assert layer.color_overlay_enabled is True
     assert layer.gradient_overlay_enabled is False
 
+    assert workspace.setSelectedOverlayMode("none") is True
+    assert workspace.selectedOverlayMode == "none"
+    assert workspace.setSelectedOverlayMode("unknown") is False
     assert workspace.setSelectedColorOverlayColor("bad") is False
     assert workspace.setSelectedGradientOverlayColor(-1, "#000000") is False
     assert workspace.setSelectedGradientOverlayColor(2, "#FFFFFF") is False
@@ -163,10 +170,12 @@ def test_text_layer_exposes_only_supported_effects(tmp_path: Path):
     assert workspace.selectedSupportsCornerRadius is False
     assert workspace.selectedSupportsColorOverlay is False
     assert workspace.selectedSupportsGradientOverlay is False
+    assert workspace.selectedOverlayMode == "none"
     assert workspace.setSelectedBlendMode("screen") is False
     assert workspace.setSelectedCornerRadius(12) is False
     assert workspace.setSelectedColorOverlayEnabled(True) is False
     assert workspace.setSelectedGradientOverlayEnabled(True) is False
+    assert workspace.setSelectedOverlayMode("color") is False
     assert not hasattr(layer, "blend_mode")
     assert not hasattr(layer, "corner_radius")
 
@@ -201,6 +210,7 @@ def test_effect_commands_validate_inputs_and_respect_lock(tmp_path: Path):
     assert workspace.setSelectedCornerRadius(12) is False
     assert workspace.setSelectedColorOverlayEnabled(True) is False
     assert workspace.setSelectedGradientOverlayEnabled(True) is False
+    assert workspace.setSelectedOverlayMode("gradient") is False
     assert layer.blend_mode == 0
     assert layer.stroke_enabled is False
     assert layer.corner_radius == 0
@@ -216,7 +226,7 @@ def test_layer_effects_survive_document_save_round_trip(tmp_path: Path):
     assert workspace.setSelectedStrokeWidth(9) is True
     assert workspace.setSelectedStrokeColor("#F7BD63") is True
     assert workspace.setSelectedCornerRadius(24) is True
-    assert workspace.setSelectedGradientOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("gradient") is True
     assert workspace.setSelectedGradientOverlayColor(0, "#173B32") is True
     assert workspace.setSelectedGradientOverlayColor(1, "#F1786D") is True
     assert workspace.setSelectedGradientOverlayOpacity(72) is True
@@ -238,6 +248,7 @@ def test_layer_effects_survive_document_save_round_trip(tmp_path: Path):
     assert loaded.selectedCornerRadius == 24
     assert loaded.selectedColorOverlayEnabled is False
     assert loaded.selectedGradientOverlayEnabled is True
+    assert loaded.selectedOverlayMode == "gradient"
     assert loaded.selectedGradientStartColor == "#173B32"
     assert loaded.selectedGradientEndColor == "#F1786D"
     assert loaded.selectedGradientOverlayOpacity == 72
@@ -259,7 +270,7 @@ def test_corner_radius_is_published_in_real_preview(tmp_path: Path):
 @pytest.mark.integration
 def test_color_and_gradient_overlays_are_published_in_real_preview(tmp_path: Path):
     workspace = _effects_workspace(tmp_path)
-    assert workspace.setSelectedColorOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("color") is True
     assert workspace.setSelectedColorOverlayColor("#F1786D") is True
     assert workspace.setSelectedColorOverlayOpacity(100) is True
     assert workspace.renderPreviewNow() is True
@@ -269,7 +280,7 @@ def test_color_and_gradient_overlays_are_published_in_real_preview(tmp_path: Pat
     center = color_image.pixelColor(70, 70)
     assert (center.red(), center.green(), center.blue()) == (241, 120, 109)
 
-    assert workspace.setSelectedGradientOverlayEnabled(True) is True
+    assert workspace.setSelectedOverlayMode("gradient") is True
     assert workspace.setSelectedGradientOverlayColor(0, "#000000") is True
     assert workspace.setSelectedGradientOverlayColor(1, "#FFFFFF") is True
     assert workspace.setSelectedGradientOverlayOpacity(100) is True

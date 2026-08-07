@@ -39,7 +39,8 @@ def test_clone_and_fill_properties_are_editable_from_qml_view_model():
     assert (layer.clone_custom_width, layer.clone_custom_height) == (200, 200)
     assert workspace.setSelectedCloneCustomWidth(96) is True
     assert workspace.setSelectedCloneCustomHeight(72) is True
-    assert workspace.setSelectedCloneFillEnabled(True) is True
+    assert workspace.selectedCloneLayoutMode == "fixed"
+    assert workspace.setSelectedCloneLayoutMode("fill") is True
     assert workspace.setSelectedCloneFillMode("staggered") is True
     assert workspace.setSelectedCloneFillSpacing(12) is True
     assert workspace.setSelectedCloneFillMargin(30) is True
@@ -52,10 +53,14 @@ def test_clone_and_fill_properties_are_editable_from_qml_view_model():
     assert workspace.selectedCloneCustomSizeEnabled is True
     assert (workspace.selectedCloneCustomWidth, workspace.selectedCloneCustomHeight) == (96, 72)
     assert workspace.selectedCloneFillEnabled is True
+    assert workspace.selectedCloneLayoutMode == "fill"
     assert workspace.selectedCloneFillMode == "staggered"
     assert workspace.selectedCloneFillSpacing == 12
     assert workspace.selectedCloneFillMargin == 30
     assert workspace.selectedCloneFillAngle == pytest.approx(22.5)
+    assert workspace.setSelectedCloneFillEnabled(False) is True
+    assert workspace.selectedCloneLayoutMode == "fixed"
+    assert workspace.setSelectedCloneLayoutMode("unknown") is False
 
 
 @pytest.mark.unit
@@ -68,6 +73,8 @@ def test_vector_corner_and_advanced_stroke_properties_are_editable_inline():
     assert workspace.setSelectedStrokeJoin("round") is True
     assert workspace.setSelectedStrokeCap("square") is True
     assert workspace.setSelectedStrokeDash(16, 7) is True
+    assert workspace.selectedCornerMode == "uniform"
+    assert workspace.setSelectedCornerMode("independent") is True
     assert workspace.setSelectedVectorCornerRadii(4, 8, 12, 16) is True
 
     assert workspace.selectedStrokeType == 2
@@ -75,20 +82,31 @@ def test_vector_corner_and_advanced_stroke_properties_are_editable_inline():
     assert workspace.selectedStrokeCap == "square"
     assert (workspace.selectedStrokeDashLength, workspace.selectedStrokeDashGap) == (16, 7)
     assert workspace.selectedVectorCornerRadii == [4, 8, 12, 16]
+    assert workspace.selectedCornerMode == "independent"
     assert layer.corner_radius == 16
+
+    assert workspace.setSelectedCornerMode("uniform") is True
+    assert workspace.selectedCornerMode == "uniform"
+    assert workspace.selectedVectorCornerRadii == [0, 0, 0, 0]
+    assert workspace.selectedCornerRadius == 16
 
     assert workspace.setSelectedVectorCornerRadiusAll(20) is True
     assert workspace.selectedVectorCornerRadii == [20, 20, 20, 20]
+    assert workspace.selectedCornerMode == "independent"
 
 
 @pytest.mark.unit
-def test_smart_crop_property_remains_available_without_legacy_panel():
+def test_transparent_bounds_trim_remains_compatible_with_legacy_field():
     workspace = _workspace()
     layer = workspace.document.layers[0]
 
     assert workspace.selectedUseOriginalSize is False
-    assert workspace.setSelectedUseOriginalSize(True) is True
+    assert workspace.selectedTrimTransparentBoundsEnabled is False
+    assert workspace.setSelectedTrimTransparentBoundsEnabled(True) is True
     assert layer.use_original_size is True
+    assert workspace.selectedUseOriginalSize is True
+    assert workspace.setSelectedUseOriginalSize(False) is True
+    assert workspace.selectedTrimTransparentBoundsEnabled is False
 
 
 @pytest.mark.unit
@@ -105,5 +123,9 @@ def test_qml_advanced_properties_are_inline_and_never_open_legacy_popup():
     assert 'objectName: "clonePropertiesSection"' in qml_source
     assert 'objectName: "advancedStrokeSection"' in qml_source
     assert "workspace.setSelectedCloneEnabled" in qml_source
+    assert "workspace.setSelectedCloneLayoutMode" in qml_source
+    assert "workspace.setSelectedOverlayMode" in qml_source
+    assert "workspace.setSelectedTrimTransparentBoundsEnabled" in qml_source
+    assert "workspace.setSelectedCornerMode" in qml_source
     assert "workspace.setSelectedVectorCornerRadii" in qml_source
     assert "workspace.setSelectedStrokeDash" in qml_source

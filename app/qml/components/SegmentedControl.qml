@@ -29,6 +29,7 @@ Rectangle {
     border.width: 1
     border.color: Theme.border
     activeFocusOnTab: enabled
+    opacity: enabled ? 1 : 0.38
 
     Keys.onLeftPressed: activateIndex(currentIndex <= 0 ? options.length - 1 : currentIndex - 1)
     Keys.onRightPressed: activateIndex(currentIndex >= options.length - 1 ? 0 : currentIndex + 1)
@@ -50,6 +51,7 @@ Rectangle {
                 width: (root.width - 4 - (root.options.length - 1) * 2) / Math.max(1, root.options.length)
                 height: root.height - 4
                 radius: Math.max(2, Theme.radiusSmall - 1)
+                enabled: root.enabled
                 color: root.value === modelData.value ? Theme.accentSoft : (segmentMouse.containsMouse ? Theme.bgHover : "transparent")
                 border.width: root.value === modelData.value ? 1 : 0
                 border.color: Theme.accentPressed
@@ -69,8 +71,9 @@ Rectangle {
                 MouseArea {
                     id: segmentMouse
                     anchors.fill: parent
+                    enabled: parent.enabled
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: {
                         root.forceActiveFocus(Qt.MouseFocusReason)
                         root.activated(parent.modelData.value)

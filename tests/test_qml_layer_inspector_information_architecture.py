@@ -19,6 +19,8 @@ def test_qml_inspector_uses_basic_and_more_parameter_tabs():
         "advancedSettingsSection",
         "shapeSection",
         "appearanceSection",
+        "overlaySection",
+        "cornerSection",
         "clonePropertiesSection",
         "layerTransformSection",
         "randomTransformSection",
@@ -26,4 +28,5 @@ def test_qml_inspector_uses_basic_and_more_parameter_tabs():
         assert f"id: {section_id}" in source
 
     assert 'title: "内容源"' not in source
+    assert 'title: "渐变叠加"' not in source
     assert 'model: ["属性", "效果"]' not in source

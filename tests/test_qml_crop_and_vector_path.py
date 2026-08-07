@@ -101,6 +101,8 @@ def test_vector_path_commands_cover_nodes_handles_and_serialization(split_image:
 
     assert workspace.convertSelectedToVectorPath() is True
     assert workspace.selectedVectorPathEnabled is True
+    assert workspace.selectedCornerControlKind == "none"
+    assert workspace.selectedSupportsCornerRadius is False
     assert workspace.selectedVectorPathMode == "bezier"
     assert len(workspace.selectedVectorNodes) == 4
 

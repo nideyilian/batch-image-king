@@ -242,6 +242,7 @@ class WorkspaceViewModel(QObject):
         self._crop_edit_was_modified = False
         self._selected_vector_node_index = -1
         self._selection_anchor_index = -1
+        self._corner_edit_modes = {}
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
         self._preview_timer.setInterval(70)
@@ -746,14 +747,49 @@ class WorkspaceViewModel(QObject):
             return 0
         return max(0, int(getattr(self._selected_layer(), "stroke_dash_gap", 0)))
 
+    @Property(str, notify=selectionChanged)
+    def selectedCornerControlKind(self) -> str:
+        layer = self._selected_layer()
+        if layer is None or not hasattr(layer, "corner_radius"):
+            return "none"
+        if bool(getattr(layer, "vector_path_enabled", False)):
+            return "none"
+        if self.selectedIsShapedLayer:
+            shape_id = self.selectedShapeTypeId
+            if shape_id == "rectangle":
+                return "rectangle"
+            if shape_id in {"right_trapezoid", "pentagon", "hexagon"}:
+                return "shape"
+            return "none"
+        return "rectangle"
+
     @Property(bool, notify=selectionChanged)
     def selectedSupportsCornerRadius(self) -> bool:
-        return hasattr(self._selected_layer(), "corner_radius")
+        return self.selectedCornerControlKind == "rectangle"
+
+    @Property(bool, notify=selectionChanged)
+    def selectedSupportsShapeCornerRadius(self) -> bool:
+        layer = self._selected_layer()
+        return self.selectedCornerControlKind == "shape" and hasattr(
+            layer, "polygon_corner_radius"
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedCornerMode(self) -> str:
+        if not self.selectedSupportsCornerRadius:
+            return "uniform"
+        layer = self._selected_layer()
+        override = self._corner_edit_modes.get(id(layer))
+        if override in {"uniform", "independent"}:
+            return override
+        return "independent" if any(self.selectedVectorCornerRadii) else "uniform"
 
     @Property(int, notify=selectionChanged)
     def selectedCornerRadius(self) -> int:
         if not self.selectedSupportsCornerRadius:
             return 0
+        if self.selectedCornerMode == "independent":
+            return max(self.selectedVectorCornerRadii)
         return max(0, int(getattr(self._selected_layer(), "corner_radius", 0)))
 
     @Property(int, notify=selectionChanged)
@@ -839,6 +875,14 @@ class WorkspaceViewModel(QObject):
         if not self.selectedSupportsGradientOverlay:
             return 0.0
         return float(getattr(self._selected_layer(), "gradient_overlay_angle", 0.0)) % 360.0
+
+    @Property(str, notify=selectionChanged)
+    def selectedOverlayMode(self) -> str:
+        if self.selectedGradientOverlayEnabled:
+            return "gradient"
+        if self.selectedColorOverlayEnabled:
+            return "color"
+        return "none"
 
     @Property(bool, notify=selectionChanged)
     def selectedVisible(self) -> bool:
@@ -1053,6 +1097,10 @@ class WorkspaceViewModel(QObject):
         )
 
     @Property(str, notify=selectionChanged)
+    def selectedCloneLayoutMode(self) -> str:
+        return "fill" if self.selectedCloneFillEnabled else "fixed"
+
+    @Property(str, notify=selectionChanged)
     def selectedCloneFillMode(self) -> str:
         value = str(getattr(self._selected_layer(), "clone_fill_mode", "grid"))
         return value if value in {"grid", "staggered", "border"} else "grid"
@@ -1083,6 +1131,10 @@ class WorkspaceViewModel(QObject):
         return self.selectedHasImageSource and bool(
             getattr(layer, "use_original_size", False)
         )
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTrimTransparentBoundsEnabled(self) -> bool:
+        return self.selectedUseOriginalSize
 
     @Property(str, notify=selectionChanged)
     def selectedFitModeId(self) -> str:
@@ -1137,7 +1189,7 @@ class WorkspaceViewModel(QObject):
     @Property(bool, notify=selectionChanged)
     def selectedSupportsVectorCorners(self) -> bool:
         layer = self._selected_layer()
-        return self.selectedSupportsVectorPath and all(
+        return self.selectedSupportsCornerRadius and all(
             hasattr(layer, attr)
             for attr in (
                 "vector_corner_radius_tl",
@@ -1283,13 +1335,13 @@ class WorkspaceViewModel(QObject):
 
     @Property(int, notify=selectionChanged)
     def selectedPolygonCornerRadius(self) -> int:
-        if not self.selectedIsShapedLayer:
+        if not self.selectedSupportsShapeCornerRadius:
             return 0
         return max(0, int(getattr(self._selected_layer(), "polygon_corner_radius", 0)))
 
     @Property(int, notify=selectionChanged)
     def selectedPolygonCornerRadiusMax(self) -> int:
-        if not self.selectedIsShapedLayer:
+        if not self.selectedSupportsShapeCornerRadius:
             return 0
         layer = self._selected_layer()
         return max(0, min(int(layer.width), int(layer.height)) // 8)
@@ -1714,6 +1766,7 @@ class WorkspaceViewModel(QObject):
             self._crop_edit_original = None
             self._selected_vector_node_index = -1
             self._selection_anchor_index = -1
+            self._corner_edit_modes.clear()
             self._disconnect_document()
             self._document = document
             self._layer_model.set_document(document)
@@ -3756,15 +3809,19 @@ class WorkspaceViewModel(QObject):
 
     @Slot(bool, result=bool)
     def setSelectedUseOriginalSize(self, enabled: bool) -> bool:
+        return self.setSelectedTrimTransparentBoundsEnabled(enabled)
+
+    @Slot(bool, result=bool)
+    def setSelectedTrimTransparentBoundsEnabled(self, enabled: bool) -> bool:
         layer = self._selected_layer()
         if not self.selectedHasImageSource or layer is None or not hasattr(layer, "use_original_size"):
-            self._set_status("当前图层不支持智能裁剪", toast=True)
+            self._set_status("当前图层不支持去透明留白", toast=True)
             return False
         return self._set_layer_attr(
             self.selectedLayerIndex,
             "use_original_size",
             bool(enabled),
-            "切换智能裁剪",
+            "切换去透明留白",
         )
 
     @Slot(str, result=bool)
@@ -3979,6 +4036,27 @@ class WorkspaceViewModel(QObject):
         value = max(0, min(1000, int(value)))
         return self.setSelectedVectorCornerRadii(value, value, value, value)
 
+    @Slot(str, result=bool)
+    def setSelectedCornerMode(self, mode: str) -> bool:
+        if not self.selectedSupportsCornerRadius:
+            self._set_status("当前图层不支持矩形圆角", toast=True)
+            return False
+        mode = str(mode or "").strip().lower()
+        if mode not in {"uniform", "independent"}:
+            self._set_status("未知的圆角编辑模式", toast=True)
+            return False
+        layer = self._selected_layer()
+        if mode == "uniform":
+            value = max(
+                max(0, int(getattr(layer, "corner_radius", 0))),
+                *self.selectedVectorCornerRadii,
+            )
+            self._corner_edit_modes[id(layer)] = "uniform"
+            return self.setSelectedCornerRadius(value)
+        self._corner_edit_modes[id(layer)] = "independent"
+        self.selectionChanged.emit()
+        return True
+
     @Slot(int, int, int, int, result=bool)
     def setSelectedVectorCornerRadii(self, top_left: int, top_right: int, bottom_right: int, bottom_left: int) -> bool:
         if not self.selectedSupportsVectorCorners:
@@ -3997,6 +4075,7 @@ class WorkspaceViewModel(QObject):
             "vector_corner_radius_bl": values[3],
             "corner_radius": max(values),
         }
+        self._corner_edit_modes[id(self._selected_layer())] = "independent"
         return self._set_layer_attrs(self.selectedLayerIndex, changes, "修改矢量四角圆角")
 
     @Slot(bool, result=bool)
@@ -4110,7 +4189,8 @@ class WorkspaceViewModel(QObject):
 
     @Slot(int, result=bool)
     def setSelectedPolygonCornerRadius(self, value: int) -> bool:
-        if self._selected_shaped_layer() is None:
+        if self._selected_shaped_layer() is None or not self.selectedSupportsShapeCornerRadius:
+            self._set_status("当前形状不支持顶点圆角", toast=True)
             return False
         value = max(0, min(self.selectedPolygonCornerRadiusMax, int(value)))
         return self._set_layer_attr(
@@ -4476,8 +4556,18 @@ class WorkspaceViewModel(QObject):
 
     @Slot(bool, result=bool)
     def setSelectedCloneFillEnabled(self, enabled: bool) -> bool:
+        return self.setSelectedCloneLayoutMode("fill" if enabled else "fixed")
+
+    @Slot(str, result=bool)
+    def setSelectedCloneLayoutMode(self, mode: str) -> bool:
+        mode = str(mode or "").strip().lower()
+        if mode not in {"fixed", "fill"}:
+            self._set_status("未知的分身布局模式", toast=True)
+            return False
         return self._set_selected_clone_attr(
-            "clone_fill_enabled", bool(enabled), "切换元素铺排"
+            "clone_fill_enabled",
+            mode == "fill",
+            "切换分身布局模式",
         )
 
     @Slot(str, result=bool)
@@ -4599,17 +4689,52 @@ class WorkspaceViewModel(QObject):
             self._set_status("当前图层不支持圆角", toast=True)
             return False
         value = max(0, min(self.selectedCornerRadiusMax, int(value)))
-        return self._set_layer_attr(self.selectedLayerIndex, "corner_radius", value, "修改圆角")
+        layer = self._selected_layer()
+        self._corner_edit_modes[id(layer)] = "uniform"
+        changes = {
+            "corner_radius": value,
+            "vector_corner_radius_tl": 0,
+            "vector_corner_radius_tr": 0,
+            "vector_corner_radius_br": 0,
+            "vector_corner_radius_bl": 0,
+        }
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "修改统一圆角")
+
+    @Slot(str, result=bool)
+    def setSelectedOverlayMode(self, mode: str) -> bool:
+        mode = str(mode or "").strip().lower()
+        if mode not in {"none", "color", "gradient"}:
+            self._set_status("未知的颜色叠加模式", toast=True)
+            return False
+        if mode == "color" and not self.selectedSupportsColorOverlay:
+            self._set_status("当前图层不支持颜色叠加", toast=True)
+            return False
+        if mode == "gradient" and not self.selectedSupportsGradientOverlay:
+            self._set_status("当前图层不支持渐变叠加", toast=True)
+            return False
+        if mode == "none" and not (
+            self.selectedSupportsColorOverlay or self.selectedSupportsGradientOverlay
+        ):
+            self._set_status("当前图层不支持颜色叠加", toast=True)
+            return False
+        changes = {}
+        if self.selectedSupportsColorOverlay:
+            changes["color_overlay_enabled"] = mode == "color"
+        if self.selectedSupportsGradientOverlay:
+            changes["gradient_overlay_enabled"] = mode == "gradient"
+        return self._set_layer_attrs(
+            self.selectedLayerIndex,
+            changes,
+            "切换颜色叠加模式",
+        )
 
     @Slot(bool, result=bool)
     def setSelectedColorOverlayEnabled(self, enabled: bool) -> bool:
-        if not self.selectedSupportsColorOverlay:
-            self._set_status("当前图层不支持颜色叠加", toast=True)
-            return False
-        changes = {"color_overlay_enabled": bool(enabled)}
-        if enabled and self.selectedSupportsGradientOverlay:
-            changes["gradient_overlay_enabled"] = False
-        return self._set_layer_attrs(self.selectedLayerIndex, changes, "切换颜色叠加")
+        if enabled:
+            return self.setSelectedOverlayMode("color")
+        if self.selectedOverlayMode == "color":
+            return self.setSelectedOverlayMode("none")
+        return True
 
     @Slot(str, result=bool)
     def setSelectedColorOverlayColor(self, value: str) -> bool:
@@ -4642,13 +4767,11 @@ class WorkspaceViewModel(QObject):
 
     @Slot(bool, result=bool)
     def setSelectedGradientOverlayEnabled(self, enabled: bool) -> bool:
-        if not self.selectedSupportsGradientOverlay:
-            self._set_status("当前图层不支持渐变叠加", toast=True)
-            return False
-        changes = {"gradient_overlay_enabled": bool(enabled)}
-        if enabled and self.selectedSupportsColorOverlay:
-            changes["color_overlay_enabled"] = False
-        return self._set_layer_attrs(self.selectedLayerIndex, changes, "切换渐变叠加")
+        if enabled:
+            return self.setSelectedOverlayMode("gradient")
+        if self.selectedOverlayMode == "gradient":
+            return self.setSelectedOverlayMode("none")
+        return True
 
     @Slot(int, str, result=bool)
     def setSelectedGradientOverlayColor(self, index: int, value: str) -> bool:

@@ -59,11 +59,10 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedBlendMode(currentValue)' in qml_source
     assert 'workspace.setSelectedStrokeEnabled(checkedValue)' in qml_source
     assert 'workspace.setSelectedStrokeColor(modelData)' in qml_source
-    assert 'workspace.setSelectedCornerRadius(modelData)' in qml_source
-    assert 'window.hexToColor(workspace.selectedStrokeColor)' in qml_source
-    assert 'workspace.setSelectedColorOverlayEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedCornerRadius(parent.modelData)' in qml_source
+    assert 'effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)' in qml_source
+    assert 'workspace.setSelectedOverlayMode(value)' in qml_source
     assert 'workspace.setSelectedColorOverlayOpacity(parsed)' in qml_source
-    assert 'workspace.setSelectedGradientOverlayEnabled(checkedValue)' in qml_source
     assert 'workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)' in qml_source
     assert 'workspace.setSelectedGradientOverlayAngle(modelData)' in qml_source
     assert 'model: workspaceSessions' in qml_source
@@ -117,10 +116,10 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedTextBold(!workspace.selectedTextBold)' in qml_source
     assert 'workspace.setSelectedTextItalic(!workspace.selectedTextItalic)' in qml_source
     assert 'workspace.setSelectedTextAlignment(parent.modelData.value)' in qml_source
-    assert 'workspace.setSelectedTextVerticalLayout(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextVerticalLayout(value === "vertical")' in qml_source
     assert 'workspace.setSelectedTextLineSpacingPercent(parsed)' in qml_source
     assert 'workspace.setSelectedTextLetterSpacing(parsed)' in qml_source
-    assert 'workspace.setSelectedTextAutoFitTextBox(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextAutoFitTextBox(value === "auto")' in qml_source
     assert 'workspace.setSelectedTextBoxPadding(parsed)' in qml_source
     assert 'objectName: "textTypographySection"' in qml_source
     assert 'function revealTextTypography()' in qml_source
@@ -158,6 +157,15 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'function revealAdvancedProperties()' in qml_source
     assert 'objectName: "clonePropertiesSection"' in qml_source
     assert 'objectName: "advancedStrokeSection"' in qml_source
+    assert 'objectName: "overlaySection"' in qml_source
+    assert 'objectName: "cornerSection"' in qml_source
+    assert 'workspace.setSelectedCloneLayoutMode(value)' in qml_source
+    assert 'workspace.setSelectedTrimTransparentBoundsEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedCornerMode(value)' in qml_source
+    assert 'title: "渐变叠加"' not in qml_source
+    assert 'text: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条文案" : "1 条文案"' not in qml_source
+    assert 'text: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未翻转"' not in qml_source
+    assert 'text: workspace.selectedTextBackgroundEnabled ? "背景已开启" : "无背景"' not in qml_source
     assert 'function openDataRelations(tab)' in qml_source
     assert 'function openCanvasPresetDrawer()' in qml_source
     assert 'function openProjectPresetDrawer()' in qml_source

@@ -45,6 +45,9 @@ def test_workspace_adds_real_shaped_layer_and_supports_undo(tmp_path: Path):
     assert workspace.selectedHasImageSource is True
     assert workspace.selectedShapeTypeId == "circle"
     assert workspace.selectedShapeTypeName == "圆形"
+    assert workspace.selectedCornerControlKind == "none"
+    assert workspace.selectedSupportsCornerRadius is False
+    assert workspace.selectedSupportsShapeCornerRadius is False
     assert workspace.document.is_modified is True
 
     assert workspace.undo() is True
@@ -72,6 +75,8 @@ def test_shaped_layer_type_and_parameters_are_validated_and_undoable(tmp_path: P
 
     assert workspace.setSelectedShapeType("right_trapezoid") is True
     assert layer.shape_type == ShapeType.RIGHT_TRAPEZOID
+    assert workspace.selectedCornerControlKind == "shape"
+    assert workspace.selectedSupportsShapeCornerRadius is True
     assert workspace.selectedTrapezoidTopWidth == 180
     assert workspace.selectedTrapezoidBottomWidth == 144
     assert workspace.selectedTrapezoidSlopeSide == "right"
@@ -87,6 +92,7 @@ def test_shaped_layer_type_and_parameters_are_validated_and_undoable(tmp_path: P
     assert workspace.setSelectedPolygonRotation(-30.0) is True
     assert workspace.setSelectedPolygonCornerRadius(999) is True
     assert layer.shape_type == ShapeType.PENTAGON
+    assert workspace.selectedCornerControlKind == "shape"
     assert layer.polygon_rotation == pytest.approx(330.0)
     assert layer.polygon_corner_radius == workspace.selectedPolygonCornerRadiusMax == 11
 
@@ -94,6 +100,30 @@ def test_shaped_layer_type_and_parameters_are_validated_and_undoable(tmp_path: P
     assert workspace.document.layers[0].polygon_corner_radius == 0
     assert workspace.redo() is True
     assert workspace.document.layers[0].polygon_corner_radius == 11
+
+
+@pytest.mark.unit
+def test_corner_controls_follow_shaped_geometry_and_vector_mode(tmp_path: Path):
+    workspace, source = _workspace(tmp_path)
+    assert workspace.addShapedLayer(str(source), "right_trapezoid") is True
+
+    assert workspace.selectedSupportsShapeCornerRadius is True
+    assert workspace.setSelectedPolygonCornerRadius(7) is True
+    assert workspace.selectedPolygonCornerRadius == 7
+
+    assert workspace.setSelectedShapeType("circle") is True
+    assert workspace.selectedCornerControlKind == "none"
+    assert workspace.setSelectedPolygonCornerRadius(4) is False
+
+    assert workspace.setSelectedShapeType("rectangle") is True
+    assert workspace.selectedCornerControlKind == "rectangle"
+    assert workspace.selectedSupportsCornerRadius is True
+    assert workspace.setSelectedCornerRadius(12) is True
+
+    assert workspace.convertSelectedToVectorPath() is True
+    assert workspace.selectedCornerControlKind == "none"
+    assert workspace.selectedSupportsCornerRadius is False
+    assert workspace.setSelectedCornerRadius(8) is False
 
 
 @pytest.mark.unit

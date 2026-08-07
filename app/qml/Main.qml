@@ -2279,6 +2279,25 @@ ApplicationWindow {
         }
     }
 
+    component TrailingToggle: Item {
+        id: trailingToggle
+        property bool checked: false
+        property string accessibleName: "开关"
+        signal toggled(bool checked)
+
+        Layout.fillWidth: true
+        implicitHeight: Theme.controlHeight
+
+        ToggleSwitch {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            accessibleName: trailingToggle.accessibleName
+            checked: trailingToggle.checked
+            enabled: trailingToggle.enabled
+            onToggled: checkedValue => trailingToggle.toggled(checkedValue)
+        }
+    }
+
     component FormatToggleButton: Rectangle {
         id: formatButton
         property string symbol: ""
@@ -4960,12 +4979,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "闭合"
                                     visible: workspace.selectedVectorPathEnabled
-                                    BodyLabel {
-                                        text: workspace.selectedVectorPathClosed ? "闭合轮廓" : "开放路径"
-                                        color: Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    TrailingToggle {
                                         accessibleName: "闭合路径"
                                         checked: workspace.selectedVectorPathClosed
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -5053,17 +5067,12 @@ ApplicationWindow {
                                 }
 
                                 InspectorRow {
-                                    label: "智能裁剪"
-                                    BodyLabel {
-                                        text: workspace.selectedUseOriginalSize ? "按源图细节处理" : "标准适配"
-                                        color: workspace.selectedUseOriginalSize ? Theme.accent : Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
-                                        accessibleName: "使用原始尺寸"
-                                        checked: workspace.selectedUseOriginalSize
+                                    label: "透明留白"
+                                    TrailingToggle {
+                                        accessibleName: "去除图片透明留白"
+                                        checked: workspace.selectedTrimTransparentBoundsEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedUseOriginalSize(checkedValue)
+                                        onToggled: checkedValue => workspace.setSelectedTrimTransparentBoundsEnabled(checkedValue)
                                     }
                                 }
 
@@ -5231,7 +5240,7 @@ ApplicationWindow {
                                 }
 
                                 InspectorRow {
-                                    label: "多边形"
+                                    label: "旋转"
                                     visible: workspace.selectedShapeTypeId === "pentagon" || workspace.selectedShapeTypeId === "hexagon"
                                     ValueBox {
                                         value: (Math.round(workspace.selectedPolygonRotation * 10) / 10).toString()
@@ -5244,16 +5253,24 @@ ApplicationWindow {
                                             if (!isNaN(parsed)) workspace.setSelectedPolygonRotation(parsed)
                                         }
                                     }
+                                }
+                                InspectorRow {
+                                    label: "顶点圆角"
+                                    visible: workspace.selectedSupportsShapeCornerRadius
                                     ValueBox {
                                         value: workspace.selectedPolygonCornerRadius.toString()
                                         bindValue: true
-                                        suffix: "圆角"
+                                        suffix: "px"
                                         Layout.fillWidth: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedPolygonCornerRadius(parsed)
                                         }
+                                    }
+                                    TinyLabel {
+                                        text: "最大 " + workspace.selectedPolygonCornerRadiusMax
+                                        Layout.preferredWidth: 62
                                     }
                                 }
                             }
@@ -5353,14 +5370,6 @@ ApplicationWindow {
                                     }
                                 }
 
-                                InspectorRow {
-                                    label: workspace.selectedTextBindingEnabled ? "候选" : "段落"
-                                    BodyLabel {
-                                        text: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条文案" : "1 条文案"
-                                        color: Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                }
                             }
 
                             PropertySection {
@@ -5464,16 +5473,16 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "方向"
-                                    BodyLabel {
-                                        text: workspace.selectedTextVerticalLayout ? "竖排" : "横排"
-                                        color: workspace.selectedTextVerticalLayout ? Theme.accent : Theme.textSecondary
+                                    SegmentedControl {
                                         Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
-                                        accessibleName: "竖排文字"
-                                        checked: workspace.selectedTextVerticalLayout
+                                        accessibleName: "文字排列方向"
+                                        options: [
+                                            { label: "横排", value: "horizontal" },
+                                            { label: "竖排", value: "vertical" }
+                                        ]
+                                        value: workspace.selectedTextVerticalLayout ? "vertical" : "horizontal"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedTextVerticalLayout(checkedValue)
+                                        onActivated: value => workspace.setSelectedTextVerticalLayout(value === "vertical")
                                     }
                                 }
                                 InspectorRow {
@@ -5503,16 +5512,16 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "文本框"
-                                    BodyLabel {
-                                        text: workspace.selectedTextAutoFitTextBox ? "自动适配" : "手动尺寸"
-                                        color: workspace.selectedTextAutoFitTextBox ? Theme.accent : Theme.textSecondary
+                                    SegmentedControl {
                                         Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
-                                        accessibleName: "自动适配文本框"
-                                        checked: workspace.selectedTextAutoFitTextBox
+                                        accessibleName: "文本框尺寸模式"
+                                        options: [
+                                            { label: "手动尺寸", value: "manual" },
+                                            { label: "自动适配", value: "auto" }
+                                        ]
+                                        value: workspace.selectedTextAutoFitTextBox ? "auto" : "manual"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedTextAutoFitTextBox(checkedValue)
+                                        onActivated: value => workspace.setSelectedTextAutoFitTextBox(value === "auto")
                                     }
                                 }
                                 InspectorRow {
@@ -5552,12 +5561,7 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "展开"
-                                    BodyLabel {
-                                        text: workspace.selectedGroupExpanded ? "已展开" : "已折叠"
-                                        color: Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    TrailingToggle {
                                         accessibleName: "展开图层组"
                                         checked: workspace.selectedGroupExpanded
                                         enabled: !workspace.operationsBlocked
@@ -5747,9 +5751,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "翻转"
-                                    BodyLabel {
-                                        text: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未翻转"
-                                        color: workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? Theme.accent : Theme.textMuted
+                                    Item {
                                         Layout.fillWidth: true
                                     }
                                     IconButton {
@@ -5881,13 +5883,8 @@ ApplicationWindow {
                                 visible: inspectorTab === 1 && workspace.selectedSupportsClone
 
                                 InspectorRow {
-                                    label: "分身"
-                                    BodyLabel {
-                                        text: workspace.selectedCloneEnabled ? "已启用" : "单个图层"
-                                        color: workspace.selectedCloneEnabled ? Theme.accent : Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    label: "启用"
+                                    TrailingToggle {
                                         accessibleName: "启用图层分身"
                                         checked: workspace.selectedCloneEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -5896,8 +5893,24 @@ ApplicationWindow {
                                 }
 
                                 InspectorRow {
-                                    label: "数量"
+                                    label: "布局"
                                     visible: workspace.selectedCloneEnabled
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "分身布局模式"
+                                        options: [
+                                            { label: "固定行列", value: "fixed" },
+                                            { label: "填充画布", value: "fill" }
+                                        ]
+                                        value: workspace.selectedCloneLayoutMode
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: value => workspace.setSelectedCloneLayoutMode(value)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "数量"
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fixed"
                                     ValueBox {
                                         value: workspace.selectedCloneRows.toString()
                                         bindValue: true
@@ -5924,7 +5937,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "间距"
-                                    visible: workspace.selectedCloneEnabled
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fixed"
                                     ValueBox {
                                         value: workspace.selectedCloneRowSpacing.toString()
                                         bindValue: true
@@ -5962,18 +5975,18 @@ ApplicationWindow {
                                 }
 
                                 InspectorRow {
-                                    label: "自定尺寸"
+                                    label: "尺寸"
                                     visible: workspace.selectedCloneEnabled
-                                    BodyLabel {
-                                        text: workspace.selectedCloneCustomSizeEnabled ? "独立尺寸" : "沿用图层"
-                                        color: Theme.textSecondary
+                                    SegmentedControl {
                                         Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
-                                        accessibleName: "分身自定义尺寸"
-                                        checked: workspace.selectedCloneCustomSizeEnabled
+                                        accessibleName: "分身尺寸模式"
+                                        options: [
+                                            { label: "沿用图层", value: "source" },
+                                            { label: "独立尺寸", value: "custom" }
+                                        ]
+                                        value: workspace.selectedCloneCustomSizeEnabled ? "custom" : "source"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedCloneCustomSizeEnabled(checkedValue)
+                                        onActivated: value => workspace.setSelectedCloneCustomSizeEnabled(value === "custom")
                                     }
                                 }
 
@@ -6005,24 +6018,8 @@ ApplicationWindow {
                                 }
 
                                 InspectorRow {
-                                    label: "元素铺排"
-                                    visible: workspace.selectedCloneEnabled
-                                    BodyLabel {
-                                        text: workspace.selectedCloneFillEnabled ? "填充画布" : "固定行列"
-                                        color: workspace.selectedCloneFillEnabled ? Theme.accent : Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
-                                        accessibleName: "分身填满画布"
-                                        checked: workspace.selectedCloneFillEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedCloneFillEnabled(checkedValue)
-                                    }
-                                }
-
-                                InspectorRow {
                                     label: "排列"
-                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneFillEnabled
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fill"
                                     SelectBox {
                                         Layout.fillWidth: true
                                         model: window.cloneFillModeOptions
@@ -6034,7 +6031,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "铺排参数"
-                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneFillEnabled
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fill"
                                     ValueBox {
                                         value: workspace.selectedCloneFillSpacing.toString()
                                         bindValue: true
@@ -6061,7 +6058,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "铺排角度"
-                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneFillEnabled
+                                    visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fill"
                                     ValueBox {
                                         value: (Math.round(workspace.selectedCloneFillAngle * 10) / 10).toString()
                                         bindValue: true
@@ -6235,12 +6232,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "启用"
-                                    BodyLabel {
-                                        text: workspace.selectedTextBackgroundEnabled ? "背景已开启" : "无背景"
-                                        color: workspace.selectedTextBackgroundEnabled ? Theme.accent : Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    TrailingToggle {
                                         accessibleName: "文字背景"
                                         checked: workspace.selectedTextBackgroundEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -6296,12 +6288,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "启用"
-                                    BodyLabel {
-                                        text: workspace.selectedTextShadowEnabled ? "投影已开启" : "无投影"
-                                        color: workspace.selectedTextShadowEnabled ? Theme.accent : Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    TrailingToggle {
                                         accessibleName: "文字阴影"
                                         checked: workspace.selectedTextShadowEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -6389,12 +6376,7 @@ ApplicationWindow {
 
                                 InspectorRow {
                                     label: "启用"
-                                    BodyLabel {
-                                        text: workspace.selectedTextGlowEnabled ? "沿用文字填充色" : "无发光"
-                                        color: workspace.selectedTextGlowEnabled ? Theme.accent : Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    TrailingToggle {
                                         accessibleName: "文字发光"
                                         checked: workspace.selectedTextGlowEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -6438,12 +6420,7 @@ ApplicationWindow {
                                 visible: workspace.selectedSupportsStroke
                                 InspectorRow {
                                     label: "启用"
-                                    BodyLabel {
-                                        text: workspace.selectedLayerType === "文字" ? "文字轮廓" : "图层边缘"
-                                        color: Theme.textSecondary
-                                        Layout.fillWidth: true
-                                    }
-                                    ToggleSwitch {
+                                    TrailingToggle {
                                         accessibleName: "描边"
                                         checked: workspace.selectedStrokeEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -6479,30 +6456,11 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "颜色"
                                     visible: workspace.selectedStrokeEnabled
-                                    Rectangle {
-                                        Layout.preferredWidth: 30
-                                        Layout.preferredHeight: 30
-                                        radius: Theme.radiusSmall
-                                        color: window.hexToColor(workspace.selectedStrokeColor)
-                                        border.width: 1
-                                        border.color: strokeColorMouse.containsMouse ? Theme.accent : Theme.borderStrong
-
-                                        MouseArea {
-                                            id: strokeColorMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: {
-                                                effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)
-                                            }
-                                        }
-                                    }
-                                    ValueBox {
+                                    ColorValueField {
                                         value: workspace.selectedStrokeColor
-                                        bindValue: true
                                         Layout.fillWidth: true
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)
                                         onValueCommitted: value => workspace.setSelectedStrokeColor(value)
                                     }
                                 }
@@ -6579,152 +6537,89 @@ ApplicationWindow {
                                 }
                             }
                             PropertySection {
+                                id: overlaySection
+                                objectName: "overlaySection"
                                 width: parent.width
                                 title: "颜色叠加"
-                                summary: workspace.selectedColorOverlayEnabled ? workspace.selectedColorOverlayOpacity + "%" : "关闭"
-                                visible: workspace.selectedSupportsColorOverlay
+                                summary: workspace.selectedOverlayMode === "color"
+                                         ? "纯色 · " + workspace.selectedColorOverlayOpacity + "%"
+                                         : workspace.selectedOverlayMode === "gradient"
+                                           ? "渐变 · " + workspace.selectedGradientOverlayOpacity + "% · " + Math.round(workspace.selectedGradientOverlayAngle) + "°"
+                                           : "关闭"
+                                visible: workspace.selectedSupportsColorOverlay || workspace.selectedSupportsGradientOverlay
 
                                 InspectorRow {
-                                    label: "启用"
-                                    BodyLabel { text: "统一图层色调"; color: Theme.textSecondary; Layout.fillWidth: true }
-                                    ToggleSwitch {
-                                        accessibleName: "颜色叠加"
-                                        checked: workspace.selectedColorOverlayEnabled
+                                    label: "模式"
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "颜色叠加模式"
+                                        options: [
+                                            { label: "关闭", value: "none" },
+                                            { label: "纯色", value: "color" },
+                                            { label: "渐变", value: "gradient" }
+                                        ]
+                                        value: workspace.selectedOverlayMode
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedColorOverlayEnabled(checkedValue)
+                                        onActivated: value => workspace.setSelectedOverlayMode(value)
                                     }
                                 }
                                 InspectorRow {
                                     label: "颜色"
-                                    visible: workspace.selectedColorOverlayEnabled
-                                    Rectangle {
-                                        Layout.preferredWidth: 30
-                                        Layout.preferredHeight: 30
-                                        radius: Theme.radiusSmall
-                                        color: window.hexToColor(workspace.selectedColorOverlayColor)
-                                        border.width: 1
-                                        border.color: overlayColorMouse.containsMouse ? Theme.accent : Theme.borderStrong
-                                        MouseArea {
-                                            id: overlayColorMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: effectColorDialog.openFor("overlay", workspace.selectedColorOverlayColor)
-                                        }
-                                    }
-                                    ValueBox {
-                                        value: workspace.selectedColorOverlayColor
-                                        bindValue: true
+                                    visible: workspace.selectedOverlayMode === "color"
+                                    ColorValueField {
                                         Layout.fillWidth: true
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        value: workspace.selectedColorOverlayColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("overlay", workspace.selectedColorOverlayColor)
                                         onValueCommitted: value => workspace.setSelectedColorOverlayColor(value)
                                     }
                                 }
                                 InspectorRow {
-                                    label: "强度"
-                                    visible: workspace.selectedColorOverlayEnabled
-                                    ValueBox {
-                                        value: workspace.selectedColorOverlayOpacity.toString()
-                                        bindValue: true
-                                        suffix: "%"
-                                        Layout.fillWidth: true
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseInt(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedColorOverlayOpacity(parsed)
-                                        }
-                                    }
-                                }
-                            }
-                            PropertySection {
-                                width: parent.width
-                                title: "渐变叠加"
-                                summary: workspace.selectedGradientOverlayEnabled ? workspace.selectedGradientOverlayOpacity + "% · " + Math.round(workspace.selectedGradientOverlayAngle) + "°" : "关闭"
-                                visible: workspace.selectedSupportsGradientOverlay
-
-                                InspectorRow {
-                                    label: "启用"
-                                    BodyLabel { text: "双端线性渐变"; color: Theme.textSecondary; Layout.fillWidth: true }
-                                    ToggleSwitch {
-                                        accessibleName: "渐变叠加"
-                                        checked: workspace.selectedGradientOverlayEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedGradientOverlayEnabled(checkedValue)
-                                    }
-                                }
-                                InspectorRow {
                                     label: "起始"
-                                    visible: workspace.selectedGradientOverlayEnabled
-                                    Rectangle {
-                                        Layout.preferredWidth: 30
-                                        Layout.preferredHeight: 30
-                                        radius: Theme.radiusSmall
-                                        color: window.hexToColor(workspace.selectedGradientStartColor)
-                                        border.width: 1
-                                        border.color: gradientStartMouse.containsMouse ? Theme.accent : Theme.borderStrong
-                                        MouseArea {
-                                            id: gradientStartMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: effectColorDialog.openFor("gradient", workspace.selectedGradientStartColor, 0)
-                                        }
-                                    }
-                                    ValueBox {
-                                        value: workspace.selectedGradientStartColor
-                                        bindValue: true
+                                    visible: workspace.selectedOverlayMode === "gradient"
+                                    ColorValueField {
                                         Layout.fillWidth: true
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        value: workspace.selectedGradientStartColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("gradient", workspace.selectedGradientStartColor, 0)
                                         onValueCommitted: value => workspace.setSelectedGradientOverlayColor(0, value)
                                     }
                                 }
                                 InspectorRow {
                                     label: "结束"
-                                    visible: workspace.selectedGradientOverlayEnabled
-                                    Rectangle {
-                                        Layout.preferredWidth: 30
-                                        Layout.preferredHeight: 30
-                                        radius: Theme.radiusSmall
-                                        color: window.hexToColor(workspace.selectedGradientEndColor)
-                                        border.width: 1
-                                        border.color: gradientEndMouse.containsMouse ? Theme.accent : Theme.borderStrong
-                                        MouseArea {
-                                            id: gradientEndMouse
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onClicked: effectColorDialog.openFor("gradient", workspace.selectedGradientEndColor, 1)
-                                        }
-                                    }
-                                    ValueBox {
-                                        value: workspace.selectedGradientEndColor
-                                        bindValue: true
+                                    visible: workspace.selectedOverlayMode === "gradient"
+                                    ColorValueField {
                                         Layout.fillWidth: true
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        value: workspace.selectedGradientEndColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("gradient", workspace.selectedGradientEndColor, 1)
                                         onValueCommitted: value => workspace.setSelectedGradientOverlayColor(1, value)
                                     }
                                 }
                                 InspectorRow {
                                     label: "强度"
-                                    visible: workspace.selectedGradientOverlayEnabled
+                                    visible: workspace.selectedOverlayMode !== "none"
                                     ValueBox {
-                                        value: workspace.selectedGradientOverlayOpacity.toString()
+                                        value: (workspace.selectedOverlayMode === "color"
+                                                ? workspace.selectedColorOverlayOpacity
+                                                : workspace.selectedGradientOverlayOpacity).toString()
                                         bindValue: true
                                         suffix: "%"
                                         Layout.fillWidth: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedGradientOverlayOpacity(parsed)
+                                            if (isNaN(parsed)) return
+                                            if (workspace.selectedOverlayMode === "color")
+                                                workspace.setSelectedColorOverlayOpacity(parsed)
+                                            else
+                                                workspace.setSelectedGradientOverlayOpacity(parsed)
                                         }
                                     }
                                 }
                                 InspectorRow {
                                     label: "角度"
-                                    visible: workspace.selectedGradientOverlayEnabled
+                                    visible: workspace.selectedOverlayMode === "gradient"
                                     ValueBox {
                                         value: (Math.round(workspace.selectedGradientOverlayAngle * 10) / 10).toString()
                                         bindValue: true
@@ -6739,7 +6634,7 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "方向"
-                                    visible: workspace.selectedGradientOverlayEnabled
+                                    visible: workspace.selectedOverlayMode === "gradient"
                                     Row {
                                         Layout.fillWidth: true
                                         spacing: 4
@@ -6774,12 +6669,33 @@ ApplicationWindow {
                                 }
                             }
                             PropertySection {
+                                id: cornerSection
+                                objectName: "cornerSection"
                                 width: parent.width
                                 title: "圆角"
-                                summary: workspace.selectedCornerRadius + " px"
+                                summary: workspace.selectedCornerMode === "independent"
+                                         ? "独立四角"
+                                         : workspace.selectedCornerRadius + " px"
                                 visible: workspace.selectedSupportsCornerRadius
+
+                                InspectorRow {
+                                    label: "模式"
+                                    visible: workspace.selectedSupportsVectorCorners
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "圆角编辑模式"
+                                        options: [
+                                            { label: "统一", value: "uniform" },
+                                            { label: "独立四角", value: "independent" }
+                                        ]
+                                        value: workspace.selectedCornerMode
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: value => workspace.setSelectedCornerMode(value)
+                                    }
+                                }
                                 InspectorRow {
                                     label: "半径"
+                                    visible: workspace.selectedCornerMode === "uniform"
                                     ValueBox {
                                         value: workspace.selectedCornerRadius.toString()
                                         bindValue: true
@@ -6795,6 +6711,7 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "预设"
+                                    visible: workspace.selectedCornerMode === "uniform"
                                     Row {
                                         Layout.fillWidth: true
                                         spacing: 4
@@ -6805,6 +6722,10 @@ ApplicationWindow {
                                                 width: 42
                                                 height: 28
                                                 radius: Theme.radiusSmall
+                                                enabled: modelData <= workspace.selectedCornerRadiusMax
+                                                         && !workspace.selectedLocked
+                                                         && !workspace.operationsBlocked
+                                                opacity: enabled ? 1 : 0.38
                                                 color: workspace.selectedCornerRadius === modelData ? Theme.accentSoft : Theme.bgControl
                                                 border.width: 1
                                                 border.color: workspace.selectedCornerRadius === modelData ? Theme.accentPressed : Theme.borderStrong
@@ -6818,38 +6739,18 @@ ApplicationWindow {
                                                 }
                                                 MouseArea {
                                                     anchors.fill: parent
-                                                    enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                                    enabled: parent.enabled
                                                     hoverEnabled: true
                                                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                    onClicked: workspace.setSelectedCornerRadius(modelData)
+                                                    onClicked: workspace.setSelectedCornerRadius(parent.modelData)
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 InspectorRow {
-                                    label: "矢量统一"
-                                    visible: workspace.selectedSupportsVectorCorners
-                                    ValueBox {
-                                        value: Math.max(
-                                            workspace.selectedVectorCornerRadii[0],
-                                            workspace.selectedVectorCornerRadii[1],
-                                            workspace.selectedVectorCornerRadii[2],
-                                            workspace.selectedVectorCornerRadii[3]
-                                        ).toString()
-                                        bindValue: true
-                                        suffix: "px"
-                                        Layout.fillWidth: true
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseInt(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedVectorCornerRadiusAll(parsed)
-                                        }
-                                    }
-                                }
-                                InspectorRow {
                                     label: "上角"
-                                    visible: workspace.selectedSupportsVectorCorners
+                                    visible: workspace.selectedCornerMode === "independent"
                                     ValueBox {
                                         value: workspace.selectedVectorCornerRadii[0].toString()
                                         bindValue: true
@@ -6877,7 +6778,7 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "下角"
-                                    visible: workspace.selectedSupportsVectorCorners
+                                    visible: workspace.selectedCornerMode === "independent"
                                     ValueBox {
                                         value: workspace.selectedVectorCornerRadii[3].toString()
                                         bindValue: true
