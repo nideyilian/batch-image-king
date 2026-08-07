@@ -1386,13 +1386,29 @@ class WorkspaceViewModel(QObject):
 
     def _load_text_font_names(self, layer):
         try:
-            font_names = layer.get_system_fonts()
+            categories = layer.get_categorized_fonts()
+            font_names = categories.get("chinese", [])
             if font_names:
                 return font_names
         except Exception:
-            logger.debug("加载文字图层本地字体目录失败，回退 Qt 字体库", exc_info=True)
+            logger.debug("加载文字图层中文字体目录失败，回退 Qt 字体库", exc_info=True)
         if QGuiApplication.instance() is not None:
-            return QFontDatabase.families()
+            try:
+                writing_system = QFontDatabase.WritingSystem
+                font_names = []
+                seen = set()
+                for system in (
+                    writing_system.SimplifiedChinese,
+                    writing_system.TraditionalChinese,
+                ):
+                    for name in QFontDatabase.families(system):
+                        key = str(name or "").strip().casefold()
+                        if key and key not in seen:
+                            seen.add(key)
+                            font_names.append(name)
+                return font_names
+            except Exception:
+                logger.debug("从 Qt 字体库加载中文字体失败", exc_info=True)
         return []
 
     def _font_catalog_layer(self):
@@ -1418,8 +1434,8 @@ class WorkspaceViewModel(QObject):
             "Microsoft YaHei",
             "SimHei",
             "SimSun",
-            "Arial",
-            "Segoe UI",
+            "KaiTi",
+            "FangSong",
         ]
         options = []
         seen = set()
@@ -1451,8 +1467,10 @@ class WorkspaceViewModel(QObject):
         current_key = current.casefold()
         current_option = next(
             (option for option in options if str(option.get("value", "")).casefold() == current_key),
-            {"label": current, "value": current},
+            None,
         )
+        if current_option is None:
+            return options
         return [current_option] + [
             option for option in options
             if str(option.get("value", "")).casefold() != current_key

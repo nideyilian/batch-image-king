@@ -32,15 +32,18 @@ def _workspace() -> tuple[WorkspaceViewModel, TextLayer]:
 def test_text_font_options_and_style_combinations(monkeypatch):
     workspace, layer = _workspace()
     monkeypatch.setattr(
-        workspace,
-        "_load_text_font_names",
-        lambda selected_layer: ["Arial", "Microsoft YaHei", "Source Han Sans SC", "Arial"],
+        layer,
+        "get_categorized_fonts",
+        lambda: {
+            "chinese": ["Microsoft YaHei", "Source Han Sans SC"],
+            "english": ["Arial"],
+        },
     )
+    workspace._text_font_options_cache = None
 
     assert workspace.selectedTextFontFamily == layer.font_family
     assert [item["value"] for item in workspace.selectedTextFontOptions] == [
         "Microsoft YaHei",
-        "Arial",
         "Source Han Sans SC",
     ]
 
@@ -63,9 +66,12 @@ def test_text_font_options_and_style_combinations(monkeypatch):
 def test_local_font_catalog_uses_canonical_family_names_and_chinese_labels(monkeypatch):
     workspace, layer = _workspace()
     monkeypatch.setattr(
-        workspace,
-        "_load_text_font_names",
-        lambda selected_layer: ["Microsoft YaHei", "Local Poster Font", "Microsoft YaHei"],
+        layer,
+        "get_categorized_fonts",
+        lambda: {
+            "chinese": ["Microsoft YaHei", "Local Poster Font", "Microsoft YaHei"],
+            "english": ["Arial"],
+        },
     )
     monkeypatch.setattr(
         layer,
@@ -85,6 +91,28 @@ def test_local_font_catalog_uses_canonical_family_names_and_chinese_labels(monke
 
     assert workspace.setSelectedTextFontFamily("本地海报体") is True
     assert layer.font_family == "Local Poster Font"
+
+
+@pytest.mark.unit
+def test_non_chinese_current_font_is_not_added_to_the_visible_catalog(monkeypatch):
+    workspace, layer = _workspace()
+    layer.font_family = "Arial"
+    monkeypatch.setattr(
+        layer,
+        "get_categorized_fonts",
+        lambda: {
+            "chinese": ["Microsoft YaHei", "SimSun"],
+            "english": ["Arial", "Segoe UI"],
+        },
+    )
+    workspace._text_font_options_cache = None
+
+    assert workspace.selectedTextFontFamily == "Arial"
+    assert [item["value"] for item in workspace.textFontOptions] == [
+        "Microsoft YaHei",
+        "SimSun",
+    ]
+    assert workspace.selectedTextFontOptions == workspace.textFontOptions
 
 
 @pytest.mark.unit
