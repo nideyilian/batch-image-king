@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import datetime
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Callable, Optional
@@ -55,6 +57,11 @@ class BatchExportViewModel(QObject):
     stateChanged = Signal()
     documentChanged = Signal()
 
+    _DATE_FORMATS = ("%Y%m%d", "%Y-%m-%d", "%y%m%d")
+    _NUMBER_FORMATS = ("{number:04d}", "{number:03d}", "{number:02d}", "{number:d}")
+    _FORMAT_BY_INDEX = {0: "png", 1: "jpg", 2: "bmp"}
+    _INDEX_BY_FORMAT = {"png": 0, "jpg": 1, "jpeg": 1, "bmp": 2}
+
     def __init__(
         self,
         workspace,
@@ -67,12 +74,25 @@ class BatchExportViewModel(QObject):
         self._runner = runner or self._run_document_export
         self._document: Optional[Document] = None
         self._output_directory = ""
-        self._count = 12
-        self._filename_template = "image_{number:04d}"
+        self._count = 10
+        self._use_date = True
+        self._date_format_index = 0
+        self._custom_text = "export"
+        self._use_layer_name = False
+        self._layer_index = 0
+        self._number_format_index = 0
+        self._filename_template = ""
+        self._manual_filename_template = False
         self._file_format = "png"
         self._avoid_duplicates = True
         self._start_index = 1
         self._traverse_mode = False
+        self._traverse_count = 0
+        self._traverse_error = ""
+        self._max_file_size_kb = 299
+        self._use_current_time_for_path = False
+        self._unique_use_enabled = False
+        self._selected_unique_layers = set()
         self._use_high_performance = True
         self._preload_enabled = True
         self._quality_profile = "quality"
@@ -95,6 +115,7 @@ class BatchExportViewModel(QObject):
         self._cancel_event = threading.Event()
         self._active_task = None
         self._document_states = WeakKeyDictionary()
+        self._filename_template = self._build_filename_template()
 
         workspace.documentObjectChanged.connect(self.setDocument)
         self.setDocument(workspace.document)
@@ -108,6 +129,84 @@ class BatchExportViewModel(QObject):
         text = str(path_or_url or "").strip()
         url = QUrl(text)
         return url.toLocalFile() if url.isLocalFile() else text
+
+    def _build_filename_template(self) -> str:
+        parts = []
+        if self._use_date:
+            format_string = self._DATE_FORMATS[max(0, min(self._date_format_index, 2))]
+            parts.append(datetime.datetime.now().strftime(format_string))
+        custom_text = self._custom_text.strip()
+        if custom_text:
+            parts.append(custom_text)
+        if self._use_layer_name and self._document is not None and self._document.layers:
+            layer_index = max(0, min(self._layer_index, len(self._document.layers) - 1))
+            parts.append(f"{{layer:{layer_index}}}")
+        number_format = self._NUMBER_FORMATS[max(0, min(self._number_format_index, 3))]
+        parts.append(number_format)
+        return "-".join(parts)
+
+    def _rebuild_filename_template(self) -> None:
+        self._manual_filename_template = False
+        self._filename_template = self._build_filename_template()
+        self.configChanged.emit()
+
+    @staticmethod
+    def _is_valid_yyyymmdd(value: str) -> bool:
+        try:
+            datetime.datetime.strptime(value, "%Y%m%d")
+            return True
+        except ValueError:
+            return False
+
+    @classmethod
+    def _replace_path_date_with_today(cls, path: str) -> str:
+        today = datetime.datetime.now().strftime("%Y%m%d")
+
+        def replace(match) -> str:
+            value = match.group(0)
+            return today if cls._is_valid_yyyymmdd(value) else value
+
+        return re.sub(r"(?<!\d)(?:19|20)\d{6}(?!\d)", replace, str(path or ""))
+
+    def _resolved_output_directory(self) -> str:
+        if self._use_current_time_for_path:
+            return self._replace_path_date_with_today(self._output_directory)
+        return self._output_directory
+
+    @staticmethod
+    def _is_text_layer(layer) -> bool:
+        if layer is None:
+            return False
+        if hasattr(layer, "get_text_lines") and callable(getattr(layer, "get_text_lines", None)):
+            return True
+        if layer.__class__.__name__ == "TextLayer":
+            return True
+        return bool(hasattr(layer, "text_content") and not hasattr(layer, "image_source"))
+
+    @classmethod
+    def _is_unique_use_eligible_layer(cls, layer) -> bool:
+        if layer is None or cls._is_text_layer(layer):
+            return False
+        source = getattr(layer, "image_source", None) or getattr(layer, "_image_source", None)
+        if source:
+            return True
+        return bool(getattr(layer, "image_paths", None))
+
+    def _refresh_traverse_count(self) -> None:
+        self._traverse_count = 0
+        self._traverse_error = ""
+        if not self._traverse_mode or self._document is None:
+            return
+        try:
+            self._traverse_count = int(self._document._calculate_possible_combinations())
+        except Exception as error:
+            self._traverse_error = str(error or "无法计算组合数量")
+
+    def _current_filename_template(self) -> str:
+        if self._manual_filename_template:
+            return self._filename_template.strip()
+        self._filename_template = self._build_filename_template()
+        return self._filename_template
 
     @Property(QObject, notify=documentChanged)
     def document(self):
@@ -137,14 +236,112 @@ class BatchExportViewModel(QObject):
 
     @Property(str, notify=configChanged)
     def filenameTemplate(self) -> str:
-        return self._filename_template
+        return self._current_filename_template()
 
     @filenameTemplate.setter
     def filenameTemplate(self, value: str) -> None:
         value = str(value or "")
-        if value != self._filename_template:
+        if value != self._filename_template or not self._manual_filename_template:
             self._filename_template = value
+            self._manual_filename_template = True
             self.configChanged.emit()
+
+    @Property(bool, notify=configChanged)
+    def useDate(self) -> bool:
+        return self._use_date
+
+    @useDate.setter
+    def useDate(self, value: bool) -> None:
+        value = bool(value)
+        if value != self._use_date:
+            self._use_date = value
+            self._rebuild_filename_template()
+
+    @Property(int, notify=configChanged)
+    def dateFormatIndex(self) -> int:
+        return self._date_format_index
+
+    @dateFormatIndex.setter
+    def dateFormatIndex(self, value: int) -> None:
+        value = max(0, min(int(value), len(self._DATE_FORMATS) - 1))
+        if value != self._date_format_index:
+            self._date_format_index = value
+            self._rebuild_filename_template()
+
+    @Property(str, notify=configChanged)
+    def customText(self) -> str:
+        return self._custom_text
+
+    @customText.setter
+    def customText(self, value: str) -> None:
+        value = str(value or "")
+        if value != self._custom_text:
+            self._custom_text = value
+            self._rebuild_filename_template()
+
+    @Property(bool, notify=configChanged)
+    def useLayerName(self) -> bool:
+        return self._use_layer_name
+
+    @useLayerName.setter
+    def useLayerName(self, value: bool) -> None:
+        value = bool(value)
+        if value != self._use_layer_name:
+            self._use_layer_name = value
+            self._rebuild_filename_template()
+
+    @Property(int, notify=configChanged)
+    def layerIndex(self) -> int:
+        return self._layer_index
+
+    @layerIndex.setter
+    def layerIndex(self, value: int) -> None:
+        value = max(0, int(value))
+        if value != self._layer_index:
+            self._layer_index = value
+            self._rebuild_filename_template()
+
+    @Property(int, notify=configChanged)
+    def numberFormatIndex(self) -> int:
+        return self._number_format_index
+
+    @numberFormatIndex.setter
+    def numberFormatIndex(self, value: int) -> None:
+        value = max(0, min(int(value), len(self._NUMBER_FORMATS) - 1))
+        if value != self._number_format_index:
+            self._number_format_index = value
+            self._rebuild_filename_template()
+
+    @Property("QVariantList", notify=configChanged)
+    def layerOptions(self):
+        if self._document is None:
+            return []
+        return [
+            {"label": f"{getattr(layer, 'name', f'图层 {index + 1}')} (图层 {index + 1})", "value": index}
+            for index, layer in enumerate(self._document.layers)
+        ]
+
+    @Property(str, notify=configChanged)
+    def filenamePreview(self) -> str:
+        preview = self._current_filename_template()
+        if self._document is not None and self._document.layers:
+            layer_index = max(0, min(self._layer_index, len(self._document.layers) - 1))
+            layer = self._document.layers[layer_index]
+            path = str(getattr(layer, "current_image_path", "") or "")
+            if path:
+                layer_name = Path(path).stem
+                extractor = getattr(self._document, "_extract_main_filename", None)
+                if callable(extractor):
+                    layer_name = extractor(layer_name) or layer_name
+            else:
+                layer_name = "[实际图像名称]"
+            preview = preview.replace(f"{{layer:{layer_index}}}", layer_name)
+        try:
+            preview = preview.format(number=self._start_index)
+        except (KeyError, ValueError):
+            pass
+        extension = "jpg" if self._file_format == "jpeg" else self._file_format
+        return f"{preview}.{extension}"
 
     @Property(str, notify=configChanged)
     def fileFormat(self) -> str:
@@ -153,6 +350,8 @@ class BatchExportViewModel(QObject):
     @fileFormat.setter
     def fileFormat(self, value: str) -> None:
         value = str(value or "").strip().lower()
+        if value == "jpeg":
+            value = "jpg"
         if value != self._file_format:
             self._file_format = value
             self.configChanged.emit()
@@ -187,7 +386,81 @@ class BatchExportViewModel(QObject):
 
     @traverseMode.setter
     def traverseMode(self, value: bool) -> None:
-        self._set_config_value("_traverse_mode", bool(value))
+        value = bool(value)
+        if value != self._traverse_mode:
+            self._traverse_mode = value
+            self._refresh_traverse_count()
+            self.configChanged.emit()
+
+    @Property(int, notify=configChanged)
+    def effectiveCount(self) -> int:
+        return self._traverse_count if self._traverse_mode else self._count
+
+    @Property(str, notify=configChanged)
+    def traverseCountText(self) -> str:
+        if not self._traverse_mode:
+            return ""
+        if self._traverse_error:
+            return "无法计算组合数"
+        if self._traverse_count > 10000:
+            return f"将导出 {self._traverse_count} 个组合 · 注意数量很大"
+        if self._traverse_count > 1000:
+            return f"将导出 {self._traverse_count} 个组合 · 数量较大"
+        return f"将导出 {self._traverse_count} 个组合"
+
+    @Property(int, notify=configChanged)
+    def maxFileSizeKB(self) -> int:
+        return self._max_file_size_kb
+
+    @maxFileSizeKB.setter
+    def maxFileSizeKB(self, value: int) -> None:
+        self._set_config_value("_max_file_size_kb", int(value))
+
+    @Property(bool, notify=configChanged)
+    def useCurrentTimeForPath(self) -> bool:
+        return self._use_current_time_for_path
+
+    @useCurrentTimeForPath.setter
+    def useCurrentTimeForPath(self, value: bool) -> None:
+        self._set_config_value("_use_current_time_for_path", bool(value))
+
+    @Property(bool, notify=configChanged)
+    def uniqueUseEnabled(self) -> bool:
+        return self._unique_use_enabled
+
+    @uniqueUseEnabled.setter
+    def uniqueUseEnabled(self, value: bool) -> None:
+        self._set_config_value("_unique_use_enabled", bool(value))
+
+    @Property("QVariantList", notify=configChanged)
+    def uniqueLayerOptions(self):
+        if self._document is None:
+            return []
+        options = []
+        for index, layer in enumerate(self._document.layers):
+            eligible = self._is_unique_use_eligible_layer(layer)
+            options.append(
+                {
+                    "index": index,
+                    "label": str(getattr(layer, "name", f"图层 {index + 1}")),
+                    "eligible": eligible,
+                    "selected": eligible and index in self._selected_unique_layers,
+                }
+            )
+        return options
+
+    @Slot(int, bool, result=bool)
+    def setUniqueLayerSelected(self, layer_index: int, selected: bool) -> bool:
+        if self._document is None or not 0 <= layer_index < len(self._document.layers):
+            return False
+        if not self._is_unique_use_eligible_layer(self._document.layers[layer_index]):
+            return False
+        if selected:
+            self._selected_unique_layers.add(int(layer_index))
+        else:
+            self._selected_unique_layers.discard(int(layer_index))
+        self.configChanged.emit()
+        return True
 
     @Property(bool, notify=configChanged)
     def useHighPerformance(self) -> bool:
@@ -329,7 +602,7 @@ class BatchExportViewModel(QObject):
 
     @Property(str, notify=configChanged)
     def estimatedTime(self) -> str:
-        seconds = max(1, round(self._count * 0.7))
+        seconds = max(1, round(self.effectiveCount * 0.7))
         if seconds < 60:
             return f"约 {seconds} 秒"
         return f"约 {seconds // 60} 分 {seconds % 60} 秒"
@@ -341,6 +614,7 @@ class BatchExportViewModel(QObject):
             (self._document.export_progress_updated, self._on_progress),
             (self._document.file_exported, self._on_file_exported),
             (self._document.export_stage_updated, self._on_stage),
+            (self._document.layers_changed, self._on_document_layers_changed),
         )
         for signal, slot in connections:
             try:
@@ -348,15 +622,45 @@ class BatchExportViewModel(QObject):
             except (RuntimeError, TypeError):
                 pass
 
+    @Slot()
+    def _on_document_layers_changed(self) -> None:
+        if self._document is None:
+            return
+        eligible = {
+            index
+            for index, layer in enumerate(self._document.layers)
+            if self._is_unique_use_eligible_layer(layer)
+        }
+        self._selected_unique_layers.intersection_update(eligible)
+        if self._document.layers:
+            self._layer_index = min(self._layer_index, len(self._document.layers) - 1)
+        else:
+            self._layer_index = 0
+        self._refresh_traverse_count()
+        if not self._manual_filename_template:
+            self._filename_template = self._build_filename_template()
+        self.configChanged.emit()
+
     def _snapshot_state(self) -> dict:
         return {
             "output_directory": self._output_directory,
             "count": self._count,
             "filename_template": self._filename_template,
+            "manual_filename_template": self._manual_filename_template,
+            "use_date": self._use_date,
+            "date_format_index": self._date_format_index,
+            "custom_text": self._custom_text,
+            "use_layer_name": self._use_layer_name,
+            "layer_index": self._layer_index,
+            "number_format_index": self._number_format_index,
             "file_format": self._file_format,
             "avoid_duplicates": self._avoid_duplicates,
             "start_index": self._start_index,
             "traverse_mode": self._traverse_mode,
+            "max_file_size_kb": self._max_file_size_kb,
+            "use_current_time_for_path": self._use_current_time_for_path,
+            "unique_use_enabled": self._unique_use_enabled,
+            "selected_unique_layers": set(self._selected_unique_layers),
             "use_high_performance": self._use_high_performance,
             "preload_enabled": self._preload_enabled,
             "quality_profile": self._quality_profile,
@@ -381,12 +685,23 @@ class BatchExportViewModel(QObject):
     def _default_state() -> dict:
         return {
             "output_directory": "",
-            "count": 12,
-            "filename_template": "image_{number:04d}",
+            "count": 10,
+            "filename_template": "",
+            "manual_filename_template": False,
+            "use_date": True,
+            "date_format_index": 0,
+            "custom_text": "export",
+            "use_layer_name": False,
+            "layer_index": 0,
+            "number_format_index": 0,
             "file_format": "png",
             "avoid_duplicates": True,
             "start_index": 1,
             "traverse_mode": False,
+            "max_file_size_kb": 299,
+            "use_current_time_for_path": False,
+            "unique_use_enabled": False,
+            "selected_unique_layers": set(),
             "use_high_performance": True,
             "preload_enabled": True,
             "quality_profile": "quality",
@@ -407,14 +722,79 @@ class BatchExportViewModel(QObject):
             "failure_summary": "",
         }
 
+    def _state_from_document(self, document) -> dict:
+        state = self._default_state()
+        if document is None:
+            return state
+        settings = getattr(document, "export_settings", {}) or {}
+        has_saved_config = bool(
+            settings.get("batch_export_settings_saved")
+            or settings.get("last_directory")
+            or settings.get("directory")
+        )
+        if not has_saved_config:
+            return state
+        configured_format = str(settings.get("format") or "").strip().lower()
+        if configured_format in {"webp", "tiff"}:
+            format_name = configured_format
+        else:
+            format_name = self._FORMAT_BY_INDEX.get(int(settings.get("format_index", 1) or 0), "jpg")
+        failure_rate = float(settings.get("export_safety_failure_rate_limit", 0.45) or 0.45)
+        if failure_rate <= 1:
+            failure_rate *= 100
+        state.update(
+            {
+                "output_directory": str(settings.get("last_directory") or settings.get("directory") or ""),
+                "count": int(settings.get("count", 10) or 10),
+                "use_date": bool(settings.get("use_date", True)),
+                "date_format_index": int(settings.get("date_format_index", 0) or 0),
+                "custom_text": str(settings.get("custom_text", "export") or ""),
+                "use_layer_name": bool(settings.get("use_layer_name", False)),
+                "layer_index": int(settings.get("layer_index", 0) or 0),
+                "number_format_index": int(settings.get("number_format_index", 0) or 0),
+                "file_format": format_name,
+                "avoid_duplicates": bool(settings.get("smart_sampling", True)),
+                "start_index": int(settings.get("start_index", 1) or 1),
+                "traverse_mode": bool(settings.get("traverse_export", False)),
+                "max_file_size_kb": int(settings.get("max_file_size_kb", 299) or 0),
+                "use_current_time_for_path": bool(settings.get("use_current_time_for_path", False)),
+                "unique_use_enabled": bool(settings.get("unique_use_enabled", False)),
+                "selected_unique_layers": {
+                    int(index) for index in settings.get("unique_use_layers", []) if str(index).lstrip("-").isdigit()
+                },
+                "use_high_performance": bool(settings.get("use_high_performance", True)),
+                "preload_enabled": bool(settings.get("batch_preload_enabled", True)),
+                "quality_profile": str(settings.get("export_quality_profile", "quality") or "quality"),
+                "memory_guard_mode": str(settings.get("export_memory_guard_mode", "auto") or "auto"),
+                "memory_limit_mb": int(settings.get("export_memory_limit_mb", 0) or 0),
+                "memory_reserve_mb": int(settings.get("export_memory_reserve_mb", 2048) or 2048),
+                "max_consecutive_failures": int(settings.get("export_safety_max_consecutive_failures", 8) or 8),
+                "failure_rate_limit": int(round(failure_rate)),
+                "stall_timeout_seconds": int(settings.get("export_safety_stall_timeout_seconds", 180) or 180),
+                "external_worker_enabled": bool(settings.get("export_external_worker_enabled", True)),
+            }
+        )
+        return state
+
     def _restore_state(self, state: dict) -> None:
         self._output_directory = state["output_directory"]
         self._count = state["count"]
         self._filename_template = state["filename_template"]
+        self._manual_filename_template = state["manual_filename_template"]
+        self._use_date = state["use_date"]
+        self._date_format_index = state["date_format_index"]
+        self._custom_text = state["custom_text"]
+        self._use_layer_name = state["use_layer_name"]
+        self._layer_index = state["layer_index"]
+        self._number_format_index = state["number_format_index"]
         self._file_format = state["file_format"]
         self._avoid_duplicates = state["avoid_duplicates"]
         self._start_index = state["start_index"]
         self._traverse_mode = state["traverse_mode"]
+        self._max_file_size_kb = state["max_file_size_kb"]
+        self._use_current_time_for_path = state["use_current_time_for_path"]
+        self._unique_use_enabled = state["unique_use_enabled"]
+        self._selected_unique_layers = set(state["selected_unique_layers"])
         self._use_high_performance = state["use_high_performance"]
         self._preload_enabled = state["preload_enabled"]
         self._quality_profile = state["quality_profile"]
@@ -433,6 +813,9 @@ class BatchExportViewModel(QObject):
         self._last_file = state["last_file"]
         self._error_message = state["error_message"]
         self._failure_summary = state["failure_summary"]
+        self._refresh_traverse_count()
+        if not self._manual_filename_template:
+            self._filename_template = self._build_filename_template()
 
     @Slot(object)
     def setDocument(self, document) -> None:
@@ -444,11 +827,12 @@ class BatchExportViewModel(QObject):
             self._document_states[self._document] = self._snapshot_state()
         self._disconnect_document()
         self._document = document
-        self._restore_state(self._document_states.get(document, self._default_state()))
+        self._restore_state(self._document_states.get(document, self._state_from_document(document)))
         if self._document is not None:
             self._document.export_progress_updated.connect(self._on_progress)
             self._document.file_exported.connect(self._on_file_exported)
             self._document.export_stage_updated.connect(self._on_stage)
+            self._document.layers_changed.connect(self._on_document_layers_changed)
         self.configChanged.emit()
         self.stateChanged.emit()
         self.documentChanged.emit()
@@ -460,6 +844,79 @@ class BatchExportViewModel(QObject):
         self._stage = "配置有误"
         self.stateChanged.emit()
 
+    def _collect_export_settings(self) -> dict:
+        format_index = self._INDEX_BY_FORMAT.get(self._file_format, 0)
+        number_index = max(0, min(self._number_format_index, len(self._NUMBER_FORMATS) - 1))
+        eligible_unique_layers = []
+        if self._document is not None:
+            eligible_unique_layers = [
+                index
+                for index in sorted(self._selected_unique_layers)
+                if 0 <= index < len(self._document.layers)
+                and self._is_unique_use_eligible_layer(self._document.layers[index])
+            ]
+        return {
+            "count": self._count,
+            "use_date": self._use_date,
+            "date_format": self._DATE_FORMATS[max(0, min(self._date_format_index, 2))],
+            "date_format_index": self._date_format_index,
+            "custom_text": self._custom_text,
+            "use_layer_name": self._use_layer_name,
+            "layer_index": self._layer_index,
+            "number_format": self._NUMBER_FORMATS[number_index],
+            "number_format_index": number_index,
+            "format": self._file_format,
+            "format_index": format_index,
+            "filename_template": self._current_filename_template(),
+            "last_directory": self._output_directory,
+            "directory": self._output_directory,
+            "start_index": self._start_index,
+            "use_high_performance": self._use_high_performance,
+            "traverse_export": self._traverse_mode,
+            "smart_sampling": self._avoid_duplicates,
+            "max_file_size_kb": self._max_file_size_kb,
+            "use_current_time_for_path": self._use_current_time_for_path,
+            "export_quality_profile": self._quality_profile,
+            "allow_lossy_size_reduction": self._quality_profile == "size",
+            "export_backend": "pillow",
+            "auto_runtime_tuning_enabled": True,
+            "freeze_preview_during_export": True,
+            "batch_preload_enabled": self._preload_enabled,
+            "export_external_worker_enabled": self._external_worker_enabled,
+            "export_safety_enabled": True,
+            "export_safety_max_consecutive_failures": self._max_consecutive_failures,
+            "export_safety_failure_rate_limit": self._failure_rate_limit / 100.0,
+            "export_safety_stall_timeout_seconds": self._stall_timeout_seconds,
+            "export_memory_guard_mode": self._memory_guard_mode,
+            "export_memory_limit_mb": self._memory_limit_mb,
+            "export_memory_reserve_mb": self._memory_reserve_mb,
+            "unique_use_enabled": self._unique_use_enabled,
+            "unique_use_layers": eligible_unique_layers,
+            "dynamic_budget_enabled": True,
+            "dynamic_budget_binding_enabled": True,
+            "dynamic_budget_standard_enabled": True,
+            "dynamic_budget_recent_n": 12,
+            "batch_export_settings_saved": True,
+        }
+
+    def _persist_settings(self, mark_document: bool = False) -> bool:
+        if self._document is None:
+            return False
+        self._document.export_settings.update(self._collect_export_settings())
+        if mark_document:
+            if hasattr(self._document, "set_modified"):
+                self._document.set_modified(True)
+            else:
+                self._document.is_modified = True
+            save_state = getattr(self._document, "save_state", None)
+            if callable(save_state):
+                save_state("保存批量导出设置")
+        return True
+
+    @Slot(result=bool)
+    def saveSettings(self) -> bool:
+        return self._persist_settings(mark_document=True)
+
     def _validate(self) -> bool:
         if self._document is None:
             self._set_error("当前没有可导出的文档")
@@ -467,13 +924,20 @@ class BatchExportViewModel(QObject):
         if not self._output_directory:
             self._set_error("请选择输出目录")
             return False
-        if not 1 <= self._count <= 10000:
+        self._refresh_traverse_count()
+        if self._traverse_mode and self._traverse_error:
+            self._set_error(f"无法计算组合数量：{self._traverse_error}")
+            return False
+        if self._traverse_mode and self._traverse_count <= 0:
+            self._set_error("没有可导出的组合")
+            return False
+        if not self._traverse_mode and not 1 <= self._count <= 10000:
             self._set_error("导出数量必须在 1 到 10000 之间")
             return False
         if not 0 <= self._start_index <= 999999999:
             self._set_error("起始序号必须在 0 到 999999999 之间")
             return False
-        if not self._filename_template.strip():
+        if not self._current_filename_template():
             self._set_error("文件名模板不能为空")
             return False
         if self._file_format not in {"png", "jpg", "jpeg", "webp", "bmp", "tiff"}:
@@ -488,6 +952,9 @@ class BatchExportViewModel(QObject):
         if self._memory_limit_mb < 0 or self._memory_reserve_mb < 256:
             self._set_error("内存限制参数无效")
             return False
+        if not 0 <= self._max_file_size_kb <= 102400:
+            self._set_error("最大文件大小必须在 0 到 102400 KB 之间")
+            return False
         if not 1 <= self._max_consecutive_failures <= 100:
             self._set_error("连续失败阈值必须在 1 到 100 之间")
             return False
@@ -498,7 +965,7 @@ class BatchExportViewModel(QObject):
             self._set_error("停滞超时必须在 30 到 3600 秒之间")
             return False
         try:
-            Path(self._output_directory).mkdir(parents=True, exist_ok=True)
+            Path(self._resolved_output_directory()).mkdir(parents=True, exist_ok=True)
         except OSError as error:
             self._set_error(f"无法创建输出目录：{error}")
             return False
@@ -511,12 +978,15 @@ class BatchExportViewModel(QObject):
         if not self._validate():
             return False
 
+        export_count = self.effectiveCount
+        export_directory = self._resolved_output_directory()
+        filename_template = self._current_filename_template()
         self._cancel_event = threading.Event()
         self._running = True
         self._succeeded = False
         self._canceled = False
         self._current = 0
-        self._total = self._count
+        self._total = export_count
         self._stage = "准备导出"
         self._last_file = ""
         self._error_message = ""
@@ -525,26 +995,11 @@ class BatchExportViewModel(QObject):
         self._workspace.setExportRunning(True)
         self.stateChanged.emit()
 
-        self._document.export_settings.update(
-            {
-                "export_quality_profile": self._quality_profile,
-                "allow_lossy_size_reduction": self._quality_profile == "size",
-                "auto_runtime_tuning_enabled": True,
-                "batch_preload_enabled": self._preload_enabled,
-                "export_external_worker_enabled": self._external_worker_enabled,
-                "export_safety_enabled": True,
-                "export_safety_max_consecutive_failures": self._max_consecutive_failures,
-                "export_safety_failure_rate_limit": self._failure_rate_limit / 100.0,
-                "export_safety_stall_timeout_seconds": self._stall_timeout_seconds,
-                "export_memory_guard_mode": self._memory_guard_mode,
-                "export_memory_limit_mb": self._memory_limit_mb,
-                "export_memory_reserve_mb": self._memory_reserve_mb,
-            }
-        )
+        self._persist_settings(mark_document=False)
         parameters = {
-            "directory": self._output_directory,
-            "count": self._count,
-            "filename_template": self._filename_template.strip(),
+            "directory": export_directory,
+            "count": export_count,
+            "filename_template": filename_template,
             "file_format": self._file_format,
             "start_index": self._start_index,
             "use_high_performance": self._use_high_performance,
@@ -632,6 +1087,7 @@ class BatchExportViewModel(QObject):
 
     @Slot(result=bool)
     def openOutputDirectory(self) -> bool:
-        if not self._output_directory or not os.path.isdir(self._output_directory):
+        output_directory = self._resolved_output_directory()
+        if not output_directory or not os.path.isdir(output_directory):
             return False
-        return bool(QDesktopServices.openUrl(QUrl.fromLocalFile(self._output_directory)))
+        return bool(QDesktopServices.openUrl(QUrl.fromLocalFile(output_directory)))

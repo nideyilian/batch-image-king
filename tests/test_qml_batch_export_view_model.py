@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import time
 from pathlib import Path
 
@@ -270,8 +271,9 @@ def test_batch_export_state_is_isolated_per_document(tmp_path: Path):
     assert workspace.activateDocument(second) is True
     assert view_model.document is second
     assert view_model.outputDirectory == ""
-    assert view_model.count == 12
-    assert view_model.filenameTemplate == "image_{number:04d}"
+    assert view_model.count == 10
+    assert view_model.customText == "export"
+    assert view_model.filenameTemplate.endswith("-export-{number:04d}")
     assert view_model.fileFormat == "png"
     assert view_model.avoidDuplicates is True
     assert view_model.errorMessage == ""
@@ -293,6 +295,119 @@ def test_batch_export_state_is_isolated_per_document(tmp_path: Path):
     assert view_model.count == 3
     assert view_model.filenameTemplate == "second_{number}"
     assert view_model.errorMessage == ""
+
+
+@pytest.mark.unit
+def test_batch_export_restores_legacy_document_settings(tmp_path: Path):
+    workspace = _workspace()
+    workspace.document.export_settings.update(
+        {
+            "batch_export_settings_saved": True,
+            "last_directory": str(tmp_path / "legacy"),
+            "count": 7,
+            "use_date": False,
+            "custom_text": "旧版导出",
+            "use_layer_name": False,
+            "number_format_index": 2,
+            "format_index": 2,
+            "traverse_export": True,
+            "smart_sampling": False,
+            "max_file_size_kb": 512,
+            "use_current_time_for_path": True,
+        }
+    )
+
+    view_model = BatchExportViewModel(workspace=workspace)
+
+    assert view_model.outputDirectory == str(tmp_path / "legacy")
+    assert view_model.count == 7
+    assert view_model.useDate is False
+    assert view_model.customText == "旧版导出"
+    assert view_model.numberFormatIndex == 2
+    assert view_model.filenameTemplate == "旧版导出-{number:02d}"
+    assert view_model.fileFormat == "bmp"
+    assert view_model.traverseMode is True
+    assert view_model.avoidDuplicates is False
+    assert view_model.maxFileSizeKB == 512
+    assert view_model.useCurrentTimeForPath is True
+
+
+@pytest.mark.unit
+def test_traverse_mode_uses_all_possible_combinations(qapp, tmp_path: Path):
+    workspace = _workspace()
+    workspace.document._calculate_possible_combinations = lambda: 27
+
+    def runner(document, **kwargs):
+        assert kwargs["count"] == 27
+        assert kwargs["traverse_mode"] is True
+        return True
+
+    view_model = BatchExportViewModel(workspace=workspace, runner=runner)
+    view_model.outputDirectory = str(tmp_path)
+    view_model.count = 2
+    view_model.traverseMode = True
+
+    assert view_model.effectiveCount == 27
+    assert "27" in view_model.traverseCountText
+    assert view_model.startExport() is True
+    _wait_until(qapp, lambda: not view_model.running)
+    assert view_model.total == 27
+    assert view_model.succeeded is True
+
+
+@pytest.mark.unit
+def test_legacy_filename_path_and_unique_layer_settings_are_applied(qapp, tmp_path: Path):
+    source = tmp_path / "产品主图.png"
+    Image.new("RGBA", (24, 24), (60, 130, 210, 255)).save(source)
+    workspace = _workspace()
+    workspace.document.add_layer(
+        "产品图",
+        0,
+        0,
+        24,
+        24,
+        image_source=str(source),
+        use_original_size=False,
+        is_folder=False,
+    )
+    today = datetime.datetime.now().strftime("%Y%m%d")
+    raw_output = tmp_path / "20240101" / "exports"
+
+    def runner(document, **kwargs):
+        assert Path(kwargs["directory"]).parts[-2:] == (today, "exports")
+        assert kwargs["filename_template"] == "产品-{layer:0}-{number:03d}"
+        assert kwargs["file_format"] == "bmp"
+        assert kwargs["use_smart_sampling"] is False
+        settings = document.export_settings
+        assert settings["max_file_size_kb"] == 640
+        assert settings["use_current_time_for_path"] is True
+        assert settings["unique_use_enabled"] is True
+        assert settings["unique_use_layers"] == [0]
+        assert settings["batch_export_settings_saved"] is True
+        return True
+
+    view_model = BatchExportViewModel(workspace=workspace, runner=runner)
+    view_model.outputDirectory = str(raw_output)
+    view_model.useCurrentTimeForPath = True
+    view_model.useDate = False
+    view_model.customText = "产品"
+    view_model.useLayerName = True
+    view_model.layerIndex = 0
+    view_model.numberFormatIndex = 1
+    view_model.fileFormat = "bmp"
+    view_model.maxFileSizeKB = 640
+    view_model.avoidDuplicates = False
+    view_model.uniqueUseEnabled = True
+    assert view_model.setUniqueLayerSelected(0, True) is True
+
+    assert view_model.filenameTemplate == "产品-{layer:0}-{number:03d}"
+    assert view_model.filenamePreview.endswith(".bmp")
+    assert "产品主图" in view_model.filenamePreview
+    assert view_model.saveSettings() is True
+    assert workspace.document.export_settings["custom_text"] == "产品"
+    assert view_model.startExport() is True
+    _wait_until(qapp, lambda: not view_model.running)
+    assert view_model.succeeded is True
 
 
 @pytest.mark.integration
@@ -321,6 +436,7 @@ def test_batch_export_runs_real_document_pipeline(qapp, tmp_path: Path):
     view_model.outputDirectory = str(output)
     view_model.count = 2
     view_model.filenameTemplate = "real_{number:02d}"
+    view_model.fileFormat = "png"
     view_model.avoidDuplicates = False
 
     assert view_model.startExport() is True

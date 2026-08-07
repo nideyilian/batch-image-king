@@ -157,7 +157,7 @@ def test_all_toggle_switches_have_accessible_names():
     toggle_blocks = _qml_component_blocks(main_source, "ToggleSwitch")
     trailing_toggle_blocks = _qml_component_blocks(main_source, "TrailingToggle")
 
-    assert len(toggle_blocks) == 20
+    assert len(toggle_blocks) == 25
     assert len(trailing_toggle_blocks) == 8
     assert all("accessibleName:" in block for block in toggle_blocks + trailing_toggle_blocks)
 

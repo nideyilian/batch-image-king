@@ -3206,7 +3206,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: batchExport.outputDirectory
                                     placeholder: "选择文件夹"
-                                    readOnly: true
+                                    onCommitted: value => batchExport.outputDirectory = value
                                 }
                                 IconButton {
                                     iconName: AppIcons.folderOpen
@@ -3214,6 +3214,15 @@ ApplicationWindow {
                                     buttonSize: 36
                                     active: true
                                     onClicked: pathInputDialog.openFor("outputFolder", batchExport.outputDirectory)
+                                }
+                            }
+                            RowLayout {
+                                width: parent.width
+                                BodyLabel { text: "使用当前日期替换路径中的 YYYYMMDD"; Layout.fillWidth: true; color: Theme.textSecondary }
+                                ToggleSwitch {
+                                    accessibleName: "使用当前日期路径"
+                                    checked: batchExport.useCurrentTimeForPath
+                                    onToggled: checkedValue => batchExport.useCurrentTimeForPath = checkedValue
                                 }
                             }
                         }
@@ -3228,8 +3237,14 @@ ApplicationWindow {
                                 ExportField {
                                     width: parent.width
                                     text: String(batchExport.count)
-                                    placeholder: "12"
+                                    placeholder: "10"
+                                    enabled: !batchExport.traverseMode
                                     onCommitted: value => batchExport.count = Math.max(0, parseInt(value) || 0)
+                                }
+                                TinyLabel {
+                                    visible: batchExport.traverseMode
+                                    text: batchExport.traverseCountText
+                                    color: batchExport.effectiveCount > 10000 ? Theme.coral : Theme.textMuted
                                 }
                             }
                             Column {
@@ -3247,13 +3262,81 @@ ApplicationWindow {
 
                         Column {
                             width: parent.width
-                            spacing: 8
-                            BodyLabel { text: "文件名模板"; color: Theme.textSecondary }
+                            spacing: 10
+                            BodyLabel { text: "文件命名"; color: Theme.textSecondary }
+                            RowLayout {
+                                width: parent.width
+                                BodyLabel { text: "添加当前日期"; Layout.fillWidth: true }
+                                ToggleSwitch {
+                                    accessibleName: "文件名添加当前日期"
+                                    checked: batchExport.useDate
+                                    onToggled: checkedValue => batchExport.useDate = checkedValue
+                                }
+                                SelectBox {
+                                    Layout.preferredWidth: 118
+                                    enabled: batchExport.useDate
+                                    model: [
+                                        { label: "YYYYMMDD", value: 0 },
+                                        { label: "YYYY-MM-DD", value: 1 },
+                                        { label: "YYMMDD", value: 2 }
+                                    ]
+                                    currentIndex: batchExport.dateFormatIndex
+                                    onActivated: batchExport.dateFormatIndex = currentValue
+                                }
+                            }
                             ExportField {
                                 width: parent.width
-                                text: batchExport.filenameTemplate
-                                placeholder: "image_{number:04d}"
-                                onCommitted: value => batchExport.filenameTemplate = value
+                                text: batchExport.customText
+                                placeholder: "自定义文本，例如 export"
+                                onCommitted: value => batchExport.customText = value
+                            }
+                            RowLayout {
+                                width: parent.width
+                                BodyLabel { text: "使用图层文件名"; Layout.fillWidth: true }
+                                ToggleSwitch {
+                                    accessibleName: "使用图层文件名"
+                                    checked: batchExport.useLayerName
+                                    onToggled: checkedValue => batchExport.useLayerName = checkedValue
+                                }
+                            }
+                            SelectBox {
+                                width: parent.width
+                                visible: batchExport.useLayerName
+                                enabled: batchExport.layerOptions.length > 0
+                                model: batchExport.layerOptions
+                                currentIndex: window.optionIndex(model, batchExport.layerIndex)
+                                onActivated: batchExport.layerIndex = currentValue
+                            }
+                            RowLayout {
+                                width: parent.width
+                                BodyLabel { text: "序号格式"; Layout.preferredWidth: 74 }
+                                SelectBox {
+                                    Layout.fillWidth: true
+                                    model: [
+                                        { label: "0001, 0002, ...", value: 0 },
+                                        { label: "001, 002, ...", value: 1 },
+                                        { label: "01, 02, ...", value: 2 },
+                                        { label: "1, 2, ...", value: 3 }
+                                    ]
+                                    currentIndex: batchExport.numberFormatIndex
+                                    onActivated: batchExport.numberFormatIndex = currentValue
+                                }
+                            }
+                            Rectangle {
+                                width: parent.width
+                                height: 40
+                                radius: Theme.radiusSmall
+                                color: Theme.bgBar
+                                border.width: 1
+                                border.color: Theme.border
+                                TinyLabel {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    text: "预览  " + batchExport.filenamePreview
+                                    elide: Text.ElideMiddle
+                                    verticalAlignment: Text.AlignVCenter
+                                    color: Theme.textSecondary
+                                }
                             }
                         }
 
@@ -3266,10 +3349,10 @@ ApplicationWindow {
                                 height: 36
                                 spacing: 4
                                 Repeater {
-                                    model: ["png", "jpg", "webp"]
+                                    model: ["png", "jpg", "bmp", "webp"]
                                     delegate: Rectangle {
                                         required property string modelData
-                                        width: (exportForm.width - 8) / 3
+                                        width: (exportForm.width - 12) / 4
                                         height: 36
                                         radius: Theme.radiusSmall
                                         color: batchExport.fileFormat === modelData ? Theme.accentSoft : Theme.bgControl
@@ -3291,6 +3374,16 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                            RowLayout {
+                                width: parent.width
+                                BodyLabel { text: "最大文件大小 KB"; Layout.fillWidth: true }
+                                ExportField {
+                                    Layout.preferredWidth: 120
+                                    text: String(batchExport.maxFileSizeKB)
+                                    placeholder: "0 表示不限制"
+                                    onCommitted: value => batchExport.maxFileSizeKB = Math.max(0, parseInt(value) || 0)
+                                }
+                            }
                         }
 
                         Rectangle {
@@ -3304,11 +3397,69 @@ ApplicationWindow {
                                 anchors.fill: parent
                                 anchors.leftMargin: 12
                                 anchors.rightMargin: 10
-                                BodyLabel { text: "避免重复组合"; color: Theme.textPrimary; Layout.fillWidth: true }
+                                Column {
+                                    Layout.fillWidth: true
+                                    spacing: 2
+                                    BodyLabel { text: "智能采样"; color: Theme.textPrimary }
+                                    TinyLabel { text: "尽量均匀使用图片，避免重复组合" }
+                                }
                                 ToggleSwitch {
-                                    accessibleName: "避免重复组合"
+                                    accessibleName: "智能采样"
                                     checked: batchExport.avoidDuplicates
                                     onToggled: checkedValue => batchExport.avoidDuplicates = checkedValue
+                                }
+                            }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 8
+                            Rectangle {
+                                width: parent.width
+                                height: 54
+                                radius: Theme.radiusSmall
+                                color: Theme.bgRaised
+                                border.width: 1
+                                border.color: Theme.border
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 10
+                                    Column {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        BodyLabel { text: "指定图层图片仅使用一次"; color: Theme.textPrimary }
+                                        TinyLabel { text: "导出数量会受所选图层图片数量限制" }
+                                    }
+                                    ToggleSwitch {
+                                        accessibleName: "指定图层图片仅使用一次"
+                                        checked: batchExport.uniqueUseEnabled
+                                        onToggled: checkedValue => batchExport.uniqueUseEnabled = checkedValue
+                                    }
+                                }
+                            }
+                            Column {
+                                width: parent.width
+                                spacing: 6
+                                visible: batchExport.uniqueUseEnabled
+                                Repeater {
+                                    model: batchExport.uniqueLayerOptions
+                                    delegate: RowLayout {
+                                        required property var modelData
+                                        width: exportForm.width
+                                        spacing: 8
+                                        ToggleSwitch {
+                                            accessibleName: "唯一使用图层 " + modelData.label
+                                            checked: modelData.selected
+                                            enabled: modelData.eligible
+                                            onToggled: checkedValue => batchExport.setUniqueLayerSelected(modelData.index, checkedValue)
+                                        }
+                                        BodyLabel {
+                                            Layout.fillWidth: true
+                                            text: modelData.label + (modelData.eligible ? "" : "（非图片图层）")
+                                            color: modelData.eligible ? Theme.textSecondary : Theme.textMuted
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3446,6 +3597,13 @@ ApplicationWindow {
                             }
                         }
 
+                        ExportButton {
+                            width: parent.width
+                            label: "保存配置到当前标签页"
+                            iconName: AppIcons.save
+                            onClicked: batchExport.saveSettings()
+                        }
+
                         Rectangle {
                             width: parent.width
                             height: 58
@@ -3460,7 +3618,7 @@ ApplicationWindow {
                                 Column {
                                     spacing: 3
                                     TinyLabel { text: "预计产出" }
-                                    BodyLabel { text: batchExport.count + " 张"; color: Theme.textPrimary }
+                                    BodyLabel { text: batchExport.effectiveCount + " 张"; color: Theme.textPrimary }
                                 }
                                 Item { Layout.fillWidth: true }
                                 Column {
