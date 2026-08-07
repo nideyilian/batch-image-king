@@ -4,6 +4,7 @@ PySide6>=6.9.0
 
 # 图像处理
 Pillow>=11.1.0
+fonttools>=4.0.0
 
 # 数值计算（图像处理需要）
 numpy>=2.2.0
@@ -24,4 +25,3 @@ PyInstaller>=6.14.1
 # pyvips：加速大图编码/写盘，需系统已安装 libvips。
 # 代码见 app/utils/vips_export_engine.py，不可用时自动回退 Pillow。
 # 安装方式：pip install pyvips>=2.2.3 （并需系统 libvips 运行时）
-

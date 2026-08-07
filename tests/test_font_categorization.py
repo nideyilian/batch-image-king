@@ -70,3 +70,57 @@ class TestFontCategorization:
         for key, zh in self.cn_names.items():
             if zh != key:
                 assert cjk_re.search(zh), f"{key} -> {zh} 缺少中文字符"
+
+
+@pytest.mark.unit
+def test_font_face_catalog_preserves_weights_and_cache_round_trip(tmp_path, monkeypatch):
+    styles = ["Regular", "Light", "SemiBold", "Bold Italic"]
+    paths = {}
+    for style in styles:
+        path = tmp_path / f"DemoSans-{style.replace(' ', '')}.ttf"
+        path.write_bytes(b"font-face")
+        paths[style] = str(path)
+
+    font_info = [
+        {
+            "name": "Demo Sans SC",
+            "family": "Demo Sans SC",
+            "cn_name": "示例黑体",
+            "style": style,
+            "path": paths[style],
+            "filename": os.path.basename(paths[style]),
+        }
+        for style in styles
+    ]
+    cache_path = tmp_path / "fonts_cache.json"
+    layer = TextLayer()
+    layer._fonts_cache_file = str(cache_path)
+    monkeypatch.setattr(layer, "_scan_all_system_fonts", lambda: font_info)
+
+    assert layer.get_system_fonts() == ["Demo Sans SC"]
+    faces = layer.get_font_faces()["Demo Sans SC"]
+    assert [face["style"] for face in faces] == [
+        "Light",
+        "Regular",
+        "SemiBold",
+        "Bold Italic",
+    ]
+    assert [face["weight"] for face in faces] == [300, 400, 600, 700]
+    assert [face["italic"] for face in faces] == [False, False, False, True]
+    assert [face["path"] for face in faces] == [
+        paths["Light"],
+        paths["Regular"],
+        paths["SemiBold"],
+        paths["Bold Italic"],
+    ]
+
+    cached_layer = TextLayer()
+    cached_layer._fonts_cache_file = str(cache_path)
+    monkeypatch.setattr(
+        cached_layer,
+        "_scan_all_system_fonts",
+        lambda: pytest.fail("有效的 face 缓存不应重新扫描字体"),
+    )
+
+    assert cached_layer.get_system_fonts() == ["Demo Sans SC"]
+    assert cached_layer.get_font_faces() == layer.get_font_faces()

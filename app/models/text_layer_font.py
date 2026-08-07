@@ -40,10 +40,11 @@ class TextLayerFontMixin:
         # 尝试从文件缓存加载（缓存内包含字体名、中文名与文件路径）
         cached = self._load_fonts_from_cache()
         if cached:
-            fonts, cn_map, paths = cached
+            fonts, cn_map, paths, faces = cached
             self._cached_fonts = fonts
             self._cached_cn_names = cn_map or {}
             self._cached_font_paths = paths or {}
+            self._cached_font_faces = faces or {}
             return fonts
 
         # 扫描系统字体
@@ -52,34 +53,93 @@ class TextLayerFontMixin:
         path_map = {}
         all_fonts_info = self._scan_all_system_fonts()
 
-        # 提取字体名称并去重（优先保留内嵌真名，附中文名与文件路径）
+        # 按家族聚合所有实际 face，避免不同字重被家族名去重丢失。
         cjk_re = self._get_cjk_re()
-        seen_fonts = set()
+        family_names = {}
+        face_map = {}
         for font_info in all_fonts_info:
-            font_name = font_info.get('name', '')
-            if font_name and font_name not in seen_fonts:
-                seen_fonts.add(font_name)
-                fonts.append(font_name)
-                cn_name = font_info.get('cn_name') or ''
-                # 只有真正包含中文字符的中文名才有展示意义
-                if cn_name and cn_name != font_name and cjk_re.search(cn_name):
-                    cn_map[font_name] = cn_name
-                font_path = font_info.get('path') or ''
-                if font_path:
-                    path_map[font_name] = font_path
+            family = str(font_info.get('family') or font_info.get('name') or '').strip()
+            if not family:
+                continue
+            family_key = family.casefold()
+            canonical_family = family_names.setdefault(family_key, family)
+            if canonical_family not in face_map:
+                face_map[canonical_family] = []
+                fonts.append(canonical_family)
 
-        # 按字母顺序排序
-        fonts.sort()
+            cn_name = str(font_info.get('cn_name') or '').strip()
+            if cn_name and cn_name != canonical_family and cjk_re.search(cn_name):
+                cn_map.setdefault(canonical_family, cn_name)
+
+            font_path = str(font_info.get('path') or '').strip()
+            if not font_path:
+                continue
+            style = str(font_info.get('style') or 'Regular').strip() or 'Regular'
+            if any(face['style'].casefold() == style.casefold() for face in face_map[canonical_family]):
+                continue
+            weight, italic = self._font_face_metadata(style)
+            face_map[canonical_family].append({
+                'style': style,
+                'path': font_path,
+                'weight': weight,
+                'italic': italic,
+            })
+
+        fonts.sort(key=str.casefold)
+        for family in fonts:
+            faces = face_map.get(family, [])
+            faces.sort(key=lambda face: (face['weight'], face['italic'], face['style'].casefold()))
+            if faces:
+                default_face = min(
+                    faces,
+                    key=lambda face: (face['italic'], abs(face['weight'] - 400)),
+                )
+                path_map[family] = default_face['path']
 
         # 缓存结果
         self._cached_fonts = fonts
         self._cached_cn_names = cn_map
         self._cached_font_paths = path_map
+        self._cached_font_faces = face_map
 
         # 保存到文件缓存
-        self._save_fonts_to_cache(fonts, cn_map, path_map)
+        self._save_fonts_to_cache(fonts, cn_map, path_map, face_map)
 
         return fonts
+
+    @staticmethod
+    def _font_face_metadata(style: str) -> Tuple[int, bool]:
+        """把字体子样式规整为 CSS 风格字重和斜体标记。"""
+        normalized = str(style or 'Regular').replace('-', ' ').replace('_', ' ').casefold()
+        italic = 'italic' in normalized or 'oblique' in normalized or 'slanted' in normalized
+        if any(token in normalized for token in ('thin', 'hairline')):
+            weight = 100
+        elif any(token in normalized for token in ('extra light', 'extralight', 'ultra light', 'ultralight')):
+            weight = 200
+        elif 'light' in normalized:
+            weight = 300
+        elif 'medium' in normalized:
+            weight = 500
+        elif any(token in normalized for token in ('semi bold', 'semibold', 'demi bold', 'demibold')):
+            weight = 600
+        elif any(token in normalized for token in ('extra bold', 'extrabold', 'ultra bold', 'ultrabold')):
+            weight = 800
+        elif any(token in normalized for token in ('black', 'heavy')):
+            weight = 900
+        elif 'bold' in normalized:
+            weight = 700
+        else:
+            weight = 400
+        return weight, italic
+
+    def get_font_faces(self) -> Dict[str, List[Dict[str, object]]]:
+        """返回字体家族到实际 face 的映射，供精确字重选择和渲染。"""
+        if not getattr(self, '_cached_font_faces', None):
+            self.get_system_fonts()
+        return {
+            family: [dict(face) for face in faces]
+            for family, faces in (getattr(self, '_cached_font_faces', {}) or {}).items()
+        }
 
     def get_font_cn_names(self) -> Dict[str, str]:
         """返回字体名 -> 中文名 的映射（仅包含确有中文名的字体）"""
@@ -448,8 +508,8 @@ class TextLayerFontMixin:
 
         return fonts
 
-    def _load_fonts_from_cache(self) -> Optional[Tuple[List[str], Dict[str, str], Dict[str, str]]]:
-        """从文件缓存加载字体列表，返回 (fonts, cn_names, font_paths) 或 None"""
+    def _load_fonts_from_cache(self) -> Optional[Tuple[List[str], Dict[str, str], Dict[str, str], Dict[str, List[Dict[str, object]]]]]:
+        """从文件缓存加载字体列表、名称、默认路径与 face 目录。"""
         try:
             if os.path.exists(self._fonts_cache_file):
                 with open(self._fonts_cache_file, 'r', encoding='utf-8') as f:
@@ -464,33 +524,49 @@ class TextLayerFontMixin:
                 if current_time - cache_time > 7 * 24 * 60 * 60:
                     return None
 
-                # 版本不匹配时重新扫描（旧缓存缺失中文名映射与文件路径）
-                if cache_data.get('cache_version', 1) < 2:
+                # v3 开始保留同一家族的全部 face；旧缓存必须重新扫描。
+                if cache_data.get('cache_version', 1) < 3:
                     return None
 
                 # 验证缓存文件中的字体是否仍然存在（优先用缓存路径，其次按名字反查）
                 cached_fonts = cache_data.get('fonts', [])
                 cached_cn_names = cache_data.get('cn_names', {}) or {}
                 cached_paths = cache_data.get('paths', {}) or {}
+                cached_faces = cache_data.get('faces', {}) or {}
                 valid_fonts = []
                 valid_cn_names = {}
                 valid_paths = {}
+                valid_faces = {}
 
                 for font_name in cached_fonts:
-                    font_path = cached_paths.get(font_name) or ''
-                    if font_path and os.path.exists(font_path):
-                        valid_fonts.append(font_name)
-                    elif self._validate_font_exists(font_name):
-                        valid_fonts.append(font_name)
-                    else:
+                    faces = []
+                    for face in cached_faces.get(font_name, []) or []:
+                        path = str(face.get('path') or '')
+                        if not path or not os.path.exists(path):
+                            continue
+                        style = str(face.get('style') or 'Regular')
+                        weight, italic = self._font_face_metadata(style)
+                        faces.append({
+                            'style': style,
+                            'path': path,
+                            'weight': int(face.get('weight', weight)),
+                            'italic': bool(face.get('italic', italic)),
+                        })
+                    if not faces:
                         continue
+                    faces.sort(key=lambda face: (face['weight'], face['italic'], face['style'].casefold()))
+                    valid_fonts.append(font_name)
+                    valid_faces[font_name] = faces
                     if font_name in cached_cn_names:
                         valid_cn_names[font_name] = cached_cn_names[font_name]
-                    if font_path:
-                        valid_paths[font_name] = font_path
+                    default_path = cached_paths.get(font_name) or ''
+                    valid_paths[font_name] = default_path if os.path.exists(default_path) else min(
+                        faces,
+                        key=lambda face: (face['italic'], abs(face['weight'] - 400)),
+                    )['path']
 
                 if valid_fonts:
-                    return valid_fonts, valid_cn_names, valid_paths
+                    return valid_fonts, valid_cn_names, valid_paths, valid_faces
                 return None
 
         except (FileNotFoundError, json.JSONDecodeError, KeyError):
@@ -500,16 +576,18 @@ class TextLayerFontMixin:
         return None
 
     def _save_fonts_to_cache(self, fonts: List[str], cn_names: Optional[Dict[str, str]] = None,
-                             font_paths: Optional[Dict[str, str]] = None) -> None:
+                             font_paths: Optional[Dict[str, str]] = None,
+                             font_faces: Optional[Dict[str, List[Dict[str, object]]]] = None) -> None:
         """保存字体列表到文件缓存"""
         try:
             import time
             cache_data = {
                 'timestamp': time.time(),
-                'cache_version': 2,
+                'cache_version': 3,
                 'fonts': fonts,
                 'cn_names': cn_names or {},
                 'paths': font_paths or {},
+                'faces': font_faces or {},
                 'count': len(fonts),
                 'system': platform.system()
             }
