@@ -2194,8 +2194,11 @@ class FastRendererSurface(object):
         document,
         active_layer_index: int,
         force_refresh: bool,
-        interactive_low_quality: bool
+        interactive_low_quality: bool,
+        cancel_token=None,
     ) -> Optional[Image.Image]:
+        if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+            return None
         """获取或构建交互静态底图（不包含当前操作图层）。"""
         cache_key = self._build_interactive_base_key(document, active_layer_index, interactive_low_quality)
         entry_key = f"{id(document)}:{active_layer_index}"
@@ -2212,9 +2215,10 @@ class FastRendererSurface(object):
             preview_mode=True,
             was_just_loaded=False,
             low_quality_preview=interactive_low_quality,
-            skip_layer_index=active_layer_index
+            skip_layer_index=active_layer_index,
+            cancel_token=cancel_token,
         )
-        if image is None:
+        if image is None or (cancel_token is not None and getattr(cancel_token, "cancelled", False)):
             return None
 
         with self._interactive_base_lock:

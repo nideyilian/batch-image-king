@@ -28,6 +28,13 @@ def _workspace() -> tuple[WorkspaceViewModel, TextLayer]:
     return workspace, text_layer
 
 
+def _install_font_catalog(workspace: WorkspaceViewModel, layer: TextLayer) -> None:
+    """Publish deterministic test font data as if the background scan completed."""
+    options = workspace._load_text_font_options(layer)
+    tree = workspace._load_text_font_tree_options(layer)
+    workspace._on_font_catalog_loaded(options, tree)
+
+
 @pytest.mark.unit
 def test_text_font_options_and_style_combinations(monkeypatch):
     workspace, layer = _workspace()
@@ -42,6 +49,7 @@ def test_text_font_options_and_style_combinations(monkeypatch):
     monkeypatch.setattr(layer, "get_font_faces", lambda: {})
     workspace._text_font_options_cache = None
     workspace._text_font_tree_options_cache = None
+    _install_font_catalog(workspace, layer)
 
     assert workspace.selectedTextFontFamily == layer.font_family
     assert [item["value"] for item in workspace.selectedTextFontOptions] == [
@@ -81,6 +89,7 @@ def test_local_font_catalog_uses_canonical_family_names_and_chinese_labels(monke
         lambda: {"Microsoft YaHei": "微软雅黑", "Local Poster Font": "本地海报体"},
     )
     workspace._text_font_options_cache = None
+    _install_font_catalog(workspace, layer)
 
     assert workspace.textFontOptions == [
         {"label": "微软雅黑 (Microsoft YaHei)", "value": "Microsoft YaHei"},
@@ -108,6 +117,7 @@ def test_non_chinese_current_font_is_not_added_to_the_visible_catalog(monkeypatc
         },
     )
     workspace._text_font_options_cache = None
+    _install_font_catalog(workspace, layer)
 
     assert workspace.selectedTextFontFamily == "Arial"
     assert [item["value"] for item in workspace.textFontOptions] == [
@@ -141,6 +151,7 @@ def test_font_tree_groups_faces_and_maps_bold_italic_to_real_faces(monkeypatch):
     )
     workspace._text_font_options_cache = None
     workspace._text_font_tree_options_cache = None
+    _install_font_catalog(workspace, layer)
 
     tree = workspace.textFontTreeOptions
     assert tree[0]["value"] == "Demo Sans SC"

@@ -29,7 +29,7 @@ def main() -> int:
     provider = PreviewImageProvider()
     workspace = WorkspaceViewModel(
         preview_provider=provider,
-        auto_render=False,
+        auto_render=True,
         parent=engine,
     )
     engine.addImageProvider("documentPreview", provider)

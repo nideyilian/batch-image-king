@@ -25,7 +25,8 @@ class PreviewImageProvider(QQuickImageProvider):
         if image is None or image.isNull():
             return
         with self._lock:
-            self._image = image.copy()
+            # QImage 使用隐式共享；这里只持有只读帧，避免大画布每次发布都深拷贝。
+            self._image = QImage(image)
 
     def clear(self) -> None:
         with self._lock:
@@ -34,7 +35,7 @@ class PreviewImageProvider(QQuickImageProvider):
     def requestImage(self, image_id, size, requested_size):  # noqa: N802 - Qt API
         del image_id
         with self._lock:
-            image = self._image.copy()
+            image = QImage(self._image)
 
         if requested_size.isValid() and requested_size.width() > 0 and requested_size.height() > 0:
             image = image.scaled(

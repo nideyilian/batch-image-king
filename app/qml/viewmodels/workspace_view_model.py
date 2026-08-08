@@ -10,7 +10,7 @@ import threading
 from typing import Optional
 import uuid
 
-from PySide6.QtCore import QMetaObject, QObject, QPointF, Property, QRunnable, QThreadPool, QTimer, QUrl, Qt, Q_ARG, Signal, Slot
+from PySide6.QtCore import QObject, QPointF, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage, QPainterPath
 
 from app.models.document import Document
@@ -20,6 +20,7 @@ from app.models.layer_properties import ShapeType
 from app.models.shaped_layer_new import ShapedLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.layer_list_model import LayerListModel
+from app.utils.preview_render_token import PreviewRenderTokenSource
 from app.utils.layer_tree import (
     child_indices_for_group,
     expand_group_indices,
@@ -174,32 +175,72 @@ def _pil_to_qimage(image) -> QImage:
 
 
 class _PreviewTaskSignals(QObject):
-    finished = Signal(int, object, str, float)
+    finished = Signal(int, int, bool, object, str, float)
 
 
 class _PreviewTask(QRunnable):
-    def __init__(self, request_id: int, document: Document, document_lock: threading.RLock) -> None:
+    def __init__(
+        self,
+        request_id: int,
+        generation: int,
+        document: Document,
+        *,
+        snapshot_data=None,
+        interactive_low_quality: bool,
+        active_layer_index: int,
+        cancel_token,
+    ) -> None:
         super().__init__()
         self.request_id = request_id
+        self.generation = generation
         self.document = document
-        self.document_lock = document_lock
+        self.snapshot_data = snapshot_data
+        self.interactive_low_quality = bool(interactive_low_quality)
+        self.active_layer_index = int(active_layer_index)
+        self.cancel_token = cancel_token
         self.signals = _PreviewTaskSignals()
 
+    def _emit_finished(self, qimage, error: str, elapsed: float) -> None:
+        try:
+            self.signals.finished.emit(
+                self.request_id,
+                self.generation,
+                self.interactive_low_quality,
+                qimage,
+                error,
+                elapsed,
+            )
+        except RuntimeError:
+            # 应用退出时 Workspace 可能先于线程池任务销毁。
+            pass
+
     def run(self) -> None:
+        from app.models.document_serializer import DocumentSerializer
         from app.services.preview_render_service import render_preview_to_image
 
         try:
-            with self.document_lock:
-                result = render_preview_to_image(self.document, force_refresh=True)
-            qimage = _pil_to_qimage(result.image) if result.image is not None else None
-            self.signals.finished.emit(
-                self.request_id,
-                qimage,
-                str(result.error or ""),
-                float(result.elapsed),
+            document = self.document
+            if isinstance(self.snapshot_data, dict):
+                document = Document(parent=None)
+                if not DocumentSerializer.restore_document_data(document, self.snapshot_data):
+                    raise RuntimeError("无法恢复预览文档快照")
+                document._is_batch_export_running = False
+                document._export_canceled = False
+                document._needs_cache_refresh = True
+            result = render_preview_to_image(
+                document,
+                force_refresh=not self.interactive_low_quality,
+                interactive_low_quality=self.interactive_low_quality,
+                active_layer_index=self.active_layer_index,
+                cancel_token=self.cancel_token,
             )
+            if result.cancelled or getattr(self.cancel_token, "cancelled", False):
+                self._emit_finished(None, "", float(result.elapsed))
+                return
+            qimage = _pil_to_qimage(result.image) if result.image is not None else None
+            self._emit_finished(qimage, str(result.error or ""), float(result.elapsed))
         except Exception as error:
-            self.signals.finished.emit(self.request_id, None, str(error), 0.0)
+            self._emit_finished(None, str(error), 0.0)
 
 
 class WorkspaceViewModel(QObject):
@@ -216,8 +257,10 @@ class WorkspaceViewModel(QObject):
     cropEditChanged = Signal()
     vectorEditChanged = Signal()
     viewSettingsChanged = Signal()
+    layerAppearanceChanged = Signal()
+    fontCatalogChanged = Signal()
+    _fontCatalogLoaded = Signal(object, object)
     toastRequested = Signal(str)
-    fontCatalogReady = Signal()
     textEditingChanged = Signal()
 
     def __init__(
@@ -240,9 +283,13 @@ class WorkspaceViewModel(QObject):
         self._auto_render = bool(auto_render)
         self._document_lock = threading.RLock()
         self._render_request_id = 0
+        self._preview_generation = 0
         self._render_running = False
         self._render_pending = False
         self._active_render_task = None
+        self._pending_preview_quality = None
+        self._pending_preview_generation = 0
+        self._preview_token_source = PreviewRenderTokenSource()
         self._text_font_names_cache = None
         self._text_font_options_cache = None
         self._text_font_tree_options_cache = None
@@ -256,10 +303,18 @@ class WorkspaceViewModel(QObject):
         self._selected_vector_node_index = -1
         self._selection_anchor_index = -1
         self._corner_edit_modes = {}
+        self._suppress_document_selection_notify = 0
         self._preview_timer = QTimer(self)
         self._preview_timer.setSingleShot(True)
-        self._preview_timer.setInterval(70)
+        self._preview_timer.setInterval(20)
         self._preview_timer.timeout.connect(self._start_preview_render)
+        self._final_preview_timer = QTimer(self)
+        self._final_preview_timer.setSingleShot(True)
+        self._final_preview_timer.setInterval(220)
+        self._final_preview_timer.timeout.connect(self._queue_final_preview)
+        self.selectionChanged.connect(self.layerAppearanceChanged.emit)
+        self.selectionChanged.connect(self.fontCatalogChanged.emit)
+        self._fontCatalogLoaded.connect(self._on_font_catalog_loaded)
         self._set_document(document or Document())
         if self._auto_render:
             self.requestPreview()
@@ -651,7 +706,7 @@ class WorkspaceViewModel(QObject):
     def selectedHeight(self) -> int:
         return int(getattr(self._selected_layer(), "height", 0))
 
-    @Property(int, notify=selectionChanged)
+    @Property(int, notify=layerAppearanceChanged)
     def selectedOpacity(self) -> int:
         return round(float(getattr(self._selected_layer(), "opacity", 1.0)) * 100)
 
@@ -1535,34 +1590,77 @@ class WorkspaceViewModel(QObject):
             })
         return groups
 
-    @Property("QVariantList", notify=selectionChanged)
+    def _font_catalog_fallback_options(self):
+        current = str(getattr(self._selected_layer(), "font_family", "") or "").strip()
+        families = [
+            current,
+            "Microsoft YaHei",
+            "SimHei",
+            "SimSun",
+            "KaiTi",
+            "FangSong",
+        ]
+        options = []
+        seen = set()
+        for family in families:
+            family = str(family or "").strip()
+            key = family.casefold()
+            if not family or key in seen:
+                continue
+            seen.add(key)
+            options.append({"label": family, "value": family})
+        return options
+
+    def _font_catalog_fallback_tree(self):
+        current_family = str(getattr(self._selected_layer(), "font_family", "") or "").strip()
+        current_face = str(getattr(self._selected_layer(), "font_face", "") or "Regular").strip()
+        groups = []
+        for option in self._font_catalog_fallback_options():
+            family = option["value"]
+            face = current_face if family.casefold() == current_family.casefold() else "Regular"
+            groups.append(
+                {
+                    "label": option["label"],
+                    "value": family,
+                    "family": family,
+                    "children": [
+                        {
+                            "label": self._font_face_label(face),
+                            "value": face,
+                            "face": face,
+                            "family": family,
+                            "weight": 400,
+                            "italic": False,
+                            "synthetic": True,
+                        }
+                    ],
+                }
+            )
+        return groups
+
+    @Property("QVariantList", notify=fontCatalogChanged)
     def textFontOptions(self):
         if self._text_font_options_cache is None:
-            if self.selectedIsTextLayer:
-                self._text_font_options_cache = self._load_text_font_options()
-            else:
-                if not self._font_catalog_loading:
-                    self.startFontCatalogPreload()
-                return []
+            self.startFontCatalogPreload()
+            return self._font_catalog_fallback_options()
         return list(self._text_font_options_cache)
 
-    @Property("QVariantList", notify=selectionChanged)
+    @Property("QVariantList", notify=fontCatalogChanged)
     def textFontTreeOptions(self):
         if self._text_font_tree_options_cache is None:
-            if self.selectedIsTextLayer:
-                self._text_font_tree_options_cache = self._load_text_font_tree_options()
-            else:
-                if not self._font_catalog_loading:
-                    self.startFontCatalogPreload()
-                return []
+            self.startFontCatalogPreload()
+            return self._font_catalog_fallback_tree()
         return list(self._text_font_tree_options_cache)
 
     def startFontCatalogPreload(self):
         if self._font_catalog_loading or self._text_font_tree_options_cache is not None:
             return
         self._font_catalog_loading = True
-        thread = threading.Thread(target=self._font_catalog_worker, daemon=True)
-        thread.start()
+        threading.Thread(
+            target=self._font_catalog_worker,
+            name="QmlFontCatalog",
+            daemon=True,
+        ).start()
 
     def _font_catalog_worker(self):
         options = []
@@ -1578,25 +1676,18 @@ class WorkspaceViewModel(QObject):
             tree = self._load_text_font_tree_options(scanner)
         except Exception:
             logger.debug("后台预加载字体目录失败", exc_info=True)
-        QMetaObject.invokeMethod(
-            self,
-            "_onFontCatalogLoaded",
-            Qt.QueuedConnection,
-            Q_ARG("QVariantList", options),
-            Q_ARG("QVariantList", tree),
-        )
+        self._fontCatalogLoaded.emit(options, tree)
 
-    @Slot("QVariantList", "QVariantList")
-    def _onFontCatalogLoaded(self, options, tree):
+    @Slot(object, object)
+    def _on_font_catalog_loaded(self, options, tree):
         self._font_catalog_loading = False
         if options:
             self._text_font_options_cache = list(options)
         if tree:
             self._text_font_tree_options_cache = list(tree)
-        self.fontCatalogReady.emit()
-        self.selectionChanged.emit()
+        self.fontCatalogChanged.emit()
 
-    @Property("QVariantList", notify=selectionChanged)
+    @Property("QVariantList", notify=fontCatalogChanged)
     def selectedTextFontOptions(self):
         if not self.selectedIsTextLayer:
             return []
@@ -1616,7 +1707,7 @@ class WorkspaceViewModel(QObject):
             if str(option.get("value", "")).casefold() != current_key
         ]
 
-    @Property("QVariantList", notify=selectionChanged)
+    @Property("QVariantList", notify=fontCatalogChanged)
     def selectedTextFontTreeOptions(self):
         return self.textFontTreeOptions if self.selectedIsTextLayer else []
 
@@ -2104,7 +2195,8 @@ class WorkspaceViewModel(QObject):
     @Slot()
     def _on_document_changed(self) -> None:
         self.documentInfoChanged.emit()
-        self.selectionChanged.emit()
+        if self._suppress_document_selection_notify <= 0:
+            self.selectionChanged.emit()
 
     @Slot(int)
     def _on_layer_selected(self, index: int) -> None:
@@ -4121,47 +4213,54 @@ class WorkspaceViewModel(QObject):
     def _set_layer_attrs(self, index: int, changes: dict, action: str, *, render: bool = True) -> bool:
         if not self._ensure_operations_available():
             return False
-        with self._document_lock:
-            layer = self._layer_model.layer_at(index)
-            if layer is None:
-                return False
-            if any(attr not in ("visible", "locked") for attr in changes) and bool(
-                getattr(layer, "locked", False)
-            ):
-                self._set_status("图层已锁定", toast=True)
-                return False
-            effective_changes = {
-                attr: value
-                for attr, value in changes.items()
-                if getattr(layer, attr, None) != value
-            }
-            if not effective_changes:
-                return True
-            self._ensure_history_baseline()
-            for attr, value in effective_changes.items():
-                setattr(layer, attr, value)
-            if any(
-                attr in ("fit_mode", "crop_direction", "use_original_size")
-                for attr in effective_changes
-            ):
-                self._clear_image_layer_cache(layer)
-                if hasattr(layer, "_cache_valid"):
-                    layer._cache_valid = False
-            self._document.is_modified = True
-            if any(
-                attr in ("x", "y", "width", "height", "rotation", "visible", "locked", "shape_type")
-                or attr.startswith("clone_")
-                or attr.startswith("vector_")
-                for attr in effective_changes
-            ):
-                self._document.bump_hit_test_version()
-            if any(attr not in ("name", "locked") for attr in effective_changes):
-                invalidate = getattr(self._document, "_invalidate_render_cache", None)
-                if callable(invalidate):
-                    invalidate()
-            self._document.save_state(action)
+        self._suppress_document_selection_notify += 1
+        try:
+            with self._document_lock:
+                layer = self._layer_model.layer_at(index)
+                if layer is None:
+                    return False
+                if any(attr not in ("visible", "locked") for attr in changes) and bool(
+                    getattr(layer, "locked", False)
+                ):
+                    self._set_status("图层已锁定", toast=True)
+                    return False
+                effective_changes = {
+                    attr: value
+                    for attr, value in changes.items()
+                    if getattr(layer, attr, None) != value
+                }
+                if not effective_changes:
+                    return True
+                self._ensure_history_baseline()
+                for attr, value in effective_changes.items():
+                    setattr(layer, attr, value)
+                if any(
+                    attr in ("fit_mode", "crop_direction", "use_original_size")
+                    for attr in effective_changes
+                ):
+                    self._clear_image_layer_cache(layer)
+                    if hasattr(layer, "_cache_valid"):
+                        layer._cache_valid = False
+                self._document.is_modified = True
+                if any(
+                    attr in ("x", "y", "width", "height", "rotation", "visible", "locked", "shape_type")
+                    or attr.startswith("clone_")
+                    or attr.startswith("vector_")
+                    for attr in effective_changes
+                ):
+                    self._document.bump_hit_test_version()
+                if any(attr not in ("name", "locked") for attr in effective_changes):
+                    invalidate = getattr(self._document, "_invalidate_render_cache", None)
+                    if callable(invalidate):
+                        invalidate()
+                self._document.save_state(action)
+        finally:
+            self._suppress_document_selection_notify -= 1
         self._layer_model.notify_row(index)
-        self.selectionChanged.emit()
+        if set(effective_changes) == {"opacity"}:
+            self.layerAppearanceChanged.emit()
+        else:
+            self.selectionChanged.emit()
         self.documentInfoChanged.emit()
         self.historyStateChanged.emit()
         if render:
@@ -5312,6 +5411,11 @@ class WorkspaceViewModel(QObject):
         del force
         if not self._auto_render:
             return
+        self._preview_generation += 1
+        self._pending_preview_generation = self._preview_generation
+        self._pending_preview_quality = "interactive"
+        self._preview_token_source.cancel()
+        self._final_preview_timer.start()
         if self._render_running:
             self._render_pending = True
             return
@@ -5320,40 +5424,107 @@ class WorkspaceViewModel(QObject):
     @Slot(result=bool)
     def renderPreviewNow(self) -> bool:
         if self._auto_render:
+            self._final_preview_timer.stop()
             self._preview_timer.stop()
+            self._pending_preview_generation = self._preview_generation
+            self._pending_preview_quality = "final"
+            self._preview_token_source.cancel()
+            if self._render_running:
+                self._render_pending = True
+                return True
             self._start_preview_render()
             return True
         return self._render_preview_sync()
+
+    @Slot()
+    def _queue_final_preview(self) -> None:
+        if not self._auto_render:
+            return
+        self._pending_preview_generation = self._preview_generation
+        self._pending_preview_quality = "final"
+        self._preview_token_source.cancel()
+        if self._render_running:
+            self._render_pending = True
+            return
+        self._preview_timer.start(0)
+
+    def _build_preview_snapshot(self):
+        from app.models.document_serializer import DocumentSerializer
+
+        with self._document_lock:
+            return DocumentSerializer.serialize_document_data(self._document)
+
+    def _preview_active_layer_index(self) -> int:
+        indices = [
+            int(index)
+            for index in list(getattr(self._document, "selected_layer_indices", []) or [])
+            if 0 <= int(index) < len(getattr(self._document, "layers", []) or [])
+        ]
+        if len(indices) != 1:
+            return -1
+        layer = self._document.layers[indices[0]]
+        return -1 if is_layer_group(layer) else indices[0]
 
     @Slot()
     def _start_preview_render(self) -> None:
         if self._render_running:
             self._render_pending = True
             return
+        quality = self._pending_preview_quality or "interactive"
+        generation = self._pending_preview_generation or self._preview_generation
+        self._pending_preview_quality = None
+        self._pending_preview_generation = generation
+        snapshot_data = None
+        if bool(getattr(self._document, "_is_batch_export_running", False)):
+            try:
+                snapshot_data = self._build_preview_snapshot()
+            except Exception as error:
+                self._set_status(f"预览快照失败：{error}", toast=True)
+                return
         self._render_running = True
         self._render_pending = False
         self._render_request_id += 1
-        self._set_busy(True)
-        task = _PreviewTask(self._render_request_id, self._document, self._document_lock)
+        token = self._preview_token_source.next()
+        task = _PreviewTask(
+            self._render_request_id,
+            generation,
+            self._document,
+            snapshot_data=snapshot_data,
+            interactive_low_quality=quality == "interactive",
+            active_layer_index=self._preview_active_layer_index(),
+            cancel_token=token,
+        )
         task.signals.finished.connect(self._on_preview_rendered)
         self._active_render_task = task
         QThreadPool.globalInstance().start(task)
 
-    @Slot(int, object, str, float)
-    def _on_preview_rendered(self, request_id: int, qimage, error: str, elapsed: float) -> None:
+    @Slot(int, int, bool, object, str, float)
+    def _on_preview_rendered(
+        self,
+        request_id: int,
+        generation: int,
+        interactive_low_quality: bool,
+        qimage,
+        error: str,
+        elapsed: float,
+    ) -> None:
         self._render_running = False
         self._active_render_task = None
-        if request_id == self._render_request_id and qimage is not None and not qimage.isNull():
+        current_result = (
+            request_id == self._render_request_id
+            and generation == self._preview_generation
+        )
+        if current_result and qimage is not None and not qimage.isNull():
             self._preview_provider.set_image(qimage)
             self._preview_revision += 1
             self.previewChanged.emit()
-            self._set_status(f"预览完成 · {elapsed * 1000:.0f} ms")
-        elif error:
+            if not interactive_low_quality:
+                self._set_status(f"预览完成 · {elapsed * 1000:.0f} ms")
+        elif current_result and error:
             self._set_status(f"预览失败：{error}", toast=True)
-        self._set_busy(False)
         if self._render_pending:
             self._render_pending = False
-            self._preview_timer.start()
+            self._preview_timer.start(0)
 
     def _render_preview_sync(self) -> bool:
         from app.services.preview_render_service import render_preview_to_image
