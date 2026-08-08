@@ -5520,7 +5520,8 @@ ApplicationWindow {
                 Column {
                     anchors.centerIn: parent
                     spacing: 8
-                    visible: window.hasOpenDocument && layerModel.rowCount() === 0 && !workspace.busy
+                    // 使用带通知信号的属性，避免 rowCount() 的非响应式调用让提示停留在有图层文档上。
+                    visible: window.hasOpenDocument && workspace.layerCount === 0 && !workspace.busy
                     AppIcon { anchors.horizontalCenter: parent.horizontalCenter; iconName: AppIcons.image; iconSize: 24; iconColor: Theme.textMuted }
                     BodyLabel { text: "空白画布"; color: Theme.textMuted }
                 }

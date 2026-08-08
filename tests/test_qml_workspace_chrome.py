@@ -72,6 +72,14 @@ def test_qml_has_a_real_no_document_state():
 
 
 @pytest.mark.unit
+def test_blank_canvas_indicator_uses_reactive_layer_count():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    assert "workspace.layerCount === 0" in source
+    assert "layerModel.rowCount()" not in source
+
+
+@pytest.mark.unit
 def test_rulers_are_fixed_to_the_canvas_viewport():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
