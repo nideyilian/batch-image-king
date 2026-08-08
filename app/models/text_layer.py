@@ -13,7 +13,7 @@ from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
 
-from app.models.text_layer_font import TextLayerFontMixin, get_fonts_cache_file
+from app.models.text_layer_font import TextLayerFontMixin
 from app.models.text_layer_render import TextLayerRenderMixin
 from app.models.text_layer_serialize import TextLayerSerializeMixin
 
@@ -73,7 +73,8 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         # 文字样式
         self._text_color = (0, 0, 0, 255)  # 文字颜色 RGBA
         self._text_color_ranges = []
-        self._font_size_ranges = []  # 局部字号：每段 {"start", "end", "size"}
+        # 局部字号区间（混合字号）：[{start, end, size}]，按字符索引指定独立字号
+        self._font_size_ranges = []
         self._text_align = TextAlign.LEFT  # 对齐方式
         self._line_spacing = 1.2  # 行间距倍数
         self._letter_spacing = 0  # 字间距（像素），0表示正常间距，正值增加间距，负值减少间距
@@ -110,12 +111,11 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         self._glow_enabled = False
         self._glow_strength = 5
         self._glow_radius = 10
-        self._glow_color = (255, 255, 255, 255)
         
         # 缓存
         self._cached_image = None
         self._font_cache = {}  # 字体对象缓存
-        self._fonts_cache_file = get_fonts_cache_file()  # 字体缓存文件（用户数据目录，避免打包后只读）
+        self._fonts_cache_file = "fonts_cache.json"  # 字体缓存文件
 
         # 渲染质量优化
         self._supersample_enabled = True
@@ -580,20 +580,6 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
             self._update_text_box_size_if_needed()
             self.changed.emit()
 
-    @Property(tuple)
-    def glow_color(self):
-        return self._glow_color
-
-    @glow_color.setter
-    def glow_color(self, value):
-        if isinstance(value, (tuple, list)) and len(value) >= 3:
-            channels = tuple(max(0, min(255, int(channel))) for channel in value[:4])
-            color = channels[:3] + ((channels[3] if len(channels) > 3 else 255),)
-            if self._glow_color != color:
-                self._glow_color = color
-                self._cached_image = None
-                self.changed.emit()
-
     # 渐变属性
     @Property(bool)
     def gradient_enabled(self):
@@ -729,7 +715,6 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         self._text_lines = parsed_lines
         self._current_text = parsed_lines[0] if parsed_lines else ""
         self._clip_text_color_ranges_to_current_text()
-        self._clip_font_size_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
         self.text_changed.emit()

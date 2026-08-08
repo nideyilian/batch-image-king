@@ -19,27 +19,6 @@ from app.models.text_layer_enums import (
 logger = logging.getLogger(__name__)
 
 
-def get_user_data_dir() -> str:
-    """返回用户数据目录（打包安装后程序目录只读，必须写入用户目录）。"""
-    try:
-        if os.name == 'nt':  # Windows
-            base_dir = os.environ.get('APPDATA', os.path.expanduser('~'))
-        else:  # Linux/Mac
-            base_dir = os.environ.get('XDG_CONFIG_HOME', os.path.join(os.path.expanduser('~'), '.config'))
-        app_data_dir = os.path.join(base_dir, '批图王')
-        os.makedirs(app_data_dir, exist_ok=True)
-        return app_data_dir
-    except Exception:
-        logger.warning("获取用户数据目录失败，回退到临时目录", exc_info=True)
-        import tempfile
-        return tempfile.gettempdir()
-
-
-def get_fonts_cache_file() -> str:
-    """字体缓存文件路径：优先用户数据目录，避免安装到 Program Files 后只读写失败。"""
-    return os.path.join(get_user_data_dir(), 'fonts_cache.json')
-
-
 class TextLayerFontMixin:
 
     def _get_default_font(self):
@@ -695,15 +674,18 @@ class TextLayerFontMixin:
         except Exception:
             return False
 
-    def _get_font_object(self, size: int = None):
-        """获取PIL字体对象，使用缓存（增强中文与斜体支持）。
+    def _get_font_object(self, size=None):
+        """获取PIL字体对象，使用缓存（增强中文与斜体支持）
 
-        size 可选：指定局部字号，None 时使用图层整体字号。
+        Args:
+            size: 指定字号；为 None 时使用全局字号（支持混合字号渲染）
         """
-        use_size = int(size) if size else int(getattr(self, '_font_size', 24))
+        if size is None:
+            size = self._font_size
+        size = max(1, int(size))
         cache_key = (
             f"{self._font_family}_{getattr(self, '_font_face', '')}_"
-            f"{use_size}_{self._font_style.name}"
+            f"{size}_{self._font_style.name}"
         )
 
         if cache_key in self._font_cache:
@@ -735,13 +717,13 @@ class TextLayerFontMixin:
         font = None
         try:
             if font_path:
-                font = ImageFont.truetype(font_path, use_size)
+                font = ImageFont.truetype(font_path, size)
             else:
                 # 尝试一些常见字体文件名（绝对路径由_find_font_path处理）
                 for fallback_family in ["Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun"]:
                     fp = self._find_font_path(fallback_family)
                     if fp:
-                        font = ImageFont.truetype(fp, use_size)
+                        font = ImageFont.truetype(fp, size)
                         break
                 if font is None:
                     # 仍找不到时使用系统默认（可能不支持中文）
@@ -751,13 +733,6 @@ class TextLayerFontMixin:
 
         self._font_cache[cache_key] = font
         return font
-
-    def _font_for_text_index(self, index: int):
-        """返回指定全局字符索引使用的字体对象（支持局部字号）。"""
-        size = self._font_size_for_text_index(index)
-        if size is None:
-            return self._get_font_object()
-        return self._get_font_object(size=size)
 
     def _find_font_path(self, font_name: str, face_style: str = '') -> str:
         """查找字体文件路径；显式 face 优先于旧版合成样式。"""

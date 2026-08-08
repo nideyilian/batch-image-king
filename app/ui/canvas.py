@@ -99,6 +99,9 @@ class CanvasWidget(QWidget, CanvasWidgetCanvasView, CanvasWidgetCanvasRender, Ca
         # 设置工具提示
         self.setToolTip("提示: 按住Alt键点击图层可以在不改变当前选中图层的情况下操作图层")
 
+        # 就地文字编辑器（Photoshop 风格，双击文字图层打开）
+        self._text_editor = None
+
         # 连接文档变化信号（启用防抖更新，避免界面抽动）
         self._update_timer = QTimer(self)
         self._update_timer.setSingleShot(True)

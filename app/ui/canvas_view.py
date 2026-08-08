@@ -217,6 +217,11 @@ class CanvasWidgetCanvasView(object):
                 )
 
         self.update()
+        # 就地文字编辑器随缩放同步位置与字号
+        try:
+            self._sync_text_editor_geometry()
+        except Exception:
+            pass
         event.accept()
 
     def _should_skip_hover_hit_test(self, pos: QPoint) -> bool:

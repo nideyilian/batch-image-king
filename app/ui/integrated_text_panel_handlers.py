@@ -51,7 +51,8 @@ class IntegratedTextPanelHandlers(object):
             self.text_count_label.setText("0 条")
             buttons = [
                 self.apply_text_btn, self.prev_text_btn, self.next_text_btn,
-                self.random_text_btn, self.range_color_btn, self.clear_range_color_btn
+                self.random_text_btn, self.range_color_btn, self.clear_range_color_btn,
+                self.range_size_btn, self.clear_range_size_btn
             ]
             if hasattr(self, 'full_edit_text_btn'):
                 buttons.append(self.full_edit_text_btn)
@@ -66,7 +67,8 @@ class IntegratedTextPanelHandlers(object):
         self.reset_btn.setEnabled(True)
         buttons = [
             self.apply_text_btn, self.prev_text_btn, self.next_text_btn,
-            self.random_text_btn, self.range_color_btn, self.clear_range_color_btn
+            self.random_text_btn, self.range_color_btn, self.clear_range_color_btn,
+            self.range_size_btn, self.clear_range_size_btn
         ]
         if hasattr(self, 'full_edit_text_btn'):
             buttons.append(self.full_edit_text_btn)
@@ -293,6 +295,10 @@ class IntegratedTextPanelHandlers(object):
         enabled = self._selected_inline_text_range() is not None
         self.range_color_btn.setEnabled(enabled)
         self.clear_range_color_btn.setEnabled(enabled)
+        if hasattr(self, "range_size_btn"):
+            self.range_size_btn.setEnabled(enabled)
+        if hasattr(self, "clear_range_size_btn"):
+            self.clear_range_size_btn.setEnabled(enabled)
 
     def _initial_selected_range_color(self, start):
         if not self.text_layer or not hasattr(self.text_layer, "get_text_color_ranges"):
@@ -335,6 +341,57 @@ class IntegratedTextPanelHandlers(object):
             if changed:
                 ranges = self.text_layer.get_text_color_ranges()
                 self.property_changed.emit("text_color_ranges", ranges)
+                self.update_preview()
+        self._sync_range_color_actions()
+
+    def _initial_selected_range_font_size(self, start):
+        if not self.text_layer or not hasattr(self.text_layer, "get_font_size_ranges"):
+            return getattr(self.text_layer, "font_size", 24)
+        for item in self.text_layer.get_font_size_ranges():
+            if item["start"] <= start < item["end"]:
+                return int(item["size"])
+        return getattr(self.text_layer, "font_size", 24)
+
+    def on_apply_range_font_size(self):
+        """为选中文字设置独立字号（同一图层内混合字号）。"""
+        from PySide6.QtWidgets import QInputDialog
+
+        selected_range = self._selected_inline_text_range()
+        if not selected_range or not self.text_layer:
+            return
+
+        start, end = selected_range
+        initial = self._initial_selected_range_font_size(start)
+        size, ok = QInputDialog.getInt(
+            self,
+            "设置选中文字字号",
+            "请输入选中文字的字号：",
+            initial,
+            6,
+            240,
+            1,
+        )
+        if not ok or not hasattr(self.text_layer, "set_font_size_range"):
+            return
+        changed = self.text_layer.set_font_size_range(start, end, size)
+        if changed:
+            ranges = self.text_layer.get_font_size_ranges()
+            self.property_changed.emit("font_size_ranges", ranges)
+            self.update_preview()
+        self._sync_range_color_actions()
+
+    def on_clear_range_font_size(self):
+        """清除选中文字的独立字号，恢复为图层字号。"""
+        selected_range = self._selected_inline_text_range()
+        if not selected_range or not self.text_layer:
+            return
+
+        start, end = selected_range
+        if hasattr(self.text_layer, "clear_font_size_range"):
+            changed = self.text_layer.clear_font_size_range(start, end)
+            if changed:
+                ranges = self.text_layer.get_font_size_ranges()
+                self.property_changed.emit("font_size_ranges", ranges)
                 self.update_preview()
         self._sync_range_color_actions()
 

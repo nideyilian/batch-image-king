@@ -158,11 +158,9 @@ class TextLayerSerializeMixin:
         self.changed.emit()
         return True
 
-    def _normalize_font_size(self, size):
-        try:
-            return max(1, min(1000, int(size)))
-        except (TypeError, ValueError):
-            return self._font_size
+    # ------------------------------------------------------------------
+    # 局部字号区间（混合字号）
+    # ------------------------------------------------------------------
 
     def _merge_font_size_ranges(self, ranges):
         valid_ranges = []
@@ -171,16 +169,13 @@ class TextLayerSerializeMixin:
             try:
                 start = max(0, min(text_len, int(item.get("start", 0))))
                 end = max(0, min(text_len, int(item.get("end", 0))))
+                size = max(1, int(item.get("size", self._font_size)))
             except (TypeError, ValueError):
                 logger.warning("静默异常已忽略: except (TypeError, ValueError): in text_layer_serialize.py", exc_info=True)
                 continue
             if end <= start:
                 continue
-            valid_ranges.append({
-                "start": start,
-                "end": end,
-                "size": self._normalize_font_size(item.get("size", self._font_size)),
-            })
+            valid_ranges.append({"start": start, "end": end, "size": size})
 
         valid_ranges.sort(key=lambda item: (item["start"], item["end"]))
         merged = []
@@ -196,7 +191,7 @@ class TextLayerSerializeMixin:
         for item in ranges or []:
             item_start = int(item.get("start", 0))
             item_end = int(item.get("end", 0))
-            size = self._normalize_font_size(item.get("size", self._font_size))
+            size = max(1, int(item.get("size", self._font_size)))
             if item_end <= start or item_start >= end:
                 next_ranges.append({"start": item_start, "end": item_end, "size": size})
                 continue
@@ -205,11 +200,6 @@ class TextLayerSerializeMixin:
             if item_end > end:
                 next_ranges.append({"start": end, "end": item_end, "size": size})
         return self._merge_font_size_ranges(next_ranges)
-
-    def _set_font_size_ranges(self, ranges):
-        if not isinstance(ranges, list):
-            ranges = []
-        self._font_size_ranges = self._merge_font_size_ranges(ranges)
 
     def _clip_font_size_ranges_to_current_text(self):
         clipped = self._merge_font_size_ranges(self._font_size_ranges)
@@ -220,15 +210,28 @@ class TextLayerSerializeMixin:
 
     def get_font_size_ranges(self):
         return [
-            {"start": item["start"], "end": item["end"], "size": item["size"]}
+            {"start": item["start"], "end": item["end"], "size": int(item["size"])}
             for item in self._font_size_ranges
         ]
 
+    def has_font_size_ranges(self):
+        return bool(self._font_size_ranges)
+
+    def font_size_for_text_index(self, index):
+        """返回字符索引处的字号；未设置局部字号时返回全局字号。"""
+        for item in self._font_size_ranges:
+            if item["start"] <= index < item["end"]:
+                return int(item["size"])
+        return self._font_size
+
     def set_font_size_range(self, start, end, size):
+        """为指定字符区间设置独立字号。返回是否发生变更。"""
         start, end = self._clamp_text_range(start, end)
         if start >= end:
             return False
-        size = self._normalize_font_size(size)
+        size = max(1, int(size))
+        if size == self._font_size:
+            return self.clear_font_size_range(start, end)
         ranges = self._subtract_font_size_range(self._font_size_ranges, start, end)
         ranges.append({"start": start, "end": end, "size": size})
         self._font_size_ranges = self._merge_font_size_ranges(ranges)
@@ -238,6 +241,7 @@ class TextLayerSerializeMixin:
         return True
 
     def clear_font_size_range(self, start, end):
+        """清除指定字符区间的独立字号（恢复全局字号）。返回是否发生变更。"""
         start, end = self._clamp_text_range(start, end)
         if start >= end:
             return False
@@ -249,13 +253,6 @@ class TextLayerSerializeMixin:
         self._update_text_box_size_if_needed()
         self.changed.emit()
         return True
-
-    def _font_size_for_text_index(self, index):
-        """返回该字符的局部字号；无局部设置返回 None（使用整体字号）。"""
-        for item in self._font_size_ranges:
-            if item["start"] <= index < item["end"]:
-                return item["size"]
-        return None
 
     def get_text_lines(self) -> List[str]:
         """获取文字行列表"""
@@ -377,8 +374,7 @@ class TextLayerSerializeMixin:
             'shadow_color': self._shadow_color,
             'glow_enabled': self._glow_enabled,
             'glow_strength': self._glow_strength,
-            'glow_radius': self._glow_radius,
-            'glow_color': self._glow_color
+            'glow_radius': self._glow_radius
         }
 
     @classmethod
@@ -407,7 +403,7 @@ class TextLayerSerializeMixin:
         layer._font_style = FontStyle[data.get('font_style', 'NORMAL')]
         layer._text_color = tuple(data.get('text_color', (0, 0, 0, 255)))
         layer._set_text_color_ranges(data.get('text_color_ranges', []))
-        layer._set_font_size_ranges(data.get('font_size_ranges', []))
+        layer._font_size_ranges = layer._merge_font_size_ranges(data.get('font_size_ranges', []))
         layer._text_align = TextAlign[data.get('text_align', 'LEFT')]
         layer._line_spacing = data.get('line_spacing', 1.2)
         layer._letter_spacing = data.get('letter_spacing', 0)
@@ -438,7 +434,6 @@ class TextLayerSerializeMixin:
         layer.glow_enabled = bool(data.get('glow_enabled', False))
         layer.glow_strength = int(data.get('glow_strength', 5))
         layer.glow_radius = int(data.get('glow_radius', 10))
-        layer.glow_color = tuple(data.get('glow_color', (255, 255, 255, 255)))
         layer._update_text_box_size_if_needed()
 
         return layer

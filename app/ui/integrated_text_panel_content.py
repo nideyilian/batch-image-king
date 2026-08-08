@@ -336,6 +336,8 @@ class IntegratedTextPanelContent(object):
         self.inline_text_edit.selectionChanged.connect(self._sync_range_color_actions)
         self.range_color_btn.clicked.connect(self.on_apply_range_text_color)
         self.clear_range_color_btn.clicked.connect(self.on_clear_range_text_color)
+        self.range_size_btn.clicked.connect(self.on_apply_range_font_size)
+        self.clear_range_size_btn.clicked.connect(self.on_clear_range_font_size)
         if hasattr(self, 'full_edit_text_btn'):
             self.full_edit_text_btn.clicked.connect(self.on_edit_text)
         self.prev_text_btn.clicked.connect(lambda: self.on_step_text(-1))

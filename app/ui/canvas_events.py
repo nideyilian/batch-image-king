@@ -352,7 +352,7 @@ class CanvasWidgetCanvasEvents(object):
         event.accept()
 
     def mouseDoubleClickEvent(self, event):
-        """双击文字图层时打开文案编辑器。"""
+        """双击文字图层时在画布上就地编辑（Photoshop 风格）。"""
         if event.button() == Qt.LeftButton:
             layer_index = self.get_layer_at_position(event.pos())
             if layer_index >= 0:
@@ -360,15 +360,72 @@ class CanvasWidgetCanvasEvents(object):
                 try:
                     from app.models.text_layer import TextLayer
                     if isinstance(layer, TextLayer):
-                        main_window = self._get_main_window()
-                        if main_window and hasattr(main_window, 'edit_text_layer'):
-                            main_window.edit_text_layer(layer_index)
-                            event.accept()
-                            return
+                        if getattr(layer, 'locked', False):
+                            # 锁定图层不能就地编辑，回退到属性面板编辑器
+                            main_window = self._get_main_window()
+                            if main_window and hasattr(main_window, 'edit_text_layer'):
+                                main_window.edit_text_layer(layer_index)
+                                event.accept()
+                                return
+                        self._open_inline_text_editor(layer_index, event.pos())
+                        event.accept()
+                        return
                 except Exception as e:
                     print(f"双击编辑文字图层时出错: {e}")
 
         QWidget.mouseDoubleClickEvent(self, event)
+
+    def _open_inline_text_editor(self, layer_index, view_pos):
+        """在画布上打开就地文字编辑器（Photoshop 风格）。"""
+        existing = getattr(self, '_text_editor', None)
+        if existing is not None and not existing.is_closed():
+            existing._commit()
+
+        if not (0 <= layer_index < len(self.document.layers)):
+            return
+        layer = self.document.layers[layer_index]
+        if not getattr(layer, 'visible', True):
+            return
+        rect = self.get_layer_rect(layer_index)
+        if rect is None:
+            return
+
+        from app.ui.canvas_text_editor import CanvasTextEditor
+        editor = CanvasTextEditor(self, layer, rect, self.zoom_factor, click_pos=view_pos)
+        editor.update_geometry(rect, self.zoom_factor)
+        self._text_editor = editor
+        editor.show()
+        editor.setFocus()
+
+        # 图层被删除时自动关闭编辑器
+        try:
+            self.document.layers_changed.connect(self._on_text_editor_layers_changed)
+        except Exception:
+            pass
+
+    def _on_text_editor_layers_changed(self, *args):
+        """图层列表变化时关闭已失效的就地编辑器。"""
+        editor = getattr(self, '_text_editor', None)
+        if editor is None or editor.is_closed():
+            return
+        layer = editor._layer
+        if layer is None or not any(item is layer for item in self.document.layers):
+            editor._close_editor()
+
+    def _sync_text_editor_geometry(self):
+        """画布缩放/平移后同步就地编辑器位置与字号。"""
+        editor = getattr(self, '_text_editor', None)
+        if editor is None or editor.is_closed():
+            return
+        layer = editor._layer
+        try:
+            idx = self.document.layers.index(layer)
+        except ValueError:
+            editor._close_editor()
+            return
+        rect = self.get_layer_rect(idx)
+        if rect is not None:
+            editor.update_geometry(rect, self.zoom_factor)
 
     def mouseMoveEvent(self, event):
         """鼠标移动事件处理"""

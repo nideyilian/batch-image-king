@@ -427,6 +427,12 @@ class IntegratedTextPanelBase(object):
         self.clear_range_color_btn = self._make_tool("清色")
         self.clear_range_color_btn.setToolTip("清除当前文案中选中文字的局部颜色")
         self.clear_range_color_btn.setEnabled(False)
+        self.range_size_btn = self._make_tool("字号")
+        self.range_size_btn.setToolTip("为选中文字设置独立字号（同一图层内混合字号）")
+        self.range_size_btn.setEnabled(False)
+        self.clear_range_size_btn = self._make_tool("清字号")
+        self.clear_range_size_btn.setToolTip("清除选中文字的独立字号，恢复为图层字号")
+        self.clear_range_size_btn.setEnabled(False)
 
         self.text_count_label = QLabel("0 条")
         self.text_count_label.setProperty("role", "summaryLabel")
@@ -435,7 +441,7 @@ class IntegratedTextPanelBase(object):
             button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             text_actions.addWidget(button)
-        for button in (self.range_color_btn, self.clear_range_color_btn):
+        for button in (self.range_color_btn, self.clear_range_color_btn, self.range_size_btn, self.clear_range_size_btn):
             button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             text_actions.addWidget(button)
