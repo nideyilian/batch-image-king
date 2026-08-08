@@ -261,6 +261,7 @@ def main() -> int:
         workspace.setSelectedTextGlowEnabled(True)
         workspace.setSelectedTextGlowStrength(7)
         workspace.setSelectedTextGlowRadius(14)
+        workspace.setSelectedTextGlowColor("#F7BD63")
         workspace.copySelectedLayerStyle()
     if args.show_crop_tools:
         workspace.startCropEdit()

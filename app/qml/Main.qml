@@ -2326,6 +2326,7 @@ ApplicationWindow {
             if (target === "textFill") return "选择文字颜色"
             if (target === "textBackground") return "选择文字背景颜色"
             if (target === "textShadow") return "选择文字阴影颜色"
+            if (target === "textGlow") return "选择文字发光颜色"
             if (target === "textRange") return "选择选区文字颜色"
             return "选择渐变颜色"
         }
@@ -2417,6 +2418,7 @@ ApplicationWindow {
             else if (target === "textGradient") workspace.setSelectedTextGradientColor(colorIndex, hexValue)
             else if (target === "textBackground") workspace.setSelectedTextBackgroundColor(hexValue)
             else if (target === "textShadow") workspace.setSelectedTextShadowColor(hexValue)
+            else if (target === "textGlow") workspace.setSelectedTextGlowColor(hexValue)
             else if (target === "textRange") workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)
             else workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)
             close()
@@ -7141,6 +7143,32 @@ ApplicationWindow {
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedTextGlowRadius(parsed)
+                                        }
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "颜色"
+                                    visible: workspace.selectedTextGlowEnabled
+                                    ColorValueField {
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextGlowColor
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onPickRequested: effectColorDialog.openFor("textGlow", workspace.selectedTextGlowColor)
+                                        onValueCommitted: value => workspace.setSelectedTextGlowColor(value)
+                                    }
+                                }
+                                InspectorRow {
+                                    label: "透明度"
+                                    visible: workspace.selectedTextGlowEnabled
+                                    ValueBox {
+                                        value: workspace.selectedTextGlowOpacity.toString()
+                                        bindValue: true
+                                        suffix: "%"
+                                        Layout.fillWidth: true
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (!isNaN(parsed)) workspace.setSelectedTextGlowOpacity(parsed)
                                         }
                                     }
                                 }

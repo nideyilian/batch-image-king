@@ -1812,7 +1812,7 @@ class FastRendererSurface(object):
             f"text_bg_padding:{getattr(layer, 'background_padding', '')}",
             f"supersample:{int(bool(getattr(layer, 'supersample_enabled', False)))}:{getattr(layer, 'supersample_scale', '')}",
             f"shadow:{int(bool(getattr(layer, 'shadow_enabled', False)))}:{getattr(layer, 'shadow_offset_x', '')}:{getattr(layer, 'shadow_offset_y', '')}:{getattr(layer, 'shadow_blur', '')}:{getattr(layer, 'shadow_color', '')}",
-            f"glow:{int(bool(getattr(layer, 'glow_enabled', False)))}:{getattr(layer, 'glow_strength', '')}:{getattr(layer, 'glow_radius', '')}",
+            f"glow:{int(bool(getattr(layer, 'glow_enabled', False)))}:{getattr(layer, 'glow_strength', '')}:{getattr(layer, 'glow_radius', '')}:{getattr(layer, 'glow_color', '')}",
         ])
 
     def _get_layer_surface_cached(self, layer, document, was_just_loaded: bool = False) -> Optional[Image.Image]:

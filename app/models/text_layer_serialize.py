@@ -275,7 +275,8 @@ class TextLayerSerializeMixin:
             'shadow_color': self._shadow_color,
             'glow_enabled': self._glow_enabled,
             'glow_strength': self._glow_strength,
-            'glow_radius': self._glow_radius
+            'glow_radius': self._glow_radius,
+            'glow_color': self._glow_color
         }
 
     @classmethod
@@ -334,6 +335,7 @@ class TextLayerSerializeMixin:
         layer.glow_enabled = bool(data.get('glow_enabled', False))
         layer.glow_strength = int(data.get('glow_strength', 5))
         layer.glow_radius = int(data.get('glow_radius', 10))
+        layer.glow_color = tuple(data.get('glow_color', (255, 255, 255, 255)))
         layer._update_text_box_size_if_needed()
 
         return layer

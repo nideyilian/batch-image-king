@@ -157,6 +157,7 @@ _TEXT_STYLE_ATTRIBUTES = (
     "glow_enabled",
     "glow_strength",
     "glow_radius",
+    "glow_color",
 )
 
 
@@ -1897,10 +1898,26 @@ class WorkspaceViewModel(QObject):
         return int(getattr(self._selected_layer(), "glow_radius", 10))
 
     @Property(str, notify=selectionChanged)
+    def selectedTextGlowColor(self) -> str:
+        return self._rgba_to_hex(
+            getattr(self._selected_layer(), "glow_color", (255, 255, 255, 255))
+        )
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextGlowOpacity(self) -> int:
+        color = getattr(self._selected_layer(), "glow_color", (255, 255, 255, 255))
+        alpha = color[3] if isinstance(color, (tuple, list)) and len(color) > 3 else 255
+        return round(max(0, min(255, int(alpha))) / 255.0 * 100)
+
+    @Property(str, notify=selectionChanged)
     def selectedTextGlowSummary(self) -> str:
         if not self.selectedTextGlowEnabled:
             return "关闭"
-        return f"强度 {self.selectedTextGlowStrength} · 半径 {self.selectedTextGlowRadius} px"
+        return (
+            f"强度 {self.selectedTextGlowStrength}"
+            f" · 半径 {self.selectedTextGlowRadius} px"
+            f" · {self._rgba_to_hex(getattr(self._selected_layer(), 'glow_color', (255, 255, 255, 255)))}"
+        )
 
     @Property(bool, notify=styleClipboardChanged)
     def hasLayerStyleClipboard(self) -> bool:
@@ -3089,6 +3106,33 @@ class WorkspaceViewModel(QObject):
             "修改文字发光半径",
             lambda layer: setattr(layer, "glow_radius", value),
             f"文字发光半径 · {value} px",
+        )
+
+    @Slot(str, result=bool)
+    def setSelectedTextGlowColor(self, value: str) -> bool:
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("文字发光颜色格式无效", toast=True)
+            return False
+        return self._change_selected_text(
+            "修改文字发光颜色",
+            lambda layer: setattr(layer, "glow_color", color),
+            f"文字发光颜色 · {self._rgba_to_hex(color)}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextGlowOpacity(self, value: int) -> bool:
+        value = max(0, min(100, int(value)))
+
+        def apply(layer) -> None:
+            color = tuple(getattr(layer, "glow_color", (255, 255, 255, 255)))
+            rgb = color[:3] if len(color) >= 3 else (255, 255, 255)
+            layer.glow_color = rgb + (round(value / 100.0 * 255),)
+
+        return self._change_selected_text(
+            "修改文字发光透明度",
+            apply,
+            f"文字发光透明度 · {value}%",
         )
 
     def _validated_selected_text_range(self, start: int, end: int):
