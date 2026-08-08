@@ -54,6 +54,19 @@ def _rep(qss: str) -> str:
         "input": Theme.color("input"),
         "ring": Theme.color("ring"),
         "hover": Theme.color("hover"),
+        "console-panel": Theme.console_color("panel"),
+        "console-raised": Theme.console_color("raised"),
+        "console-control": Theme.console_color("control"),
+        "console-hover": Theme.console_color("hover"),
+        "console-border": Theme.console_color("border"),
+        "console-border-strong": Theme.console_color("border_strong"),
+        "console-text-primary": Theme.console_color("text_primary"),
+        "console-text-secondary": Theme.console_color("text_secondary"),
+        "console-text-muted": Theme.console_color("text_muted"),
+        "console-accent": Theme.console_color("accent"),
+        "console-accent-hover": Theme.console_color("accent_hover"),
+        "console-accent-pressed": Theme.console_color("accent_pressed"),
+        "console-accent-foreground": Theme.console_color("accent_foreground"),
         "info": Theme.color("info"),
         "success": Theme.color("success"),
         "warning": Theme.color("warning"),
@@ -307,6 +320,24 @@ QDialog[dialogA2="true"] QLabel[role="dialogTitle"] {
     font-size: 16px;
     font-weight: %%fw-bold%%;
 }
+QDialog[dialogA2="true"] QFrame[role="dialogHeader"] {
+    background-color: transparent;
+    border: none;
+}
+QDialog[dialogA2="true"] QFrame[role="dialogDivider"] {
+    background-color: %%border%%;
+    border: none;
+    max-height: 1px;
+}
+QDialog[dialogA2="true"] QToolButton[role="dialogCloseButton"] {
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    padding: 0;
+    background-color: transparent;
+    border-color: transparent;
+}
 QDialog[dialogA2="true"] QLabel[role="sectionTitle"] {
     color: %%primary-foreground%%;
     font-size: 13px;
@@ -397,6 +428,60 @@ QDialog[dialogA2="true"] QPushButton[secondaryButton="true"] {
     min-height: 34px;
     background-color: %%secondary%%;
     border-color: %%input%%;
+}
+/* 取色器同时服务于 QWidget 与 QML 工作台，视觉令牌以当前生产控制台为准。 */
+QDialog[colorPickerA2="true"] {
+    background-color: %%console-panel%%;
+    color: %%console-text-primary%%;
+    font-family: "Microsoft YaHei UI";
+}
+QDialog[colorPickerA2="true"] * {
+    font-family: "Microsoft YaHei UI";
+}
+QDialog[colorPickerA2="true"] QLabel {
+    color: %%console-text-primary%%;
+}
+QDialog[colorPickerA2="true"] QLabel[role="dialogTitle"],
+QDialog[colorPickerA2="true"] QLabel[role="sectionTitle"] {
+    color: %%console-text-primary%%;
+}
+QDialog[colorPickerA2="true"] QFrame[role="dialogDivider"] {
+    background-color: %%console-border%%;
+}
+QDialog[colorPickerA2="true"] QLineEdit,
+QDialog[colorPickerA2="true"] QSpinBox {
+    background-color: %%console-control%%;
+    color: %%console-text-primary%%;
+    border-color: %%console-border-strong%%;
+    selection-background-color: %%console-accent-pressed%%;
+}
+QDialog[colorPickerA2="true"] QLineEdit:focus,
+QDialog[colorPickerA2="true"] QSpinBox:focus {
+    border-color: %%console-accent-hover%%;
+}
+QDialog[colorPickerA2="true"] QPushButton,
+QDialog[colorPickerA2="true"] QToolButton {
+    background-color: %%console-raised%%;
+    color: %%console-text-primary%%;
+    border-color: %%console-border-strong%%;
+}
+QDialog[colorPickerA2="true"] QPushButton:hover,
+QDialog[colorPickerA2="true"] QToolButton:hover {
+    background-color: %%console-hover%%;
+    border-color: %%console-accent-hover%%;
+}
+QDialog[colorPickerA2="true"] QPushButton[primaryButton="true"] {
+    background-color: %%console-accent%%;
+    border-color: %%console-accent%%;
+    color: %%console-accent-foreground%%;
+}
+QDialog[colorPickerA2="true"] QPushButton[primaryButton="true"]:hover {
+    background-color: %%console-accent-hover%%;
+    border-color: %%console-accent-hover%%;
+}
+QDialog[colorPickerA2="true"] QPushButton[secondaryButton="true"] {
+    background-color: %%console-raised%%;
+    border-color: %%console-border-strong%%;
 }
 QDialog[dialogA2="true"] QCheckBox {
     color: %%foreground%%;

@@ -68,7 +68,7 @@ class DialogA2Test(unittest.TestCase):
         self.assertTrue(hasattr(dialog, "color_field"))
         self.assertTrue(hasattr(dialog, "hue_strip"))
         self.assertEqual(dialog.current_preview._color, QColor(12, 34, 56, 128))
-        self.assertEqual(dialog.ok_button.text(), "确定")
+        self.assertEqual(dialog.ok_button.text(), "应用")
         self.assertEqual(dialog.cancel_button.text(), "取消")
 
     def test_color_picker_swatch_click_updates_selected_color(self):

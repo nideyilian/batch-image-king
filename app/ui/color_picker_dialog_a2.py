@@ -3,7 +3,7 @@
 """Photoshop 风格的统一颜色选择器。"""
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -14,11 +14,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from app.ui.dialog_a2 import DialogA2
+from app.ui.theme import Theme
 
 
 class _SaturationValueField(QWidget):
@@ -57,7 +60,7 @@ class _SaturationValueField(QWidget):
         value_gradient.setColorAt(1.0, QColor(0, 0, 0, 255))
         painter.fillRect(rect, value_gradient)
 
-        painter.setPen(QPen(QColor(DialogA2.BORDER_CONTROL), 1))
+        painter.setPen(QPen(QColor(Theme.console_color("border_strong")), 1))
         painter.drawRect(rect)
 
         x = rect.left() + (self._saturation / 255.0) * rect.width()
@@ -111,7 +114,7 @@ class _HueStrip(QWidget):
             position = index / 6.0
             gradient.setColorAt(position, QColor.fromHsv(round(position * 359), 255, 255))
         painter.fillRect(rect, gradient)
-        painter.setPen(QPen(QColor(DialogA2.BORDER_CONTROL), 1))
+        painter.setPen(QPen(QColor(Theme.console_color("border_strong")), 1))
         painter.drawRect(rect)
 
         y = rect.top() + (self._hue / 359.0) * rect.height()
@@ -157,7 +160,7 @@ class _ColorPreview(QFrame):
             for x in range(0, self.width(), cell):
                 painter.fillRect(x, y, cell, cell, light if ((x // cell) + (y // cell)) % 2 == 0 else dark)
         painter.fillRect(self.rect(), self._color)
-        painter.setPen(QPen(QColor(DialogA2.BORDER_CONTROL), 1))
+        painter.setPen(QPen(QColor(Theme.console_color("border_strong")), 1))
         painter.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
 
@@ -168,13 +171,14 @@ class _ColorSwatchButton(QPushButton):
         self.setProperty("color", self._color)
         self.setFixedSize(24, 24)
         self.setCursor(Qt.PointingHandCursor)
+        self.setAccessibleName(f"颜色 {self._color.name()}")
         self._refresh_style(False)
 
     def set_selected(self, selected):
         self._refresh_style(selected)
 
     def _refresh_style(self, selected):
-        border = DialogA2.ACCENT_HOVER if selected else DialogA2.BORDER_CONTROL
+        border = Theme.console_color("accent_hover" if selected else "border_strong")
         width = 2 if selected else 1
         self.setStyleSheet(f"""
             QPushButton {{
@@ -186,14 +190,39 @@ class _ColorSwatchButton(QPushButton):
         """)
 
 
+class _DialogTitleBar(QFrame):
+    """提供无系统标题栏对话框的拖动区域。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._drag_offset = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.window().pos()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and event.buttons() & Qt.LeftButton:
+            self.window().move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
+
+
 class ColorPickerDialogA2(QDialog):
     """统一的专业取色器，支持 HSV、RGB、HEX 和透明度。"""
 
     BASIC_COLORS = [
         "#000000", "#404040", "#808080", "#bfbfbf", "#ffffff", "#7f0000", "#ff0000", "#ff7f7f",
-        "#7f3f00", "#ff7f00", "#ffbf7f", "#7f7f00", "#ffff00", "#ffff7f", "#007f00", "#00ff00",
-        "#7fff7f", "#007f7f", "#00ffff", "#7fffff", "#00007f", "#0000ff", "#7f7fff", "#3f007f",
-        "#7f00ff", "#bf7fff", "#7f007f", "#ff00ff", "#ff7fff", "#7f003f", "#ff007f", "#ff7fbf",
+        "#7f3f00", "#ff7f00", "#ffff00", "#007f00", "#00ff00", "#007f7f", "#00ffff", "#0000ff",
+        "#7f00ff", "#ff00ff", "#46d7ad", "#4fa3ff", "#f7bd63", "#f1786d", "#65d88d", "#747d7a",
     ]
 
     def __init__(self, initial_color=None, parent=None, title="选择颜色", show_alpha=True):
@@ -208,10 +237,13 @@ class ColorPickerDialogA2(QDialog):
         self._selected_color = QColor(self._initial_color)
         self._hue = max(0, self._selected_color.hsvHue())
 
-        self.setWindowTitle(f"取色器（{title}）")
+        self.setWindowTitle(title)
+        self.setWindowFlag(Qt.FramelessWindowHint, True)
         self.setModal(True)
         self.resize(780, 540)
         self.setMinimumSize(700, 500)
+        self.setProperty("colorPickerA2", True)
+        self.setFont(QFont("Microsoft YaHei UI", 12))
         DialogA2.apply(self)
         self._setup_ui(title)
         self.set_selected_color(self._selected_color)
@@ -264,27 +296,48 @@ class ColorPickerDialogA2(QDialog):
         root.setContentsMargins(DialogA2.OUTER_MARGIN, DialogA2.OUTER_MARGIN, DialogA2.OUTER_MARGIN, DialogA2.OUTER_MARGIN)
         root.setSpacing(DialogA2.CONTENT_GAP)
 
+        title_bar = _DialogTitleBar(self)
+        title_bar.setProperty("role", "dialogHeader")
+        title_bar.setFixedHeight(40)
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(8)
         self.title_label = QLabel(title)
         self.title_label.setProperty("role", "dialogTitle")
-        root.addWidget(self.title_label)
+        self.title_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        title_layout.addWidget(self.title_label)
+        title_layout.addStretch()
+        self.close_button = QToolButton(title_bar)
+        self.close_button.setProperty("role", "dialogCloseButton")
+        self.close_button.setIcon(self.style().standardIcon(QStyle.SP_TitleBarCloseButton))
+        self.close_button.setToolTip("关闭")
+        self.close_button.setAccessibleName("关闭")
+        self.close_button.clicked.connect(self.reject)
+        title_layout.addWidget(self.close_button)
+        root.addWidget(title_bar)
+
+        divider = QFrame()
+        divider.setProperty("role", "dialogDivider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
 
         body = QHBoxLayout()
         body.setSpacing(DialogA2.CONTENT_GAP)
         root.addLayout(body, 1)
 
-        field_card = self._make_card()
-        field_layout = QHBoxLayout(field_card)
-        field_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        field_panel = QWidget()
+        field_layout = QHBoxLayout(field_panel)
+        field_layout.setContentsMargins(0, 0, 0, 0)
         field_layout.setSpacing(10)
         self.color_field = _SaturationValueField(self)
         self.hue_strip = _HueStrip(self)
         field_layout.addWidget(self.color_field, 1)
         field_layout.addWidget(self.hue_strip)
-        body.addWidget(field_card, 3)
+        body.addWidget(field_panel, 3)
 
-        detail_card = self._make_card()
-        detail_layout = QVBoxLayout(detail_card)
-        detail_layout.setContentsMargins(*DialogA2.CARD_MARGIN)
+        detail_panel = QWidget()
+        detail_layout = QVBoxLayout(detail_panel)
+        detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(DialogA2.CARD_GAP)
 
         preview_layout = QGridLayout()
@@ -299,6 +352,10 @@ class ColorPickerDialogA2(QDialog):
         preview_layout.addWidget(self.current_preview, 1, 1)
         detail_layout.addLayout(preview_layout)
 
+        values_label = QLabel("颜色数值")
+        values_label.setProperty("role", "sectionTitle")
+        detail_layout.addWidget(values_label)
+
         hsv_grid = QGridLayout()
         hsv_grid.setHorizontalSpacing(8)
         hsv_grid.setVerticalSpacing(6)
@@ -311,7 +368,7 @@ class ColorPickerDialogA2(QDialog):
         self.alpha_spin = self._make_spin(0, 255)
 
         fields = (
-            ("H", self.hue_spin, 0, 0), ("S", self.saturation_spin, 1, 0), ("B", self.value_spin, 2, 0),
+            ("H", self.hue_spin, 0, 0), ("S", self.saturation_spin, 1, 0), ("V", self.value_spin, 2, 0),
             ("R", self.red_spin, 0, 2), ("G", self.green_spin, 1, 2), ("B", self.blue_spin, 2, 2),
             ("A", self.alpha_spin, 3, 2),
         )
@@ -322,7 +379,7 @@ class ColorPickerDialogA2(QDialog):
 
         hex_row = QHBoxLayout()
         hex_row.setSpacing(8)
-        hex_row.addWidget(self._field_label("#"))
+        hex_row.addWidget(self._field_label("HEX"))
         self.hex_edit = QLineEdit()
         self.hex_edit.setMaxLength(7)
         self.hex_edit.setFixedHeight(DialogA2.CONTROL_HEIGHT)
@@ -345,21 +402,21 @@ class ColorPickerDialogA2(QDialog):
             self.swatch_buttons.append(button)
         detail_layout.addLayout(swatch_grid)
         detail_layout.addStretch()
-        body.addWidget(detail_card, 2)
+        body.addWidget(detail_panel, 2)
 
         footer = QFrame()
         footer.setProperty("role", "dialogFooter")
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(0, 0, 0, 0)
         footer_layout.addStretch()
-        self.ok_button = QPushButton("确定")
+        self.ok_button = QPushButton("应用")
         self.cancel_button = QPushButton("取消")
         DialogA2.mark_primary(self.ok_button)
         DialogA2.mark_secondary(self.cancel_button)
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
-        footer_layout.addWidget(self.ok_button)
         footer_layout.addWidget(self.cancel_button)
+        footer_layout.addWidget(self.ok_button)
         root.addWidget(footer)
 
         self.color_field.value_changed.connect(self._on_field_changed)
@@ -371,15 +428,10 @@ class ColorPickerDialogA2(QDialog):
         if not self._show_alpha:
             self.alpha_spin.setVisible(False)
 
-    def _make_card(self):
-        frame = QFrame()
-        frame.setProperty("role", "dialogCard")
-        return frame
-
     def _field_label(self, text):
         label = QLabel(text)
         label.setProperty("role", "fieldLabel")
-        label.setFixedWidth(18)
+        label.setFixedWidth(28 if len(text) > 1 else 18)
         return label
 
     def _make_spin(self, minimum, maximum, suffix=""):

@@ -101,6 +101,24 @@ _THEMES = {
     },
 }
 
+# QML 工作台固定使用的生产控制台配色。保留为独立令牌，供仍需保留的
+# QWidget 工具面板接入，避免同一窗口同时出现旧版蓝色与当前生产绿。
+_CONSOLE_COLORS = {
+    "panel": "#151a1c",
+    "raised": "#1a2022",
+    "control": "#20272a",
+    "hover": "#293235",
+    "border": "#2b3437",
+    "border_strong": "#3b474a",
+    "text_primary": "#f3f6f5",
+    "text_secondary": "#aab5b1",
+    "text_muted": "#84918c",
+    "accent": "#3bd5aa",
+    "accent_hover": "#67e6c1",
+    "accent_pressed": "#28b88f",
+    "accent_foreground": "#06271f",
+}
+
 _REQUIRED_SEMANTIC_COLORS = frozenset({
     "background", "foreground", "card", "card-foreground", "popover",
     "popover-foreground", "primary", "primary-foreground", "secondary",
@@ -262,6 +280,11 @@ class Theme:
     @classmethod
     def color(cls, name: str, default: str = "#000000") -> str:
         return _THEMES[cls._skin].get(name, default)
+
+    @classmethod
+    def console_color(cls, name: str, default: str = "#000000") -> str:
+        """返回 QML 生产控制台对应的颜色令牌。"""
+        return _CONSOLE_COLORS.get(name, default)
 
     @classmethod
     def qc(cls, name: str, alpha: float = 1.0) -> QColor:

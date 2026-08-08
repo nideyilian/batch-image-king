@@ -2312,8 +2312,8 @@ ApplicationWindow {
         id: effectColorDialog
         objectName: "effectColorDialog"
         anchors.centerIn: parent
-        width: 780
-        height: 550
+        width: Math.min(780, Math.max(720, window.width - 120))
+        height: Math.min(560, Math.max(520, window.height - 96))
         modal: true
         focus: true
         padding: 0
@@ -2589,7 +2589,7 @@ ApplicationWindow {
                         ValueBox { value: Math.round(effectColorDialog.selectedColor.r * 255).toString(); bindValue: true; suffix: "R"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(parseFloat(value), effectColorDialog.selectedColor.g * 255, effectColorDialog.selectedColor.b * 255) }
                         ValueBox { value: Math.round(effectColorDialog.saturation * 100).toString(); bindValue: true; suffix: "S%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, parseFloat(value) / 100, effectColorDialog.brightness) }
                         ValueBox { value: Math.round(effectColorDialog.selectedColor.g * 255).toString(); bindValue: true; suffix: "G"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, parseFloat(value), effectColorDialog.selectedColor.b * 255) }
-                        ValueBox { value: Math.round(effectColorDialog.brightness * 100).toString(); bindValue: true; suffix: "B%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, effectColorDialog.saturation, parseFloat(value) / 100) }
+                        ValueBox { value: Math.round(effectColorDialog.brightness * 100).toString(); bindValue: true; suffix: "V%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, effectColorDialog.saturation, parseFloat(value) / 100) }
                         ValueBox { value: Math.round(effectColorDialog.selectedColor.b * 255).toString(); bindValue: true; suffix: "B"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, effectColorDialog.selectedColor.g * 255, parseFloat(value)) }
                         ValueBox { value: Math.round(effectColorDialog.alphaValue * 255).toString(); bindValue: true; suffix: "A"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setAlpha(parseFloat(value)) }
                     }
@@ -2597,18 +2597,19 @@ ApplicationWindow {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
-                        BodyLabel { text: "#"; color: Theme.textMuted }
+                        TinyLabel { text: "HEX"; color: Theme.textMuted; font.weight: Font.DemiBold }
                         ValueBox {
                             id: effectColorInput
                             Layout.fillWidth: true
                             value: "#000000"
                             bindValue: true
+                            invalid: effectColorDialog.errorMessage.length > 0
                             accessibleName: "十六进制颜色"
                             onValueCommitted: value => effectColorDialog.setFromHex(value)
                         }
                     }
 
-                    BodyLabel { text: "常用颜色"; color: Theme.textMuted }
+                    TinyLabel { text: "常用颜色"; color: Theme.textMuted; font.weight: Font.DemiBold }
                     GridLayout {
                         Layout.fillWidth: true
                         columns: 8
@@ -2677,6 +2678,46 @@ ApplicationWindow {
         font.family: Theme.bodyFont
         font.pixelSize: 12
         verticalAlignment: Text.AlignVCenter
+    }
+
+    component ExportSectionHeader: Column {
+        property string text: ""
+        property string detail: ""
+        property string iconName: AppIcons.settings
+
+        width: parent ? parent.width : implicitWidth
+        spacing: 4
+
+        Row {
+            spacing: 7
+            AppIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: parent.parent.iconName
+                iconSize: 14
+                iconColor: Theme.accent
+            }
+            BodyLabel {
+                text: parent.parent.text
+                color: Theme.textPrimary
+                font.weight: Font.DemiBold
+            }
+        }
+
+        TinyLabel {
+            width: parent.width
+            text: parent.detail
+            color: Theme.textMuted
+            elide: Text.ElideRight
+        }
+
+        Rectangle {
+            width: parent.width
+            height: 1
+            color: Theme.border
+        }
+
+        Accessible.name: text
+        Accessible.role: Accessible.Grouping
     }
 
     component MenuLabel: Text {
@@ -3127,11 +3168,19 @@ ApplicationWindow {
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
 
+                    ScrollIndicator.vertical: ScrollIndicator { }
+
                     Column {
                         id: exportForm
                         width: parent.width
-                        spacing: 18
+                        spacing: 16
                         enabled: !batchExport.running
+
+                        ExportSectionHeader {
+                            text: "导出任务"
+                            detail: "目录、数量和起始序号"
+                            iconName: AppIcons.folderOutput
+                        }
 
                         Column {
                             width: parent.width
@@ -3198,10 +3247,15 @@ ApplicationWindow {
                             }
                         }
 
+                        ExportSectionHeader {
+                            text: "文件命名"
+                            detail: "让每张图片都能快速定位"
+                            iconName: AppIcons.tag
+                        }
+
                         Column {
                             width: parent.width
                             spacing: 10
-                            BodyLabel { text: "文件命名"; color: Theme.textSecondary }
                             RowLayout {
                                 width: parent.width
                                 BodyLabel { text: "添加当前日期"; Layout.fillWidth: true }
@@ -3278,10 +3332,15 @@ ApplicationWindow {
                             }
                         }
 
+                        ExportSectionHeader {
+                            text: "输出格式"
+                            detail: "选择格式并控制单文件体积"
+                            iconName: AppIcons.fileImage
+                        }
+
                         Column {
                             width: parent.width
                             spacing: 8
-                            BodyLabel { text: "图像格式"; color: Theme.textSecondary }
                             Row {
                                 width: parent.width
                                 height: 36
@@ -3289,13 +3348,19 @@ ApplicationWindow {
                                 Repeater {
                                     model: ["png", "jpg", "bmp", "webp"]
                                     delegate: Rectangle {
+                                        id: formatOption
                                         required property string modelData
                                         width: (exportForm.width - 12) / 4
                                         height: 36
                                         radius: Theme.radiusSmall
-                                        color: batchExport.fileFormat === modelData ? Theme.accentSoft : Theme.bgControl
+                                        color: batchExport.fileFormat === modelData
+                                               ? Theme.accentSoft
+                                               : (formatMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
                                         border.width: 1
-                                        border.color: batchExport.fileFormat === modelData ? Theme.accentPressed : Theme.borderStrong
+                                        border.color: activeFocus
+                                                      ? Theme.focusRing
+                                                      : (batchExport.fileFormat === modelData ? Theme.accentPressed : Theme.borderStrong)
+                                        activeFocusOnTab: true
                                         Text {
                                             anchors.centerIn: parent
                                             text: modelData.toUpperCase()
@@ -3305,10 +3370,18 @@ ApplicationWindow {
                                             font.weight: Font.DemiBold
                                         }
                                         MouseArea {
+                                            id: formatMouse
                                             anchors.fill: parent
+                                            hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: batchExport.fileFormat = parent.modelData
+                                            onPressed: formatOption.forceActiveFocus(Qt.MouseFocusReason)
+                                            onClicked: batchExport.fileFormat = formatOption.modelData
                                         }
+                                        Keys.onSpacePressed: batchExport.fileFormat = modelData
+                                        Keys.onReturnPressed: batchExport.fileFormat = modelData
+                                        Accessible.name: modelData.toUpperCase()
+                                        Accessible.role: Accessible.RadioButton
+                                        Accessible.checked: batchExport.fileFormat === modelData
                                     }
                                 }
                             }
@@ -3322,6 +3395,12 @@ ApplicationWindow {
                                     onCommitted: value => batchExport.maxFileSizeKB = Math.max(0, parseInt(value) || 0)
                                 }
                             }
+                        }
+
+                        ExportSectionHeader {
+                            text: "组合策略"
+                            detail: "控制随机、去重和组合遍历规则"
+                            iconName: AppIcons.shuffle
                         }
 
                         Rectangle {
@@ -7326,6 +7405,8 @@ ApplicationWindow {
                                         }
                                     }
                                 }
+                                Accessible.name: "颜色 " + modelData
+                                Accessible.role: Accessible.Button
                             }
 
                             PropertySection {
