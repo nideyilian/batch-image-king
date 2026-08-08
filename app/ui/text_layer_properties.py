@@ -112,7 +112,7 @@ class TextLayerPropertiesPanel(QWidget):
             "line_spacing", "letter_spacing", "auto_fit_text_box",
             "text_box_padding", "vertical_layout", "current_text",
             "text_binding_enabled", "shadow_enabled", "shadow_color",
-            "glow_enabled", "background_enabled", "background_color",
+            "glow_enabled", "glow_color", "background_enabled", "background_color",
             "background_padding", "gradient_enabled", "gradient_type",
             "gradient_start_color", "gradient_end_color",
         }

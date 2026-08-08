@@ -374,7 +374,8 @@ class TextLayerSerializeMixin:
             'shadow_color': self._shadow_color,
             'glow_enabled': self._glow_enabled,
             'glow_strength': self._glow_strength,
-            'glow_radius': self._glow_radius
+            'glow_radius': self._glow_radius,
+            'glow_color': self._glow_color
         }
 
     @classmethod
@@ -434,6 +435,7 @@ class TextLayerSerializeMixin:
         layer.glow_enabled = bool(data.get('glow_enabled', False))
         layer.glow_strength = int(data.get('glow_strength', 5))
         layer.glow_radius = int(data.get('glow_radius', 10))
+        layer.glow_color = tuple(data.get('glow_color', (255, 255, 255, 255)))
         layer._update_text_box_size_if_needed()
 
         return layer
@@ -524,6 +526,12 @@ class TextLayerSerializeMixin:
         new_layer._background_enabled = self._background_enabled
         new_layer._background_color = self._background_color
         new_layer._background_padding = self._background_padding
+
+        # 复制发光设置
+        new_layer._glow_enabled = self._glow_enabled
+        new_layer._glow_strength = self._glow_strength
+        new_layer._glow_radius = self._glow_radius
+        new_layer._glow_color = self._glow_color
 
         # 清空缓存（新图层需要重新生成）
         new_layer._cached_image = None

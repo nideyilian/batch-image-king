@@ -197,6 +197,30 @@ class IntegratedTextPanelHandlers(object):
                 self.gradient_end_color.current_color = self.text_layer.gradient_end_color
                 self.gradient_end_color.update_color_display()
 
+            # 阴影与发光
+            if hasattr(self, 'shadow_check'):
+                shadow_enabled = bool(getattr(self.text_layer, 'shadow_enabled', False))
+                self.shadow_check.setChecked(shadow_enabled)
+                self.shadow_x_spin.setValue(int(getattr(self.text_layer, 'shadow_offset_x', 2)))
+                self.shadow_y_spin.setValue(int(getattr(self.text_layer, 'shadow_offset_y', 2)))
+                self.shadow_blur_spin.setValue(int(getattr(self.text_layer, 'shadow_blur', 4)))
+                self.shadow_color.current_color = getattr(
+                    self.text_layer, 'shadow_color', (0, 0, 0, 128)
+                )
+                self.shadow_color.update_color_display()
+
+            if hasattr(self, 'glow_check'):
+                glow_enabled = bool(getattr(self.text_layer, 'glow_enabled', False))
+                glow_color = tuple(getattr(self.text_layer, 'glow_color', (255, 255, 255, 255)))
+                self.glow_check.setChecked(glow_enabled)
+                self.glow_strength_spin.setValue(int(getattr(self.text_layer, 'glow_strength', 5)))
+                self.glow_radius_spin.setValue(int(getattr(self.text_layer, 'glow_radius', 10)))
+                self.glow_color.current_color = glow_color
+                self.glow_color.update_color_display()
+                glow_alpha = glow_color[3] if len(glow_color) > 3 else 255
+                self.glow_opacity_spin.setValue(round(glow_alpha / 255.0 * 100))
+                self._sync_glow_controls_enabled(glow_enabled)
+
 
 
             # 位置大小 - 修复：确保UI控件初始化正确，避免覆盖图层属性
@@ -640,9 +664,15 @@ class IntegratedTextPanelHandlers(object):
             'shadow_enabled', 'shadow_offset_x', 'shadow_offset_y', 'shadow_blur', 'shadow_color'
         ])
         has_glow = all(hasattr(layer, attr) for attr in [
-            'glow_enabled', 'glow_strength', 'glow_radius'
+            'glow_enabled', 'glow_strength', 'glow_radius', 'glow_color'
         ])
         self.effects_group.setVisible(has_shadow or has_glow)
+
+    def _sync_glow_controls_enabled(self, enabled):
+        for name in ('glow_strength_spin', 'glow_radius_spin', 'glow_color', 'glow_opacity_spin'):
+            control = getattr(self, name, None)
+            if control is not None:
+                control.setEnabled(bool(enabled))
 
     def on_edit_text(self):
         """编辑当前文字 - 统一入口"""
@@ -790,6 +820,7 @@ class IntegratedTextPanelHandlers(object):
         if self.text_layer:
             enabled = self._is_checked(state)
             self.text_layer.glow_enabled = enabled
+            self._sync_glow_controls_enabled(enabled)
             self.property_changed.emit("glow_enabled", enabled)
             self.update_preview()
 
@@ -799,6 +830,25 @@ class IntegratedTextPanelHandlers(object):
             self.text_layer.glow_strength = self.glow_strength_spin.value()
             self.text_layer.glow_radius = self.glow_radius_spin.value()
             self.property_changed.emit("glow_params", (self.glow_strength_spin.value(), self.glow_radius_spin.value()))
+            self.update_preview()
+
+    def on_glow_color_changed(self, color):
+        """发光颜色改变。"""
+        if self.text_layer:
+            self.text_layer.glow_color = color
+            self.glow_opacity_spin.setValue(round(self.text_layer.glow_color[3] / 255.0 * 100))
+            self.property_changed.emit("glow_color", self.text_layer.glow_color)
+            self.update_preview()
+
+    def on_glow_opacity_changed(self, value):
+        """发光透明度改变。"""
+        if self.text_layer:
+            color = tuple(getattr(self.text_layer, 'glow_color', (255, 255, 255, 255)))
+            rgb = color[:3] if len(color) >= 3 else (255, 255, 255)
+            self.text_layer.glow_color = rgb + (round(max(0, min(100, value)) / 100.0 * 255),)
+            self.glow_color.current_color = self.text_layer.glow_color
+            self.glow_color.update_color_display()
+            self.property_changed.emit("glow_color", self.text_layer.glow_color)
             self.update_preview()
 
     def on_cycle_text(self):

@@ -74,13 +74,17 @@ class TextLayerRenderMixin:
         if getattr(self, '_glow_enabled', False) and getattr(self, '_glow_strength', 0) > 0:
             radius = max(1, int(getattr(self, '_glow_radius', 1)))
             strength = max(0, min(20, int(getattr(self, '_glow_strength', 0))))
-            glow_image = text_image.filter(ImageFilter.GaussianBlur(radius=radius))
-            glow_mask = glow_image.getchannel('A')
+            glow_mask = alpha.filter(ImageFilter.GaussianBlur(radius=radius))
             glow_mask = glow_mask.point(
                 lambda value: min(255, round(value * (strength / 5.0)))
             )
-            glow_image.putalpha(glow_mask)
-            result = Image.alpha_composite(result, glow_image)
+            result = Image.alpha_composite(
+                result,
+                self._colored_mask(
+                    glow_mask,
+                    getattr(self, '_glow_color', (255, 255, 255, 255)),
+                ),
+            )
 
         if getattr(self, '_shadow_enabled', False):
             blur = max(0, int(getattr(self, '_shadow_blur', 0)))

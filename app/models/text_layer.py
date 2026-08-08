@@ -111,6 +111,7 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         self._glow_enabled = False
         self._glow_strength = 5
         self._glow_radius = 10
+        self._glow_color = (255, 255, 255, 255)
         
         # 缓存
         self._cached_image = None
@@ -579,6 +580,20 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
             self._cached_image = None
             self._update_text_box_size_if_needed()
             self.changed.emit()
+
+    @Property(tuple)
+    def glow_color(self):
+        return self._glow_color
+
+    @glow_color.setter
+    def glow_color(self, value):
+        if isinstance(value, (tuple, list)) and len(value) >= 3:
+            channels = tuple(max(0, min(255, int(channel))) for channel in value[:4])
+            color = channels[:3] + ((channels[3] if len(channels) > 3 else 255),)
+            if self._glow_color != color:
+                self._glow_color = color
+                self._cached_image = None
+                self.changed.emit()
 
     # 渐变属性
     @Property(bool)

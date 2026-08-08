@@ -40,6 +40,8 @@ def test_text_shadow_and_glow_commands_are_mapped_and_validated():
     assert workspace.selectedTextGlowEnabled is False
     assert workspace.selectedTextGlowStrength == 5
     assert workspace.selectedTextGlowRadius == 10
+    assert workspace.selectedTextGlowColor == "#FFFFFF"
+    assert workspace.selectedTextGlowOpacity == 100
 
     assert workspace.setSelectedTextShadowEnabled(True) is True
     assert workspace.setSelectedTextShadowOffset(-80, 90) is True
@@ -49,6 +51,8 @@ def test_text_shadow_and_glow_commands_are_mapped_and_validated():
     assert workspace.setSelectedTextGlowEnabled(True) is True
     assert workspace.setSelectedTextGlowStrength(90) is True
     assert workspace.setSelectedTextGlowRadius(-2) is True
+    assert workspace.setSelectedTextGlowColor("#173B32CC") is True
+    assert workspace.setSelectedTextGlowOpacity(37) is True
 
     assert layer.shadow_enabled is True
     assert (layer.shadow_offset_x, layer.shadow_offset_y) == (-50, 50)
@@ -57,6 +61,7 @@ def test_text_shadow_and_glow_commands_are_mapped_and_validated():
     assert layer.glow_enabled is True
     assert layer.glow_strength == 20
     assert layer.glow_radius == 1
+    assert layer.glow_color == (23, 59, 50, 94)
 
     assert workspace.setSelectedTextShadowColor("bad") is False
     layer.locked = True
@@ -74,6 +79,8 @@ def test_text_effects_undo_redo_and_save_round_trip(tmp_path):
     assert workspace.setSelectedTextShadowBlur(12) is True
     assert workspace.setSelectedTextShadowColor("#11223399") is True
     assert workspace.setSelectedTextGlowEnabled(True) is True
+    assert workspace.setSelectedTextGlowColor("#F7BD6380") is True
+    assert workspace.setSelectedTextGlowOpacity(42) is True
     assert workspace.setSelectedTextGlowStrength(14) is True
     assert workspace.setSelectedTextGlowRadius(18) is True
 
@@ -97,6 +104,8 @@ def test_text_effects_undo_redo_and_save_round_trip(tmp_path):
     assert loaded.selectedTextGlowEnabled is True
     assert loaded.selectedTextGlowStrength == 14
     assert loaded.selectedTextGlowRadius == 18
+    assert loaded.selectedTextGlowColor == "#F7BD636B"
+    assert loaded.selectedTextGlowOpacity == 42
 
 
 @pytest.mark.integration
@@ -124,10 +133,18 @@ def test_text_shadow_glow_and_vertical_background_change_real_pixels():
     assert workspace.setSelectedTextGlowEnabled(True) is True
     assert workspace.setSelectedTextGlowStrength(16) is True
     assert workspace.setSelectedTextGlowRadius(10) is True
+    assert workspace.setSelectedTextGlowColor("#FF0000") is True
     glow = layer.render_text().copy()
     assert sum(pixel[3] > 5 for pixel in glow.getdata()) > sum(
         pixel[3] > 5 for pixel in base.getdata()
     )
+    glow_only = [
+        glow.getpixel((x, y))
+        for y in range(glow.height)
+        for x in range(glow.width)
+        if base.getpixel((x, y))[3] == 0 and glow.getpixel((x, y))[3] > 5
+    ]
+    assert any(pixel[0] > pixel[1] * 2 and pixel[0] > pixel[2] * 2 for pixel in glow_only)
 
     assert workspace.setSelectedTextGlowEnabled(False) is True
     layer.vertical_layout = True
@@ -198,6 +215,7 @@ def test_text_style_clipboard_preserves_content_and_geometry_and_is_undoable():
     assert (target.shadow_offset_x, target.shadow_offset_y) == (7, -4)
     assert target.glow_enabled is True
     assert target.glow_strength == 12
+    assert target.glow_color == source.glow_color
 
     assert workspace.undo() is True
     restored = workspace.document.layers[1]

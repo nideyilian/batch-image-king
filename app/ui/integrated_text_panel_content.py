@@ -212,6 +212,24 @@ class IntegratedTextPanelContent(object):
         glow_params_layout.addStretch()
         effects_layout.addLayout(glow_params_layout)
 
+        # 发光颜色与透明度
+        glow_color_layout = QHBoxLayout()
+        glow_color_layout.addWidget(QLabel("颜色:"))
+        self.glow_color = ColorIndicator((255, 255, 255, 255))
+        self.glow_color.color_changed.connect(self.on_glow_color_changed)
+        glow_color_layout.addWidget(self.glow_color)
+        glow_color_layout.addSpacing(10)
+        glow_color_layout.addWidget(QLabel("透明度:"))
+        self.glow_opacity_spin = QSpinBox()
+        self.glow_opacity_spin.setRange(0, 100)
+        self.glow_opacity_spin.setSuffix("%")
+        self.glow_opacity_spin.setValue(100)
+        self.glow_opacity_spin.setFixedWidth(72)
+        self.glow_opacity_spin.valueChanged.connect(self.on_glow_opacity_changed)
+        glow_color_layout.addWidget(self.glow_opacity_spin)
+        glow_color_layout.addStretch()
+        effects_layout.addLayout(glow_color_layout)
+
         parent_group.add_content_layout(effects_layout)
         # 根据模型能力调整可见性
         self._sync_feature_visibility()
