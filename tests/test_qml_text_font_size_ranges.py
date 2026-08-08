@@ -90,3 +90,37 @@ def test_text_edit_overlay_start_rejects_locked_layer():
 
     assert workspace.startTextEditOverlay() is False
     assert workspace.textEditOverlayVisible is False
+
+
+@pytest.mark.unit
+def test_text_edit_overlay_properties_have_valid_notify_signals():
+    workspace, layer = _workspace()
+    meta = workspace.metaObject()
+
+    def notify_signal(property_name):
+        for i in range(meta.propertyCount()):
+            prop = meta.property(i)
+            if prop.name() == property_name:
+                return prop.notifySignal()
+        return None
+
+    overlay_notify = notify_signal("textEditOverlayVisible")
+    assert overlay_notify is not None
+    assert overlay_notify.isValid() is True
+    assert overlay_notify.name() == bytes(b"textEditingChanged")
+
+
+@pytest.mark.unit
+def test_text_edit_overlay_auto_dismisses_on_selection_change():
+    workspace, layer = _workspace()
+    other = TextLayer(name="其他", x=120, y=160, width=160, height=80)
+    workspace.document.add_text_layer(other)
+    workspace.document._history_manager.clear()
+    workspace.layerModel.reset_from_document()
+    workspace.selectLayer(0)
+
+    assert workspace.startTextEditOverlay() is True
+    assert workspace.textEditOverlayVisible is True
+
+    workspace.selectLayer(1)
+    assert workspace.textEditOverlayVisible is False

@@ -248,6 +248,7 @@ class WorkspaceViewModel(QObject):
         self._text_font_tree_options_cache = None
         self._font_catalog_loading = False
         self._text_edit_overlay_visible = False
+        self._text_edit_layer_index = -1
         self._layer_style_clipboard = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
@@ -1534,7 +1535,7 @@ class WorkspaceViewModel(QObject):
             })
         return groups
 
-    @Property("QVariantList", notify=[selectionChanged, fontCatalogReady])
+    @Property("QVariantList", notify=selectionChanged)
     def textFontOptions(self):
         if self._text_font_options_cache is None:
             if self.selectedIsTextLayer:
@@ -1545,7 +1546,7 @@ class WorkspaceViewModel(QObject):
                 return []
         return list(self._text_font_options_cache)
 
-    @Property("QVariantList", notify=[selectionChanged, fontCatalogReady])
+    @Property("QVariantList", notify=selectionChanged)
     def textFontTreeOptions(self):
         if self._text_font_tree_options_cache is None:
             if self.selectedIsTextLayer:
@@ -1593,6 +1594,7 @@ class WorkspaceViewModel(QObject):
         if tree:
             self._text_font_tree_options_cache = list(tree)
         self.fontCatalogReady.emit()
+        self.selectionChanged.emit()
 
     @Property("QVariantList", notify=selectionChanged)
     def selectedTextFontOptions(self):
@@ -3479,6 +3481,7 @@ class WorkspaceViewModel(QObject):
             selection = [index]
             primary = index
             self._selection_anchor_index = index
+        self._dismiss_text_edit_overlay(primary)
         self._document.select_layers(selection, primary_index=primary)
         self._selected_vector_node_index = -1
         self.vectorEditChanged.emit()
@@ -3505,6 +3508,7 @@ class WorkspaceViewModel(QObject):
             if index not in selection:
                 selection.append(index)
         primary = hits[-1] if hits else (selection[-1] if selection else -1)
+        self._dismiss_text_edit_overlay(primary)
         self._document.select_layers(selection, primary_index=primary)
         self._selection_anchor_index = primary
         return bool(hits)
@@ -3906,6 +3910,7 @@ class WorkspaceViewModel(QObject):
             return False
         if self._crop_edit_original is not None and index != self._crop_edit_index:
             self.cancelCropEdit()
+        self._dismiss_text_edit_overlay(index)
         self._document.select_layers([int(index)], primary_index=int(index))
         self._selection_anchor_index = int(index)
         self._selected_vector_node_index = -1
@@ -3919,6 +3924,7 @@ class WorkspaceViewModel(QObject):
             return True
         if self._crop_edit_original is not None:
             self.cancelCropEdit()
+        self._dismiss_text_edit_overlay(-1)
         self._document.select_layers([], primary_index=-1)
         self._selection_anchor_index = -1
         self._selected_vector_node_index = -1
@@ -4056,7 +4062,7 @@ class WorkspaceViewModel(QObject):
         self.selectLayer(index)
         return True
 
-    @Property(bool, notify=[selectionChanged, textEditingChanged])
+    @Property(bool, notify=textEditingChanged)
     def textEditOverlayVisible(self) -> bool:
         return self._text_edit_overlay_visible
 
@@ -4071,9 +4077,20 @@ class WorkspaceViewModel(QObject):
         if is_effectively_locked(layer, self._document.layers):
             self._set_status("图层已锁定，无法编辑文字", toast=True)
             return False
+        self._text_edit_layer_index = self.selectedLayerIndex
         self._text_edit_overlay_visible = True
         self.textEditingChanged.emit()
         return True
+
+    def _dismiss_text_edit_overlay(self, primary_index: int = -1):
+        """选中图层发生变化时关闭画布文字编辑覆盖层（保留已编辑内容不保存）。"""
+        if not self._text_edit_overlay_visible:
+            return
+        if primary_index >= 0 and primary_index == self._text_edit_layer_index:
+            return
+        self._text_edit_overlay_visible = False
+        self._text_edit_layer_index = -1
+        self.textEditingChanged.emit()
 
     @Slot(str, result=bool)
     def commitTextEditOverlay(self, value: str) -> bool:
