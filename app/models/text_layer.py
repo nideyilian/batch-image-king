@@ -73,6 +73,7 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         # 文字样式
         self._text_color = (0, 0, 0, 255)  # 文字颜色 RGBA
         self._text_color_ranges = []
+        self._font_size_ranges = []  # 局部字号：每段 {"start", "end", "size"}
         self._text_align = TextAlign.LEFT  # 对齐方式
         self._line_spacing = 1.2  # 行间距倍数
         self._letter_spacing = 0  # 字间距（像素），0表示正常间距，正值增加间距，负值减少间距
@@ -728,6 +729,7 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         self._text_lines = parsed_lines
         self._current_text = parsed_lines[0] if parsed_lines else ""
         self._clip_text_color_ranges_to_current_text()
+        self._clip_font_size_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
         self.text_changed.emit()

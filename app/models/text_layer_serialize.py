@@ -33,6 +33,7 @@ class TextLayerSerializeMixin:
 
         self._current_text = value
         self._clip_text_color_ranges_to_current_text()
+        self._clip_font_size_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
 
@@ -157,6 +158,105 @@ class TextLayerSerializeMixin:
         self.changed.emit()
         return True
 
+    def _normalize_font_size(self, size):
+        try:
+            return max(1, min(1000, int(size)))
+        except (TypeError, ValueError):
+            return self._font_size
+
+    def _merge_font_size_ranges(self, ranges):
+        valid_ranges = []
+        text_len = len(self._current_text or "")
+        for item in ranges or []:
+            try:
+                start = max(0, min(text_len, int(item.get("start", 0))))
+                end = max(0, min(text_len, int(item.get("end", 0))))
+            except (TypeError, ValueError):
+                logger.warning("静默异常已忽略: except (TypeError, ValueError): in text_layer_serialize.py", exc_info=True)
+                continue
+            if end <= start:
+                continue
+            valid_ranges.append({
+                "start": start,
+                "end": end,
+                "size": self._normalize_font_size(item.get("size", self._font_size)),
+            })
+
+        valid_ranges.sort(key=lambda item: (item["start"], item["end"]))
+        merged = []
+        for item in valid_ranges:
+            if merged and merged[-1]["size"] == item["size"] and item["start"] <= merged[-1]["end"]:
+                merged[-1]["end"] = max(merged[-1]["end"], item["end"])
+            else:
+                merged.append(dict(item))
+        return merged
+
+    def _subtract_font_size_range(self, ranges, start, end):
+        next_ranges = []
+        for item in ranges or []:
+            item_start = int(item.get("start", 0))
+            item_end = int(item.get("end", 0))
+            size = self._normalize_font_size(item.get("size", self._font_size))
+            if item_end <= start or item_start >= end:
+                next_ranges.append({"start": item_start, "end": item_end, "size": size})
+                continue
+            if item_start < start:
+                next_ranges.append({"start": item_start, "end": start, "size": size})
+            if item_end > end:
+                next_ranges.append({"start": end, "end": item_end, "size": size})
+        return self._merge_font_size_ranges(next_ranges)
+
+    def _set_font_size_ranges(self, ranges):
+        if not isinstance(ranges, list):
+            ranges = []
+        self._font_size_ranges = self._merge_font_size_ranges(ranges)
+
+    def _clip_font_size_ranges_to_current_text(self):
+        clipped = self._merge_font_size_ranges(self._font_size_ranges)
+        if clipped != self._font_size_ranges:
+            self._font_size_ranges = clipped
+            return True
+        return False
+
+    def get_font_size_ranges(self):
+        return [
+            {"start": item["start"], "end": item["end"], "size": item["size"]}
+            for item in self._font_size_ranges
+        ]
+
+    def set_font_size_range(self, start, end, size):
+        start, end = self._clamp_text_range(start, end)
+        if start >= end:
+            return False
+        size = self._normalize_font_size(size)
+        ranges = self._subtract_font_size_range(self._font_size_ranges, start, end)
+        ranges.append({"start": start, "end": end, "size": size})
+        self._font_size_ranges = self._merge_font_size_ranges(ranges)
+        self._cached_image = None
+        self._update_text_box_size_if_needed()
+        self.changed.emit()
+        return True
+
+    def clear_font_size_range(self, start, end):
+        start, end = self._clamp_text_range(start, end)
+        if start >= end:
+            return False
+        next_ranges = self._subtract_font_size_range(self._font_size_ranges, start, end)
+        if next_ranges == self._font_size_ranges:
+            return False
+        self._font_size_ranges = next_ranges
+        self._cached_image = None
+        self._update_text_box_size_if_needed()
+        self.changed.emit()
+        return True
+
+    def _font_size_for_text_index(self, index):
+        """返回该字符的局部字号；无局部设置返回 None（使用整体字号）。"""
+        for item in self._font_size_ranges:
+            if item["start"] <= index < item["end"]:
+                return item["size"]
+        return None
+
     def get_text_lines(self) -> List[str]:
         """获取文字行列表"""
         return self._text_lines.copy()
@@ -167,6 +267,7 @@ class TextLayerSerializeMixin:
         if self._text_lines and (self._current_text is None or str(self._current_text).strip() == ""):
             self._current_text = self._text_lines[0]
         self._clip_text_color_ranges_to_current_text()
+        self._clip_font_size_ranges_to_current_text()
         self._cached_image = None
         self._update_text_box_size_if_needed()
         self.text_changed.emit()
@@ -246,6 +347,7 @@ class TextLayerSerializeMixin:
             'font_style': self._font_style.name,
             'text_color': self._text_color,
             'text_color_ranges': self.get_text_color_ranges(),
+            'font_size_ranges': self.get_font_size_ranges(),
             'text_align': self._text_align.name,
             'line_spacing': self._line_spacing,
             'letter_spacing': self._letter_spacing,
@@ -305,6 +407,7 @@ class TextLayerSerializeMixin:
         layer._font_style = FontStyle[data.get('font_style', 'NORMAL')]
         layer._text_color = tuple(data.get('text_color', (0, 0, 0, 255)))
         layer._set_text_color_ranges(data.get('text_color_ranges', []))
+        layer._set_font_size_ranges(data.get('font_size_ranges', []))
         layer._text_align = TextAlign[data.get('text_align', 'LEFT')]
         layer._line_spacing = data.get('line_spacing', 1.2)
         layer._letter_spacing = data.get('letter_spacing', 0)
@@ -399,6 +502,7 @@ class TextLayerSerializeMixin:
         # 复制文字样式
         new_layer._text_color = self._text_color
         new_layer._text_color_ranges = self.get_text_color_ranges()
+        new_layer._font_size_ranges = self.get_font_size_ranges()
         new_layer._text_align = self._text_align
         new_layer._line_spacing = self._line_spacing
         new_layer._letter_spacing = self._letter_spacing

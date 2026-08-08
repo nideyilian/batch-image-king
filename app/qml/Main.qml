@@ -205,7 +205,17 @@ ApplicationWindow {
         Qt.callLater(function() {
             if (inspectorScroll.contentItem)
                 inspectorScroll.contentItem.contentY = Math.max(0, textContentSection.y - 8)
-            selectedTextEditor.beginEdit()
+            if (!workspace.textEditOverlayVisible)
+                selectedTextEditor.beginEdit()
+        })
+    }
+
+    function focusCanvasTextEditor() {
+        Qt.callLater(function() {
+            if (canvasTextEditInput.activeFocus)
+                return
+            canvasTextEditInput.forceActiveFocus()
+            canvasTextEditInput.selectAll()
         })
     }
 
@@ -4965,8 +4975,11 @@ ApplicationWindow {
                             onDoubleClicked: mouse => {
                                 if (workspace.cropEditing || canvasWorkspace.transformActive)
                                     return
-                                if (workspace.beginTextEditAt(mouse.x, mouse.y))
+                                if (workspace.beginTextEditAt(mouse.x, mouse.y)) {
                                     window.revealTextContentEditing()
+                                    if (workspace.startTextEditOverlay())
+                                        window.focusCanvasTextEditor()
+                                }
                             }
                         }
 
@@ -5261,6 +5274,89 @@ ApplicationWindow {
                                     color: Theme.textPrimary
                                     font.family: Theme.bodyFont
                                     font.pixelSize: 10 / canvasWorkspace.actualScale
+                                }
+                            }
+
+                            Rectangle {
+                                id: canvasTextEditOverlay
+                                objectName: "canvasTextEditOverlay"
+                                visible: workspace.textEditOverlayVisible && workspace.selectedIsTextLayer
+                                x: workspace.selectedX
+                                y: workspace.selectedY
+                                width: Math.max(1, workspace.selectedWidth)
+                                height: Math.max(1, workspace.selectedHeight)
+                                rotation: workspace.selectedCanRotate ? workspace.selectedRotation : 0
+                                transformOrigin: Item.Center
+                                z: 60
+                                color: Theme.bgControl
+                                border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
+                                border.color: workspace.selectedLocked ? Theme.textMuted : Theme.accent
+                                clip: false
+
+                                function commit() {
+                                    if (canvasTextEditInput.editing) {
+                                        canvasTextEditInput.focus = false
+                                        canvasTextEditOverlay.commitValue()
+                                    }
+                                }
+
+                                function commitValue() {
+                                    if (canvasTextEditOverlay.editingIndex < 0)
+                                        return
+                                    var index = canvasTextEditOverlay.editingIndex
+                                    canvasTextEditOverlay.editingIndex = -1
+                                    workspace.commitTextEditOverlay(canvasTextEditInput.text)
+                                }
+
+                                property int editingIndex: -1
+
+                                TextEdit {
+                                    id: canvasTextEditInput
+                                    anchors.fill: parent
+                                    anchors.margins: Math.max(2, 4 / canvasWorkspace.actualScale)
+                                    color: workspace.selectedTextColor
+                                    selectionColor: Theme.accentPressed
+                                    selectedTextColor: Theme.textPrimary
+                                    font.family: workspace.selectedTextFontFamily
+                                    font.pixelSize: workspace.selectedTextFontSize
+                                    wrapMode: TextEdit.Wrap
+                                    selectByMouse: true
+                                    readOnly: workspace.selectedLocked || !workspace.textEditOverlayVisible
+                                    z: 61
+
+                                    readonly property bool editing: activeFocus && workspace.textEditOverlayVisible
+
+                                    onActiveFocusChanged: {
+                                        if (activeFocus && workspace.textEditOverlayVisible) {
+                                            canvasTextEditInput.text = workspace.selectedTextContent
+                                            canvasTextEditOverlay.editingIndex = workspace.selectedLayerIndex
+                                        } else if (canvasTextEditOverlay.editingIndex >= 0 && workspace.textEditOverlayVisible) {
+                                            canvasTextEditOverlay.commitValue()
+                                        }
+                                    }
+
+                                    Keys.onPressed: event => {
+                                        if (event.key === Qt.Key_Escape) {
+                                            canvasTextEditOverlay.editingIndex = -1
+                                            workspace.cancelTextEditOverlay()
+                                            focus = false
+                                            event.accepted = true
+                                        } else if ((event.modifiers & Qt.ControlModifier)
+                                                   && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
+                                            canvasTextEditOverlay.commit()
+                                            event.accepted = true
+                                        }
+                                    }
+
+                                    Connections {
+                                        target: workspace
+                                        function onSelectionChanged() {
+                                            if (canvasTextEditOverlay.visible && canvasTextEditInput.activeFocus
+                                                    && workspace.selectedLayerIndex !== canvasTextEditOverlay.editingIndex) {
+                                                canvasTextEditInput.focus = false
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -6066,6 +6162,63 @@ ApplicationWindow {
                                         height: parent.height
                                         text: workspace.selectedTextColorRangeCount + " 处"
                                         horizontalAlignment: Text.AlignRight
+                                    }
+                                }
+
+                                Row {
+                                    width: parent.width
+                                    height: Theme.controlHeight
+                                    spacing: 6
+                                    CompactActionButton {
+                                        width: (parent.width - rangeFontSizeCount.width - 18) / 2
+                                        label: "选区字号"
+                                        enabled: !workspace.selectedTextBindingEnabled
+                                                 && selectedTextEditor.selectionLength > 0
+                                                 && !workspace.selectedLocked
+                                                 && !workspace.operationsBlocked
+                                        onClicked: {
+                                            var parsed = parseInt(rangeFontSizeInput.text)
+                                            if (!isNaN(parsed) && parsed >= 1) {
+                                                workspace.setSelectedTextFontSizeRange(
+                                                    selectedTextEditor.selectionStart,
+                                                    selectedTextEditor.selectionEnd,
+                                                    parsed
+                                                )
+                                            }
+                                        }
+                                    }
+                                    CompactActionButton {
+                                        width: (parent.width - rangeFontSizeCount.width - 18) / 2
+                                        label: "清除局部字号"
+                                        enabled: !workspace.selectedTextBindingEnabled
+                                                 && selectedTextEditor.selectionLength > 0
+                                                 && workspace.selectedTextFontSizeRangeCount > 0
+                                                 && !workspace.selectedLocked
+                                                 && !workspace.operationsBlocked
+                                        onClicked: workspace.clearSelectedTextFontSizeRange(
+                                            selectedTextEditor.selectionStart,
+                                            selectedTextEditor.selectionEnd
+                                        )
+                                    }
+                                    TinyLabel {
+                                        id: rangeFontSizeCount
+                                        width: 36
+                                        height: parent.height
+                                        text: workspace.selectedTextFontSizeRangeCount + " 处"
+                                        horizontalAlignment: Text.AlignRight
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "选区字号值"
+                                    visible: !workspace.selectedTextBindingEnabled
+                                    ValueBox {
+                                        id: rangeFontSizeInput
+                                        Layout.fillWidth: true
+                                        value: workspace.selectedTextFontSize.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                     }
                                 }
 

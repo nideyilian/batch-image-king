@@ -695,11 +695,15 @@ class TextLayerFontMixin:
         except Exception:
             return False
 
-    def _get_font_object(self):
-        """获取PIL字体对象，使用缓存（增强中文与斜体支持）"""
+    def _get_font_object(self, size: int = None):
+        """获取PIL字体对象，使用缓存（增强中文与斜体支持）。
+
+        size 可选：指定局部字号，None 时使用图层整体字号。
+        """
+        use_size = int(size) if size else int(getattr(self, '_font_size', 24))
         cache_key = (
             f"{self._font_family}_{getattr(self, '_font_face', '')}_"
-            f"{self._font_size}_{self._font_style.name}"
+            f"{use_size}_{self._font_style.name}"
         )
 
         if cache_key in self._font_cache:
@@ -731,13 +735,13 @@ class TextLayerFontMixin:
         font = None
         try:
             if font_path:
-                font = ImageFont.truetype(font_path, self._font_size)
+                font = ImageFont.truetype(font_path, use_size)
             else:
                 # 尝试一些常见字体文件名（绝对路径由_find_font_path处理）
                 for fallback_family in ["Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "SimHei", "SimSun"]:
                     fp = self._find_font_path(fallback_family)
                     if fp:
-                        font = ImageFont.truetype(fp, self._font_size)
+                        font = ImageFont.truetype(fp, use_size)
                         break
                 if font is None:
                     # 仍找不到时使用系统默认（可能不支持中文）
@@ -747,6 +751,13 @@ class TextLayerFontMixin:
 
         self._font_cache[cache_key] = font
         return font
+
+    def _font_for_text_index(self, index: int):
+        """返回指定全局字符索引使用的字体对象（支持局部字号）。"""
+        size = self._font_size_for_text_index(index)
+        if size is None:
+            return self._get_font_object()
+        return self._get_font_object(size=size)
 
     def _find_font_path(self, font_name: str, face_style: str = '') -> str:
         """查找字体文件路径；显式 face 优先于旧版合成样式。"""

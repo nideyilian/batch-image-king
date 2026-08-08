@@ -132,6 +132,7 @@ class SmartCache:
                     layer_key += f":pad{int(getattr(layer, 'text_box_padding', 0))}"
                     layer_key += f":tc{getattr(layer, 'text_color', '')}"
                     layer_key += f":tcr{getattr(layer, 'text_color_ranges', getattr(layer, '_text_color_ranges', []))}"
+                    layer_key += f":fsr{getattr(layer, 'font_size_ranges', getattr(layer, '_font_size_ranges', []))}"
                     layer_key += f":se{int(bool(getattr(layer, 'stroke_enabled', False)))}"
                     layer_key += f":sw{getattr(layer, 'stroke_width', 0)}"
                     layer_key += f":sc{getattr(layer, 'stroke_color', '')}"

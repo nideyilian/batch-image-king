@@ -1794,6 +1794,7 @@ class FastRendererSurface(object):
             f"font_style:{getattr(layer, 'font_style', '')}",
             f"text_color:{getattr(layer, 'text_color', '')}",
             f"text_color_ranges:{getattr(layer, 'text_color_ranges', getattr(layer, '_text_color_ranges', []))}",
+            f"font_size_ranges:{getattr(layer, 'font_size_ranges', getattr(layer, '_font_size_ranges', []))}",
             f"text_align:{getattr(layer, 'text_align', '')}",
             f"line_spacing:{getattr(layer, 'line_spacing', '')}",
             f"letter_spacing:{getattr(layer, 'letter_spacing', '')}",

@@ -569,6 +569,34 @@ class TextLayerRenderMixin:
         if self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
             italic_shear_extra = int(math.tan(math.radians(12.0)) * max(1, self._font_size))
 
+        # 局部字号：逐字符测量
+        if getattr(self, '_font_size_ranges', None):
+            line_widths = []
+            line_heights = []
+            line_start_index = 0
+            for line in lines:
+                line_text = line if line else " "
+                n = len(line_text)
+                total = 0
+                max_h = 0
+                for offset, ch in enumerate(line_text):
+                    char_font = self._font_for_text_index(line_start_index + offset)
+                    bbox = draw.textbbox((0, 0), ch, font=char_font, stroke_width=stroke_for_measure)
+                    cw = max(0, bbox[2] - bbox[0])
+                    chh = max(0, bbox[3] - bbox[1])
+                    total += cw + self._letter_spacing
+                    max_h = max(max_h, chh)
+                if n:
+                    total -= self._letter_spacing
+                line_widths.append(max(0, total) + italic_shear_extra)
+                line_heights.append(max_h)
+                line_start_index += n + 1
+            max_line_height = max(line_heights) if line_heights else 0
+            line_gap = int(max_line_height * (self._line_spacing - 1)) if max_line_height else 0
+            content_width = max(line_widths) if line_widths else 0
+            content_height = sum(line_heights) + max(0, len(line_heights) - 1) * line_gap
+            return content_width, content_height
+
         line_widths = []
         line_heights = []
         for line in lines:
@@ -599,17 +627,23 @@ class TextLayerRenderMixin:
 
         column_widths = []
         column_heights = []
+        line_start_index = 0
 
         for line in lines:
             chars = list(line) if line else [" "]
             char_heights = []
             char_widths = []
-            for ch in chars:
-                bbox = draw.textbbox((0, 0), ch, font=font, stroke_width=stroke_for_measure)
+            for offset, ch in enumerate(chars):
+                if getattr(self, '_font_size_ranges', None):
+                    char_font = self._font_for_text_index(line_start_index + offset)
+                else:
+                    char_font = font
+                bbox = draw.textbbox((0, 0), ch, font=char_font, stroke_width=stroke_for_measure)
                 cw = max(0, bbox[2] - bbox[0])
                 chh = max(0, bbox[3] - bbox[1])
                 char_widths.append(cw)
                 char_heights.append(chh)
+            line_start_index += len(chars) + 1
 
             column_width = (max(char_widths) if char_widths else 0) + italic_shear_extra
             base_gap = int((max(char_heights) if char_heights else 0) * (self._line_spacing - 1))
@@ -934,6 +968,7 @@ class TextLayerRenderMixin:
             'width': self._width,
             'height': self._height,
             'font_size': self._font_size,
+            'font_size_ranges': self.get_font_size_ranges(),
             'stroke_width': self._stroke_width,
             'letter_spacing': self._letter_spacing,
             'text_box_padding': self._text_box_padding,
@@ -949,6 +984,15 @@ class TextLayerRenderMixin:
             self._width = int(self._width * scale)
             self._height = int(self._height * scale)
             self._font_size = int(self._font_size * scale)
+            if self._font_size_ranges:
+                self._font_size_ranges = [
+                    {
+                        'start': item['start'],
+                        'end': item['end'],
+                        'size': max(1, int(item['size'] * scale)),
+                    }
+                    for item in self._font_size_ranges
+                ]
             self._stroke_width = int(self._stroke_width * scale)
             self._letter_spacing = int(self._letter_spacing * scale)
             self._text_box_padding = int(self._text_box_padding * scale)
@@ -970,6 +1014,7 @@ class TextLayerRenderMixin:
             self._width = original['width']
             self._height = original['height']
             self._font_size = original['font_size']
+            self._font_size_ranges = original['font_size_ranges']
             self._stroke_width = original['stroke_width']
             self._letter_spacing = original['letter_spacing']
             self._text_box_padding = original['text_box_padding']
@@ -1030,6 +1075,21 @@ class TextLayerRenderMixin:
             return image
 
         use_gradient = self._gradient_enabled and gradient_image is not None
+        # 局部字号：逐字符绘制，各自使用对应字号字体
+        if getattr(self, '_font_size_ranges', None):
+            current_x = x
+            temp_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+            for offset, ch in enumerate(line):
+                char_font = self._font_for_text_index(line_start_index + offset)
+                local_color = self._color_for_text_index(line_start_index + offset)
+                fill = local_color if local_color is not None else (gradient_image if use_gradient else self._text_color)
+                bbox = temp_draw.textbbox((0, 0), ch, font=char_font)
+                image = self._draw_text_fill_piece(
+                    image, current_x + (-bbox[0]), y + (-bbox[1]), ch, char_font, fill,
+                )
+                current_x += (bbox[2] - bbox[0]) + self._letter_spacing
+            return image
+
         if self._letter_spacing != 0:
             current_x = x
             temp_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
@@ -1047,6 +1107,26 @@ class TextLayerRenderMixin:
             fill = local_color if local_color is not None else (gradient_image if use_gradient else self._text_color)
             image = self._draw_text_fill_piece(image, segment_x, y, segment, font, fill)
         return image
+
+    def _draw_text_line_stroke(self, text_image: Image.Image, draw_x: int, draw_y: int,
+                               line: str, line_start_index: int, font) -> Image.Image:
+        """绘制带局部字号的描边：逐字符绘制以支持不同字号。"""
+        current_x = draw_x
+        temp_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+        draw = ImageDraw.Draw(text_image)
+        for offset, ch in enumerate(line):
+            char_font = self._font_for_text_index(line_start_index + offset)
+            bbox = temp_draw.textbbox((0, 0), ch, font=char_font, stroke_width=self._stroke_width)
+            draw.text(
+                (current_x + (-bbox[0]), draw_y + (-bbox[1])),
+                ch,
+                font=char_font,
+                fill=self._stroke_color,
+                stroke_width=self._stroke_width,
+                stroke_fill=self._stroke_color,
+            )
+            current_x += (bbox[2] - bbox[0]) + self._letter_spacing
+        return text_image
 
     def _render_text_internal(self) -> Image.Image:
         """内部渲染实现（不写缓存）"""
@@ -1072,20 +1152,45 @@ class TextLayerRenderMixin:
         if self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
             italic_shear_extra = int(math.tan(math.radians(12.0)) * max(1, self._font_size))
 
-        for line in lines:
-            # 使用字间距计算宽度
-            line_text = line if line else " "
-            line_width = self._get_text_width_with_spacing(line_text, font)
-            bbox = temp_draw.textbbox((0, 0), line_text, font=font, stroke_width=stroke_for_measure)
-            bbox_width = max(0, bbox[2] - bbox[0])
-            bbox_height = max(0, bbox[3] - bbox[1])
+        if getattr(self, '_font_size_ranges', None):
+            # 局部字号：逐字符测量行宽/行高
+            measure_index = 0
+            for line in lines:
+                line_text = line if line else " "
+                total = 0
+                max_h = 0
+                min_left = 0
+                min_top = 0
+                n = len(line_text)
+                for offset, ch in enumerate(line_text):
+                    char_font = self._font_for_text_index(measure_index + offset)
+                    bbox = temp_draw.textbbox((0, 0), ch, font=char_font, stroke_width=stroke_for_measure)
+                    total += max(0, bbox[2] - bbox[0]) + self._letter_spacing
+                    max_h = max(max_h, max(0, bbox[3] - bbox[1]))
+                    min_left = min(min_left, int(-bbox[0]))
+                    min_top = min(min_top, int(-bbox[1]))
+                if n:
+                    total -= self._letter_spacing
+                line_widths.append(max(0, total) + italic_shear_extra)
+                line_heights.append(max_h)
+                line_left_offsets.append(min_left)
+                line_top_offsets.append(min_top)
+                measure_index += n + 1
+        else:
+            for line in lines:
+                # 使用字间距计算宽度
+                line_text = line if line else " "
+                line_width = self._get_text_width_with_spacing(line_text, font)
+                bbox = temp_draw.textbbox((0, 0), line_text, font=font, stroke_width=stroke_for_measure)
+                bbox_width = max(0, bbox[2] - bbox[0])
+                bbox_height = max(0, bbox[3] - bbox[1])
 
-            render_width = max(line_width, bbox_width) + italic_shear_extra
-            line_widths.append(render_width)
-            line_heights.append(bbox_height)
-            # 关键修复：必须完整使用 -bbox 偏移（含正负），否则中文字体 top>0 时会整体下移
-            line_left_offsets.append(int(-bbox[0]))
-            line_top_offsets.append(int(-bbox[1]))
+                render_width = max(line_width, bbox_width) + italic_shear_extra
+                line_widths.append(render_width)
+                line_heights.append(bbox_height)
+                # 关键修复：必须完整使用 -bbox 偏移（含正负），否则中文字体 top>0 时会整体下移
+                line_left_offsets.append(int(-bbox[0]))
+                line_top_offsets.append(int(-bbox[1]))
 
         # 计算总高度
         if not line_heights:
@@ -1155,7 +1260,12 @@ class TextLayerRenderMixin:
 
             # 绘制描边
             if self._stroke_enabled and self._stroke_width > 0:
-                if self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
+                if getattr(self, '_font_size_ranges', None):
+                    text_image = self._draw_text_line_stroke(
+                        text_image, draw_x, draw_y, line, line_start_index, font,
+                    )
+                    draw = ImageDraw.Draw(text_image)
+                elif self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
                     stroke_mask = self._create_text_mask_with_spacing(
                         draw_x,
                         draw_y,
@@ -1233,19 +1343,21 @@ class TextLayerRenderMixin:
             chars = list(line) if line else [" "]
             char_sizes = []
             for offset, ch in enumerate(chars):
-                bbox = temp_draw.textbbox((0, 0), ch, font=font, stroke_width=stroke_for_measure)
+                char_font = self._font_for_text_index(text_index + offset) if getattr(self, '_font_size_ranges', None) else font
+                bbox = temp_draw.textbbox((0, 0), ch, font=char_font, stroke_width=stroke_for_measure)
                 char_sizes.append((
                     max(0, bbox[2] - bbox[0]),
                     max(0, bbox[3] - bbox[1]),
                     int(-bbox[0]),
                     int(-bbox[1]),
                     ch,
-                    text_index + offset
+                    text_index + offset,
+                    char_font,
                 ))
-            col_width = max((w for w, _, _, _, _, _ in char_sizes), default=0)
-            base_gap = int(max((h for _, h, _, _, _, _ in char_sizes), default=0) * (self._line_spacing - 1))
+            col_width = max((w for w, _, _, _, _, _, _ in char_sizes), default=0)
+            base_gap = int(max((h for _, h, _, _, _, _, _ in char_sizes), default=0) * (self._line_spacing - 1))
             char_gap = base_gap + self._letter_spacing
-            col_height = sum(h for _, h, _, _, _, _ in char_sizes) + max(0, len(char_sizes) - 1) * char_gap
+            col_height = sum(h for _, h, _, _, _, _, _ in char_sizes) + max(0, len(char_sizes) - 1) * char_gap
             column_data.append((col_width, col_height, char_sizes, char_gap))
             text_index += len(line) + 1
 
@@ -1278,7 +1390,7 @@ class TextLayerRenderMixin:
         current_x = start_x
         for col_width, col_height, char_sizes, char_gap in column_data:
             current_y = start_y
-            for char_width, char_height, char_left_off, char_top_off, ch, char_index in char_sizes:
+            for char_width, char_height, char_left_off, char_top_off, ch, char_index, char_font in char_sizes:
                 char_x = current_x + max(0, (col_width - char_width) // 2) + char_left_off
                 char_y = current_y + char_top_off
 
@@ -1286,7 +1398,7 @@ class TextLayerRenderMixin:
                     draw.text(
                         (char_x, char_y),
                         ch,
-                        font=font,
+                        font=char_font,
                         fill=self._stroke_color,
                         stroke_width=self._stroke_width,
                         stroke_fill=self._stroke_color
@@ -1294,22 +1406,22 @@ class TextLayerRenderMixin:
 
                 local_color = self._color_for_text_index(char_index)
                 if local_color is not None:
-                    color_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, local_color)
+                    color_result = self._draw_text_with_style(draw, char_x, char_y, ch, char_font, local_color)
                     if color_result:
                         text_image = Image.alpha_composite(text_image, color_result)
                         draw = ImageDraw.Draw(text_image)
                 elif self._gradient_enabled and gradient_image is not None:
-                    gradient_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, gradient_image)
+                    gradient_result = self._draw_text_with_style(draw, char_x, char_y, ch, char_font, gradient_image)
                     if gradient_result:
                         text_image = Image.alpha_composite(text_image, gradient_result)
                         draw = ImageDraw.Draw(text_image)
                 else:
-                    color_result = self._draw_text_with_style(draw, char_x, char_y, ch, font, self._text_color)
+                    color_result = self._draw_text_with_style(draw, char_x, char_y, ch, char_font, self._text_color)
                     if color_result:
                         text_image = Image.alpha_composite(text_image, color_result)
                         draw = ImageDraw.Draw(text_image)
                     else:
-                        draw.text((char_x, char_y), ch, font=font, fill=self._text_color)
+                        draw.text((char_x, char_y), ch, font=char_font, fill=self._text_color)
 
                 current_y += char_height + char_gap
 

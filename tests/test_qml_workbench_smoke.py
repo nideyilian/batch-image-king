@@ -154,6 +154,13 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.pasteSelectedLayerStyle()' in qml_source
     assert 'workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)' in qml_source
     assert 'workspace.clearSelectedTextColorRange(' in qml_source
+    assert 'workspace.setSelectedTextFontSizeRange(' in qml_source
+    assert 'workspace.clearSelectedTextFontSizeRange(' in qml_source
+    assert 'workspace.startTextEditOverlay()' in qml_source
+    assert 'workspace.commitTextEditOverlay(' in qml_source
+    assert 'workspace.cancelTextEditOverlay()' in qml_source
+    assert 'id: canvasTextEditOverlay' in qml_source
+    assert 'canvasTextEditInput.forceActiveFocus()' in qml_source
     assert 'property bool randomTransformEnabled' not in qml_source
     assert 'enabled: index === 0' not in qml_source
     assert 'id: fileMenu' in qml_source

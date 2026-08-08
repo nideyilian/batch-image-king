@@ -85,6 +85,18 @@ def test_qml_canvas_pointer_has_double_click_text_edit_handler():
 
 
 @pytest.mark.unit
+def test_qml_canvas_pointer_double_click_starts_overlay_edit():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    assert "workspace.startTextEditOverlay()" in source
+    assert "window.focusCanvasTextEditor()" in source
+    assert "id: canvasTextEditOverlay" in source
+    assert "canvasTextEditInput" in source
+    assert "workspace.commitTextEditOverlay(" in source
+    assert "workspace.cancelTextEditOverlay()" in source
+
+
+@pytest.mark.unit
 def test_qml_text_content_section_has_reveal_id():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 

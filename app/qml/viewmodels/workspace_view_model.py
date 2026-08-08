@@ -218,6 +218,7 @@ class WorkspaceViewModel(QObject):
     viewSettingsChanged = Signal()
     toastRequested = Signal(str)
     fontCatalogReady = Signal()
+    textEditingChanged = Signal()
 
     def __init__(
         self,
@@ -246,6 +247,7 @@ class WorkspaceViewModel(QObject):
         self._text_font_options_cache = None
         self._text_font_tree_options_cache = None
         self._font_catalog_loading = False
+        self._text_edit_overlay_visible = False
         self._layer_style_clipboard = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
@@ -1844,6 +1846,13 @@ class WorkspaceViewModel(QObject):
         getter = getattr(self._selected_layer(), "get_text_color_ranges", None)
         return len(getter()) if callable(getter) else 0
 
+    @Property(int, notify=selectionChanged)
+    def selectedTextFontSizeRangeCount(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 0
+        getter = getattr(self._selected_layer(), "get_font_size_ranges", None)
+        return len(getter()) if callable(getter) else 0
+
     @Property(bool, notify=selectionChanged)
     def selectedTextShadowEnabled(self) -> bool:
         return self.selectedIsTextLayer and bool(
@@ -3135,12 +3144,12 @@ class WorkspaceViewModel(QObject):
             f"文字发光透明度 · {value}%",
         )
 
-    def _validated_selected_text_range(self, start: int, end: int):
+    def _validated_selected_text_range(self, start: int, end: int, label: str = "局部颜色"):
         if not self.selectedIsTextLayer:
             self._set_status("当前图层不是文字图层", toast=True)
             return None
         if self.selectedTextBindingEnabled:
-            self._set_status("局部颜色仅支持整段排版模式", toast=True)
+            self._set_status(f"{label}仅支持整段排版模式", toast=True)
             return None
         text = str(getattr(self._selected_layer(), "current_text", "") or "")
         start = max(0, min(len(text), int(start)))
@@ -3148,7 +3157,7 @@ class WorkspaceViewModel(QObject):
         if start > end:
             start, end = end, start
         if start >= end:
-            self._set_status("请先选择需要着色的文字", toast=True)
+            self._set_status(f"请先选择需要设置的文字", toast=True)
             return None
         return start, end
 
@@ -3183,6 +3192,36 @@ class WorkspaceViewModel(QObject):
             "清除局部文字颜色",
             lambda selected: selected.clear_text_color_range(start, end),
             f"已清除 {end - start} 个字符的局部颜色",
+        )
+
+    @Slot(int, int, int, result=bool)
+    def setSelectedTextFontSizeRange(self, start: int, end: int, value: int) -> bool:
+        selected_range = self._validated_selected_text_range(start, end, label="局部字号")
+        if selected_range is None:
+            return False
+        value = max(1, min(1000, int(value)))
+        start, end = selected_range
+        return self._change_selected_text(
+            "修改局部文字字号",
+            lambda layer: layer.set_font_size_range(start, end, value),
+            f"已设置 {end - start} 个字符为 {value} px",
+        )
+
+    @Slot(int, int, result=bool)
+    def clearSelectedTextFontSizeRange(self, start: int, end: int) -> bool:
+        selected_range = self._validated_selected_text_range(start, end, label="局部字号")
+        if selected_range is None:
+            return False
+        start, end = selected_range
+        layer = self._selected_layer()
+        ranges = layer.get_font_size_ranges() if hasattr(layer, "get_font_size_ranges") else []
+        if not any(item["end"] > start and item["start"] < end for item in ranges):
+            self._set_status("当前选区没有局部字号", toast=True)
+            return False
+        return self._change_selected_text(
+            "清除局部文字字号",
+            lambda selected: selected.clear_font_size_range(start, end),
+            f"已清除 {end - start} 个字符的局部字号",
         )
 
     def _style_attributes_for_layer(self, layer) -> tuple:
@@ -4015,6 +4054,46 @@ class WorkspaceViewModel(QObject):
             self._set_status("图层已锁定，无法编辑文字", toast=True)
             return False
         self.selectLayer(index)
+        return True
+
+    @Property(bool, notify=[selectionChanged, textEditingChanged])
+    def textEditOverlayVisible(self) -> bool:
+        return self._text_edit_overlay_visible
+
+    @Slot(result=bool)
+    def startTextEditOverlay(self) -> bool:
+        """在画布上进入文字直接编辑状态（供 QML 双击文字图层后调用）。"""
+        if self.cropEditing or self._export_running:
+            return False
+        if not self.selectedIsTextLayer:
+            return False
+        layer = self._selected_layer()
+        if is_effectively_locked(layer, self._document.layers):
+            self._set_status("图层已锁定，无法编辑文字", toast=True)
+            return False
+        self._text_edit_overlay_visible = True
+        self.textEditingChanged.emit()
+        return True
+
+    @Slot(str, result=bool)
+    def commitTextEditOverlay(self, value: str) -> bool:
+        """提交画布文字编辑内容并退出编辑状态。"""
+        index = self.selectedLayerIndex
+        was_visible = self._text_edit_overlay_visible
+        self._text_edit_overlay_visible = False
+        if was_visible:
+            self.textEditingChanged.emit()
+        if index < 0:
+            return False
+        return self.setTextContentForLayer(index, value)
+
+    @Slot(result=bool)
+    def cancelTextEditOverlay(self) -> bool:
+        """取消画布文字编辑，不保存内容。"""
+        if not self._text_edit_overlay_visible:
+            return False
+        self._text_edit_overlay_visible = False
+        self.textEditingChanged.emit()
         return True
 
     def _ensure_history_baseline(self) -> None:
