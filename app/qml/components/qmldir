@@ -8,6 +8,7 @@ AppIcon 1.0 AppIcon.qml
 AppMenu 1.0 AppMenu.qml
 AppProgressBar 1.0 AppProgressBar.qml
 IconButton 1.0 IconButton.qml
+OptionTile 1.0 OptionTile.qml
 AppTextArea 1.0 AppTextArea.qml
 AppTextField 1.0 AppTextField.qml
 PropertySection 1.0 PropertySection.qml

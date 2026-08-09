@@ -111,7 +111,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source
     assert 'visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform' in qml_source
-    assert 'workspace.setSelectedRandomPositionEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedRandomPositionEnabled(!workspace.selectedRandomPositionEnabled)' in qml_source
     assert 'workspace.setSelectedRandomScaleMinPercent(parsed)' in qml_source
     assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source
     assert 'workspace.regenerateSelectedRandomTransform()' in qml_source

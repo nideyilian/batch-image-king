@@ -1635,16 +1635,33 @@ ApplicationWindow {
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    BodyLabel { text: "一对多"; Layout.fillWidth: true }
-                    ToggleSwitch { id: oneToManyToggle; accessibleName: "一对多" }
-                    BodyLabel { text: "自动旋转"; Layout.leftMargin: 12 }
-                    ToggleSwitch { id: autoRotateToggle; accessibleName: "自动旋转" }
-                    BodyLabel { text: "自动遮罩"; Layout.leftMargin: 12 }
-                    ToggleSwitch { id: autoMaskToggle; accessibleName: "自动遮罩" }
+                    spacing: 6
+
+                    OptionTile {
+                        id: oneToManyOption
+                        compact: true
+                        title: "一对多"
+                        detail: "一个源匹配多个目标"
+                        onActivated: selected = !selected
+                    }
+                    OptionTile {
+                        id: autoRotateOption
+                        compact: true
+                        title: "自动旋转"
+                        detail: "按孔位方向调整素材"
+                        onActivated: selected = !selected
+                    }
+                    OptionTile {
+                        id: autoMaskOption
+                        compact: true
+                        title: "自动遮罩"
+                        detail: "按透明边缘生成遮罩"
+                        onActivated: selected = !selected
+                    }
                 }
                 RowLayout {
                     Layout.fillWidth: true
-                    visible: autoMaskToggle.checked
+                    visible: autoMaskOption.selected
                     BodyLabel { text: "阈值"; Layout.preferredWidth: 40 }
                     AppTextField {
                         id: maskThresholdInput
@@ -1677,9 +1694,9 @@ ApplicationWindow {
                             sizeSourceSelect.currentValue,
                             [sizeTargetSelect.currentValue],
                             parseInt(sizePaddingInput.text),
-                            oneToManyToggle.checked,
-                            autoRotateToggle.checked,
-                            autoMaskToggle.checked,
+                            oneToManyOption.selected,
+                            autoRotateOption.selected,
+                            autoMaskOption.selected,
                             parseInt(maskThresholdInput.text),
                             parseInt(maskToleranceInput.text)
                         )
@@ -2922,82 +2939,6 @@ ApplicationWindow {
         Accessible.role: Accessible.Grouping
     }
 
-    component ExportStrategyTile: Rectangle {
-        id: strategyTile
-
-        property string title: ""
-        property string detail: ""
-        property bool selected: false
-        signal toggled()
-
-        Layout.fillWidth: true
-        Layout.minimumWidth: 0
-        Layout.preferredHeight: 84
-        radius: Theme.radiusSmall
-        color: selected ? Theme.accentSoft : (strategyMouse.containsMouse ? Theme.bgHover : Theme.bgRaised)
-        border.width: 1
-        border.color: activeFocus
-                      ? Theme.focusRing
-                      : (selected ? Theme.accentPressed : Theme.border)
-        activeFocusOnTab: true
-
-        Behavior on color {
-            ColorAnimation { duration: Theme.motionFast }
-        }
-        Behavior on border.color {
-            ColorAnimation { duration: Theme.motionFast }
-        }
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 5
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 6
-                BodyLabel {
-                    text: strategyTile.title
-                    color: strategyTile.selected ? Theme.accentHover : Theme.textPrimary
-                    font.weight: Font.DemiBold
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-                AppIcon {
-                    visible: strategyTile.selected
-                    iconName: AppIcons.check
-                    iconSize: 14
-                    iconColor: Theme.accent
-                }
-            }
-            TinyLabel {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                text: strategyTile.detail
-                color: strategyTile.selected ? Theme.textSecondary : Theme.textMuted
-                wrapMode: Text.Wrap
-                maximumLineCount: 2
-                elide: Text.ElideRight
-                verticalAlignment: Text.AlignTop
-            }
-        }
-
-        MouseArea {
-            id: strategyMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onPressed: strategyTile.forceActiveFocus(Qt.MouseFocusReason)
-            onClicked: strategyTile.toggled()
-        }
-        Keys.onSpacePressed: toggled()
-        Keys.onReturnPressed: toggled()
-        Accessible.name: title
-        Accessible.description: detail
-        Accessible.role: Accessible.CheckBox
-        Accessible.checked: selected
-    }
-
     component MenuLabel: Text {
         property bool hovered: false
         color: hovered ? Theme.textPrimary : Theme.textSecondary
@@ -3688,23 +3629,23 @@ ApplicationWindow {
                                 width: parent.width
                                 spacing: 8
 
-                                ExportStrategyTile {
+                                OptionTile {
                                     title: "智能采样"
                                     detail: "均衡使用素材，降低重复"
                                     selected: batchExport.avoidDuplicates
-                                    onToggled: batchExport.avoidDuplicates = !batchExport.avoidDuplicates
+                                    onActivated: batchExport.avoidDuplicates = !batchExport.avoidDuplicates
                                 }
-                                ExportStrategyTile {
+                                OptionTile {
                                     title: "单次用图"
                                     detail: "限制选中图层素材复用"
                                     selected: batchExport.uniqueUseEnabled
-                                    onToggled: batchExport.uniqueUseEnabled = !batchExport.uniqueUseEnabled
+                                    onActivated: batchExport.uniqueUseEnabled = !batchExport.uniqueUseEnabled
                                 }
-                                ExportStrategyTile {
+                                OptionTile {
                                     title: "遍历组合"
                                     detail: "按组合顺序逐项生成"
                                     selected: batchExport.traverseMode
-                                    onToggled: batchExport.traverseMode = !batchExport.traverseMode
+                                    onActivated: batchExport.traverseMode = !batchExport.traverseMode
                                 }
                             }
 
@@ -3762,16 +3703,26 @@ ApplicationWindow {
                                 }
                                 RowLayout {
                                     width: parent.width
-                                    BodyLabel { text: "高性能管线"; Layout.fillWidth: true }
-                                    ToggleSwitch { accessibleName: "高性能管线"; checked: batchExport.useHighPerformance; onToggled: checkedValue => batchExport.useHighPerformance = checkedValue }
-                                    BodyLabel { text: "预读素材"; Layout.leftMargin: 12 }
-                                    ToggleSwitch { accessibleName: "预读素材"; checked: batchExport.preloadEnabled; onToggled: checkedValue => batchExport.preloadEnabled = checkedValue }
-                                }
-                                RowLayout {
-                                    width: parent.width
-                                    BodyLabel { text: "独立 Worker"; Layout.fillWidth: true }
-                                    ToggleSwitch { accessibleName: "独立 Worker"; checked: batchExport.externalWorkerEnabled; onToggled: checkedValue => batchExport.externalWorkerEnabled = checkedValue }
-                                    TinyLabel { text: "大批量隔离主界面"; Layout.leftMargin: 8 }
+                                    spacing: 8
+
+                                    OptionTile {
+                                        title: "高性能管线"
+                                        detail: "加速批量渲染与写出"
+                                        selected: batchExport.useHighPerformance
+                                        onActivated: batchExport.useHighPerformance = !batchExport.useHighPerformance
+                                    }
+                                    OptionTile {
+                                        title: "预读素材"
+                                        detail: "提前读取素材，减少等待"
+                                        selected: batchExport.preloadEnabled
+                                        onActivated: batchExport.preloadEnabled = !batchExport.preloadEnabled
+                                    }
+                                    OptionTile {
+                                        title: "独立 Worker"
+                                        detail: "大批量任务与主界面隔离"
+                                        selected: batchExport.externalWorkerEnabled
+                                        onActivated: batchExport.externalWorkerEnabled = !batchExport.externalWorkerEnabled
+                                    }
                                 }
                                 RowLayout {
                                     width: parent.width
@@ -4007,10 +3958,20 @@ ApplicationWindow {
             }
             RowLayout {
                 Layout.fillWidth: true
-                BodyLabel { text: "避免重复组合"; Layout.fillWidth: true }
-                ToggleSwitch { accessibleName: "多标签避免重复组合"; checked: multiTabExport.avoidDuplicates; onToggled: checkedValue => multiTabExport.avoidDuplicates = checkedValue }
-                BodyLabel { text: "遍历模式"; Layout.leftMargin: 14 }
-                ToggleSwitch { accessibleName: "多标签遍历模式"; checked: multiTabExport.traverseMode; onToggled: checkedValue => multiTabExport.traverseMode = checkedValue }
+                spacing: 8
+
+                OptionTile {
+                    title: "智能采样"
+                    detail: "跨标签均衡组合，降低重复"
+                    selected: multiTabExport.avoidDuplicates
+                    onActivated: multiTabExport.avoidDuplicates = !multiTabExport.avoidDuplicates
+                }
+                OptionTile {
+                    title: "遍历组合"
+                    detail: "各标签按组合顺序逐项生成"
+                    selected: multiTabExport.traverseMode
+                    onActivated: multiTabExport.traverseMode = !multiTabExport.traverseMode
+                }
             }
 
             TinyLabel { text: "标签页任务"; color: Theme.textSecondary }
@@ -6958,20 +6919,51 @@ ApplicationWindow {
                                          ? workspace.selectedRandomTransformEnabledCount + " 项已启用" : "关闭"
                                 visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform
 
-                                InspectorRow {
-                                    label: "位置"
-                                    ToggleSwitch {
-                                        accessibleName: "随机位置"
-                                        checked: workspace.selectedRandomPositionEnabled
+                                RowLayout {
+                                    width: parent.width
+                                    spacing: 6
+
+                                    OptionTile {
+                                        compact: true
+                                        title: "位置"
+                                        detail: workspace.selectedRandomPositionEnabled
+                                                ? "±" + workspace.selectedRandomPositionRange + " px"
+                                                : "随机偏移"
+                                        selected: workspace.selectedRandomPositionEnabled
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedRandomPositionEnabled(checkedValue)
+                                        onActivated: workspace.setSelectedRandomPositionEnabled(!workspace.selectedRandomPositionEnabled)
                                     }
+                                    OptionTile {
+                                        compact: true
+                                        title: "缩放"
+                                        detail: workspace.selectedRandomScaleEnabled
+                                                ? workspace.selectedRandomScaleMinPercent + "–" + workspace.selectedRandomScaleMaxPercent + "%"
+                                                : "随机比例"
+                                        selected: workspace.selectedRandomScaleEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: workspace.setSelectedRandomScaleEnabled(!workspace.selectedRandomScaleEnabled)
+                                    }
+                                    OptionTile {
+                                        compact: true
+                                        title: "旋转"
+                                        detail: workspace.selectedRandomRotationEnabled
+                                                ? "±" + Math.round(workspace.selectedRandomRotationRange * 10) / 10 + "°"
+                                                : "随机角度"
+                                        selected: workspace.selectedRandomRotationEnabled
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: workspace.setSelectedRandomRotationEnabled(!workspace.selectedRandomRotationEnabled)
+                                    }
+                                }
+
+                                InspectorRow {
+                                    label: "位置范围"
+                                    visible: workspace.selectedRandomPositionEnabled
                                     ValueBox {
                                         value: workspace.selectedRandomPositionRange.toString()
                                         bindValue: true
-                                        suffix: "px"
+                                        suffix: "± px"
                                         Layout.fillWidth: true
-                                        editable: workspace.selectedRandomPositionEnabled && !workspace.selectedLocked
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedRandomPositionRange(parsed)
@@ -6979,19 +6971,14 @@ ApplicationWindow {
                                     }
                                 }
                                 InspectorRow {
-                                    label: "缩放"
-                                    ToggleSwitch {
-                                        accessibleName: "随机缩放"
-                                        checked: workspace.selectedRandomScaleEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedRandomScaleEnabled(checkedValue)
-                                    }
+                                    label: "缩放范围"
+                                    visible: workspace.selectedRandomScaleEnabled
                                     ValueBox {
                                         value: workspace.selectedRandomScaleMinPercent.toString()
                                         bindValue: true
                                         suffix: "min%"
                                         Layout.fillWidth: true
-                                        editable: workspace.selectedRandomScaleEnabled && !workspace.selectedLocked
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedRandomScaleMinPercent(parsed)
@@ -7002,7 +6989,7 @@ ApplicationWindow {
                                         bindValue: true
                                         suffix: "max%"
                                         Layout.fillWidth: true
-                                        editable: workspace.selectedRandomScaleEnabled && !workspace.selectedLocked
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
                                             if (!isNaN(parsed)) workspace.setSelectedRandomScaleMaxPercent(parsed)
@@ -7010,19 +6997,14 @@ ApplicationWindow {
                                     }
                                 }
                                 InspectorRow {
-                                    label: "旋转"
-                                    ToggleSwitch {
-                                        accessibleName: "随机旋转"
-                                        checked: workspace.selectedRandomRotationEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedRandomRotationEnabled(checkedValue)
-                                    }
+                                    label: "旋转范围"
+                                    visible: workspace.selectedRandomRotationEnabled
                                     ValueBox {
                                         value: (Math.round(workspace.selectedRandomRotationRange * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "±°"
                                         Layout.fillWidth: true
-                                        editable: workspace.selectedRandomRotationEnabled && !workspace.selectedLocked
+                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
                                             if (!isNaN(parsed)) workspace.setSelectedRandomRotationRange(parsed)

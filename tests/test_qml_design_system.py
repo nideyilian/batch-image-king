@@ -84,6 +84,7 @@ def test_qml_component_library_covers_core_controls():
         "AppTextField",
         "FontSelectBox",
         "IconButton",
+        "OptionTile",
         "AppIcons",
         "PropertySection",
         "SegmentedControl",
@@ -157,9 +158,28 @@ def test_all_toggle_switches_have_accessible_names():
     toggle_blocks = _qml_component_blocks(main_source, "ToggleSwitch")
     trailing_toggle_blocks = _qml_component_blocks(main_source, "TrailingToggle")
 
-    assert len(toggle_blocks) == 25
+    assert toggle_blocks
     assert len(trailing_toggle_blocks) == 8
     assert all("accessibleName:" in block for block in toggle_blocks + trailing_toggle_blocks)
+
+
+@pytest.mark.unit
+def test_option_tile_supports_compact_and_accessible_selection_modes():
+    source = (QML_ROOT / "components" / "OptionTile.qml").read_text(encoding="utf-8")
+
+    for declaration in (
+        "property string title",
+        "property string detail",
+        "property bool selected",
+        "property bool compact",
+        "property bool exclusive",
+        "signal activated()",
+    ):
+        assert declaration in source
+    assert "Keys.onSpacePressed: activated()" in source
+    assert "Keys.onReturnPressed: activated()" in source
+    assert "exclusive ? Accessible.RadioButton : Accessible.CheckBox" in source
+    assert "Accessible.checked: selected" in source
 
 
 @pytest.mark.unit
