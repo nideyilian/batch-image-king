@@ -648,40 +648,31 @@ ApplicationWindow {
                 }
 
                 BodyLabel { text: "图层处理"; color: Theme.textMuted }
-                SegmentedControl {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 36
-                    accessibleName: "画布调整方式"
-                    options: [
-                        { label: "比例缩放", value: 0 },
-                        { label: "居中保留", value: 1 },
-                        { label: "左上保留", value: 2 }
-                    ]
-                    value: resizeCanvasDialog.adjustmentMode
-                    onActivated: value => resizeCanvasDialog.adjustmentMode = value
-                }
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 56
-                radius: Theme.radiusSmall
-                color: Theme.bgRaised
-                border.width: 1
-                border.color: Theme.border
                 RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    AppIcon { iconName: AppIcons.info; iconSize: 15; iconColor: Theme.accent }
-                    TinyLabel {
-                        Layout.fillWidth: true
-                        wrapMode: Text.Wrap
-                        color: Theme.textSecondary
-                        text: resizeCanvasDialog.adjustmentMode === 0
-                              ? "按宽高比例同步调整全部图层的位置与尺寸"
-                              : (resizeCanvasDialog.adjustmentMode === 1
-                                 ? "保留图层尺寸，并将每个图层移动到新画布中心"
-                                 : "保留图层尺寸，并将每个图层的左上角对齐画布原点")
+                    id: canvasAdjustmentOptions
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    OptionTile {
+                        title: "比例缩放"
+                        detail: "同步调整图层位置与尺寸"
+                        exclusive: true
+                        selected: resizeCanvasDialog.adjustmentMode === 0
+                        onActivated: resizeCanvasDialog.adjustmentMode = 0
+                    }
+                    OptionTile {
+                        title: "居中保留"
+                        detail: "保持尺寸并移动到画布中心"
+                        exclusive: true
+                        selected: resizeCanvasDialog.adjustmentMode === 1
+                        onActivated: resizeCanvasDialog.adjustmentMode = 1
+                    }
+                    OptionTile {
+                        title: "左上保留"
+                        detail: "保持尺寸并对齐画布左上"
+                        exclusive: true
+                        selected: resizeCanvasDialog.adjustmentMode === 2
+                        onActivated: resizeCanvasDialog.adjustmentMode = 2
                     }
                 }
             }
@@ -804,12 +795,13 @@ ApplicationWindow {
         property string fontFamily: "Microsoft YaHei"
         property string fontFace: ""
         property string alignment: "left"
+        property bool bindingEnabled: true
         property string errorMessage: ""
 
         function openFresh() {
             textLayerNameInput.text = "新文字图层"
             textLayerContentInput.text = "示例文字"
-            textLayerBindingInput.checked = true
+            bindingEnabled = true
             // impeccable-disable-next-line design-system-font: output-content font, not UI typography
             fontFamily = "Microsoft YaHei"
             fontFace = ""
@@ -825,7 +817,7 @@ ApplicationWindow {
             var success = workspace.addConfiguredTextLayer({
                 name: textLayerNameInput.text,
                 content: textLayerContentInput.text,
-                bindingEnabled: textLayerBindingInput.checked,
+                bindingEnabled: textLayerDialog.bindingEnabled,
                 fontFamily: fontFamily,
                 fontFace: fontFace,
                 fontSize: parseInt(textLayerFontSizeInput.text),
@@ -879,13 +871,24 @@ ApplicationWindow {
 
                 BodyLabel { text: "内容模式"; color: Theme.textMuted }
                 RowLayout {
+                    id: textContentModeOptions
                     Layout.fillWidth: true
-                    BodyLabel {
-                        text: textLayerBindingInput.checked ? "按行作为候选文案" : "整段保留真实换行"
-                        color: Theme.textSecondary
-                        Layout.fillWidth: true
+                    spacing: 8
+
+                    OptionTile {
+                        title: "按行随机"
+                        detail: "每一行作为独立候选文案"
+                        exclusive: true
+                        selected: textLayerDialog.bindingEnabled
+                        onActivated: textLayerDialog.bindingEnabled = true
                     }
-                    ToggleSwitch { id: textLayerBindingInput; accessibleName: "按行作为候选文案"; checked: true }
+                    OptionTile {
+                        title: "整段排版"
+                        detail: "保留真实换行和段落结构"
+                        exclusive: true
+                        selected: !textLayerDialog.bindingEnabled
+                        onActivated: textLayerDialog.bindingEnabled = false
+                    }
                 }
             }
 
@@ -987,12 +990,13 @@ ApplicationWindow {
         padding: 0
         closePolicy: Popup.CloseOnEscape
         property string sourceMode: "none"
+        property string shapeType: "rectangle"
         property string trapezoidSlopeSide: "right"
         property string errorMessage: ""
 
         function openFresh() {
             shapedLayerNameInput.text = "异形图层"
-            shapedLayerTypeInput.currentIndex = 0
+            shapeType = "rectangle"
             shapedLayerXInput.text = "0"
             shapedLayerYInput.text = "0"
             shapedLayerWidthInput.text = "200"
@@ -1013,7 +1017,7 @@ ApplicationWindow {
         function createLayer() {
             var success = workspace.addConfiguredShapedLayer({
                 name: shapedLayerNameInput.text,
-                shapeType: shapedLayerTypeInput.currentValue,
+                shapeType: shapedLayerDialog.shapeType,
                 x: parseInt(shapedLayerXInput.text),
                 y: parseInt(shapedLayerYInput.text),
                 width: parseInt(shapedLayerWidthInput.text),
@@ -1078,17 +1082,54 @@ ApplicationWindow {
                         BodyLabel { text: "图层名称"; color: Theme.textMuted; Layout.preferredWidth: 72 }
                         ValueBox { id: shapedLayerNameInput; Layout.fillWidth: true; text: "异形图层" }
 
-                        BodyLabel { text: "形状"; color: Theme.textMuted }
-                        SelectBox {
-                            id: shapedLayerTypeInput
+                        BodyLabel { text: "形状"; color: Theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 8 }
+                        GridLayout {
+                            id: shapedLayerTypeOptions
                             Layout.fillWidth: true
-                            model: [
-                                { label: "矩形", value: "rectangle" },
-                                { label: "直角梯形", value: "right_trapezoid" },
-                                { label: "圆形", value: "circle" },
-                                { label: "正五边形", value: "pentagon" },
-                                { label: "正六边形", value: "hexagon" }
-                            ]
+                            columns: 3
+                            rowSpacing: 6
+                            columnSpacing: 6
+
+                            OptionTile {
+                                compact: true
+                                exclusive: true
+                                title: "矩形"
+                                detail: "标准四边形"
+                                selected: shapedLayerDialog.shapeType === "rectangle"
+                                onActivated: shapedLayerDialog.shapeType = "rectangle"
+                            }
+                            OptionTile {
+                                compact: true
+                                exclusive: true
+                                title: "直角梯形"
+                                detail: "可调上下底与斜边"
+                                selected: shapedLayerDialog.shapeType === "right_trapezoid"
+                                onActivated: shapedLayerDialog.shapeType = "right_trapezoid"
+                            }
+                            OptionTile {
+                                compact: true
+                                exclusive: true
+                                title: "圆形"
+                                detail: "圆形或椭圆"
+                                selected: shapedLayerDialog.shapeType === "circle"
+                                onActivated: shapedLayerDialog.shapeType = "circle"
+                            }
+                            OptionTile {
+                                compact: true
+                                exclusive: true
+                                title: "正五边形"
+                                detail: "可调旋转与圆角"
+                                selected: shapedLayerDialog.shapeType === "pentagon"
+                                onActivated: shapedLayerDialog.shapeType = "pentagon"
+                            }
+                            OptionTile {
+                                compact: true
+                                exclusive: true
+                                title: "正六边形"
+                                detail: "可调旋转与圆角"
+                                selected: shapedLayerDialog.shapeType === "hexagon"
+                                onActivated: shapedLayerDialog.shapeType = "hexagon"
+                            }
                         }
                     }
 
@@ -1159,7 +1200,7 @@ ApplicationWindow {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 8
-                        visible: shapedLayerTypeInput.currentValue === "right_trapezoid"
+                        visible: shapedLayerDialog.shapeType === "right_trapezoid"
                         BodyLabel { text: "梯形参数"; color: Theme.textPrimary; font.weight: Font.DemiBold }
                         RowLayout {
                             Layout.fillWidth: true
@@ -1180,7 +1221,7 @@ ApplicationWindow {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 8
-                        visible: shapedLayerTypeInput.currentValue === "pentagon" || shapedLayerTypeInput.currentValue === "hexagon"
+                        visible: shapedLayerDialog.shapeType === "pentagon" || shapedLayerDialog.shapeType === "hexagon"
                         BodyLabel { text: "多边形参数"; color: Theme.textPrimary; font.weight: Font.DemiBold }
                         RowLayout {
                             Layout.fillWidth: true
@@ -3686,22 +3727,49 @@ ApplicationWindow {
                             Column {
                                 width: parent.width
                                 spacing: 10
-                                RowLayout {
+                                BodyLabel { text: "质量策略"; color: Theme.textSecondary }
+                                GridLayout {
+                                    id: qualityStrategyGrid
                                     width: parent.width
-                                    BodyLabel { text: "质量策略"; Layout.preferredWidth: 74 }
-                                    SelectBox {
-                                        Layout.fillWidth: true
-                                        model: [
-                                            { label: "高质量", value: "quality" },
-                                            { label: "均衡", value: "balanced" },
-                                            { label: "速度优先", value: "speed" },
-                                            { label: "体积优先", value: "size" }
-                                        ]
-                                        currentIndex: window.optionIndex(model, batchExport.qualityProfile)
-                                        onActivated: batchExport.qualityProfile = currentValue
+                                    columns: 2
+                                    rowSpacing: 8
+                                    columnSpacing: 8
+
+                                    OptionTile {
+                                        compact: true
+                                        exclusive: true
+                                        title: "高质量"
+                                        detail: "优先保留图像细节"
+                                        selected: batchExport.qualityProfile === "quality"
+                                        onActivated: batchExport.qualityProfile = "quality"
+                                    }
+                                    OptionTile {
+                                        compact: true
+                                        exclusive: true
+                                        title: "均衡"
+                                        detail: "兼顾质量与处理速度"
+                                        selected: batchExport.qualityProfile === "balanced"
+                                        onActivated: batchExport.qualityProfile = "balanced"
+                                    }
+                                    OptionTile {
+                                        compact: true
+                                        exclusive: true
+                                        title: "速度优先"
+                                        detail: "缩短批量处理时间"
+                                        selected: batchExport.qualityProfile === "speed"
+                                        onActivated: batchExport.qualityProfile = "speed"
+                                    }
+                                    OptionTile {
+                                        compact: true
+                                        exclusive: true
+                                        title: "体积优先"
+                                        detail: "控制输出文件大小"
+                                        selected: batchExport.qualityProfile === "size"
+                                        onActivated: batchExport.qualityProfile = "size"
                                     }
                                 }
                                 RowLayout {
+                                    id: performanceStrategyOptions
                                     width: parent.width
                                     spacing: 8
 

@@ -87,10 +87,13 @@ def test_related_parameter_groups_use_option_tiles_instead_of_switch_rows():
     advanced_start = qml_source.index('title: "高级策略"')
     advanced_end = qml_source.index('label: "保存配置到当前标签页"', advanced_start)
     advanced_block = qml_source[advanced_start:advanced_end]
-    assert advanced_block.count("OptionTile {") == 3
-    assert "selected: batchExport.useHighPerformance" in advanced_block
-    assert "selected: batchExport.preloadEnabled" in advanced_block
-    assert "selected: batchExport.externalWorkerEnabled" in advanced_block
+    performance_start = advanced_block.index("id: performanceStrategyOptions")
+    performance_end = advanced_block.index('BodyLabel { text: "内存保护"', performance_start)
+    performance_block = advanced_block[performance_start:performance_end]
+    assert performance_block.count("OptionTile {") == 3
+    assert "selected: batchExport.useHighPerformance" in performance_block
+    assert "selected: batchExport.preloadEnabled" in performance_block
+    assert "selected: batchExport.externalWorkerEnabled" in performance_block
 
 
 @pytest.mark.integration
