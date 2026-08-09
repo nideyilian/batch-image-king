@@ -2874,6 +2874,16 @@ ApplicationWindow {
                     iconSize: 12
                     iconColor: Theme.textMuted
                     rotation: section.expanded ? 0 : -90
+                    Behavior on rotation {
+                        NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic }
+                    }
+                }
+            }
+
+            function toggleSection() {
+                section.expanded = !section.expanded
+                section.toggled(section.expanded)
+            }
 
             MouseArea {
                 id: sectionMouse
@@ -2888,16 +2898,6 @@ ApplicationWindow {
             Accessible.name: section.title
             Accessible.description: section.detail
             Accessible.role: Accessible.Button
-                    Behavior on rotation {
-                        NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic }
-                    }
-                }
-            }
-
-            function toggleSection() {
-                section.expanded = !section.expanded
-                section.toggled(section.expanded)
-            }
         }
 
         Column {
@@ -2920,6 +2920,82 @@ ApplicationWindow {
 
         Accessible.name: title
         Accessible.role: Accessible.Grouping
+    }
+
+    component ExportStrategyTile: Rectangle {
+        id: strategyTile
+
+        property string title: ""
+        property string detail: ""
+        property bool selected: false
+        signal toggled()
+
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        Layout.preferredHeight: 84
+        radius: Theme.radiusSmall
+        color: selected ? Theme.accentSoft : (strategyMouse.containsMouse ? Theme.bgHover : Theme.bgRaised)
+        border.width: 1
+        border.color: activeFocus
+                      ? Theme.focusRing
+                      : (selected ? Theme.accentPressed : Theme.border)
+        activeFocusOnTab: true
+
+        Behavior on color {
+            ColorAnimation { duration: Theme.motionFast }
+        }
+        Behavior on border.color {
+            ColorAnimation { duration: Theme.motionFast }
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 5
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                BodyLabel {
+                    text: strategyTile.title
+                    color: strategyTile.selected ? Theme.accentHover : Theme.textPrimary
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                }
+                AppIcon {
+                    visible: strategyTile.selected
+                    iconName: AppIcons.check
+                    iconSize: 14
+                    iconColor: Theme.accent
+                }
+            }
+            TinyLabel {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                text: strategyTile.detail
+                color: strategyTile.selected ? Theme.textSecondary : Theme.textMuted
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignTop
+            }
+        }
+
+        MouseArea {
+            id: strategyMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onPressed: strategyTile.forceActiveFocus(Qt.MouseFocusReason)
+            onClicked: strategyTile.toggled()
+        }
+        Keys.onSpacePressed: toggled()
+        Keys.onReturnPressed: toggled()
+        Accessible.name: title
+        Accessible.description: detail
+        Accessible.role: Accessible.CheckBox
+        Accessible.checked: selected
     }
 
     component MenuLabel: Text {
@@ -3404,7 +3480,6 @@ ApplicationWindow {
                                         onClicked: outputFolderDialog.open()
                                     }
                                 }
-
                                 RowLayout {
                                     width: parent.width
                                     BodyLabel { text: "使用当前日期替换路径中的 YYYYMMDD"; Layout.fillWidth: true; color: Theme.textSecondary }
@@ -3415,6 +3490,7 @@ ApplicationWindow {
                                     }
                                 }
                             }
+
                             RowLayout {
                                 width: parent.width
                                 spacing: 12
@@ -3450,12 +3526,12 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                        }
 
                         ExportSettingsSection {
                             title: "文件命名"
                             detail: "让每张图片都能快速定位"
                             iconName: AppIcons.tag
-                        }
 
                             Column {
                                 width: parent.width
@@ -3535,12 +3611,12 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                        }
 
                         ExportSettingsSection {
                             title: "输出格式"
                             detail: "选择格式并控制单文件体积"
                             iconName: AppIcons.fileImage
-                        }
 
                             Column {
                                 width: parent.width
@@ -3601,65 +3677,37 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                        }
 
                         ExportSettingsSection {
                             title: "组合策略"
                             detail: "控制随机、去重和组合遍历规则"
                             iconName: AppIcons.shuffle
-                        }
 
-                        Rectangle {
-                            width: parent.width
-                            height: 48
-                            radius: Theme.radiusSmall
-                            color: Theme.bgRaised
-                            border.width: 1
-                            border.color: Theme.border
                             RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 10
-                                Column {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-                                    BodyLabel { text: "智能采样"; color: Theme.textPrimary }
-                                    TinyLabel { text: "尽量均匀使用图片，避免重复组合" }
-                                }
-                                ToggleSwitch {
-                                    accessibleName: "智能采样"
-                                    checked: batchExport.avoidDuplicates
-                                    onToggled: checkedValue => batchExport.avoidDuplicates = checkedValue
-                                }
-                            }
-                        }
-
-                        Column {
-                            width: parent.width
-                            spacing: 8
-                            Rectangle {
                                 width: parent.width
-                                height: 54
-                                radius: Theme.radiusSmall
-                                color: Theme.bgRaised
-                                border.width: 1
-                                border.color: Theme.border
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 10
-                                    Column {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-                                        BodyLabel { text: "指定图层图片仅使用一次"; color: Theme.textPrimary }
-                                        TinyLabel { text: "导出数量会受所选图层图片数量限制" }
-                                    }
-                                    ToggleSwitch {
-                                        accessibleName: "指定图层图片仅使用一次"
-                                        checked: batchExport.uniqueUseEnabled
-                                        onToggled: checkedValue => batchExport.uniqueUseEnabled = checkedValue
-                                    }
+                                spacing: 8
+
+                                ExportStrategyTile {
+                                    title: "智能采样"
+                                    detail: "均衡使用素材，降低重复"
+                                    selected: batchExport.avoidDuplicates
+                                    onToggled: batchExport.avoidDuplicates = !batchExport.avoidDuplicates
+                                }
+                                ExportStrategyTile {
+                                    title: "单次用图"
+                                    detail: "限制选中图层素材复用"
+                                    selected: batchExport.uniqueUseEnabled
+                                    onToggled: batchExport.uniqueUseEnabled = !batchExport.uniqueUseEnabled
+                                }
+                                ExportStrategyTile {
+                                    title: "遍历组合"
+                                    detail: "按组合顺序逐项生成"
+                                    selected: batchExport.traverseMode
+                                    onToggled: batchExport.traverseMode = !batchExport.traverseMode
                                 }
                             }
+
                             Column {
                                 width: parent.width
                                 spacing: 6
@@ -3686,32 +3734,6 @@ ApplicationWindow {
                             }
                         }
 
-                        Rectangle {
-                            width: parent.width
-                            height: 48
-                            radius: Theme.radiusSmall
-                            color: Theme.bgRaised
-                            border.width: 1
-                            border.color: Theme.border
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 10
-                                Column {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-                        }
-                                    BodyLabel { text: "遍历全部组合"; color: Theme.textPrimary }
-                                    TinyLabel { text: "按可用组合顺序生成，而非随机抽样" }
-                                }
-                                ToggleSwitch {
-                                    accessibleName: "遍历全部组合"
-                                    checked: batchExport.traverseMode
-                                    onToggled: checkedValue => batchExport.traverseMode = checkedValue
-                                }
-                            }
-                        }
-
                         ExportSettingsSection {
                             title: "高级策略"
                             detail: "性能、内存保护和异常终止条件"
@@ -3723,7 +3745,6 @@ ApplicationWindow {
                             Column {
                                 width: parent.width
                                 spacing: 10
-
                                 RowLayout {
                                     width: parent.width
                                     BodyLabel { text: "质量策略"; Layout.preferredWidth: 74 }

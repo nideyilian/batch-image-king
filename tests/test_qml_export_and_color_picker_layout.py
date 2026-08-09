@@ -41,6 +41,21 @@ def test_batch_export_count_and_start_columns_stay_top_aligned():
     assert count_and_start_block.count("Layout.alignment: Qt.AlignTop") == 2
 
 
+@pytest.mark.unit
+def test_batch_export_strategy_choices_use_clickable_three_column_tiles():
+    qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+    strategy_start = qml_source.index('title: "组合策略"')
+    strategy_end = qml_source.index('title: "高级策略"', strategy_start)
+    strategy_block = qml_source[strategy_start:strategy_end]
+
+    assert "component ExportStrategyTile: Rectangle" in qml_source
+    assert strategy_block.count("ExportStrategyTile {") == 3
+    assert strategy_block.count("onToggled: batchExport.") == 3
+    assert "selected: batchExport.avoidDuplicates" in strategy_block
+    assert "selected: batchExport.uniqueUseEnabled" in strategy_block
+    assert "selected: batchExport.traverseMode" in strategy_block
+
+
 @pytest.mark.integration
 def test_qml_color_picker_renders_without_native_white_header(tmp_path: Path):
     screenshot = tmp_path / "qml-color-picker.png"
