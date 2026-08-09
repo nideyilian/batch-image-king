@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo", action="store_true", help="启动内置演示文档")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     parser.add_argument("--show-batch-advanced", action="store_true", help="展示批量导出高级策略")
+    parser.add_argument("--show-color-picker", action="store_true", help="启动后打开 QML 取色器")
     parser.add_argument("--show-multi-tab-export", action="store_true", help="展示多标签批量导出")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
     parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
@@ -410,6 +411,22 @@ def main() -> int:
 
         QTimer.singleShot(80, open_batch_export)
 
+    if args.show_color_picker:
+        def open_color_picker() -> None:
+            dialog = window.findChild(QObject, "effectColorDialog")
+            if dialog is None or not QMetaObject.invokeMethod(
+                dialog,
+                "openFor",
+                Q_ARG("QVariant", "textFill"),
+                Q_ARG("QVariant", "#46D7AD"),
+                Q_ARG("QVariant", 0),
+                Q_ARG("QVariant", 0),
+                Q_ARG("QVariant", 0),
+            ):
+                debug("color picker could not be opened")
+
+        QTimer.singleShot(80, open_color_picker)
+
     if args.show_multi_tab_export:
         def open_multi_tab_export() -> None:
             drawer = window.findChild(QObject, "multiTabExportDrawer")
@@ -508,6 +525,7 @@ def main() -> int:
                 if (
                     args.show_batch_export
                     or args.show_batch_advanced
+                    or args.show_color_picker
                     or args.show_multi_tab_export
                     or args.show_new_canvas
                     or args.show_resize_canvas

@@ -61,8 +61,8 @@ def test_qml_color_picker_has_photoshop_style_controls():
         "id: hueStrip",
         "function setHsv",
         "function setRgb",
-        'BodyLabel { text: "新的"',
-        'BodyLabel { text: "当前"',
+        'text: "新颜色"',
+        'text: "原颜色"',
         'accessibleName: "十六进制颜色"',
     ):
         assert marker in source
