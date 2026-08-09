@@ -3419,7 +3419,9 @@ ApplicationWindow {
                                 width: parent.width
                                 spacing: 12
                                 Column {
-                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 116
+                                    Layout.minimumWidth: 96
+                                    Layout.alignment: Qt.AlignTop
                                     spacing: 8
                                     BodyLabel { text: "生成数量"; color: Theme.textSecondary }
                                     ExportField {
@@ -3437,6 +3439,7 @@ ApplicationWindow {
                                 }
                                 Column {
                                     Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignTop
                                     spacing: 8
                                     BodyLabel { text: "起始序号"; color: Theme.textSecondary }
                                     ExportField {

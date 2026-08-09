@@ -30,6 +30,17 @@ def test_qml_export_sections_and_color_picker_debug_entry_exist():
     assert 'window.findChild(QObject, "effectColorDialog")' in launcher_source
 
 
+@pytest.mark.unit
+def test_batch_export_count_and_start_columns_stay_top_aligned():
+    qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+    start = qml_source.index('BodyLabel { text: "生成数量"')
+    end = qml_source.index('title: "文件命名"', start)
+    count_and_start_block = qml_source[start - 240 : end]
+
+    assert "Layout.preferredWidth: 116" in count_and_start_block
+    assert count_and_start_block.count("Layout.alignment: Qt.AlignTop") == 2
+
+
 @pytest.mark.integration
 def test_qml_color_picker_renders_without_native_white_header(tmp_path: Path):
     screenshot = tmp_path / "qml-color-picker.png"
