@@ -6,6 +6,8 @@ Dialog {
     focus: true
     padding: 0
     closePolicy: Popup.CloseOnEscape
+    header: null
+    footer: null
 
     Overlay.modal: Rectangle { color: Theme.overlayModal }
 

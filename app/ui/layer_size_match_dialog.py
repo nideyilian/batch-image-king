@@ -407,24 +407,13 @@ class LayerSizeMatchDialog(QDialog):
             return
         # 取源图层 surface 并应用自动遮罩
         try:
-            fr = getattr(self.document, "fast_renderer", None) or getattr(self.document, "renderer", None)
-            if fr is None and hasattr(self.document, "_renderer"):
-                fr = self.document._renderer
-            if fr is None:
-                from app.utils.fast_renderer import get_global_fast_renderer
-                try:
-                    fr = get_global_fast_renderer()
-                except Exception:
-                    fr = None
-            if fr is None:
-                QMessageBox.information(self, "提示", "无法访问渲染器，无法生成遮罩副本。")
-                return
-            surface = fr._get_layer_surface_cached(layer, self.document, False)
-            if surface is None:
+            from app.services.render_service import render_layer_with_auto_mask
+
+            relation = self._collect_auto_mask()
+            masked = render_layer_with_auto_mask(self.document, layer, relation)
+            if masked is None:
                 QMessageBox.information(self, "提示", "源图层渲染失败。")
                 return
-            relation = self._collect_auto_mask()
-            masked = fr._apply_auto_mask(surface, relation)
         except Exception as exc:  # pragma: no cover - 防御性
             QMessageBox.warning(self, "错误", f"生成遮罩副本失败: {exc}")
             return

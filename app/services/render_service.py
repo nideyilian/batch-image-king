@@ -140,6 +140,25 @@ def get_render_service() -> RenderService:
     return _render_service
 
 
+def render_layer_with_auto_mask(document: object, layer: object, relation: object):
+    """通过统一渲染边界生成应用自动遮罩后的单图层 surface。"""
+    renderer = (
+        getattr(document, "fast_renderer", None)
+        or getattr(document, "renderer", None)
+        or getattr(document, "_renderer", None)
+    )
+    if renderer is None:
+        from app.utils.fast_renderer import get_global_fast_renderer
+
+        renderer = get_global_fast_renderer()
+    if renderer is None:
+        return None
+    surface = renderer._get_layer_surface_cached(layer, document, False)
+    if surface is None:
+        return None
+    return renderer._apply_auto_mask(surface, relation)
+
+
 def render_document_to_image(
     document: object,
     mode: str = "preview",

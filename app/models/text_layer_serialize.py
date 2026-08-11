@@ -224,6 +224,13 @@ class TextLayerSerializeMixin:
                 return int(item["size"])
         return self._font_size
 
+    def _font_size_for_text_index(self, index):
+        """兼容旧接口：仅在字符命中局部字号区间时返回字号。"""
+        for item in self._font_size_ranges:
+            if item["start"] <= index < item["end"]:
+                return int(item["size"])
+        return None
+
     def set_font_size_range(self, start, end, size):
         """为指定字符区间设置独立字号。返回是否发生变更。"""
         start, end = self._clamp_text_range(start, end)
