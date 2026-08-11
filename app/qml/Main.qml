@@ -4025,43 +4025,6 @@ ApplicationWindow {
                     }
                 }
 
-                Column {
-                    Layout.fillWidth: true
-                    spacing: 6
-                    visible: batchExport.uniqueUseEnabled
-                    TinyLabel { text: "单次用图图层" }
-                    Flow {
-                        width: parent.width
-                        height: childrenRect.height
-                        spacing: 6
-                        Repeater {
-                            model: batchExport.uniqueLayerOptions
-                            delegate: Rectangle {
-                                required property var modelData
-                                width: uniqueLayerLabel.implicitWidth + 42
-                                height: 28
-                                radius: Theme.radiusSmall
-                                color: modelData.selected ? Theme.accentSoft : Theme.bgControl
-                                border.width: 1
-                                border.color: modelData.selected ? Theme.accentPressed : Theme.border
-                                opacity: modelData.eligible ? 1 : 0.38
-                                Row {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-                                    AppIcon { iconName: modelData.selected ? AppIcons.check : AppIcons.circleDot; iconSize: 11; iconColor: modelData.selected ? Theme.accent : Theme.textMuted }
-                                    TinyLabel { id: uniqueLayerLabel; text: modelData.label; color: modelData.selected ? Theme.accent : Theme.textSecondary }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    enabled: parent.modelData.eligible
-                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                    onClicked: batchExport.setUniqueLayerSelected(parent.modelData.index, !parent.modelData.selected)
-                                }
-                            }
-                        }
-                    }
-                }
-
                 Item { Layout.fillHeight: true }
                 RowLayout {
                     Layout.fillWidth: true
@@ -4083,6 +4046,11 @@ ApplicationWindow {
         dim: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
+
+        function showUniqueLayerSelector() {
+            batchExport.uniqueUseEnabled = true
+            uniqueLayerPicker.selectorOpen = true
+        }
 
         Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle {
@@ -4298,9 +4266,11 @@ ApplicationWindow {
                         }
 
                         CompactExportSection {
+                            id: strategySection
                             title: "组合策略"
                             detail: "随机、去重与遍历"
                             iconName: AppIcons.shuffle
+                            z: uniqueLayerPicker.selectorOpen ? 10 : 0
 
                             Rectangle {
                                 id: compactStrategyBar
@@ -4312,6 +4282,7 @@ ApplicationWindow {
                                 border.color: Theme.border
                                 Row {
                                     id: strategyOptionsRow
+                                    objectName: "batchStrategyOptions"
                                     anchors.fill: parent
                                     anchors.margins: 2
                                     spacing: 2
@@ -4366,6 +4337,198 @@ ApplicationWindow {
                                             Accessible.name: modelData.label
                                             Accessible.role: Accessible.CheckBox
                                             Accessible.checked: strategyOptionsRow.optionSelected(modelData.value)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                id: uniqueLayerPicker
+                                objectName: "uniqueLayerPicker"
+                                width: parent.width
+                                height: 32
+                                enabled: batchExport.uniqueUseEnabled
+                                opacity: enabled ? 1 : 0.46
+                                radius: Theme.radiusSmall
+                                color: selectorOpen || uniqueLayerMouse.containsMouse
+                                       ? Theme.bgHover : Theme.bgControl
+                                border.width: 1
+                                border.color: selectorOpen || activeFocus
+                                              ? Theme.focusRing
+                                              : (selectedLayerCount > 0 ? Theme.accentPressed : Theme.borderStrong)
+                                activeFocusOnTab: enabled && eligibleLayerCount > 0
+                                property bool selectorOpen: false
+                                readonly property bool openMenuAbove: window.height < 840
+
+                                readonly property int eligibleLayerCount: {
+                                    var count = 0
+                                    var options = batchExport.uniqueLayerOptions
+                                    for (var index = 0; index < options.length; index++) {
+                                        if (options[index].eligible) count++
+                                    }
+                                    return count
+                                }
+                                readonly property int selectedLayerCount: {
+                                    var count = 0
+                                    var options = batchExport.uniqueLayerOptions
+                                    for (var index = 0; index < options.length; index++) {
+                                        if (options[index].eligible && options[index].selected) count++
+                                    }
+                                    return count
+                                }
+
+                                function toggleSelector() {
+                                    if (eligibleLayerCount <= 0) return
+                                    selectorOpen = !selectorOpen
+                                }
+
+                                onEnabledChanged: if (!enabled) selectorOpen = false
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 9
+                                    anchors.rightMargin: 9
+                                    spacing: 8
+                                    BodyLabel {
+                                        text: "限制图层"
+                                        color: Theme.textSecondary
+                                        font.pixelSize: 11
+                                    }
+                                    TinyLabel {
+                                        Layout.fillWidth: true
+                                        text: !batchExport.uniqueUseEnabled
+                                              ? "启用单次用图后选择"
+                                              : (uniqueLayerPicker.eligibleLayerCount <= 0
+                                              ? "没有可用的图片图层"
+                                              : (uniqueLayerPicker.selectedLayerCount > 0
+                                                 ? "已选 " + uniqueLayerPicker.selectedLayerCount
+                                                   + " / " + uniqueLayerPicker.eligibleLayerCount
+                                                 : "请选择图片图层"))
+                                        color: uniqueLayerPicker.eligibleLayerCount > 0
+                                               && uniqueLayerPicker.selectedLayerCount === 0
+                                               ? Theme.coral : Theme.textMuted
+                                        elide: Text.ElideRight
+                                    }
+                                    AppIcon {
+                                        iconName: AppIcons.selectIndicator
+                                        iconSize: 12
+                                        iconColor: batchExport.uniqueUseEnabled
+                                                   && uniqueLayerPicker.eligibleLayerCount > 0
+                                                   ? Theme.textMuted : Theme.textDisabled
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: uniqueLayerMouse
+                                    anchors.fill: parent
+                                    enabled: batchExport.uniqueUseEnabled
+                                             && uniqueLayerPicker.eligibleLayerCount > 0
+                                    hoverEnabled: true
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onPressed: uniqueLayerPicker.forceActiveFocus(Qt.MouseFocusReason)
+                                    onClicked: uniqueLayerPicker.toggleSelector()
+                                }
+                                Keys.onSpacePressed: toggleSelector()
+                                Keys.onReturnPressed: toggleSelector()
+                                Keys.onEscapePressed: selectorOpen = false
+                                Accessible.name: "单次用图限制图层"
+                                Accessible.description: eligibleLayerCount <= 0
+                                                        ? "没有可用的图片图层"
+                                                        : "已选择 " + selectedLayerCount + " 个，共 " + eligibleLayerCount + " 个可用图层"
+                                Accessible.role: Accessible.Button
+
+                                Rectangle {
+                                    id: uniqueLayerMenu
+                                    objectName: "uniqueLayerMenu"
+                                    x: 0
+                                    y: uniqueLayerPicker.openMenuAbove
+                                       ? -height - 4
+                                       : uniqueLayerPicker.height + 4
+                                    width: uniqueLayerPicker.width
+                                    height: Math.min(180, Math.max(70, batchExport.uniqueLayerOptions.length * 32 + 38))
+                                    visible: uniqueLayerPicker.selectorOpen
+                                    z: 100
+                                    radius: Theme.radius
+                                    color: Theme.bgRaised
+                                    border.width: 1
+                                    border.color: Theme.borderStrong
+
+                                    ListView {
+                                        id: uniqueLayerList
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        anchors.bottom: uniqueLayerMenuFooter.top
+                                        anchors.margins: 4
+                                        clip: true
+                                        model: uniqueLayerMenu.visible ? batchExport.uniqueLayerOptions : []
+                                        boundsBehavior: Flickable.StopAtBounds
+
+                                        delegate: ItemDelegate {
+                                            id: uniqueLayerOption
+                                            required property var modelData
+                                            required property int index
+                                            width: uniqueLayerList.width
+                                            height: 32
+                                            enabled: modelData.eligible
+                                            highlighted: hovered
+                                            onClicked: batchExport.setUniqueLayerSelected(modelData.index, !modelData.selected)
+
+                                            contentItem: RowLayout {
+                                                spacing: 8
+                                                AppIcon {
+                                                    iconName: uniqueLayerOption.modelData.selected
+                                                              ? AppIcons.check : AppIcons.circleDot
+                                                    iconSize: 13
+                                                    iconColor: uniqueLayerOption.modelData.selected
+                                                               ? Theme.accent : Theme.textMuted
+                                                }
+                                                BodyLabel {
+                                                    Layout.fillWidth: true
+                                                    text: uniqueLayerOption.modelData.label
+                                                    color: uniqueLayerOption.modelData.eligible
+                                                           ? Theme.textPrimary : Theme.textDisabled
+                                                    elide: Text.ElideRight
+                                                }
+                                                TinyLabel {
+                                                    visible: !uniqueLayerOption.modelData.eligible
+                                                    text: "非图片图层"
+                                                    color: Theme.textDisabled
+                                                }
+                                            }
+                                            background: Rectangle {
+                                                radius: Theme.radiusSmall
+                                                color: uniqueLayerOption.modelData.selected
+                                                       ? Theme.accentSoft
+                                                       : (uniqueLayerOption.highlighted ? Theme.bgHover : "transparent")
+                                            }
+                                            Accessible.name: modelData.label
+                                            Accessible.role: Accessible.CheckBox
+                                            Accessible.checked: modelData.selected
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: uniqueLayerMenuFooter
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        anchors.margins: 4
+                                        height: 30
+                                        radius: Theme.radiusSmall
+                                        color: uniqueLayerDoneMouse.containsMouse ? Theme.bgHover : "transparent"
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: 6
+                                            AppIcon { iconName: AppIcons.check; iconSize: 12; iconColor: Theme.accent }
+                                            BodyLabel { text: "完成"; color: Theme.textPrimary; font.pixelSize: 11 }
+                                        }
+                                        MouseArea {
+                                            id: uniqueLayerDoneMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: uniqueLayerPicker.selectorOpen = false
                                         }
                                     }
                                 }

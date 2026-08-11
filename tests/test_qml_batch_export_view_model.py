@@ -55,6 +55,17 @@ def test_batch_export_rejects_invalid_parameters(tmp_path: Path):
 
 
 @pytest.mark.unit
+def test_batch_export_requires_selected_layer_for_unique_use(tmp_path: Path):
+    workspace = _workspace()
+    view_model = BatchExportViewModel(workspace=workspace)
+    view_model.outputDirectory = str(tmp_path)
+    view_model.uniqueUseEnabled = True
+
+    assert view_model.startExport() is False
+    assert "至少选择一个可用的图片图层" in view_model.errorMessage
+
+
+@pytest.mark.unit
 def test_batch_export_tracks_progress_and_success(qapp, tmp_path: Path):
     workspace = _workspace()
 

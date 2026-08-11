@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo", action="store_true", help="启动内置演示文档")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     parser.add_argument("--show-batch-advanced", action="store_true", help="展示批量导出高级策略")
+    parser.add_argument("--show-batch-unique", action="store_true", help="展示单次用图的图层参数")
     parser.add_argument("--show-color-picker", action="store_true", help="启动后打开 QML 取色器")
     parser.add_argument("--show-multi-tab-export", action="store_true", help="展示多标签批量导出")
     parser.add_argument("--show-effects", action="store_true", help="启动后打开图层效果面板")
@@ -165,6 +166,7 @@ def main() -> int:
         or args.duplicate_selected
         or args.show_batch_export
         or args.show_batch_advanced
+        or args.show_batch_unique
         or args.show_multi_tab_export
         or args.show_effects
         or args.show_close_confirm
@@ -401,7 +403,7 @@ def main() -> int:
 
         QTimer.singleShot(120, reveal_text_effects)
 
-    if args.show_batch_export or args.show_batch_advanced:
+    if args.show_batch_export or args.show_batch_advanced or args.show_batch_unique:
         def open_batch_export() -> None:
             drawer = window.findChild(QObject, "batchExportDrawer")
             if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
@@ -411,6 +413,12 @@ def main() -> int:
                 advanced_dialog = window.findChild(QObject, "batchExportAdvancedDialog")
                 if advanced_dialog is None or not QMetaObject.invokeMethod(advanced_dialog, "open"):
                     debug("batch export advanced dialog could not be opened")
+            elif args.show_batch_unique:
+                def open_unique_layer_selector() -> None:
+                    if not QMetaObject.invokeMethod(drawer, "showUniqueLayerSelector"):
+                        debug("batch export unique layer selector could not be opened")
+
+                QTimer.singleShot(260, open_unique_layer_selector)
 
         QTimer.singleShot(80, open_batch_export)
 
@@ -528,6 +536,7 @@ def main() -> int:
                 if (
                     args.show_batch_export
                     or args.show_batch_advanced
+                    or args.show_batch_unique
                     or args.show_color_picker
                     or args.show_multi_tab_export
                     or args.show_new_canvas

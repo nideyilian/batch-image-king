@@ -924,6 +924,15 @@ class BatchExportViewModel(QObject):
         if not self._output_directory:
             self._set_error("请选择输出目录")
             return False
+        if self._unique_use_enabled:
+            has_selected_unique_layer = any(
+                0 <= index < len(self._document.layers)
+                and self._is_unique_use_eligible_layer(self._document.layers[index])
+                for index in self._selected_unique_layers
+            )
+            if not has_selected_unique_layer:
+                self._set_error("单次用图至少选择一个可用的图片图层")
+                return False
         self._refresh_traverse_count()
         if self._traverse_mode and self._traverse_error:
             self._set_error(f"无法计算组合数量：{self._traverse_error}")

@@ -51,6 +51,24 @@ def test_batch_export_drawer_keeps_only_primary_parameters():
 
 
 @pytest.mark.unit
+def test_unique_use_exposes_layer_parameters_in_main_drawer():
+    qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+    drawer_block = _batch_drawer_block(qml_source)
+    advanced_start = qml_source.index('objectName: "batchExportAdvancedDialog"')
+    advanced_end = qml_source.index('objectName: "batchExportDrawer"', advanced_start)
+    advanced_block = qml_source[advanced_start:advanced_end]
+
+    assert 'id: uniqueLayerPicker' in drawer_block
+    assert 'enabled: batchExport.uniqueUseEnabled' in drawer_block
+    assert 'text: !batchExport.uniqueUseEnabled' in drawer_block
+    assert 'text: "限制图层"' in drawer_block
+    assert 'objectName: "uniqueLayerMenu"' in drawer_block
+    assert 'model: uniqueLayerMenu.visible ? batchExport.uniqueLayerOptions : []' in drawer_block
+    assert 'onClicked: batchExport.setUniqueLayerSelected(modelData.index, !modelData.selected)' in drawer_block
+    assert 'batchExport.uniqueLayerOptions' not in advanced_block
+
+
+@pytest.mark.unit
 def test_batch_export_advanced_settings_remain_available_in_dialog():
     qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     start = qml_source.index('objectName: "batchExportAdvancedDialog"')
@@ -68,7 +86,6 @@ def test_batch_export_advanced_settings_remain_available_in_dialog():
         "batchExport.maxConsecutiveFailures",
         "batchExport.failureRateLimit",
         "batchExport.stallTimeoutSeconds",
-        "batchExport.uniqueLayerOptions",
     ):
         assert binding in advanced_block
 
@@ -108,3 +125,23 @@ def test_compact_batch_export_drawer_renders_at_target_sizes(tmp_path: Path, wid
         drawer_crop = image.crop((width - 480, 0, width, height)).convert("RGB")
         assert drawer_crop.getbbox() is not None
         assert len(drawer_crop.getcolors(maxcolors=1_000_000) or []) > 20
+
+
+@pytest.mark.integration
+def test_unique_use_layer_can_be_selected_with_mouse():
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    env["QT_QUICK_BACKEND"] = "software"
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "tests/helpers/qml_batch_unique_interaction_probe.py")],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "single-use image layer selected through the compact drawer" in result.stdout
