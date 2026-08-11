@@ -204,7 +204,9 @@ def test_new_canvas_dialog_offers_editable_quick_presets():
 def test_canvas_quick_actions_and_image_drop_contract():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
 
-    assert 'iconName: AppIcons.fileNew; tooltip: "新建画布 · Ctrl+N"' in main_source
+    assert "iconName: AppIcons.fileNew" not in main_source
+    assert 'tooltip: "新建文档"' in main_source
+    assert 'label: "新建画布"' in main_source
     assert 'tooltip: "添加素材文件夹"' not in main_source
     assert "DropArea {" in main_source
     assert "drag.hasUrls && window.hasSupportedImageUrl(drag.urls)" in main_source

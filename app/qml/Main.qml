@@ -4637,7 +4637,6 @@ ApplicationWindow {
                         }
                     }
 
-                IconButton { iconName: AppIcons.panelRight; tooltip: "展开高级图层属性"; buttonSize: 28; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                 }
             }
 
@@ -4656,8 +4655,13 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
-                IconButton { iconName: AppIcons.fileNew; tooltip: "新建画布 · Ctrl+N"; enabled: !workspace.operationsBlocked; onClicked: window.openNewCanvasDialog() }
-                IconButton { iconName: AppIcons.folderOpen; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: openDialog.open() }
+                IconButton {
+                    iconName: AppIcons.folderOpen
+                    tooltip: "打开项目"
+                    visible: window.hasOpenDocument
+                    enabled: !workspace.operationsBlocked
+                    onClicked: openDialog.open()
+                }
                 IconButton {
                     iconName: AppIcons.save
                     tooltip: "保存"
@@ -4870,6 +4874,7 @@ ApplicationWindow {
                     tooltip: "新建文档"
                     buttonSize: 36
                     Layout.preferredWidth: 40
+                    visible: window.hasOpenDocument
                     onClicked: window.openNewCanvasDialog()
                 }
             }
@@ -4899,8 +4904,6 @@ ApplicationWindow {
 
                     ToolRailButton { toolIndex: 0; iconName: AppIcons.pointer; label: "选择工具 (V)"; enabled: window.hasOpenDocument }
                     ToolRailButton { toolIndex: 1; iconName: AppIcons.hand; label: "抓手工具 (H)"; enabled: window.hasOpenDocument }
-                    ToolRailButton { toolIndex: 2; iconName: AppIcons.type; label: "文字工具 (T)"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
-                    ToolRailButton { toolIndex: 3; iconName: AppIcons.shapes; label: "形状工具 (U)"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
                 }
 
                 Column {
@@ -4944,7 +4947,6 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                             Layout.fillWidth: true
                         }
-                        IconButton { iconName: AppIcons.add; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -5134,7 +5136,6 @@ ApplicationWindow {
                         Row {
                             anchors.centerIn: parent
                             spacing: 5
-                            IconButton { iconName: AppIcons.add; tooltip: "新建空图片图层"; buttonSize: 28; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: workspace.addEmptyImageLayer() }
                             IconButton {
                                 iconName: AppIcons.copy
                                 tooltip: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
@@ -6714,7 +6715,6 @@ ApplicationWindow {
                             TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
 
-                        IconButton { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; iconName: AppIcons.sliders; tooltip: "打开更多参数"; buttonSize: 28; enabled: workspace.selectedLayerIndex >= 0; onClicked: window.revealAdvancedProperties() }
                     }
 
                     Divider { Layout.fillWidth: true }
@@ -7488,23 +7488,6 @@ ApplicationWindow {
                                         checked: workspace.selectedGroupExpanded
                                         enabled: !workspace.operationsBlocked
                                         onToggled: workspace.toggleLayerGroupExpanded(workspace.selectedLayerIndex)
-                                    }
-                                }
-                                InspectorRow {
-                                    label: "组状态"
-                                    IconButton {
-                                        iconName: workspace.selectedLocked ? AppIcons.lock : AppIcons.unlock
-                                        tooltip: workspace.selectedLocked ? "解锁图层组" : "锁定图层组"
-                                        buttonSize: 30
-                                        active: workspace.selectedLocked
-                                        onClicked: workspace.setSelectedLayersLocked(!workspace.selectedLocked)
-                                    }
-                                    IconButton {
-                                        iconName: AppIcons.ungroup
-                                        tooltip: "解散图层组"
-                                        buttonSize: 30
-                                        enabled: workspace.canUngroupSelectedLayers && !workspace.selectedLocked
-                                        onClicked: workspace.ungroupSelectedGroups()
                                     }
                                 }
                             }
