@@ -96,6 +96,38 @@ def test_vector_corner_and_advanced_stroke_properties_are_editable_inline():
 
 
 @pytest.mark.unit
+def test_corner_mode_noop_switch_notifies_qml_and_failed_change_is_atomic():
+    workspace = _workspace()
+    layer = workspace.document.layers[0]
+    observed_modes = []
+    workspace.selectionChanged.connect(
+        lambda: observed_modes.append(workspace.selectedCornerMode)
+    )
+
+    # 全 0 圆角不会产生图层属性差异，但编辑模式仍应通知 QML 更新。
+    assert workspace.setSelectedVectorCornerRadiusAll(0) is True
+    assert workspace.selectedCornerMode == "independent"
+    assert observed_modes[-1:] == ["independent"]
+
+    observed_modes.clear()
+    assert workspace.setSelectedCornerMode("uniform") is True
+    assert workspace.selectedCornerMode == "uniform"
+    assert observed_modes == ["uniform"]
+
+    # 底层属性更新失败时，不能留下已经切换的临时编辑模式。
+    assert workspace.setSelectedCornerMode("independent") is True
+    layer.locked = True
+    assert workspace.setSelectedCornerMode("uniform") is False
+    assert workspace.selectedCornerMode == "independent"
+
+    layer.locked = False
+    assert workspace.setSelectedCornerMode("uniform") is True
+    layer.locked = True
+    assert workspace.setSelectedVectorCornerRadiusAll(8) is False
+    assert workspace.selectedCornerMode == "uniform"
+
+
+@pytest.mark.unit
 def test_transparent_bounds_trim_remains_compatible_with_legacy_field():
     workspace = _workspace()
     layer = workspace.document.layers[0]

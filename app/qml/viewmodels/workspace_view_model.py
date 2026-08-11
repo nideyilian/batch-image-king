@@ -4573,6 +4573,32 @@ class WorkspaceViewModel(QObject):
         value = max(0, min(1000, int(value)))
         return self.setSelectedVectorCornerRadii(value, value, value, value)
 
+    def _set_corner_attrs(self, mode: str, changes: dict, action: str) -> bool:
+        """原子更新圆角属性和仅供界面使用的编辑模式。"""
+        layer = self._selected_layer()
+        mode_key = id(layer)
+        previous_mode = self.selectedCornerMode
+        had_override = mode_key in self._corner_edit_modes
+        previous_override = self._corner_edit_modes.get(mode_key)
+        has_layer_changes = any(
+            getattr(layer, attr, None) != value for attr, value in changes.items()
+        )
+
+        # 属性变更会同步发出 selectionChanged，因此先设置模式，确保绑定读取新值。
+        self._corner_edit_modes[mode_key] = mode
+        changed = self._set_layer_attrs(self.selectedLayerIndex, changes, action)
+        if not changed:
+            if had_override:
+                self._corner_edit_modes[mode_key] = previous_override
+            else:
+                self._corner_edit_modes.pop(mode_key, None)
+            return False
+
+        # no-op 属性更新不会发通知，但模式本身仍可能已经改变。
+        if previous_mode != mode and not has_layer_changes:
+            self.selectionChanged.emit()
+        return True
+
     @Slot(str, result=bool)
     def setSelectedCornerMode(self, mode: str) -> bool:
         if not self.selectedSupportsCornerRadius:
@@ -4588,8 +4614,9 @@ class WorkspaceViewModel(QObject):
                 max(0, int(getattr(layer, "corner_radius", 0))),
                 *self.selectedVectorCornerRadii,
             )
-            self._corner_edit_modes[id(layer)] = "uniform"
             return self.setSelectedCornerRadius(value)
+        if self.selectedCornerMode == "independent":
+            return True
         self._corner_edit_modes[id(layer)] = "independent"
         self.selectionChanged.emit()
         return True
@@ -4612,8 +4639,7 @@ class WorkspaceViewModel(QObject):
             "vector_corner_radius_bl": values[3],
             "corner_radius": max(values),
         }
-        self._corner_edit_modes[id(self._selected_layer())] = "independent"
-        return self._set_layer_attrs(self.selectedLayerIndex, changes, "修改矢量四角圆角")
+        return self._set_corner_attrs("independent", changes, "修改矢量四角圆角")
 
     @Slot(bool, result=bool)
     def setSelectedFlipHorizontal(self, enabled: bool) -> bool:
@@ -5226,8 +5252,6 @@ class WorkspaceViewModel(QObject):
             self._set_status("当前图层不支持圆角", toast=True)
             return False
         value = max(0, min(self.selectedCornerRadiusMax, int(value)))
-        layer = self._selected_layer()
-        self._corner_edit_modes[id(layer)] = "uniform"
         changes = {
             "corner_radius": value,
             "vector_corner_radius_tl": 0,
@@ -5235,7 +5259,7 @@ class WorkspaceViewModel(QObject):
             "vector_corner_radius_br": 0,
             "vector_corner_radius_bl": 0,
         }
-        return self._set_layer_attrs(self.selectedLayerIndex, changes, "修改统一圆角")
+        return self._set_corner_attrs("uniform", changes, "修改统一圆角")
 
     @Slot(str, result=bool)
     def setSelectedOverlayMode(self, mode: str) -> bool:
