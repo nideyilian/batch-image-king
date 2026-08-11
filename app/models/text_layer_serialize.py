@@ -254,6 +254,23 @@ class TextLayerSerializeMixin:
         self.changed.emit()
         return True
 
+    def replace_text_style_ranges(self, color_ranges, font_size_ranges):
+        """一次性替换编辑器提交的局部颜色与字号区间。"""
+        next_colors = self._merge_text_color_ranges(color_ranges or [])
+        next_sizes = self._merge_font_size_ranges(font_size_ranges or [])
+        colors_changed = next_colors != self._text_color_ranges
+        sizes_changed = next_sizes != self._font_size_ranges
+        if not colors_changed and not sizes_changed:
+            return False
+
+        self._text_color_ranges = next_colors
+        self._font_size_ranges = next_sizes
+        self._cached_image = None
+        if sizes_changed:
+            self._update_text_box_size_if_needed()
+        self.changed.emit()
+        return True
+
     def get_text_lines(self) -> List[str]:
         """获取文字行列表"""
         return self._text_lines.copy()

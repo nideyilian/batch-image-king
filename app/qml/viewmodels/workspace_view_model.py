@@ -21,6 +21,12 @@ from app.models.shaped_layer_new import ShapedLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.layer_list_model import LayerListModel
 from app.utils.preview_render_token import PreviewRenderTokenSource
+from app.utils.text_rich_format import (
+    apply_editor_style,
+    build_editor_html,
+    inspect_editor_selection,
+    parse_editor_html,
+)
 from app.utils.layer_tree import (
     child_indices_for_group,
     expand_group_indices,
@@ -299,6 +305,7 @@ class WorkspaceViewModel(QObject):
         self._font_catalog_loading = False
         self._text_edit_overlay_visible = False
         self._text_edit_layer_index = -1
+        self._text_edit_draft_html = None
         self._layer_style_clipboard = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
@@ -1422,6 +1429,38 @@ class WorkspaceViewModel(QObject):
         if not self.selectedIsTextLayer:
             return ""
         return str(getattr(self._selected_layer(), "text_content", "") or "")
+
+    def _text_editor_html_for_layer(self, layer) -> str:
+        if layer is None:
+            return ""
+        binding_enabled = bool(getattr(layer, "text_binding_enabled", False))
+        text = str(getattr(layer, "text_content", "") or "")
+        return build_editor_html(
+            text,
+            font_family=str(getattr(layer, "font_family", "sans-serif") or "sans-serif"),
+            font_size=max(1, int(getattr(layer, "font_size", 24) or 24)),
+            text_color=getattr(layer, "text_color", (0, 0, 0, 255)),
+            font_weight=int(
+                getattr(self, "selectedTextFontWeight", 700 if self.selectedTextBold else 400)
+            ),
+            italic=self.selectedTextItalic,
+            letter_spacing=int(getattr(layer, "letter_spacing", 0) or 0),
+            line_spacing=float(getattr(layer, "line_spacing", 1.0) or 1.0),
+            color_ranges=[] if binding_enabled else layer.get_text_color_ranges(),
+            font_size_ranges=[] if binding_enabled else layer.get_font_size_ranges(),
+        )
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextEditorHtml(self) -> str:
+        if not self.selectedIsTextLayer:
+            return ""
+        if (
+            self._text_edit_overlay_visible
+            and self._text_edit_layer_index == self.selectedLayerIndex
+            and self._text_edit_draft_html is not None
+        ):
+            return self._text_edit_draft_html
+        return self._text_editor_html_for_layer(self._selected_layer())
 
     @Property(bool, notify=selectionChanged)
     def selectedTextBindingEnabled(self) -> bool:
@@ -4163,51 +4202,170 @@ class WorkspaceViewModel(QObject):
 
     @Slot(result=bool)
     def startTextEditOverlay(self) -> bool:
-        """在画布上进入文字直接编辑状态（供 QML 双击文字图层后调用）。"""
-        if self.cropEditing or self._export_running:
-            return False
-        if not self.selectedIsTextLayer:
+        """在画布上进入文字直接编辑状态。"""
+        if self.cropEditing or self._export_running or not self.selectedIsTextLayer:
             return False
         layer = self._selected_layer()
         if is_effectively_locked(layer, self._document.layers):
             self._set_status("图层已锁定，无法编辑文字", toast=True)
             return False
         self._text_edit_layer_index = self.selectedLayerIndex
+        self._text_edit_draft_html = self._text_editor_html_for_layer(layer)
         self._text_edit_overlay_visible = True
         self.textEditingChanged.emit()
         self.requestPreview(force=True)
         return True
 
     def _dismiss_text_edit_overlay(self, primary_index: int = -1):
-        """选中图层发生变化时关闭画布文字编辑覆盖层（保留已编辑内容不保存）。"""
+        """切换图层时提交当前草稿并关闭画布文字编辑覆盖层。"""
         if not self._text_edit_overlay_visible:
             return
         if primary_index >= 0 and primary_index == self._text_edit_layer_index:
             return
+        index = self._text_edit_layer_index
+        draft_html = self._text_edit_draft_html
         self._text_edit_overlay_visible = False
         self._text_edit_layer_index = -1
+        self._text_edit_draft_html = None
         self.textEditingChanged.emit()
-        self.requestPreview(force=True)
+        if index >= 0 and draft_html:
+            self._commit_text_edit_html(index, draft_html, "文字编辑已保存")
+        else:
+            self.requestPreview(force=True)
+
+    def _selected_text_editor_style(self):
+        layer = self._selected_layer()
+        if layer is None or not self.selectedIsTextLayer:
+            return None
+        return (
+            max(1, int(getattr(layer, "font_size", 24) or 24)),
+            getattr(layer, "text_color", (0, 0, 0, 255)),
+        )
+
+    @Slot(str, result=bool)
+    def stageTextEditOverlayDraft(self, html: str) -> bool:
+        if not self._text_edit_overlay_visible or self._text_edit_layer_index < 0:
+            return False
+        self._text_edit_draft_html = str(html or "")
+        return True
+
+    @Slot(str, int, int, result="QVariantMap")
+    def inspectTextEditorSelection(self, html: str, start: int, end: int):
+        style = self._selected_text_editor_style()
+        if style is None:
+            return {
+                "characterCount": 0,
+                "fontSize": 0,
+                "mixedFontSize": False,
+                "color": "#000000",
+                "mixedColor": False,
+            }
+        return inspect_editor_selection(
+            html,
+            int(start),
+            int(end),
+            base_font_size=style[0],
+            base_text_color=style[1],
+        )
+
+    @Slot(str, int, int, int, result=str)
+    def applyTextEditorFontSize(self, html: str, start: int, end: int, size: int) -> str:
+        size = max(1, min(1000, int(size)))
+        return apply_editor_style(html, int(start), int(end), font_size=size)
+
+    @Slot(str, int, int, str, result=str)
+    def applyTextEditorColor(self, html: str, start: int, end: int, value: str) -> str:
+        color = self._parse_hex_color(value)
+        if color is None:
+            self._set_status("局部文字颜色格式无效", toast=True)
+            return str(html or "")
+        return apply_editor_style(html, int(start), int(end), color=color)
+
+    @Slot(str, int, int, result=str)
+    def clearTextEditorStyle(self, html: str, start: int, end: int) -> str:
+        style = self._selected_text_editor_style()
+        if style is None:
+            return str(html or "")
+        return apply_editor_style(
+            html,
+            int(start),
+            int(end),
+            font_size=style[0],
+            color=style[1],
+        )
+
+    def _commit_text_edit_html(self, index: int, html: str, status: str) -> bool:
+        layer = self._layer_model.layer_at(int(index))
+        if layer is None or self._layer_model.layer_type_name(layer) != "文字":
+            return False
+        state = parse_editor_html(
+            html,
+            base_font_size=max(1, int(getattr(layer, "font_size", 24) or 24)),
+            base_text_color=getattr(layer, "text_color", (0, 0, 0, 255)),
+        )
+        lines = layer.parse_text_input_to_lines(state.text)
+        current_text = lines[0] if lines else ""
+        color_ranges = [] if layer.text_binding_enabled else state.color_ranges
+        font_size_ranges = [] if layer.text_binding_enabled else state.font_size_ranges
+        unchanged = (
+            layer.get_text_lines() == lines
+            and str(getattr(layer, "current_text", "") or "") == current_text
+            and layer.get_text_color_ranges() == color_ranges
+            and layer.get_font_size_ranges() == font_size_ranges
+        )
+        if unchanged:
+            self.requestPreview(force=True)
+            return True
+
+        def apply(selected) -> None:
+            selected.set_text_lines(lines)
+            selected.set_current_text(current_text, force=True)
+            selected.replace_text_style_ranges(color_ranges, font_size_ranges)
+
+        return self._change_text_layer(
+            int(index),
+            "编辑文字",
+            apply,
+            status,
+        )
+
+    @Slot(str, result=bool)
+    def commitTextEditOverlayRichText(self, html: str) -> bool:
+        index = self._text_edit_layer_index
+        was_visible = self._text_edit_overlay_visible
+        self._text_edit_overlay_visible = False
+        self._text_edit_layer_index = -1
+        self._text_edit_draft_html = None
+        if was_visible:
+            self.textEditingChanged.emit()
+        if index < 0 or index != self.selectedLayerIndex:
+            self.requestPreview(force=True)
+            return False
+        return self._commit_text_edit_html(index, str(html or ""), "文字编辑已完成")
 
     @Slot(str, result=bool)
     def commitTextEditOverlay(self, value: str) -> bool:
-        """提交画布文字编辑内容并退出编辑状态。"""
-        index = self.selectedLayerIndex
+        """提交画布纯文字编辑内容并退出编辑状态。"""
+        index = self._text_edit_layer_index
         was_visible = self._text_edit_overlay_visible
         self._text_edit_overlay_visible = False
+        self._text_edit_layer_index = -1
+        self._text_edit_draft_html = None
         if was_visible:
             self.textEditingChanged.emit()
-        if index < 0:
+        if index < 0 or index != self.selectedLayerIndex:
             self.requestPreview(force=True)
             return False
         return self.setTextContentForLayer(index, value)
 
     @Slot(result=bool)
     def cancelTextEditOverlay(self) -> bool:
-        """取消画布文字编辑，不保存内容。"""
+        """取消画布文字编辑，不保存草稿。"""
         if not self._text_edit_overlay_visible:
             return False
         self._text_edit_overlay_visible = False
+        self._text_edit_layer_index = -1
+        self._text_edit_draft_html = None
         self.textEditingChanged.emit()
         self.requestPreview(force=True)
         return True

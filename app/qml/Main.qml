@@ -2382,6 +2382,7 @@ ApplicationWindow {
         property int colorIndex: 0
         property int rangeStart: 0
         property int rangeEnd: 0
+        property string editorHtml: ""
         property string errorMessage: ""
         property color currentColor: "#000000"
         property real hue: 0
@@ -2398,6 +2399,7 @@ ApplicationWindow {
             if (target === "textShadow") return "选择文字阴影颜色"
             if (target === "textGlow") return "选择文字发光颜色"
             if (target === "textRange") return "选择选区文字颜色"
+            if (target === "canvasTextRange") return "选择选区文字颜色"
             return "选择渐变颜色"
         }
 
@@ -2406,7 +2408,20 @@ ApplicationWindow {
             colorIndex = index === undefined ? 0 : index
             rangeStart = start === undefined ? 0 : start
             rangeEnd = end === undefined ? 0 : end
+            editorHtml = ""
             currentColor = window.hexToColor(colorValue || "#000000")
+            setFromColor(currentColor)
+            errorMessage = ""
+            open()
+        }
+
+        function openForTextEditor(colorValue, start, end, html) {
+            target = "canvasTextRange"
+            colorIndex = 0
+            rangeStart = start
+            rangeEnd = end
+            editorHtml = html
+            currentColor = window.hexToColor(colorValue || workspace.selectedTextColor)
             setFromColor(currentColor)
             errorMessage = ""
             open()
@@ -2467,12 +2482,6 @@ ApplicationWindow {
             if (isNaN(blue)) blue = selectedColor.b * 255
             setFromColor(Qt.rgba(
                 clamp(red, 0, 255) / 255,
-            errorMessage = ""
-        }
-
-        function selectPaletteColor(hexValue) {
-            var preset = window.hexToColor(hexValue)
-            setFromColor(Qt.rgba(preset.r, preset.g, preset.b, alphaValue))
                 clamp(green, 0, 255) / 255,
                 clamp(blue, 0, 255) / 255,
                 alphaValue
@@ -2483,11 +2492,18 @@ ApplicationWindow {
             if (isNaN(alpha)) return
             alphaValue = clamp(alpha, 0, 255) / 255
             effectColorInput.value = colorToHex(selectedColor)
+            errorMessage = ""
+        }
+
+        function selectPaletteColor(hexValue) {
+            var preset = window.hexToColor(hexValue)
+            setFromColor(Qt.rgba(preset.r, preset.g, preset.b, alphaValue))
         }
 
         function applyColor() {
             if (!setFromHex(effectColorInput.text)) return
             var hexValue = colorToHex(selectedColor)
+            var targetName = target
             if (target === "stroke") workspace.setSelectedStrokeColor(hexValue)
             else if (target === "overlay") workspace.setSelectedColorOverlayColor(hexValue)
             else if (target === "textFill") workspace.setSelectedTextColor(hexValue)
@@ -2496,8 +2512,32 @@ ApplicationWindow {
             else if (target === "textShadow") workspace.setSelectedTextShadowColor(hexValue)
             else if (target === "textGlow") workspace.setSelectedTextGlowColor(hexValue)
             else if (target === "textRange") workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)
+            else if (target === "canvasTextRange") {
+                var updatedHtml = workspace.applyTextEditorColor(
+                    editorHtml,
+                    rangeStart,
+                    rangeEnd,
+                    hexValue
+                )
+                canvasTextEditOverlay.replaceFormattedText(updatedHtml, rangeStart, rangeEnd)
+            }
             else workspace.setSelectedGradientOverlayColor(colorIndex, hexValue)
             close()
+            if (targetName === "canvasTextRange") {
+                Qt.callLater(function() {
+                    window.focusCanvasTextEditor()
+                    canvasTextEditInput.select(rangeStart, rangeEnd)
+                })
+            }
+        }
+
+        onClosed: {
+            if (target === "canvasTextRange" && workspace.textEditOverlayVisible) {
+                Qt.callLater(function() {
+                    window.focusCanvasTextEditor()
+                    canvasTextEditInput.select(rangeStart, rangeEnd)
+                })
+            }
         }
 
         background: Rectangle {
@@ -2790,7 +2830,6 @@ ApplicationWindow {
                             model: [
                                 "#000000", "#404040", "#808080", "#BFBFBF", "#FFFFFF", "#7F0000", "#FF0000", "#FF7F7F",
                                 "#7F3F00", "#FF7F00", "#FFFF00", "#007F00", "#00FF00", "#007F7F", "#00FFFF", "#0000FF",
-                                activeFocusOnTab: true
                                 "#7F00FF", "#FF00FF", "#46D7AD", "#4FA3FF", "#F7BD63", "#F1786D", "#65D88D", "#747D7A"
                             ]
                             delegate: Rectangle {
@@ -2805,6 +2844,7 @@ ApplicationWindow {
                                 Accessible.role: Accessible.Button
                                 border.width: effectColorDialog.colorToHex(effectColorDialog.selectedColor).slice(0, 7) === modelData ? 2 : 1
                                 border.color: paletteMouse.containsMouse || border.width === 2 ? Theme.accent : Theme.borderStrong
+                                activeFocusOnTab: true
                                 MouseArea {
                                     id: paletteMouse
                                     anchors.fill: parent
@@ -2860,11 +2900,7 @@ ApplicationWindow {
 
     component BodyLabel: Text {
         color: Theme.textSecondary
-        property string summary: ""
         font.family: Theme.bodyFont
-        property bool expanded: true
-        default property alias sectionData: sectionContent.data
-        signal toggled(bool expanded)
         font.pixelSize: 12
         verticalAlignment: Text.AlignVCenter
     }
@@ -2874,7 +2910,11 @@ ApplicationWindow {
 
         property string title: ""
         property string detail: ""
+        property string summary: ""
         property string iconName: AppIcons.settings
+        property bool expanded: true
+        default property alias sectionData: sectionContent.data
+        signal toggled(bool expanded)
 
         width: parent ? parent.width : implicitWidth
         implicitHeight: sectionHeader.height + (expanded ? sectionContent.implicitHeight + 18 : 0) + 1
@@ -5235,6 +5275,11 @@ ApplicationWindow {
                             onPressed: mouse => {
                                 if (workspace.cropEditing)
                                     return
+                                if (workspace.textEditOverlayVisible) {
+                                    canvasTextEditOverlay.commit()
+                                    mouse.accepted = true
+                                    return
+                                }
                                 var handle = canvasWorkspace.handleAt(mouse.x, mouse.y)
                                 if (handle.length > 0) {
                                     canvasWorkspace.beginTransform(handle, mouse.x, mouse.y)
@@ -5590,6 +5635,7 @@ ApplicationWindow {
                                     font.pixelSize: 10 / canvasWorkspace.actualScale
                                 }
                             }
+                        }
 
                             Rectangle {
                                 id: canvasTextEditOverlay
@@ -5647,30 +5693,63 @@ ApplicationWindow {
 
                                 function commit() {
                                     if (canvasTextEditInput.editing) {
-                                        canvasTextEditInput.focus = false
                                         canvasTextEditOverlay.commitValue()
+                                        canvasTextEditInput.focus = false
                                     }
                                 }
 
                                 function commitValue() {
                                     if (canvasTextEditOverlay.editingIndex < 0)
                                         return
-                                    var index = canvasTextEditOverlay.editingIndex
+                                    if (canvasTextEditInput.getFormattedText === undefined) {
+                                        canvasTextEditOverlay.editingIndex = -1
+                                        workspace.commitTextEditOverlay(canvasTextEditInput.text)
+                                        return
+                                    }
+                                    var formattedText = canvasTextEditInput.getFormattedText(
+                                        0,
+                                        canvasTextEditInput.length
+                                    )
                                     canvasTextEditOverlay.editingIndex = -1
-                                    workspace.commitTextEditOverlay(canvasTextEditInput.text)
+                                    workspace.commitTextEditOverlayRichText(formattedText)
+                                }
+
+                                function cancel() {
+                                    if (canvasTextEditOverlay.editingIndex < 0)
+                                        return
+                                    canvasTextEditOverlay.editingIndex = -1
+                                    workspace.cancelTextEditOverlay()
+                                    canvasTextEditInput.focus = false
+                                }
+
+                                function formattedText() {
+                                    return canvasTextEditInput.getFormattedText(
+                                        0,
+                                        canvasTextEditInput.length
+                                    )
+                                }
+
+                                function replaceFormattedText(html, start, end) {
+                                    canvasTextEditInput.text = html
+                                    canvasTextEditInput.select(start, end)
+                                    workspace.stageTextEditOverlayDraft(html)
+                                    canvasTextSelectionToolbar.refreshStyleInfo()
                                 }
 
                                 property int editingIndex: -1
 
                                 TextEdit {
                                     id: canvasTextEditInput
+                                    objectName: "canvasTextEditInput"
                                     anchors.fill: parent
-                                    anchors.margins: Math.max(1, 2 / canvasTextEditOverlay.overlayScale)
+                                    anchors.margins: Math.max(0, workspace.selectedTextBoxPadding)
+                                    textFormat: TextEdit.RichText
                                     color: workspace.selectedTextColor
-                                    selectionColor: "#663bd5aa"
+                                    selectionColor: Theme.accentPressed
                                     selectedTextColor: Theme.textPrimary
                                     font.family: workspace.selectedTextFontFamily
                                     font.pixelSize: workspace.selectedTextFontSize
+                                    font.bold: workspace.selectedTextBold
                                     font.italic: workspace.selectedTextItalic
                                     font.letterSpacing: workspace.selectedTextLetterSpacing
                                     horizontalAlignment: workspace.selectedTextAlignmentId === "center"
@@ -5680,25 +5759,35 @@ ApplicationWindow {
                                                             : TextEdit.AlignLeft)
                                     wrapMode: TextEdit.Wrap
                                     selectByMouse: true
+                                    persistentSelection: true
                                     readOnly: workspace.selectedLocked || !workspace.textEditOverlayVisible
                                     z: 61
 
-                                    readonly property bool editing: activeFocus && workspace.textEditOverlayVisible
+                                    readonly property bool editing: canvasTextEditOverlay.editingIndex >= 0
+                                                                    && workspace.textEditOverlayVisible
 
                                     onActiveFocusChanged: {
-                                        if (activeFocus && workspace.textEditOverlayVisible) {
-                                            canvasTextEditInput.text = workspace.selectedTextContent
+                                        if (activeFocus && workspace.textEditOverlayVisible
+                                                && canvasTextEditOverlay.editingIndex < 0) {
                                             canvasTextEditOverlay.editingIndex = workspace.selectedLayerIndex
-                                        } else if (canvasTextEditOverlay.editingIndex >= 0 && workspace.textEditOverlayVisible) {
-                                            canvasTextEditOverlay.commitValue()
+                                            canvasTextEditInput.text = workspace.selectedTextEditorHtml
                                         }
                                     }
 
+                                    onTextChanged: {
+                                        if (editing) {
+                                            workspace.stageTextEditOverlayDraft(
+                                                canvasTextEditOverlay.formattedText()
+                                            )
+                                            canvasTextSelectionToolbar.refreshStyleInfo()
+                                        }
+                                    }
+                                    onSelectionStartChanged: canvasTextSelectionToolbar.refreshStyleInfo()
+                                    onSelectionEndChanged: canvasTextSelectionToolbar.refreshStyleInfo()
+
                                     Keys.onPressed: event => {
                                         if (event.key === Qt.Key_Escape) {
-                                            canvasTextEditOverlay.editingIndex = -1
-                                            workspace.cancelTextEditOverlay()
-                                            focus = false
+                                            canvasTextEditOverlay.cancel()
                                             event.accepted = true
                                         } else if ((event.modifiers & Qt.ControlModifier)
                                                    && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)) {
@@ -5709,16 +5798,205 @@ ApplicationWindow {
 
                                     Connections {
                                         target: workspace
-                                        function onSelectionChanged() {
-                                            if (canvasTextEditOverlay.visible && canvasTextEditInput.activeFocus
-                                                    && workspace.selectedLayerIndex !== canvasTextEditOverlay.editingIndex) {
+                                        function onTextEditingChanged() {
+                                            if (!workspace.textEditOverlayVisible) {
+                                                canvasTextEditOverlay.editingIndex = -1
                                                 canvasTextEditInput.focus = false
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
+                            Rectangle {
+                                id: canvasTextSelectionToolbar
+                                objectName: "canvasTextSelectionToolbar"
+                                visible: workspace.textEditOverlayVisible
+                                         && !workspace.selectedTextBindingEnabled
+                                         && canvasTextEditInput.selectionStart !== canvasTextEditInput.selectionEnd
+                                width: 286
+                                height: 36
+                                x: Math.min(
+                                    Math.max(workspace.selectedX, 8 / canvasWorkspace.actualScale),
+                                    Math.max(
+                                        8 / canvasWorkspace.actualScale,
+                                        artboard.width - width / canvasWorkspace.actualScale
+                                            - 8 / canvasWorkspace.actualScale
+                                    )
+                                )
+                                y: workspace.selectedY >= (height + 10) / canvasWorkspace.actualScale
+                                   ? workspace.selectedY - (height + 8) / canvasWorkspace.actualScale
+                                   : Math.min(
+                                       artboard.height - height / canvasWorkspace.actualScale
+                                           - 8 / canvasWorkspace.actualScale,
+                                       workspace.selectedY + workspace.selectedHeight
+                                           + 8 / canvasWorkspace.actualScale
+                                   )
+                                scale: 1 / canvasWorkspace.actualScale
+                                transformOrigin: Item.TopLeft
+                                z: 80
+                                radius: Theme.radiusSmall
+                                color: Theme.floatingPanelSurface
+                                border.width: 1
+                                border.color: Theme.floatingPanelBorder
+                                property var styleInfo: ({
+                                    "characterCount": 0,
+                                    "fontSize": workspace.selectedTextFontSize,
+                                    "mixedFontSize": false,
+                                    "color": workspace.selectedTextColor,
+                                    "mixedColor": false
+                                })
+
+                                function refreshStyleInfo() {
+                                    if (!workspace.textEditOverlayVisible
+                                            || canvasTextEditInput.selectionStart === canvasTextEditInput.selectionEnd)
+                                        return
+                                    styleInfo = workspace.inspectTextEditorSelection(
+                                        canvasTextEditOverlay.formattedText(),
+                                        canvasTextEditInput.selectionStart,
+                                        canvasTextEditInput.selectionEnd
+                                    )
+                                }
+
+                                onVisibleChanged: {
+                                    if (visible)
+                                        refreshStyleInfo()
+                                }
+
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 4
+                                    spacing: 4
+
+                                    TinyLabel {
+                                        width: 44
+                                        height: parent.height
+                                        text: canvasTextSelectionToolbar.styleInfo.characterCount + " 字"
+                                        color: Theme.textSecondary
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+
+                                    Rectangle {
+                                        id: canvasTextColorSwatch
+                                        width: 28
+                                        height: 28
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        radius: Theme.radiusSmall
+                                        color: canvasTextSelectionToolbar.styleInfo.color
+                                        border.width: activeFocus ? 2 : 1
+                                        border.color: activeFocus ? Theme.focusRing : Theme.borderStrong
+                                        activeFocusOnTab: visible
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: canvasTextSelectionToolbar.styleInfo.mixedColor
+                                            text: "混"
+                                            color: Theme.textPrimary
+                                            font.family: Theme.bodyFont
+                                            font.pixelSize: 9
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onPressed: canvasTextColorSwatch.forceActiveFocus(Qt.MouseFocusReason)
+                                            onClicked: effectColorDialog.openForTextEditor(
+                                                canvasTextSelectionToolbar.styleInfo.mixedColor
+                                                    ? workspace.selectedTextColor
+                                                    : canvasTextSelectionToolbar.styleInfo.color,
+                                                canvasTextEditInput.selectionStart,
+                                                canvasTextEditInput.selectionEnd,
+                                                canvasTextEditOverlay.formattedText()
+                                            )
+                                        }
+                                        Keys.onSpacePressed: effectColorDialog.openForTextEditor(
+                                            canvasTextSelectionToolbar.styleInfo.color,
+                                            canvasTextEditInput.selectionStart,
+                                            canvasTextEditInput.selectionEnd,
+                                            canvasTextEditOverlay.formattedText()
+                                        )
+                                        Accessible.name: "修改选区文字颜色"
+                                        Accessible.role: Accessible.Button
+                                    }
+
+                                    ValueBox {
+                                        width: 78
+                                        height: 28
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        value: canvasTextSelectionToolbar.styleInfo.mixedFontSize
+                                               ? "混合"
+                                               : canvasTextSelectionToolbar.styleInfo.fontSize.toString()
+                                        bindValue: true
+                                        suffix: "px"
+                                        accessibleName: "选区文字字号"
+                                        onValueCommitted: value => {
+                                            var parsed = parseInt(value)
+                                            if (isNaN(parsed) || parsed < 1)
+                                                return
+                                            var start = canvasTextEditInput.selectionStart
+                                            var end = canvasTextEditInput.selectionEnd
+                                            var updatedHtml = workspace.applyTextEditorFontSize(
+                                                canvasTextEditOverlay.formattedText(),
+                                                start,
+                                                end,
+                                                parsed
+                                            )
+                                            canvasTextEditOverlay.replaceFormattedText(updatedHtml, start, end)
+                                            Qt.callLater(function() {
+                                                window.focusCanvasTextEditor()
+                                                canvasTextEditInput.select(start, end)
+                                            })
+                                        }
+                                    }
+
+                                    IconButton {
+                                        iconName: AppIcons.refresh
+                                        tooltip: "清除选区局部样式"
+                                        buttonSize: 28
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        onClicked: {
+                                            var start = canvasTextEditInput.selectionStart
+                                            var end = canvasTextEditInput.selectionEnd
+                                            var updatedHtml = workspace.clearTextEditorStyle(
+                                                canvasTextEditOverlay.formattedText(),
+                                                start,
+                                                end
+                                            )
+                                            canvasTextEditOverlay.replaceFormattedText(updatedHtml, start, end)
+                                            Qt.callLater(function() {
+                                                window.focusCanvasTextEditor()
+                                                canvasTextEditInput.select(start, end)
+                                            })
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        width: 1
+                                        height: 20
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        color: Theme.borderStrong
+                                    }
+
+                                    IconButton {
+                                        iconName: AppIcons.close
+                                        tooltip: "取消文字编辑"
+                                        buttonSize: 28
+                                        destructive: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        onClicked: canvasTextEditOverlay.cancel()
+                                    }
+
+                                    IconButton {
+                                        iconName: AppIcons.check
+                                        tooltip: "完成文字编辑"
+                                        buttonSize: 28
+                                        primary: true
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        onClicked: canvasTextEditOverlay.commit()
+                                    }
+                                }
+                            }
                     }
                 }
 
