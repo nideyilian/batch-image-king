@@ -34,6 +34,10 @@ def test_batch_export_drawer_uses_fixed_compact_layout():
     assert 'text: "大小 KB"' in drawer_block
     assert 'id: compactStrategyBar' in drawer_block
     assert 'Layout.preferredHeight: 46' in drawer_block
+    export_form = drawer_block[
+        drawer_block.index("id: exportForm"):drawer_block.index('title: "导出任务"')
+    ]
+    assert "spacing: 4" in export_form
 
 
 @pytest.mark.unit

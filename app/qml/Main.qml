@@ -4103,7 +4103,7 @@ ApplicationWindow {
                     id: exportForm
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    spacing: 0
+                    spacing: 4
                     enabled: !batchExport.running
 
                         CompactExportSection {
