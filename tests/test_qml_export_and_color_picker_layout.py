@@ -23,8 +23,11 @@ def test_qml_export_sections_and_color_picker_debug_entry_exist():
     assert 'text: "HSV"' in qml_source
     assert 'text: "RGB"' in qml_source
     assert "component ExportSettingsSection" in qml_source
-    for title in ("导出任务", "文件命名", "输出格式", "组合策略", "高级策略"):
+    assert "component CompactExportSection" in qml_source
+    for title in ("导出任务", "文件命名", "输出格式", "组合策略"):
         assert f'title: "{title}"' in qml_source
+    assert 'objectName: "batchExportAdvancedDialog"' in qml_source
+    assert 'BodyLabel { text: "高级策略"' in qml_source
 
     assert '"--show-color-picker"' in launcher_source
     assert 'window.findChild(QObject, "effectColorDialog")' in launcher_source
@@ -37,23 +40,26 @@ def test_batch_export_count_and_start_columns_stay_top_aligned():
     end = qml_source.index('title: "文件命名"', start)
     count_and_start_block = qml_source[start - 240 : end]
 
-    assert "Layout.preferredWidth: 116" in count_and_start_block
+    assert count_and_start_block.count("Layout.preferredWidth: 1") == 2
+    assert count_and_start_block.count("Layout.minimumWidth: 0") == 2
     assert count_and_start_block.count("Layout.alignment: Qt.AlignTop") == 2
 
 
 @pytest.mark.unit
-def test_batch_export_strategy_choices_use_clickable_three_column_tiles():
+def test_batch_export_strategy_choices_use_compact_toggle_bar():
     qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     strategy_start = qml_source.index('title: "组合策略"')
-    strategy_end = qml_source.index('title: "高级策略"', strategy_start)
+    strategy_end = qml_source.index('id: advancedStrategyEntry', strategy_start)
     strategy_block = qml_source[strategy_start:strategy_end]
 
-    assert "component ExportStrategyTile: Rectangle" not in qml_source
-    assert strategy_block.count("OptionTile {") == 3
-    assert strategy_block.count("onActivated: batchExport.") == 3
-    assert "selected: batchExport.avoidDuplicates" in strategy_block
-    assert "selected: batchExport.uniqueUseEnabled" in strategy_block
-    assert "selected: batchExport.traverseMode" in strategy_block
+    assert "id: compactStrategyBar" in strategy_block
+    assert "height: 30" in strategy_block
+    assert strategy_block.count('value: "sample"') == 1
+    assert strategy_block.count('value: "unique"') == 1
+    assert strategy_block.count('value: "traverse"') == 1
+    assert "batchExport.avoidDuplicates = !batchExport.avoidDuplicates" in strategy_block
+    assert "batchExport.uniqueUseEnabled = !batchExport.uniqueUseEnabled" in strategy_block
+    assert "batchExport.traverseMode = !batchExport.traverseMode" in strategy_block
 
 
 @pytest.mark.unit
@@ -84,8 +90,8 @@ def test_related_parameter_groups_use_option_tiles_instead_of_switch_rows():
     assert "selected: multiTabExport.avoidDuplicates" in multi_block
     assert "selected: multiTabExport.traverseMode" in multi_block
 
-    advanced_start = qml_source.index('title: "高级策略"')
-    advanced_end = qml_source.index('label: "保存配置到当前标签页"', advanced_start)
+    advanced_start = qml_source.index('objectName: "batchExportAdvancedDialog"')
+    advanced_end = qml_source.index('objectName: "batchExportDrawer"', advanced_start)
     advanced_block = qml_source[advanced_start:advanced_end]
     performance_start = advanced_block.index("id: performanceStrategyOptions")
     performance_end = advanced_block.index('BodyLabel { text: "内存保护"', performance_start)

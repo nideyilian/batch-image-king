@@ -47,11 +47,12 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     qml_source = (repo_root / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
     assert 'objectName: "batchExportDrawer"' in qml_source
     assert 'Text { text: "批量导出"' in qml_source
-    assert 'text: batchExport.traverseCountText' in qml_source
+    assert 'text: batchExport.effectiveCount + " 张 · " + batchExport.fileFormat.toUpperCase()' in qml_source
     assert 'title: "文件命名"' in qml_source
-    assert 'model: ["png", "jpg", "bmp", "webp"]' in qml_source
-    assert 'title: "单次用图"' in qml_source
-    assert 'label: "保存配置到当前标签页"' in qml_source
+    assert '{ label: "PNG", value: "png" }' in qml_source
+    assert '{ label: "JPG", value: "jpg" }' in qml_source
+    assert '{ label: "单次用图", value: "unique" }' in qml_source
+    assert 'label: "保存配置"' in qml_source
     assert 'title: "图像源"' in qml_source
     assert 'title: "文字内容"' in qml_source
     assert 'tooltip: "添加素材文件夹"' not in qml_source

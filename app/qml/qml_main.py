@@ -404,10 +404,13 @@ def main() -> int:
     if args.show_batch_export or args.show_batch_advanced:
         def open_batch_export() -> None:
             drawer = window.findChild(QObject, "batchExportDrawer")
-            if drawer is not None and args.show_batch_advanced:
-                drawer.setProperty("advancedOpen", True)
             if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
                 debug("batch export drawer could not be opened")
+                return
+            if args.show_batch_advanced:
+                advanced_dialog = window.findChild(QObject, "batchExportAdvancedDialog")
+                if advanced_dialog is None or not QMetaObject.invokeMethod(advanced_dialog, "open"):
+                    debug("batch export advanced dialog could not be opened")
 
         QTimer.singleShot(80, open_batch_export)
 

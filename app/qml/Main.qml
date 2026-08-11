@@ -204,8 +204,11 @@ ApplicationWindow {
     }
 
     function openBatchExportDrawer() {
-        if (window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running))
+        if (window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running)) {
+            if (batchExport.fileFormat !== "png" && batchExport.fileFormat !== "jpg")
+                batchExport.fileFormat = "png"
             batchExportDrawer.open()
+        }
     }
 
     function openMultiTabExportDrawer() {
@@ -3367,6 +3370,104 @@ ApplicationWindow {
         Accessible.role: Accessible.Grouping
     }
 
+    component CompactExportSection: Item {
+        id: compactSection
+
+        property string title: ""
+        property string detail: ""
+        property string iconName: AppIcons.settings
+        property bool expanded: true
+        default property alias sectionData: compactSectionContent.data
+
+        Layout.fillWidth: true
+        implicitHeight: compactSectionHeader.height
+                        + (expanded ? compactSectionContent.implicitHeight + 7 : 0) + 1
+
+        Rectangle {
+            id: compactSectionHeader
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 38
+            radius: Theme.radiusSmall
+            color: compactSectionMouse.containsMouse || activeFocus ? Theme.bgRaised : "transparent"
+            activeFocusOnTab: true
+
+            RowLayout {
+                anchors.fill: parent
+                spacing: 8
+
+                Rectangle {
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    radius: Theme.radiusSmall
+                    color: Theme.accentSoft
+                    AppIcon {
+                        anchors.centerIn: parent
+                        iconName: compactSection.iconName
+                        iconSize: 13
+                        iconColor: Theme.accent
+                    }
+                }
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 0
+                    BodyLabel {
+                        text: compactSection.title
+                        color: Theme.textPrimary
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+                    TinyLabel {
+                        width: parent.width
+                        text: compactSection.detail
+                        font.pixelSize: 9
+                        elide: Text.ElideRight
+                    }
+                }
+                AppIcon {
+                    iconName: AppIcons.chevronDown
+                    iconSize: 11
+                    iconColor: Theme.textMuted
+                    rotation: compactSection.expanded ? 0 : -90
+                }
+            }
+
+            function toggleSection() {
+                compactSection.expanded = !compactSection.expanded
+            }
+
+            MouseArea {
+                id: compactSectionMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onPressed: compactSectionHeader.forceActiveFocus(Qt.MouseFocusReason)
+                onClicked: compactSectionHeader.toggleSection()
+            }
+            Keys.onSpacePressed: toggleSection()
+            Keys.onReturnPressed: toggleSection()
+            Accessible.name: compactSection.title
+            Accessible.description: compactSection.detail
+            Accessible.role: Accessible.Button
+        }
+
+        Column {
+            id: compactSectionContent
+            anchors.top: compactSectionHeader.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.topMargin: 6
+            spacing: 6
+            visible: compactSection.expanded
+        }
+
+        Divider {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+        }
+    }
+
     component MenuLabel: Text {
         property bool hovered: false
         color: hovered ? Theme.textPrimary : Theme.textSecondary
@@ -3759,17 +3860,229 @@ ApplicationWindow {
         }
     }
 
+    AppDialog {
+        id: batchExportAdvancedDialog
+        objectName: "batchExportAdvancedDialog"
+        anchors.centerIn: parent
+        width: Math.min(620, window.width - 32)
+        height: Math.min(590, window.height - 40)
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        header: null
+        footer: null
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
+                spacing: 10
+                Rectangle {
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    radius: Theme.radiusSmall
+                    color: Theme.accentSoft
+                    AppIcon { anchors.centerIn: parent; iconName: AppIcons.sliders; iconSize: 15; iconColor: Theme.accent }
+                }
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 1
+                    Text { text: "高级策略"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 16; font.weight: Font.DemiBold }
+                    TinyLabel { text: "质量、性能、内存保护和异常终止条件" }
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: batchExportAdvancedDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 10
+                enabled: !batchExport.running
+
+                BodyLabel { text: "质量策略"; color: Theme.textSecondary }
+                GridLayout {
+                    id: qualityStrategyGrid
+                    Layout.fillWidth: true
+                    columns: 2
+                    rowSpacing: 8
+                    columnSpacing: 8
+
+                    OptionTile {
+                        compact: true
+                        exclusive: true
+                        title: "高质量"
+                        detail: "优先保留图像细节"
+                        selected: batchExport.qualityProfile === "quality"
+                        onActivated: batchExport.qualityProfile = "quality"
+                    }
+                    OptionTile {
+                        compact: true
+                        exclusive: true
+                        title: "均衡"
+                        detail: "兼顾质量与处理速度"
+                        selected: batchExport.qualityProfile === "balanced"
+                        onActivated: batchExport.qualityProfile = "balanced"
+                    }
+                    OptionTile {
+                        compact: true
+                        exclusive: true
+                        title: "速度优先"
+                        detail: "缩短批量处理时间"
+                        selected: batchExport.qualityProfile === "speed"
+                        onActivated: batchExport.qualityProfile = "speed"
+                    }
+                    OptionTile {
+                        compact: true
+                        exclusive: true
+                        title: "体积优先"
+                        detail: "控制输出文件大小"
+                        selected: batchExport.qualityProfile === "size"
+                        onActivated: batchExport.qualityProfile = "size"
+                    }
+                }
+
+                BodyLabel { text: "性能策略"; color: Theme.textSecondary }
+                RowLayout {
+                    id: performanceStrategyOptions
+                    Layout.fillWidth: true
+                    spacing: 8
+                    OptionTile {
+                        compact: true
+                        title: "高性能管线"
+                        detail: "加速批量渲染与写出"
+                        selected: batchExport.useHighPerformance
+                        onActivated: batchExport.useHighPerformance = !batchExport.useHighPerformance
+                    }
+                    OptionTile {
+                        compact: true
+                        title: "预读素材"
+                        detail: "提前读取，减少等待"
+                        selected: batchExport.preloadEnabled
+                        onActivated: batchExport.preloadEnabled = !batchExport.preloadEnabled
+                    }
+                    OptionTile {
+                        compact: true
+                        title: "独立 Worker"
+                        detail: "大批量任务隔离运行"
+                        selected: batchExport.externalWorkerEnabled
+                        onActivated: batchExport.externalWorkerEnabled = !batchExport.externalWorkerEnabled
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    BodyLabel { text: "内存保护"; Layout.preferredWidth: 70 }
+                    SelectBox {
+                        Layout.fillWidth: true
+                        model: [
+                            { label: "自动", value: "auto" },
+                            { label: "低内存", value: "low" },
+                            { label: "自定义", value: "custom" },
+                            { label: "关闭", value: "off" }
+                        ]
+                        currentIndex: window.optionIndex(model, batchExport.memoryGuardMode)
+                        onActivated: batchExport.memoryGuardMode = currentValue
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: batchExport.memoryGuardMode === "custom"
+                    spacing: 8
+                    BodyLabel { text: "上限 MB"; Layout.preferredWidth: 70 }
+                    ExportField { Layout.fillWidth: true; text: String(batchExport.memoryLimitMB); onCommitted: value => batchExport.memoryLimitMB = Math.max(0, parseInt(value) || 0) }
+                    BodyLabel { text: "预留 MB"; Layout.preferredWidth: 58 }
+                    ExportField { Layout.fillWidth: true; text: String(batchExport.memoryReserveMB); onCommitted: value => batchExport.memoryReserveMB = Math.max(256, parseInt(value) || 256) }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        TinyLabel { text: "连续失败上限" }
+                        ExportField { width: parent.width; text: String(batchExport.maxConsecutiveFailures); onCommitted: value => batchExport.maxConsecutiveFailures = Math.max(1, parseInt(value) || 1) }
+                    }
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        TinyLabel { text: "失败率上限 %" }
+                        ExportField { width: parent.width; text: String(batchExport.failureRateLimit); onCommitted: value => batchExport.failureRateLimit = Math.max(1, Math.min(100, parseInt(value) || 1)) }
+                    }
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        TinyLabel { text: "停滞超时 秒" }
+                        ExportField { width: parent.width; text: String(batchExport.stallTimeoutSeconds); onCommitted: value => batchExport.stallTimeoutSeconds = Math.max(30, parseInt(value) || 30) }
+                    }
+                }
+
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: batchExport.uniqueUseEnabled
+                    TinyLabel { text: "单次用图图层" }
+                    Flow {
+                        width: parent.width
+                        height: childrenRect.height
+                        spacing: 6
+                        Repeater {
+                            model: batchExport.uniqueLayerOptions
+                            delegate: Rectangle {
+                                required property var modelData
+                                width: uniqueLayerLabel.implicitWidth + 42
+                                height: 28
+                                radius: Theme.radiusSmall
+                                color: modelData.selected ? Theme.accentSoft : Theme.bgControl
+                                border.width: 1
+                                border.color: modelData.selected ? Theme.accentPressed : Theme.border
+                                opacity: modelData.eligible ? 1 : 0.38
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+                                    AppIcon { iconName: modelData.selected ? AppIcons.check : AppIcons.circleDot; iconSize: 11; iconColor: modelData.selected ? Theme.accent : Theme.textMuted }
+                                    TinyLabel { id: uniqueLayerLabel; text: modelData.label; color: modelData.selected ? Theme.accent : Theme.textSecondary }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: parent.modelData.eligible
+                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: batchExport.setUniqueLayerSelected(parent.modelData.index, !parent.modelData.selected)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Item { Layout.fillWidth: true }
+                    ExportButton { Layout.preferredWidth: 92; label: "完成"; iconName: AppIcons.check; primary: true; onClicked: batchExportAdvancedDialog.close() }
+                }
+            }
+        }
+    }
+
     AppDrawer {
         id: batchExportDrawer
         objectName: "batchExportDrawer"
         edge: Qt.RightEdge
-        width: Math.min(480, Math.max(420, window.width * 0.32))
+        width: Math.min(480, Math.max(450, window.width * 0.39))
         height: window.height
         modal: true
         dim: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
-        property bool advancedOpen: false
 
         Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle {
@@ -3781,17 +4094,17 @@ ApplicationWindow {
         contentItem: Item {
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 22
+                anchors.margins: 12
                 spacing: 0
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 46
+                    Layout.preferredHeight: 44
                     spacing: 12
 
                     Rectangle {
-                        width: 32
-                        height: 32
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
                         radius: Theme.radiusSmall
                         color: Theme.accentSoft
                         AppIcon { anchors.centerIn: parent; iconName: AppIcons.exportAction; iconSize: 16; iconColor: Theme.accent }
@@ -3802,41 +4115,44 @@ ApplicationWindow {
                         Text { text: "批量导出"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold }
                         TinyLabel { text: workspace.documentTitle; color: Theme.textMuted }
                     }
+                    Rectangle {
+                        Layout.preferredWidth: 92
+                        Layout.preferredHeight: 28
+                        radius: Theme.radiusSmall
+                        color: Theme.bgRaised
+                        TinyLabel {
+                            anchors.centerIn: parent
+                            text: batchExport.effectiveCount + " 张 · " + batchExport.fileFormat.toUpperCase()
+                            color: Theme.textSecondary
+                        }
+                    }
                     IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: batchExportDrawer.close() }
                 }
 
-                Divider { Layout.fillWidth: true; Layout.topMargin: 10; Layout.bottomMargin: 18 }
+                Divider { Layout.fillWidth: true; Layout.topMargin: 6; Layout.bottomMargin: 5 }
 
-                Flickable {
+                ColumnLayout {
+                    id: exportForm
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    contentWidth: width
-                    contentHeight: exportForm.height
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
+                    spacing: 0
+                    enabled: !batchExport.running
 
-                    ScrollIndicator.vertical: ScrollIndicator { }
-
-                    Column {
-                        id: exportForm
-                        width: parent.width
-                        spacing: 16
-                        enabled: !batchExport.running
-
-                        ExportSettingsSection {
+                        CompactExportSection {
                             title: "导出任务"
                             detail: "目录、数量和起始序号"
                             iconName: AppIcons.folderOutput
 
                             Column {
                                 width: parent.width
-                                spacing: 8
-                                BodyLabel { text: "输出目录"; color: Theme.textSecondary }
+                                spacing: 5
+                                BodyLabel { text: "输出目录"; color: Theme.textSecondary; font.pixelSize: 11 }
                                 RowLayout {
                                     width: parent.width
-                                    spacing: 8
+                                    spacing: 6
                                     ExportField {
                                         Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
                                         text: batchExport.outputDirectory
                                         placeholder: "选择文件夹"
                                         onCommitted: value => batchExport.outputDirectory = value
@@ -3844,51 +4160,42 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.folderOpen
                                         tooltip: "选择输出目录"
-                                        buttonSize: 36
+                                        buttonSize: 32
                                         active: true
                                         onClicked: outputFolderDialog.open()
-                                    }
-                                }
-                                RowLayout {
-                                    width: parent.width
-                                    BodyLabel { text: "使用当前日期替换路径中的 YYYYMMDD"; Layout.fillWidth: true; color: Theme.textSecondary }
-                                    ToggleSwitch {
-                                        accessibleName: "使用当前日期路径"
-                                        checked: batchExport.useCurrentTimeForPath
-                                        onToggled: checkedValue => batchExport.useCurrentTimeForPath = checkedValue
                                     }
                                 }
                             }
 
                             RowLayout {
                                 width: parent.width
-                                spacing: 12
+                                spacing: 8
                                 Column {
-                                    Layout.preferredWidth: 116
-                                    Layout.minimumWidth: 96
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 1
+                                    Layout.minimumWidth: 0
                                     Layout.alignment: Qt.AlignTop
-                                    spacing: 8
-                                    BodyLabel { text: "生成数量"; color: Theme.textSecondary }
+                                    spacing: 4
+                                    BodyLabel { text: "生成数量"; color: Theme.textSecondary; font.pixelSize: 11 }
                                     ExportField {
                                         width: parent.width
+                                        height: 32
                                         text: String(batchExport.count)
                                         placeholder: "10"
                                         enabled: !batchExport.traverseMode
                                         onCommitted: value => batchExport.count = Math.max(0, parseInt(value) || 0)
                                     }
-                                    TinyLabel {
-                                        visible: batchExport.traverseMode
-                                        text: batchExport.traverseCountText
-                                        color: batchExport.effectiveCount > 10000 ? Theme.coral : Theme.textMuted
-                                    }
                                 }
                                 Column {
                                     Layout.fillWidth: true
+                                    Layout.preferredWidth: 1
+                                    Layout.minimumWidth: 0
                                     Layout.alignment: Qt.AlignTop
-                                    spacing: 8
-                                    BodyLabel { text: "起始序号"; color: Theme.textSecondary }
+                                    spacing: 4
+                                    BodyLabel { text: "起始序号"; color: Theme.textSecondary; font.pixelSize: 11 }
                                     ExportField {
                                         width: parent.width
+                                        height: 32
                                         text: String(batchExport.startIndex)
                                         placeholder: "1"
                                         onCommitted: value => batchExport.startIndex = Math.max(0, parseInt(value) || 0)
@@ -3897,24 +4204,26 @@ ApplicationWindow {
                             }
                         }
 
-                        ExportSettingsSection {
+                        CompactExportSection {
                             title: "文件命名"
-                            detail: "让每张图片都能快速定位"
+                            detail: "日期、前缀与序号规则"
                             iconName: AppIcons.tag
 
                             Column {
                                 width: parent.width
-                                spacing: 10
+                                spacing: 5
                                 RowLayout {
                                     width: parent.width
-                                    BodyLabel { text: "添加当前日期"; Layout.fillWidth: true }
+                                    spacing: 6
+                                    BodyLabel { text: "添加日期"; Layout.preferredWidth: 58; font.pixelSize: 11 }
                                     ToggleSwitch {
                                         accessibleName: "文件名添加当前日期"
                                         checked: batchExport.useDate
                                         onToggled: checkedValue => batchExport.useDate = checkedValue
                                     }
                                     SelectBox {
-                                        Layout.preferredWidth: 118
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
                                         enabled: batchExport.useDate
                                         model: [
                                             { label: "YYYYMMDD", value: 0 },
@@ -3925,34 +4234,25 @@ ApplicationWindow {
                                         onActivated: batchExport.dateFormatIndex = currentValue
                                     }
                                 }
-                                ExportField {
-                                    width: parent.width
-                                    text: batchExport.customText
-                                    placeholder: "自定义文本，例如 export"
-                                    onCommitted: value => batchExport.customText = value
-                                }
                                 RowLayout {
                                     width: parent.width
-                                    BodyLabel { text: "使用图层文件名"; Layout.fillWidth: true }
-                                    ToggleSwitch {
-                                        accessibleName: "使用图层文件名"
-                                        checked: batchExport.useLayerName
-                                        onToggled: checkedValue => batchExport.useLayerName = checkedValue
+                                    spacing: 6
+                                    BodyLabel { text: "文件前缀"; Layout.preferredWidth: 58; font.pixelSize: 11 }
+                                    ExportField {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
+                                        text: batchExport.customText
+                                        placeholder: "例如 export"
+                                        onCommitted: value => batchExport.customText = value
                                     }
                                 }
-                                SelectBox {
-                                    width: parent.width
-                                    visible: batchExport.useLayerName
-                                    enabled: batchExport.layerOptions.length > 0
-                                    model: batchExport.layerOptions
-                                    currentIndex: window.optionIndex(model, batchExport.layerIndex)
-                                    onActivated: batchExport.layerIndex = currentValue
-                                }
                                 RowLayout {
                                     width: parent.width
-                                    BodyLabel { text: "序号格式"; Layout.preferredWidth: 74 }
+                                    spacing: 6
+                                    BodyLabel { text: "序号格式"; Layout.preferredWidth: 58; font.pixelSize: 11 }
                                     SelectBox {
                                         Layout.fillWidth: true
+                                        Layout.preferredHeight: 32
                                         model: [
                                             { label: "0001, 0002, ...", value: 0 },
                                             { label: "001, 002, ...", value: 1 },
@@ -3963,370 +4263,244 @@ ApplicationWindow {
                                         onActivated: batchExport.numberFormatIndex = currentValue
                                     }
                                 }
-                                Rectangle {
-                                    width: parent.width
-                                    height: 40
-                                    radius: Theme.radiusSmall
-                                    color: Theme.bgBar
-                                    border.width: 1
-                                    border.color: Theme.border
-                                    TinyLabel {
-                                        anchors.fill: parent
-                                        anchors.margins: 10
-                                        text: "预览  " + batchExport.filenamePreview
-                                        elide: Text.ElideMiddle
-                                        verticalAlignment: Text.AlignVCenter
-                                        color: Theme.textSecondary
-                                    }
+                            }
+                        }
+
+                        CompactExportSection {
+                            title: "输出格式"
+                            detail: "格式与单文件体积"
+                            iconName: AppIcons.fileImage
+
+                            RowLayout {
+                                width: parent.width
+                                spacing: 8
+                                SegmentedControl {
+                                    id: batchFormatControl
+                                    Layout.preferredWidth: 158
+                                    Layout.preferredHeight: 32
+                                    options: [
+                                        { label: "PNG", value: "png" },
+                                        { label: "JPG", value: "jpg" }
+                                    ]
+                                    value: batchExport.fileFormat
+                                    accessibleName: "输出格式"
+                                    onActivated: value => batchExport.fileFormat = value
+                                }
+                                BodyLabel { text: "大小 KB"; Layout.preferredWidth: 48; font.pixelSize: 11 }
+                                ExportField {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 32
+                                    text: String(batchExport.maxFileSizeKB)
+                                    placeholder: "0（不限制）"
+                                    onCommitted: value => batchExport.maxFileSizeKB = Math.max(0, parseInt(value) || 0)
                                 }
                             }
                         }
 
-                        ExportSettingsSection {
-                            title: "输出格式"
-                            detail: "选择格式并控制单文件体积"
-                            iconName: AppIcons.fileImage
+                        CompactExportSection {
+                            title: "组合策略"
+                            detail: "随机、去重与遍历"
+                            iconName: AppIcons.shuffle
 
-                            Column {
+                            Rectangle {
+                                id: compactStrategyBar
                                 width: parent.width
-                                spacing: 8
+                                height: 30
+                                radius: Theme.radiusSmall
+                                color: Theme.bgControl
+                                border.width: 1
+                                border.color: Theme.border
                                 Row {
-                                    id: formatOptionsRow
-                                    width: parent.width
-                                    height: 36
-                                    spacing: 4
+                                    id: strategyOptionsRow
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    spacing: 2
+                                    property var strategyOptions: [
+                                        { label: "智能采样", value: "sample" },
+                                        { label: "单次用图", value: "unique" },
+                                        { label: "遍历组合", value: "traverse" }
+                                    ]
+                                    function optionSelected(value) {
+                                        if (value === "sample") return batchExport.avoidDuplicates
+                                        if (value === "unique") return batchExport.uniqueUseEnabled
+                                        return batchExport.traverseMode
+                                    }
+                                    function toggleOption(value) {
+                                        if (value === "sample") batchExport.avoidDuplicates = !batchExport.avoidDuplicates
+                                        else if (value === "unique") batchExport.uniqueUseEnabled = !batchExport.uniqueUseEnabled
+                                        else batchExport.traverseMode = !batchExport.traverseMode
+                                    }
                                     Repeater {
-                                        model: ["png", "jpg", "bmp", "webp"]
+                                        model: parent.strategyOptions
                                         delegate: Rectangle {
-                                            id: formatOption
-                                            required property string modelData
-                                            width: (formatOptionsRow.width - 12) / 4
-                                            height: 36
-                                            radius: Theme.radiusSmall
-                                            color: batchExport.fileFormat === modelData
+                                            required property var modelData
+                                            width: (compactStrategyBar.width - 8) / 3
+                                            height: compactStrategyBar.height - 4
+                                            radius: Math.max(2, Theme.radiusSmall - 1)
+                                            color: strategyOptionsRow.optionSelected(modelData.value)
                                                    ? Theme.accentSoft
-                                                   : (formatMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
-                                            border.width: 1
-                                            border.color: activeFocus
-                                                          ? Theme.focusRing
-                                                          : (batchExport.fileFormat === modelData ? Theme.accentPressed : Theme.borderStrong)
+                                                   : (strategyMouse.containsMouse ? Theme.bgHover : "transparent")
+                                            border.width: strategyOptionsRow.optionSelected(modelData.value) ? 1 : 0
+                                            border.color: Theme.accentPressed
                                             activeFocusOnTab: true
                                             Text {
                                                 anchors.centerIn: parent
-                                                text: modelData.toUpperCase()
-                                                color: batchExport.fileFormat === modelData ? Theme.accent : Theme.textSecondary
+                                                text: parent.modelData.label
+                                                color: strategyOptionsRow.optionSelected(parent.modelData.value)
+                                                       ? Theme.accent : Theme.textSecondary
                                                 font.family: Theme.bodyFont
-                                                font.pixelSize: 11
-                                                font.weight: Font.DemiBold
+                                                font.pixelSize: 10
+                                                font.weight: strategyOptionsRow.optionSelected(parent.modelData.value)
+                                                             ? Font.DemiBold : Font.Normal
                                             }
                                             MouseArea {
-                                                id: formatMouse
+                                                id: strategyMouse
                                                 anchors.fill: parent
                                                 hoverEnabled: true
                                                 cursorShape: Qt.PointingHandCursor
-                                                onPressed: formatOption.forceActiveFocus(Qt.MouseFocusReason)
-                                                onClicked: batchExport.fileFormat = formatOption.modelData
+                                                onPressed: parent.forceActiveFocus(Qt.MouseFocusReason)
+                                                onClicked: strategyOptionsRow.toggleOption(parent.modelData.value)
                                             }
-                                            Keys.onSpacePressed: batchExport.fileFormat = modelData
-                                            Keys.onReturnPressed: batchExport.fileFormat = modelData
-                                            Accessible.name: modelData.toUpperCase()
-                                            Accessible.role: Accessible.RadioButton
-                                            Accessible.checked: batchExport.fileFormat === modelData
-                                        }
-                                    }
-                                }
-                                RowLayout {
-                                    width: parent.width
-                                    BodyLabel { text: "最大文件大小 KB"; Layout.fillWidth: true }
-                                    ExportField {
-                                        Layout.preferredWidth: 120
-                                        text: String(batchExport.maxFileSizeKB)
-                                        placeholder: "0 表示不限制"
-                                        onCommitted: value => batchExport.maxFileSizeKB = Math.max(0, parseInt(value) || 0)
-                                    }
-                                }
-                            }
-                        }
-
-                        ExportSettingsSection {
-                            title: "组合策略"
-                            detail: "控制随机、去重和组合遍历规则"
-                            iconName: AppIcons.shuffle
-
-                            RowLayout {
-                                width: parent.width
-                                spacing: 8
-
-                                OptionTile {
-                                    title: "智能采样"
-                                    detail: "均衡使用素材，降低重复"
-                                    selected: batchExport.avoidDuplicates
-                                    onActivated: batchExport.avoidDuplicates = !batchExport.avoidDuplicates
-                                }
-                                OptionTile {
-                                    title: "单次用图"
-                                    detail: "限制选中图层素材复用"
-                                    selected: batchExport.uniqueUseEnabled
-                                    onActivated: batchExport.uniqueUseEnabled = !batchExport.uniqueUseEnabled
-                                }
-                                OptionTile {
-                                    title: "遍历组合"
-                                    detail: "按组合顺序逐项生成"
-                                    selected: batchExport.traverseMode
-                                    onActivated: batchExport.traverseMode = !batchExport.traverseMode
-                                }
-                            }
-
-                            Column {
-                                width: parent.width
-                                spacing: 6
-                                visible: batchExport.uniqueUseEnabled
-                                Repeater {
-                                    model: batchExport.uniqueLayerOptions
-                                    delegate: RowLayout {
-                                        required property var modelData
-                                        width: parent.width
-                                        spacing: 8
-                                        ToggleSwitch {
-                                            accessibleName: "唯一使用图层 " + modelData.label
-                                            checked: modelData.selected
-                                            enabled: modelData.eligible
-                                            onToggled: checkedValue => batchExport.setUniqueLayerSelected(modelData.index, checkedValue)
-                                        }
-                                        BodyLabel {
-                                            Layout.fillWidth: true
-                                            text: modelData.label + (modelData.eligible ? "" : "（非图片图层）")
-                                            color: modelData.eligible ? Theme.textSecondary : Theme.textMuted
+                                            Keys.onSpacePressed: strategyOptionsRow.toggleOption(modelData.value)
+                                            Keys.onReturnPressed: strategyOptionsRow.toggleOption(modelData.value)
+                                            Accessible.name: modelData.label
+                                            Accessible.role: Accessible.CheckBox
+                                            Accessible.checked: strategyOptionsRow.optionSelected(modelData.value)
                                         }
                                     }
                                 }
                             }
-                        }
-
-                        ExportSettingsSection {
-                            title: "高级策略"
-                            detail: "性能、内存保护和异常终止条件"
-                            summary: batchExport.memoryGuardMode === "off" ? "保护关闭" : "保护已启用"
-                            iconName: AppIcons.sliders
-                            expanded: batchExportDrawer.advancedOpen
-                            onToggled: expanded => batchExportDrawer.advancedOpen = expanded
-
-                            Column {
-                                width: parent.width
-                                spacing: 10
-                                BodyLabel { text: "质量策略"; color: Theme.textSecondary }
-                                GridLayout {
-                                    id: qualityStrategyGrid
-                                    width: parent.width
-                                    columns: 2
-                                    rowSpacing: 8
-                                    columnSpacing: 8
-
-                                    OptionTile {
-                                        compact: true
-                                        exclusive: true
-                                        title: "高质量"
-                                        detail: "优先保留图像细节"
-                                        selected: batchExport.qualityProfile === "quality"
-                                        onActivated: batchExport.qualityProfile = "quality"
-                                    }
-                                    OptionTile {
-                                        compact: true
-                                        exclusive: true
-                                        title: "均衡"
-                                        detail: "兼顾质量与处理速度"
-                                        selected: batchExport.qualityProfile === "balanced"
-                                        onActivated: batchExport.qualityProfile = "balanced"
-                                    }
-                                    OptionTile {
-                                        compact: true
-                                        exclusive: true
-                                        title: "速度优先"
-                                        detail: "缩短批量处理时间"
-                                        selected: batchExport.qualityProfile === "speed"
-                                        onActivated: batchExport.qualityProfile = "speed"
-                                    }
-                                    OptionTile {
-                                        compact: true
-                                        exclusive: true
-                                        title: "体积优先"
-                                        detail: "控制输出文件大小"
-                                        selected: batchExport.qualityProfile === "size"
-                                        onActivated: batchExport.qualityProfile = "size"
-                                    }
-                                }
-                                RowLayout {
-                                    id: performanceStrategyOptions
-                                    width: parent.width
-                                    spacing: 8
-
-                                    OptionTile {
-                                        title: "高性能管线"
-                                        detail: "加速批量渲染与写出"
-                                        selected: batchExport.useHighPerformance
-                                        onActivated: batchExport.useHighPerformance = !batchExport.useHighPerformance
-                                    }
-                                    OptionTile {
-                                        title: "预读素材"
-                                        detail: "提前读取素材，减少等待"
-                                        selected: batchExport.preloadEnabled
-                                        onActivated: batchExport.preloadEnabled = !batchExport.preloadEnabled
-                                    }
-                                    OptionTile {
-                                        title: "独立 Worker"
-                                        detail: "大批量任务与主界面隔离"
-                                        selected: batchExport.externalWorkerEnabled
-                                        onActivated: batchExport.externalWorkerEnabled = !batchExport.externalWorkerEnabled
-                                    }
-                                }
-                                RowLayout {
-                                    width: parent.width
-                                    BodyLabel { text: "内存保护"; Layout.preferredWidth: 74 }
-                                    SelectBox {
-                                        Layout.fillWidth: true
-                                        model: [
-                                            { label: "自动", value: "auto" },
-                                            { label: "低内存", value: "low" },
-                                            { label: "自定义", value: "custom" },
-                                            { label: "关闭", value: "off" }
-                                        ]
-                                        currentIndex: window.optionIndex(model, batchExport.memoryGuardMode)
-                                        onActivated: batchExport.memoryGuardMode = currentValue
-                                    }
-                                }
-                                RowLayout {
-                                    width: parent.width
-                                    visible: batchExport.memoryGuardMode === "custom"
-                                    BodyLabel { text: "上限 MB"; Layout.preferredWidth: 62 }
-                                    ExportField { Layout.fillWidth: true; text: String(batchExport.memoryLimitMB); onCommitted: value => batchExport.memoryLimitMB = Math.max(0, parseInt(value) || 0) }
-                                    BodyLabel { text: "预留 MB"; Layout.preferredWidth: 62 }
-                                    ExportField { Layout.fillWidth: true; text: String(batchExport.memoryReserveMB); onCommitted: value => batchExport.memoryReserveMB = Math.max(256, parseInt(value) || 256) }
-                                }
-                                RowLayout {
-                                    width: parent.width
-                                    Column {
-                                        Layout.fillWidth: true
-                                        spacing: 5
-                                        TinyLabel { text: "连续失败上限" }
-                                        ExportField { width: parent.width; text: String(batchExport.maxConsecutiveFailures); onCommitted: value => batchExport.maxConsecutiveFailures = Math.max(1, parseInt(value) || 1) }
-                                    }
-                                    Column {
-                                        Layout.fillWidth: true
-                                        spacing: 5
-                                        TinyLabel { text: "失败率上限 %" }
-                                        ExportField { width: parent.width; text: String(batchExport.failureRateLimit); onCommitted: value => batchExport.failureRateLimit = Math.max(1, Math.min(100, parseInt(value) || 1)) }
-                                    }
-                                    Column {
-                                        Layout.fillWidth: true
-                                        spacing: 5
-                                        TinyLabel { text: "停滞超时 秒" }
-                                        ExportField { width: parent.width; text: String(batchExport.stallTimeoutSeconds); onCommitted: value => batchExport.stallTimeoutSeconds = Math.max(30, parseInt(value) || 30) }
-                                    }
-                                }
-                            }
-                        }
-
-                        ExportButton {
-                            width: parent.width
-                            label: "保存配置到当前标签页"
-                            iconName: AppIcons.save
-                            onClicked: batchExport.saveSettings()
                         }
 
                         Rectangle {
-                            width: parent.width
-                            height: 58
+                            id: advancedStrategyEntry
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 42
                             radius: Theme.radiusSmall
-                            color: Theme.bgBar
+                            color: advancedStrategyMouse.containsMouse || activeFocus ? Theme.bgRaised : "transparent"
                             border.width: 1
                             border.color: Theme.border
+                            activeFocusOnTab: true
+
                             RowLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 12
-                                anchors.rightMargin: 12
-                                Column {
-                                    spacing: 3
-                                    TinyLabel { text: "预计产出" }
-                                    BodyLabel { text: batchExport.effectiveCount + " 张"; color: Theme.textPrimary }
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 8
+                                Rectangle {
+                                    Layout.preferredWidth: 24
+                                    Layout.preferredHeight: 24
+                                    radius: Theme.radiusSmall
+                                    color: Theme.accentSoft
+                                    AppIcon { anchors.centerIn: parent; iconName: AppIcons.sliders; iconSize: 13; iconColor: Theme.accent }
                                 }
-                                Item { Layout.fillWidth: true }
                                 Column {
-                                    spacing: 3
-                                    TinyLabel { text: "预计耗时"; horizontalAlignment: Text.AlignRight; width: parent.width }
-                                    BodyLabel { text: batchExport.estimatedTime; color: Theme.textPrimary }
+                                    Layout.fillWidth: true
+                                    spacing: 0
+                                    BodyLabel { text: "高级策略"; color: Theme.textPrimary; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                    TinyLabel { text: "质量、性能与保护"; font.pixelSize: 9 }
                                 }
+                                TinyLabel {
+                                    text: (batchExport.qualityProfile === "quality" ? "高质量"
+                                           : (batchExport.qualityProfile === "balanced" ? "均衡"
+                                              : (batchExport.qualityProfile === "speed" ? "速度" : "体积")))
+                                          + " · " + (batchExport.memoryGuardMode === "auto" ? "自动"
+                                                       : (batchExport.memoryGuardMode === "low" ? "低内存"
+                                                          : (batchExport.memoryGuardMode === "custom" ? "自定义" : "关闭")))
+                                    color: Theme.textSecondary
+                                }
+                                AppIcon { iconName: AppIcons.chevronRight; iconSize: 12; iconColor: Theme.textMuted }
                             }
+                            MouseArea {
+                                id: advancedStrategyMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onPressed: advancedStrategyEntry.forceActiveFocus(Qt.MouseFocusReason)
+                                onClicked: batchExportAdvancedDialog.open()
+                            }
+                            Keys.onSpacePressed: batchExportAdvancedDialog.open()
+                            Keys.onReturnPressed: batchExportAdvancedDialog.open()
+                            Accessible.name: "高级策略"
+                            Accessible.description: "打开质量、性能与保护设置"
+                            Accessible.role: Accessible.Button
                         }
-                    }
+
+                        Item { Layout.fillHeight: true }
                 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.topMargin: 18
-                    spacing: 10
+                    Layout.topMargin: 8
+                    spacing: 8
 
                     StatusBanner {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: batchExport.errorMessage.length > 0 ? 60 : 48
+                        Layout.preferredHeight: 46
                         tone: batchExport.errorMessage.length > 0 ? "error" : (batchExport.succeeded ? "success" : "neutral")
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 9
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            anchors.topMargin: 6
+                            anchors.bottomMargin: 6
+                            spacing: 8
                             AppIcon {
                                 iconName: batchExport.errorMessage.length > 0 ? AppIcons.error : (batchExport.succeeded ? AppIcons.check : AppIcons.info)
-                                iconSize: 15
+                                iconSize: 14
                                 iconColor: batchExport.errorMessage.length > 0 ? Theme.coral : (batchExport.succeeded ? Theme.success : Theme.accent)
                             }
                             Column {
                                 Layout.fillWidth: true
-                                spacing: 2
-                                BodyLabel { text: batchExport.statusText; color: Theme.textPrimary }
+                                spacing: 0
+                                BodyLabel { text: batchExport.statusText; color: Theme.textPrimary; font.pixelSize: 11 }
                                 TinyLabel {
                                     width: parent.width
-                                    text: batchExport.errorMessage.length > 0 ? batchExport.errorMessage : batchExport.stage
-                                    color: batchExport.errorMessage.length > 0 ? Theme.errorText : Theme.textMuted
-                                    elide: Text.ElideRight
+                                    text: batchExport.errorMessage.length > 0
+                                          ? batchExport.errorMessage
+                                          : (batchExport.failureSummary.length > 0
+                                             ? batchExport.failureSummary
+                                             : (batchExport.lastFile.length > 0
+                                                ? "最近文件  " + batchExport.lastFile
+                                                : batchExport.stage))
+                                    color: batchExport.errorMessage.length > 0 || batchExport.failureSummary.length > 0
+                                           ? Theme.errorText : Theme.textMuted
+                                    elide: batchExport.lastFile.length > 0 ? Text.ElideMiddle : Text.ElideRight
                                 }
                             }
                             TinyLabel {
-                                visible: batchExport.running || batchExport.succeeded || batchExport.canceled
-                                text: batchExport.current + " / " + batchExport.total
+                                text: batchExport.running || batchExport.succeeded || batchExport.canceled
+                                      ? batchExport.current + " / " + batchExport.total
+                                      : "预计 " + batchExport.effectiveCount + " 张 · " + batchExport.estimatedTime
                                 color: Theme.textSecondary
                             }
                         }
-                    }
-
-                    AppProgressBar {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 5
-                        visible: batchExport.running || batchExport.current > 0
-                        progress: batchExport.progress
-                        tone: batchExport.canceled ? "warning" : "accent"
-                    }
-
-                    TinyLabel {
-                        Layout.fillWidth: true
-                        visible: batchExport.lastFile.length > 0
-                        text: "最近文件  " + batchExport.lastFile
-                        elide: Text.ElideMiddle
-                        color: Theme.textMuted
-                    }
-
-                    TinyLabel {
-                        Layout.fillWidth: true
-                        visible: batchExport.failureSummary.length > 0
-                        text: batchExport.failureSummary
-                        color: Theme.coral
-                        elide: Text.ElideRight
+                        AppProgressBar {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            anchors.leftMargin: 1
+                            anchors.rightMargin: 1
+                            height: 3
+                            visible: batchExport.running || batchExport.current > 0
+                            progress: batchExport.progress
+                            tone: batchExport.canceled ? "warning" : "accent"
+                        }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
                         ExportButton {
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: 108
+                            label: "保存配置"
+                            iconName: AppIcons.save
+                            enabled: !batchExport.running
+                            onClicked: batchExport.saveSettings()
+                        }
+                        ExportButton {
+                            Layout.preferredWidth: 104
                             label: "打开目录"
                             iconName: AppIcons.folderOpen
                             enabled: batchExport.outputDirectory.length > 0
