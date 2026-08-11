@@ -54,7 +54,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'label: "保存配置到当前标签页"' in qml_source
     assert 'title: "图像源"' in qml_source
     assert 'title: "文字内容"' in qml_source
-    assert 'tooltip: "添加素材文件夹"' in qml_source
+    assert 'tooltip: "添加素材文件夹"' not in qml_source
     assert '"复制图层 · Ctrl+D"' not in qml_source
     assert 'workspace.moveSelectedLayer("forward")' in qml_source
     assert 'sequence: "Ctrl+D"' in qml_source

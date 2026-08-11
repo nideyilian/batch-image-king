@@ -184,16 +184,32 @@ def test_option_tile_supports_compact_and_accessible_selection_modes():
 
 
 @pytest.mark.unit
-def test_new_canvas_dialog_offers_ecommerce_presets():
+def test_new_canvas_dialog_offers_editable_quick_presets():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
 
     for preset in (
-        '{ name: "商品主图", width: 800, height: 800 }',
-        '{ name: "高清方图", width: 1080, height: 1080 }',
-        '{ name: "商品竖图 4:5", width: 1080, height: 1350 }',
-        '{ name: "详情页切片", width: 750, height: 1000 }',
+        '{ name: "方形图", width: 800, height: 800 }',
+        '{ name: "横版 16:9", width: 1280, height: 720 }',
+        '{ name: "竖版 9:16", width: 1080, height: 1920 }',
     ):
         assert preset in main_source
+    assert 'property string quickPresetsJson: ""' in main_source
+    assert "function replaceQuickCanvasPreset(" in main_source
+    assert 'objectName: "quickCanvasPresetDialog"' in main_source
+    assert 'tooltip: "编辑常用尺寸"' in main_source
+    assert "buttonSize: 32" in main_source
+
+
+@pytest.mark.unit
+def test_canvas_quick_actions_and_image_drop_contract():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+
+    assert 'iconName: AppIcons.fileNew; tooltip: "新建画布 · Ctrl+N"' in main_source
+    assert 'tooltip: "添加素材文件夹"' not in main_source
+    assert "DropArea {" in main_source
+    assert "drag.hasUrls && window.hasSupportedImageUrl(drag.urls)" in main_source
+    assert "window.addDroppedImages(drop.urls)" in main_source
+    assert "workspace.addImageLayer(String(urlValue))" in main_source
 
 
 @pytest.mark.unit

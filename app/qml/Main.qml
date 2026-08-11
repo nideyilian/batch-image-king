@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtCore
 import "components"
 
 ApplicationWindow {
@@ -34,6 +35,11 @@ ApplicationWindow {
     property bool updateBannerDismissed: false
     property string updateBannerText: ""
     property bool pendingUpdateInstall: false
+    property var quickCanvasPresets: [
+        { name: "方形图", width: 800, height: 800 },
+        { name: "横版 16:9", width: 1280, height: 720 },
+        { name: "竖版 9:16", width: 1080, height: 1920 }
+    ]
     readonly property var blendModeOptions: [
         { label: "正常", value: "normal" },
         { label: "正片叠底", value: "multiply" },
@@ -115,6 +121,86 @@ ApplicationWindow {
     function openNewCanvasDialog() {
         if (!workspace.operationsBlocked)
             newCanvasDialog.open()
+    }
+
+    function defaultQuickCanvasPresets() {
+        return [
+            { name: "方形图", width: 800, height: 800 },
+            { name: "横版 16:9", width: 1280, height: 720 },
+            { name: "竖版 9:16", width: 1080, height: 1920 }
+        ]
+    }
+
+    function normalizedQuickCanvasPresets(candidates) {
+        if (!candidates || candidates.length !== 3)
+            return null
+        var normalized = []
+        for (var index = 0; index < candidates.length; index++) {
+            var candidate = candidates[index] || {}
+            var name = String(candidate.name || "").trim()
+            var widthValue = parseInt(candidate.width)
+            var heightValue = parseInt(candidate.height)
+            if (name.length === 0 || isNaN(widthValue) || isNaN(heightValue)
+                    || widthValue < 16 || heightValue < 16
+                    || widthValue > 32768 || heightValue > 32768)
+                return null
+            normalized.push({ name: name, width: widthValue, height: heightValue })
+        }
+        return normalized
+    }
+
+    function loadQuickCanvasPresets() {
+        var restored = null
+        if (newCanvasSettings.quickPresetsJson.length > 0) {
+            try {
+                restored = normalizedQuickCanvasPresets(JSON.parse(newCanvasSettings.quickPresetsJson))
+            } catch (error) {
+                restored = null
+            }
+        }
+        quickCanvasPresets = restored || defaultQuickCanvasPresets()
+        if (!restored)
+            newCanvasSettings.quickPresetsJson = JSON.stringify(quickCanvasPresets)
+    }
+
+    function replaceQuickCanvasPreset(index, name, widthValue, heightValue) {
+        if (index < 0 || index >= quickCanvasPresets.length)
+            return false
+        var normalized = normalizedQuickCanvasPresets([
+            index === 0 ? { name: name, width: widthValue, height: heightValue } : quickCanvasPresets[0],
+            index === 1 ? { name: name, width: widthValue, height: heightValue } : quickCanvasPresets[1],
+            index === 2 ? { name: name, width: widthValue, height: heightValue } : quickCanvasPresets[2]
+        ])
+        if (!normalized)
+            return false
+        quickCanvasPresets = normalized
+        newCanvasSettings.quickPresetsJson = JSON.stringify(normalized)
+        return true
+    }
+
+    function isSupportedImageUrl(urlValue) {
+        var cleanUrl = String(urlValue || "").split("?")[0].split("#")[0].toLowerCase()
+        return /\.(png|jpe?g|webp|gif|bmp|tiff?)$/.test(cleanUrl)
+    }
+
+    function hasSupportedImageUrl(urls) {
+        if (!urls)
+            return false
+        for (var index = 0; index < urls.length; index++) {
+            if (isSupportedImageUrl(urls[index]))
+                return true
+        }
+        return false
+    }
+
+    function addDroppedImages(urls) {
+        var addedCount = 0
+        for (var index = 0; urls && index < urls.length; index++) {
+            var urlValue = urls[index]
+            if (isSupportedImageUrl(urlValue) && workspace.addImageLayer(String(urlValue)))
+                addedCount++
+        }
+        return addedCount
     }
 
     function openBatchExportDrawer() {
@@ -297,6 +383,14 @@ ApplicationWindow {
         return Qt.rgba(red, green, blue, alpha)
     }
 
+    Settings {
+        id: newCanvasSettings
+        category: "newCanvas"
+        property string quickPresetsJson: ""
+    }
+
+    Component.onCompleted: window.loadQuickCanvasPresets()
+
     Connections {
         target: workspace
         function onToastRequested(message) { showToast(message) }
@@ -466,38 +560,60 @@ ApplicationWindow {
             BodyLabel { text: "常用尺寸"; color: Theme.textPrimary }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 2
+                columns: 3
                 rowSpacing: 8
                 columnSpacing: 8
 
                 Repeater {
-                    model: [
-                        { name: "商品主图", width: 800, height: 800 },
-                        { name: "高清方图", width: 1080, height: 1080 },
-                        { name: "商品竖图 4:5", width: 1080, height: 1350 },
-                        { name: "详情页切片", width: 750, height: 1000 }
-                    ]
+                    model: window.quickCanvasPresets
                     delegate: Rectangle {
+                        id: quickPresetTile
                         required property var modelData
+                        required property int index
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 48
+                        Layout.preferredHeight: 60
                         radius: Theme.radiusSmall
                         color: presetMouse.containsMouse ? Theme.bgHover : Theme.bgControl
                         border.width: 1
-                        border.color: Theme.borderStrong
+                        border.color: activeFocus ? Theme.focusRing : Theme.borderStrong
+                        activeFocusOnTab: true
                         Column {
-                            anchors.centerIn: parent
+                            anchors.left: parent.left
+                            anchors.right: editQuickPresetButton.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 2
                             spacing: 2
-                            BodyLabel { text: modelData.name; color: Theme.textPrimary; anchors.horizontalCenter: parent.horizontalCenter; width: parent.parent.width - 12; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter }
-                            TinyLabel { text: modelData.width + " x " + modelData.height; anchors.horizontalCenter: parent.horizontalCenter }
+                            BodyLabel { text: quickPresetTile.modelData.name; color: Theme.textPrimary; width: parent.width; elide: Text.ElideRight; horizontalAlignment: Text.AlignHCenter }
+                            TinyLabel { text: quickPresetTile.modelData.width + " x " + quickPresetTile.modelData.height; width: parent.width; horizontalAlignment: Text.AlignHCenter }
                         }
                         MouseArea {
                             id: presetMouse
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.top: parent.top
+                            anchors.bottom: parent.bottom
+                            anchors.right: editQuickPresetButton.left
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: newCanvasDialog.chooseSize(modelData.width, modelData.height)
+                            onPressed: quickPresetTile.forceActiveFocus(Qt.MouseFocusReason)
+                            onClicked: newCanvasDialog.chooseSize(quickPresetTile.modelData.width, quickPresetTile.modelData.height)
                         }
+                        IconButton {
+                            id: editQuickPresetButton
+                            anchors.right: parent.right
+                            anchors.rightMargin: 4
+                            anchors.verticalCenter: parent.verticalCenter
+                            iconName: AppIcons.settings
+                            tooltip: "编辑常用尺寸"
+                            buttonSize: 32
+                            iconSize: 14
+                            onClicked: quickCanvasPresetDialog.openForPreset(quickPresetTile.index)
+                        }
+                        Keys.onSpacePressed: newCanvasDialog.chooseSize(modelData.width, modelData.height)
+                        Keys.onReturnPressed: newCanvasDialog.chooseSize(modelData.width, modelData.height)
+                        Keys.onEnterPressed: newCanvasDialog.chooseSize(modelData.width, modelData.height)
+                        Accessible.name: modelData.name + " " + modelData.width + " x " + modelData.height
+                        Accessible.role: Accessible.Button
                     }
                 }
             }
@@ -511,7 +627,7 @@ ApplicationWindow {
                     id: canvasWidthInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
-                    text: "1080"
+                    text: "800"
                     placeholderText: "宽度"
                     color: Theme.textPrimary
                     selectByMouse: true
@@ -523,7 +639,7 @@ ApplicationWindow {
                     id: canvasHeightInput
                     Layout.fillWidth: true
                     Layout.preferredHeight: 38
-                    text: "1350"
+                    text: "800"
                     placeholderText: "高度"
                     color: Theme.textPrimary
                     selectByMouse: true
@@ -2885,6 +3001,128 @@ ApplicationWindow {
         }
     }
 
+    AppDialog {
+        id: quickCanvasPresetDialog
+        objectName: "quickCanvasPresetDialog"
+        anchors.centerIn: parent
+        width: 380
+        height: 330
+        modal: true
+        focus: true
+        padding: 0
+        closePolicy: Popup.CloseOnEscape
+        property int presetIndex: -1
+        property string errorMessage: ""
+
+        function openForPreset(index) {
+            var preset = window.quickCanvasPresets[index]
+            if (!preset)
+                return
+            presetIndex = index
+            quickPresetNameInput.text = preset.name
+            quickPresetWidthInput.text = String(preset.width)
+            quickPresetHeightInput.text = String(preset.height)
+            errorMessage = ""
+            open()
+            Qt.callLater(function() { quickPresetNameInput.forceActiveFocus() })
+        }
+
+        function savePreset() {
+            var name = quickPresetNameInput.text.trim()
+            var widthValue = parseInt(quickPresetWidthInput.text)
+            var heightValue = parseInt(quickPresetHeightInput.text)
+            if (name.length === 0) {
+                errorMessage = "请输入尺寸名称"
+                return
+            }
+            if (!window.replaceQuickCanvasPreset(presetIndex, name, widthValue, heightValue)) {
+                errorMessage = "宽度和高度必须在 16 到 32768 像素之间"
+                return
+            }
+            newCanvasDialog.chooseSize(widthValue, heightValue)
+            close()
+        }
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.borderStrong
+            radius: Theme.radius
+        }
+
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 12
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: "编辑常用尺寸"
+                    color: Theme.textPrimary
+                    font.family: Theme.displayFont
+                    font.pixelSize: 16
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 28; onClicked: quickCanvasPresetDialog.close() }
+            }
+
+            Divider { Layout.fillWidth: true }
+
+            BodyLabel { text: "名称"; color: Theme.textPrimary }
+            AppTextField {
+                id: quickPresetNameInput
+                Layout.fillWidth: true
+                accessibleName: "常用尺寸名称"
+                placeholderText: "例如：横版封面"
+                maximumLength: 32
+            }
+
+            BodyLabel { text: "画布尺寸"; color: Theme.textPrimary }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                AppTextField {
+                    id: quickPresetWidthInput
+                    Layout.fillWidth: true
+                    accessibleName: "常用尺寸宽度"
+                    placeholderText: "宽度"
+                    validator: IntValidator { bottom: 16; top: 32768 }
+                }
+                TinyLabel { text: "x"; Layout.preferredWidth: 10; horizontalAlignment: Text.AlignHCenter }
+                AppTextField {
+                    id: quickPresetHeightInput
+                    Layout.fillWidth: true
+                    accessibleName: "常用尺寸高度"
+                    placeholderText: "高度"
+                    validator: IntValidator { bottom: 16; top: 32768 }
+                    Keys.onReturnPressed: quickCanvasPresetDialog.savePreset()
+                }
+                TinyLabel { text: "px"; Layout.preferredWidth: 18; horizontalAlignment: Text.AlignRight }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 18
+                text: quickCanvasPresetDialog.errorMessage
+                color: Theme.danger
+                font.family: Theme.bodyFont
+                font.pixelSize: 11
+                elide: Text.ElideRight
+            }
+
+            Item { Layout.fillHeight: true }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 86; label: "取消"; onClicked: quickCanvasPresetDialog.close() }
+                ExportButton { Layout.preferredWidth: 96; label: "保存"; iconName: AppIcons.save; primary: true; onClicked: quickCanvasPresetDialog.savePreset() }
+            }
+        }
+    }
+
     component Divider: Rectangle {
         implicitWidth: 1
         implicitHeight: 1
@@ -4309,6 +4547,7 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
+                IconButton { iconName: AppIcons.fileNew; tooltip: "新建画布 · Ctrl+N"; enabled: !workspace.operationsBlocked; onClicked: window.openNewCanvasDialog() }
                 IconButton { iconName: AppIcons.folderOpen; tooltip: "打开项目"; enabled: !workspace.operationsBlocked; onClicked: openDialog.open() }
                 IconButton {
                     iconName: AppIcons.save
@@ -4348,7 +4587,6 @@ ApplicationWindow {
                 }
 
                 IconButton { iconName: AppIcons.type; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
-                IconButton { iconName: AppIcons.folderInput; tooltip: "添加素材文件夹"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: imageFolderDialog.open() }
                 IconButton {
                     iconName: AppIcons.shapes
                     tooltip: "添加异形图层"
@@ -4901,6 +5139,53 @@ ApplicationWindow {
                 property real marqueeStartY: 0
                 property real marqueeCurrentX: 0
                 property real marqueeCurrentY: 0
+
+                DropArea {
+                    id: imageDropArea
+                    anchors.fill: parent
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    z: 100
+
+                    onEntered: function(drag) {
+                        drag.accepted = drag.hasUrls && window.hasSupportedImageUrl(drag.urls)
+                    }
+                    onDropped: function(drop) {
+                        if (drop.hasUrls && window.addDroppedImages(drop.urls) > 0)
+                            drop.acceptProposedAction()
+                        else
+                            drop.accepted = false
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        visible: imageDropArea.containsDrag
+                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.10)
+                        border.width: 1
+                        border.color: Theme.accent
+                        radius: Theme.radius
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            AppIcon {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                iconName: AppIcons.imageAdd
+                                iconSize: 24
+                                iconColor: Theme.accent
+                            }
+                            BodyLabel {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "释放以添加图片图层"
+                                color: Theme.textPrimary
+                            }
+                            TinyLabel {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "支持同时拖入多张图片"
+                            }
+                        }
+                    }
+                }
 
                 function rulerMajorStep() {
                     var desiredCanvasUnits = 80 / Math.max(0.001, actualScale)
