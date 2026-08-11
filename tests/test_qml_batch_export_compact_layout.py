@@ -37,7 +37,7 @@ def test_batch_export_drawer_uses_fixed_compact_layout():
     export_form = drawer_block[
         drawer_block.index("id: exportForm"):drawer_block.index('title: "导出任务"')
     ]
-    assert "spacing: window.height < 760 ? 6 : 8" in export_form
+    assert "spacing: window.height < 800 ? 6 : 16" in export_form
 
 
 @pytest.mark.unit
