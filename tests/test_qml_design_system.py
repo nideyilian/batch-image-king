@@ -103,6 +103,7 @@ def test_qml_uses_semantic_lucide_icons_instead_of_raw_codepoints():
     registry_source = (QML_ROOT / "components" / "AppIcons.qml").read_text(encoding="utf-8")
 
     assert "property string iconName" in icon_source
+    assert "import QtQuick.Controls.impl" in icon_source
     assert "IconImage" in icon_source
     assert "MultiEffect" not in icon_source
     assert "function source(iconName)" in registry_source
