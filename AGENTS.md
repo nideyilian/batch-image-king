@@ -19,7 +19,7 @@
 
 - 语言：Python。
 - GUI：PySide6。
-- 图像处理：Pillow、NumPy、SciPy、OpenCV。
+- 图像处理：Pillow、fontTools、NumPy、SciPy、OpenCV。
 - 性能/监控：psutil，自研智能缓存、线程池、内存管理模块。
 - 打包：PyInstaller。
 - 可选导出加速：`app/utils/vips_export_engine.py` 会尝试使用 `pyvips`，不可用时自动回退。
@@ -28,6 +28,7 @@
 
 - `PySide6>=6.9.0`
 - `Pillow>=11.1.0`
+- `fonttools>=4.0.0`
 - `numpy>=2.2.0`
 - `scipy>=1.15.0`
 - `opencv-python>=4.12.0`
@@ -67,6 +68,8 @@ python -m pytest -m unit
 # 跑单个文件
 python -m pytest tests/test_document_core.py -v
 ```
+
+`requirements-dev.txt` 会自动继承 `requirements.txt`；开发/测试环境安装 dev 文件即可，运行或打包环境只安装 runtime 文件。
 
 测试根目录为 `tests/`，使用 pytest 风格 + 旧 unittest.TestCase 混用。配置文件 `pytest.ini` + 根目录 `conftest.py` + `tests/__init__.py` 已就绪。
 

@@ -53,6 +53,8 @@ pip install -r requirements-dev.txt
 python -m pytest
 ```
 
+`requirements-dev.txt` 会自动继承 `requirements.txt`，开发/测试环境不用重复安装两个文件。
+
 ### 打包为单文件
 
 ```powershell
@@ -71,6 +73,7 @@ python build.py
 | 语言 | Python 3.11 | 主开发语言 |
 | GUI | PySide6 ≥ 6.9 | 主窗口 / 画布 / 面板 / 信号槽 |
 | 图像处理 | Pillow ≥ 11.1 | 加载、缩放、文字渲染、编码保存 |
+| 字体解析 | fontTools ≥ 4.0 | 读取字体家族、字重和样式元数据 |
 | 数值计算 | NumPy ≥ 2.2 | 像素数组、Alpha 合成、混合模式 |
 | 科学计算 | SciPy ≥ 1.15 | 部分高级图像算法 |
 | 高级图像处理 | OpenCV ≥ 4.12 | 几何、检测、图像质量 |

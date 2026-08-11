@@ -11,9 +11,10 @@
 - 依赖安装：
 
   ```powershell
-  pip install -r requirements.txt
-  pip install -r requirements-dev.txt   # 测试用
+  pip install -r requirements-dev.txt
   ```
+
+  `requirements-dev.txt` 会自动继承 `requirements.txt`，运行时环境才单独安装 `requirements.txt`。
 
 ## 工作流
 
