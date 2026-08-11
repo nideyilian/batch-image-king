@@ -7,6 +7,7 @@ import datetime
 import uuid
 import re
 import copy
+import tempfile
 from pathlib import Path
 
 from app.utils.trusted_pickle import load_trusted_pickle
@@ -21,6 +22,7 @@ class PresetManager:
         self.presets_dir = os.path.join(self.app_dir, "presets")
         # 预设索引文件，用于管理预设元数据
         self.index_file = os.path.join(self.presets_dir, "presets_index.json")
+        self.last_error = ""
         self._ensure_presets_dir()
         if copy_initial:
             self._copy_initial_presets()
@@ -115,13 +117,111 @@ class PresetManager:
 
     def _save_index(self):
         """保存预设索引"""
+        temp_path = None
         try:
-            with open(self.index_file, 'w', encoding='utf-8') as f:
+            fd, temp_path = tempfile.mkstemp(
+                dir=self.presets_dir,
+                prefix='.presets-index-',
+                suffix='.json',
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(self.presets_index, f, ensure_ascii=False, indent=2)
+            os.replace(temp_path, self.index_file)
             return True
         except Exception as e:
             safe_print(f"保存预设索引失败: {e}")
             return False
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+    def _set_error(self, message):
+        self.last_error = str(message or "")
+
+    @staticmethod
+    def _is_valid_document_data(document_data):
+        if not isinstance(document_data, dict):
+            return False
+        try:
+            width = int(document_data.get('canvas_width'))
+            height = int(document_data.get('canvas_height'))
+        except (TypeError, ValueError, OverflowError):
+            return False
+        return (
+            width > 0
+            and height > 0
+            and isinstance(document_data.get('layers'), list)
+        )
+
+    @classmethod
+    def _is_valid_preset_data(cls, preset_data):
+        if not isinstance(preset_data, dict):
+            return False
+        if 'documents' not in preset_data:
+            return cls._is_valid_document_data(preset_data)
+        documents = preset_data.get('documents')
+        return (
+            isinstance(documents, list)
+            and bool(documents)
+            and all(cls._is_valid_document_data(item) for item in documents)
+        )
+
+    @staticmethod
+    def _document_payloads(preset_data):
+        if isinstance(preset_data, dict) and isinstance(preset_data.get('documents'), list):
+            return preset_data['documents']
+        return [preset_data]
+
+    @classmethod
+    def _metadata_from_preset_data(cls, preset_data):
+        documents = cls._document_payloads(preset_data)
+        canvas_sizes = []
+        total_layers = 0
+        for document in documents:
+            size = f"{int(document['canvas_width'])}x{int(document['canvas_height'])}"
+            if size not in canvas_sizes:
+                canvas_sizes.append(size)
+            total_layers += len(document['layers'])
+        return {
+            'type': 'multi_document' if len(documents) > 1 else 'single_document',
+            'document_count': len(documents),
+            'canvas_sizes': canvas_sizes,
+            'total_layers': total_layers,
+        }
+
+    @staticmethod
+    def _dump_pickle_atomic(data, destination):
+        destination = os.path.abspath(os.fspath(destination))
+        temp_path = None
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                dir=os.path.dirname(destination),
+                prefix=f'.{os.path.basename(destination)}-',
+                suffix='.tmp',
+            )
+            with os.fdopen(fd, 'wb') as f:
+                pickle.dump(data, f)
+            os.replace(temp_path, destination)
+            temp_path = None
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+    def _next_import_name(self, requested_name, reserved_names):
+        base_name = str(requested_name or '导入的预设').strip() or '导入的预设'
+        name = base_name
+        counter = 1
+        while name in reserved_names:
+            name = f"{base_name} ({counter})"
+            counter += 1
+        reserved_names.add(name)
+        return name
 
     def _generate_safe_filename(self, name):
         """生成安全的文件名"""
@@ -395,7 +495,7 @@ class PresetManager:
                 'created_at': datetime.datetime.now().isoformat(),
                 'modified_at': datetime.datetime.now().isoformat(),
                 'version': 2,
-                'type': 'multi_document',
+                'type': 'multi_document' if len(documents) > 1 else 'single_document',
                 'document_count': len(documents),
                 'canvas_sizes': list(dict.fromkeys(
                     f"{int(getattr(doc, 'canvas_width', 0))}x{int(getattr(doc, 'canvas_height', 0))}"
@@ -561,7 +661,8 @@ class PresetManager:
         """导出单个预设"""
         try:
             preset_path = os.path.join(self.presets_dir, f"{preset_id}.cmp")
-            if not os.path.exists(preset_path):
+            if preset_id not in self.presets_index or not os.path.exists(preset_path):
+                self._set_error("预设不存在")
                 return False
 
             # 创建导出数据
@@ -576,136 +677,114 @@ class PresetManager:
             # 加载预设数据
             with open(preset_path, 'rb') as f:
                 export_data['preset_data'] = load_trusted_pickle(f, preset_path)
+            if not self._is_valid_preset_data(export_data['preset_data']):
+                self._set_error("预设数据已损坏或格式不正确")
+                return False
 
-            # 保存导出文件
-            with open(export_path, 'wb') as f:
-                pickle.dump(export_data, f)
+            self._dump_pickle_atomic(export_data, export_path)
 
+            self._set_error("")
             return True
         except Exception as e:
             safe_print(f"导出预设失败: {e}")
+            self._set_error(f"导出预设失败: {e}")
             return False
 
     def import_preset(self, import_path):
         """导入预设"""
+        temp_paths = []
+        committed_paths = []
+        original_index = copy.deepcopy(self.presets_index)
         try:
-            # 加载导入文件
             with open(import_path, 'rb') as f:
                 import_data = load_trusted_pickle(f, import_path)
 
-            # 检查导入数据格式
-            if isinstance(import_data, dict) and 'export_type' in import_data:
-                if import_data.get('export_type') == 'all_presets':
-                    imported_ids = []
-                    for preset_package in import_data.get('presets', []) or []:
-                        preset_info = preset_package.get('info', {}) if isinstance(preset_package, dict) else {}
-                        preset_data = preset_package.get('data') if isinstance(preset_package, dict) else None
-                        if not preset_data:
-                            continue
-                        preset_id = self._generate_unique_id()
-                        preset_name = preset_info.get('name', '导入的预设')
-                        counter = 1
-                        original_name = preset_name
-                        while self._find_preset_by_name(preset_name):
-                            preset_name = f"{original_name} ({counter})"
-                            counter += 1
-
-                        preset_path = os.path.join(self.presets_dir, f"{preset_id}.cmp")
-                        with open(preset_path, 'wb') as f:
-                            pickle.dump(preset_data, f)
-
-                        now = datetime.datetime.now().isoformat()
-                        info = {
-                            'name': preset_name,
-                            'description': preset_info.get('description', ''),
-                            'created_at': now,
-                            'modified_at': now,
-                            'version': preset_info.get('version', 2),
-                            'type': preset_info.get('type', 'unknown'),
-                            'document_count': preset_info.get('document_count', 0),
-                            'imported': True
-                        }
-                        self._ensure_optional_metadata(info)
-                        self.presets_index[preset_id] = info
-                        imported_ids.append(preset_id)
-                    self._save_index()
-                    return imported_ids[0] if imported_ids else None
-
-                # 新格式导入
-                preset_info = import_data.get('preset_info', {})
-                preset_data = import_data.get('preset_data')
-
-                if not preset_data:
-                    return None
-
-                # 生成新的预设ID
-                preset_id = self._generate_unique_id()
-                preset_name = preset_info.get('name', '导入的预设')
-
-                # 检查名称冲突
-                counter = 1
-                original_name = preset_name
-                while self._find_preset_by_name(preset_name):
-                    preset_name = f"{original_name} ({counter})"
-                    counter += 1
-
-                # 保存预设文件
-                preset_path = os.path.join(self.presets_dir, f"{preset_id}.cmp")
-                with open(preset_path, 'wb') as f:
-                    pickle.dump(preset_data, f)
-
-                # 更新索引
-                info = {
-                    'name': preset_name,
-                    'description': preset_info.get('description', ''),
-                    'created_at': datetime.datetime.now().isoformat(),
-                    'modified_at': datetime.datetime.now().isoformat(),
-                    'version': preset_info.get('version', 2),
-                    'type': preset_info.get('type', 'unknown'),
-                    'imported': True
-                }
-                self._ensure_optional_metadata(info)
-                self.presets_index[preset_id] = info
-
-                # 保存索引
-                self._save_index()
-                return preset_id
+            if isinstance(import_data, dict) and import_data.get('export_type') == 'all_presets':
+                packages = import_data.get('presets')
+                if not isinstance(packages, list) or not packages:
+                    raise ValueError("预设合集为空或格式不正确")
+                candidates = []
+                for package in packages:
+                    if not isinstance(package, dict):
+                        raise ValueError("预设合集包含无效项目")
+                    info = package.get('info')
+                    data = package.get('data')
+                    if not isinstance(info, dict) or not self._is_valid_preset_data(data):
+                        raise ValueError("预设合集包含损坏或格式不正确的项目")
+                    candidates.append((info, data))
+            elif isinstance(import_data, dict) and 'export_type' in import_data:
+                if import_data.get('export_type') != 'single_preset':
+                    raise ValueError("不支持的预设导出格式")
+                info = import_data.get('preset_info')
+                data = import_data.get('preset_data')
+                if not isinstance(info, dict) or not self._is_valid_preset_data(data):
+                    raise ValueError("预设数据已损坏或格式不正确")
+                candidates = [(info, data)]
             else:
-                # 旧格式导入（直接是预设数据）
+                if not self._is_valid_preset_data(import_data):
+                    raise ValueError("预设数据已损坏或格式不正确")
+                candidates = [({}, import_data)]
+
+            reserved_names = {
+                str(item.get('name') or '') for item in self.presets_index.values()
+            }
+            reserved_ids = set(self.presets_index)
+            pending = []
+            for preset_info, preset_data in candidates:
                 preset_id = self._generate_unique_id()
-                preset_name = "导入的预设"
-
-                # 检查名称冲突
-                counter = 1
-                original_name = preset_name
-                while self._find_preset_by_name(preset_name):
-                    preset_name = f"{original_name} ({counter})"
-                    counter += 1
-
-                # 保存预设文件
-                preset_path = os.path.join(self.presets_dir, f"{preset_id}.cmp")
-                with open(preset_path, 'wb') as f:
-                    pickle.dump(import_data, f)
-
-                # 更新索引
+                while preset_id in reserved_ids:
+                    preset_id = self._generate_unique_id()
+                reserved_ids.add(preset_id)
+                preset_name = self._next_import_name(
+                    preset_info.get('name', '导入的预设'), reserved_names
+                )
+                now = datetime.datetime.now().isoformat()
                 info = {
                     'name': preset_name,
-                    'description': '',
-                    'created_at': datetime.datetime.now().isoformat(),
-                    'modified_at': datetime.datetime.now().isoformat(),
-                    'version': 2,
-                    'type': 'unknown',
-                    'imported': True
+                    'description': str(preset_info.get('description') or ''),
+                    'created_at': now,
+                    'modified_at': now,
+                    'version': preset_info.get('version', 2),
+                    'imported': True,
+                    **self._metadata_from_preset_data(preset_data),
                 }
                 self._ensure_optional_metadata(info)
-                self.presets_index[preset_id] = info
 
-                # 保存索引
-                self._save_index()
-                return preset_id
+                fd, temp_path = tempfile.mkstemp(
+                    dir=self.presets_dir,
+                    prefix=f'.import-{preset_id}-',
+                    suffix='.cmp',
+                )
+                with os.fdopen(fd, 'wb') as f:
+                    pickle.dump(preset_data, f)
+                temp_paths.append(temp_path)
+                pending.append((preset_id, info, preset_data, temp_path))
+
+            for preset_id, _info, _data, temp_path in pending:
+                final_path = os.path.join(self.presets_dir, f"{preset_id}.cmp")
+                os.replace(temp_path, final_path)
+                temp_paths.remove(temp_path)
+                committed_paths.append(final_path)
+
+            self.presets_index.update({
+                preset_id: info for preset_id, info, _data, _temp_path in pending
+            })
+            if not self._save_index():
+                raise OSError("无法保存预设索引")
+
+            self._set_error("")
+            return pending[0][0]
 
         except Exception as e:
             safe_print(f"导入预设失败: {e}")
+            self.presets_index = original_index
+            for path in committed_paths + temp_paths:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError:
+                    pass
+            self._set_error(f"导入预设失败: {e}")
             return None
 
     def export_all_presets(self, export_path):
@@ -718,29 +797,30 @@ class PresetManager:
                 'presets': []
             }
 
-            # 收集所有预设
+            if not self.presets_index:
+                self._set_error("没有可导出的预设")
+                return 0
+
             for preset_id, preset_info in self.presets_index.items():
                 preset_path = os.path.join(self.presets_dir, f"{preset_id}.cmp")
-                if os.path.exists(preset_path):
-                    try:
-                        with open(preset_path, 'rb') as f:
-                            preset_data = load_trusted_pickle(f, preset_path)
+                if not os.path.exists(preset_path):
+                    raise FileNotFoundError(f"预设文件不存在: {preset_info.get('name', preset_id)}")
+                with open(preset_path, 'rb') as f:
+                    preset_data = load_trusted_pickle(f, preset_path)
+                if not self._is_valid_preset_data(preset_data):
+                    raise ValueError(f"预设数据已损坏: {preset_info.get('name', preset_id)}")
+                export_data['presets'].append({
+                    'info': copy.deepcopy(preset_info),
+                    'data': preset_data
+                })
 
-                        export_data['presets'].append({
-                            'info': preset_info,
-                            'data': preset_data
-                        })
-                    except Exception as e:
-                        safe_print(f"导出预设 {preset_id} 失败: {e}")
-                        continue
+            self._dump_pickle_atomic(export_data, export_path)
 
-            # 保存导出文件
-            with open(export_path, 'wb') as f:
-                pickle.dump(export_data, f)
-
+            self._set_error("")
             return len(export_data['presets'])
         except Exception as e:
             safe_print(f"导出所有预设失败: {e}")
+            self._set_error(f"导出预设合集失败: {e}")
             return 0
 
 

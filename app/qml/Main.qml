@@ -1394,7 +1394,7 @@ ApplicationWindow {
                     primary: true
                     onClicked: {
                         projectPresets.deletePreset(presetDeleteConfirm.presetId)
-                        projectPresetDrawer.selectedPresetId = ""
+                        projectPresetDrawer.clearEditor()
                         presetDeleteConfirm.close()
                     }
                 }
@@ -1414,6 +1414,36 @@ ApplicationWindow {
         padding: 0
         property string selectedPresetId: ""
 
+        function clearEditor() {
+            selectedPresetId = ""
+            projectPresetName.clear()
+            projectPresetDescription.clear()
+        }
+
+        function selectPreset(presetId) {
+            var items = projectPresets.presets
+            for (var index = 0; index < items.length; index++) {
+                if (items[index].id === presetId) {
+                    selectedPresetId = presetId
+                    projectPresetName.text = items[index].name
+                    projectPresetDescription.text = items[index].description
+                    return
+                }
+            }
+        }
+
+        function savePreset(includeAll) {
+            var success = includeAll
+                    ? projectPresets.saveAll(projectPresetName.text, projectPresetDescription.text)
+                    : projectPresets.saveCurrent(projectPresetName.text, projectPresetDescription.text)
+            if (success) {
+                showToast(includeAll ? "全部文档已保存为预设" : "当前文档已保存为预设")
+                clearEditor()
+            } else {
+                showToast(projectPresets.lastError)
+            }
+        }
+
         Overlay.modal: Rectangle { color: Theme.overlayModal }
         background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong }
         contentItem: ColumnLayout {
@@ -1425,9 +1455,11 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 Text { text: "项目预设"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 17; font.weight: Font.DemiBold; Layout.fillWidth: true }
                 TinyLabel { text: projectPresets.count + " 项" }
-                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: projectPresetDrawer.close() }
+                IconButton { iconName: AppIcons.folderInput; tooltip: "导入预设"; buttonSize: 32; enabled: !workspace.operationsBlocked; onClicked: projectPresetImportDialog.open() }
+                IconButton { iconName: AppIcons.folderOutput; tooltip: "导出全部预设"; buttonSize: 32; enabled: projectPresets.count > 0; onClicked: projectPresetExportAllDialog.open() }
+                IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 32; onClicked: projectPresetDrawer.close() }
             }
-            TinyLabel { text: "保存完整文档结构，加载时追加为新标签页"; color: Theme.textMuted }
+            TinyLabel { text: "保存当前或全部文档，加载时追加为新标签页"; color: Theme.textMuted }
             Divider { Layout.fillWidth: true }
 
             ListView {
@@ -1472,18 +1504,32 @@ ApplicationWindow {
                                 } else showToast(projectPresets.lastError)
                             }
                         }
+                        IconButton {
+                            iconName: AppIcons.copy
+                            tooltip: "复制预设"
+                            buttonSize: 32
+                            onClicked: {
+                                var duplicatedId = projectPresets.duplicatePreset(modelData.id)
+                                if (duplicatedId.length > 0) {
+                                    projectPresetDrawer.selectPreset(duplicatedId)
+                                    showToast("预设已复制")
+                                } else showToast(projectPresets.lastError)
+                            }
+                        }
+                        IconButton {
+                            iconName: AppIcons.folderOutput
+                            tooltip: "导出预设"
+                            buttonSize: 32
+                            onClicked: projectPresetExportDialog.openForPreset(modelData.id, modelData.name)
+                        }
                     }
                     MouseArea {
                         id: projectPresetMouse
                         anchors.fill: parent
-                        anchors.rightMargin: 40
+                        anchors.rightMargin: 112
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            projectPresetDrawer.selectedPresetId = modelData.id
-                            projectPresetName.text = modelData.name
-                            projectPresetDescription.text = modelData.description
-                        }
+                        onClicked: projectPresetDrawer.selectPreset(modelData.id)
                     }
                 }
             }
@@ -1496,7 +1542,7 @@ ApplicationWindow {
                     anchors.centerIn: parent
                     spacing: 5
                     BodyLabel { text: "还没有项目预设"; color: Theme.textPrimary; anchors.horizontalCenter: parent.horizontalCenter }
-                    TinyLabel { text: "输入名称后保存当前文档"; anchors.horizontalCenter: parent.horizontalCenter }
+                    TinyLabel { text: "保存当前或全部文档，也可以导入已有预设"; anchors.horizontalCenter: parent.horizontalCenter }
                 }
             }
             Divider { Layout.fillWidth: true }
@@ -1518,6 +1564,13 @@ ApplicationWindow {
                 selectByMouse: true
                 background: Rectangle { color: Theme.bgControl; border.width: 1; border.color: projectPresetDescription.activeFocus ? Theme.accent : Theme.borderStrong; radius: Theme.radiusSmall }
             }
+            TinyLabel {
+                Layout.fillWidth: true
+                text: projectPresets.lastError
+                color: Theme.danger
+                visible: text.length > 0
+                wrapMode: Text.Wrap
+            }
             RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
@@ -1526,13 +1579,23 @@ ApplicationWindow {
                     label: "保存当前文档"
                     iconName: AppIcons.save
                     primary: true
-                    onClicked: {
-                        if (projectPresets.saveCurrent(projectPresetName.text, projectPresetDescription.text)) {
-                            showToast("项目预设已保存")
-                            projectPresetName.clear()
-                            projectPresetDescription.clear()
-                        } else showToast(projectPresets.lastError)
-                    }
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: projectPresetDrawer.savePreset(false)
+                }
+                ExportButton {
+                    Layout.fillWidth: true
+                    label: "保存全部文档"
+                    iconName: AppIcons.layers
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: projectPresetDrawer.savePreset(true)
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                TinyLabel {
+                    Layout.fillWidth: true
+                    text: projectPresetDrawer.selectedPresetId.length > 0 ? "已选择预设，可更新信息或删除" : "选择预设后可更新信息"
                 }
                 IconButton {
                     iconName: AppIcons.shuffle
@@ -1540,8 +1603,11 @@ ApplicationWindow {
                     buttonSize: 36
                     enabled: projectPresetDrawer.selectedPresetId.length > 0
                     onClicked: {
-                        if (!projectPresets.renamePreset(projectPresetDrawer.selectedPresetId, projectPresetName.text, projectPresetDescription.text))
+                        if (projectPresets.renamePreset(projectPresetDrawer.selectedPresetId, projectPresetName.text, projectPresetDescription.text)) {
+                            showToast("预设信息已更新")
+                        } else {
                             showToast(projectPresets.lastError)
+                        }
                     }
                 }
                 IconButton {
@@ -2101,6 +2167,49 @@ ApplicationWindow {
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片文件 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff)"]
         onAccepted: workspace.addImageLayer(selectedFile.toString())
+    }
+
+    FileDialog {
+        id: projectPresetImportDialog
+        title: "导入项目预设"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["预设文件 (*.preset *.pst)", "所有文件 (*)"]
+        onAccepted: {
+            var imported = projectPresets.importPreset(selectedFile.toString())
+            showToast(imported > 0 ? "已导入 " + imported + " 个预设" : projectPresets.lastError)
+        }
+    }
+
+    FileDialog {
+        id: projectPresetExportDialog
+        title: "导出项目预设"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "preset"
+        nameFilters: ["预设文件 (*.preset)"]
+        property string presetId: ""
+
+        function openForPreset(presetId, presetName) {
+            projectPresetExportDialog.presetId = presetId
+            title = "导出项目预设 · " + presetName
+            open()
+        }
+
+        onAccepted: {
+            var success = projectPresets.exportPreset(presetId, selectedFile.toString())
+            showToast(success ? "预设已导出" : projectPresets.lastError)
+        }
+    }
+
+    FileDialog {
+        id: projectPresetExportAllDialog
+        title: "导出全部项目预设"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "preset"
+        nameFilters: ["预设合集 (*.preset)"]
+        onAccepted: {
+            var exported = projectPresets.exportAll(selectedFile.toString())
+            showToast(exported > 0 ? "已导出 " + exported + " 个预设" : projectPresets.lastError)
+        }
     }
 
     FileDialog {
