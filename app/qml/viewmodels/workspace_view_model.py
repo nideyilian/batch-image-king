@@ -188,6 +188,7 @@ class _PreviewTask(QRunnable):
         snapshot_data=None,
         interactive_low_quality: bool,
         active_layer_index: int,
+        omit_active_layer: bool,
         cancel_token,
     ) -> None:
         super().__init__()
@@ -197,6 +198,7 @@ class _PreviewTask(QRunnable):
         self.snapshot_data = snapshot_data
         self.interactive_low_quality = bool(interactive_low_quality)
         self.active_layer_index = int(active_layer_index)
+        self.omit_active_layer = bool(omit_active_layer)
         self.cancel_token = cancel_token
         self.signals = _PreviewTaskSignals()
 
@@ -232,6 +234,7 @@ class _PreviewTask(QRunnable):
                 force_refresh=not self.interactive_low_quality,
                 interactive_low_quality=self.interactive_low_quality,
                 active_layer_index=self.active_layer_index,
+                omit_active_layer=self.omit_active_layer,
                 cancel_token=self.cancel_token,
             )
             if result.cancelled or getattr(self.cancel_token, "cancelled", False):
@@ -4172,6 +4175,7 @@ class WorkspaceViewModel(QObject):
         self._text_edit_layer_index = self.selectedLayerIndex
         self._text_edit_overlay_visible = True
         self.textEditingChanged.emit()
+        self.requestPreview(force=True)
         return True
 
     def _dismiss_text_edit_overlay(self, primary_index: int = -1):
@@ -4183,6 +4187,7 @@ class WorkspaceViewModel(QObject):
         self._text_edit_overlay_visible = False
         self._text_edit_layer_index = -1
         self.textEditingChanged.emit()
+        self.requestPreview(force=True)
 
     @Slot(str, result=bool)
     def commitTextEditOverlay(self, value: str) -> bool:
@@ -4193,6 +4198,7 @@ class WorkspaceViewModel(QObject):
         if was_visible:
             self.textEditingChanged.emit()
         if index < 0:
+            self.requestPreview(force=True)
             return False
         return self.setTextContentForLayer(index, value)
 
@@ -4203,6 +4209,7 @@ class WorkspaceViewModel(QObject):
             return False
         self._text_edit_overlay_visible = False
         self.textEditingChanged.emit()
+        self.requestPreview(force=True)
         return True
 
     def _ensure_history_baseline(self) -> None:
@@ -5479,6 +5486,10 @@ class WorkspaceViewModel(QObject):
             return DocumentSerializer.serialize_document_data(self._document)
 
     def _preview_active_layer_index(self) -> int:
+        if self._text_edit_overlay_visible:
+            index = int(self._text_edit_layer_index)
+            if 0 <= index < len(getattr(self._document, "layers", []) or []):
+                return index
         indices = [
             int(index)
             for index in list(getattr(self._document, "selected_layer_indices", []) or [])
@@ -5516,6 +5527,7 @@ class WorkspaceViewModel(QObject):
             snapshot_data=snapshot_data,
             interactive_low_quality=quality == "interactive",
             active_layer_index=self._preview_active_layer_index(),
+            omit_active_layer=self._text_edit_overlay_visible,
             cancel_token=token,
         )
         task.signals.finished.connect(self._on_preview_rendered)
@@ -5556,7 +5568,12 @@ class WorkspaceViewModel(QObject):
         self._set_busy(True)
         try:
             with self._document_lock:
-                result = render_preview_to_image(self._document, force_refresh=True)
+                result = render_preview_to_image(
+                    self._document,
+                    force_refresh=True,
+                    active_layer_index=self._preview_active_layer_index(),
+                    omit_active_layer=self._text_edit_overlay_visible,
+                )
             if result.image is None:
                 self._set_status(f"预览失败：{result.error or '渲染器未返回图像'}", toast=True)
                 return False

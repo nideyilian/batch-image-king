@@ -5311,7 +5311,7 @@ ApplicationWindow {
 
                         Rectangle {
                             id: selectionBox
-                            visible: workspace.selectedLayerIndex >= 0
+                            visible: workspace.selectedLayerIndex >= 0 && !workspace.textEditOverlayVisible
                             x: canvasWorkspace.transformActive ? canvasWorkspace.transientX
                                : (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup ? workspace.selectionBoundsX : workspace.selectedX)
                             y: canvasWorkspace.transformActive ? canvasWorkspace.transientY
@@ -5602,10 +5602,48 @@ ApplicationWindow {
                                 rotation: workspace.selectedCanRotate ? workspace.selectedRotation : 0
                                 transformOrigin: Item.Center
                                 z: 60
-                                color: Theme.bgControl
+                                color: "transparent"
                                 border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
                                 border.color: workspace.selectedLocked ? Theme.textMuted : Theme.accent
                                 clip: false
+                                readonly property real overlayScale: Math.max(0.05, canvasWorkspace.actualScale)
+                                readonly property real handleSize: Math.max(7 / overlayScale, 7)
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: -Math.max(1, 1 / canvasTextEditOverlay.overlayScale)
+                                    color: "transparent"
+                                    border.width: Math.max(1, 1 / canvasTextEditOverlay.overlayScale)
+                                    border.color: "#eafef8"
+                                    opacity: workspace.selectedLocked ? 0.36 : 0.86
+                                    z: -1
+                                }
+
+                                Repeater {
+                                    model: [
+                                        {"x": 0, "y": 0},
+                                        {"x": parent.width / 2, "y": 0},
+                                        {"x": parent.width, "y": 0},
+                                        {"x": parent.width, "y": parent.height / 2},
+                                        {"x": parent.width, "y": parent.height},
+                                        {"x": parent.width / 2, "y": parent.height},
+                                        {"x": 0, "y": parent.height},
+                                        {"x": 0, "y": parent.height / 2}
+                                    ]
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        visible: !workspace.selectedLocked
+                                        width: canvasTextEditOverlay.handleSize
+                                        height: width
+                                        radius: width / 2
+                                        x: modelData.x - width / 2
+                                        y: modelData.y - height / 2
+                                        color: "#eafff8"
+                                        border.width: Math.max(1, 1 / canvasTextEditOverlay.overlayScale)
+                                        border.color: Theme.accent
+                                        z: 62
+                                    }
+                                }
 
                                 function commit() {
                                     if (canvasTextEditInput.editing) {
@@ -5627,12 +5665,19 @@ ApplicationWindow {
                                 TextEdit {
                                     id: canvasTextEditInput
                                     anchors.fill: parent
-                                    anchors.margins: Math.max(2, 4 / canvasWorkspace.actualScale)
+                                    anchors.margins: Math.max(1, 2 / canvasTextEditOverlay.overlayScale)
                                     color: workspace.selectedTextColor
-                                    selectionColor: Theme.accentPressed
+                                    selectionColor: "#663bd5aa"
                                     selectedTextColor: Theme.textPrimary
                                     font.family: workspace.selectedTextFontFamily
                                     font.pixelSize: workspace.selectedTextFontSize
+                                    font.italic: workspace.selectedTextItalic
+                                    font.letterSpacing: workspace.selectedTextLetterSpacing
+                                    horizontalAlignment: workspace.selectedTextAlignmentId === "center"
+                                                         ? TextEdit.AlignHCenter
+                                                         : (workspace.selectedTextAlignmentId === "right"
+                                                            ? TextEdit.AlignRight
+                                                            : TextEdit.AlignLeft)
                                     wrapMode: TextEdit.Wrap
                                     selectByMouse: true
                                     readOnly: workspace.selectedLocked || !workspace.textEditOverlayVisible

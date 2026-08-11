@@ -91,6 +91,11 @@ def test_qml_canvas_pointer_double_click_starts_overlay_edit():
     assert "workspace.startTextEditOverlay()" in source
     assert "window.focusCanvasTextEditor()" in source
     assert "id: canvasTextEditOverlay" in source
+    assert 'color: "transparent"' in source
+    assert "readonly property real handleSize" in source
+    assert "workspace.selectedTextAlignmentId === \"center\"" in source
+    assert "font.letterSpacing: workspace.selectedTextLetterSpacing" in source
+    assert "visible: workspace.selectedLayerIndex >= 0 && !workspace.textEditOverlayVisible" in source
     assert "canvasTextEditInput" in source
     assert "workspace.commitTextEditOverlay(" in source
     assert "workspace.cancelTextEditOverlay()" in source

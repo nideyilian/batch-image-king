@@ -25,6 +25,7 @@ class PreviewRenderRequest:
     force_refresh: bool = False
     interactive_low_quality: bool = False
     active_layer_index: int = -1
+    omit_active_layer: bool = False
     cancel_token: object = None
 
 
@@ -53,7 +54,15 @@ class PreviewRenderService:
             from app.utils.fast_renderer import get_global_fast_renderer
 
             renderer = get_global_fast_renderer()
-            if request.interactive_low_quality and request.active_layer_index >= 0:
+            if request.omit_active_layer and request.active_layer_index >= 0:
+                image = renderer.render_preview_without_layer(
+                    request.document,
+                    active_layer_index=request.active_layer_index,
+                    force_refresh=request.force_refresh,
+                    interactive_low_quality=request.interactive_low_quality,
+                    cancel_token=token,
+                )
+            elif request.interactive_low_quality and request.active_layer_index >= 0:
                 image = renderer.render_preview_incremental(
                     request.document,
                     active_layer_index=request.active_layer_index,
@@ -129,6 +138,7 @@ def render_preview_to_image(
     force_refresh: bool = False,
     interactive_low_quality: bool = False,
     active_layer_index: int = -1,
+    omit_active_layer: bool = False,
     cancel_token=None,
 ) -> PreviewRenderResult:
     return get_preview_render_service().render(
@@ -137,6 +147,7 @@ def render_preview_to_image(
             force_refresh=force_refresh,
             interactive_low_quality=interactive_low_quality,
             active_layer_index=active_layer_index,
+            omit_active_layer=omit_active_layer,
             cancel_token=cancel_token,
         )
     )
@@ -163,4 +174,3 @@ def get_layer_surface_for_overlay(document, layer) -> Optional[Image.Image]:
     except Exception:
         return None
     return None
-

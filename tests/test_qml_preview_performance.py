@@ -13,6 +13,7 @@ from app.models.text_layer import TextLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels import workspace_view_model as workspace_module
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
+from app.services.preview_render_service import PreviewRenderRequest, PreviewRenderService
 from app.utils.fast_renderer_preview import FastRendererPreview
 from app.utils.preview_render_token import PreviewRenderToken
 
@@ -101,6 +102,31 @@ def test_preview_task_avoids_ui_lock_and_receives_cancel_token(monkeypatch):
     assert task.cancel_token is not None
     assert task.interactive_low_quality is True
     assert workspace.busy is False
+
+
+@pytest.mark.unit
+def test_text_edit_preview_task_omits_active_text_layer(monkeypatch):
+    workspace = _text_workspace()
+    captured = {}
+
+    class _Pool:
+        def start(self, task):
+            captured["task"] = task
+
+    class _ThreadPoolFacade:
+        @staticmethod
+        def globalInstance():
+            return _Pool()
+
+    monkeypatch.setattr(workspace_module, "QThreadPool", _ThreadPoolFacade)
+    workspace._auto_render = True
+    assert workspace.startTextEditOverlay() is True
+    workspace._preview_timer.stop()
+    workspace._start_preview_render()
+
+    task = captured["task"]
+    assert task.active_layer_index == 0
+    assert task.omit_active_layer is True
 
 
 @pytest.mark.unit
@@ -234,3 +260,39 @@ def test_incremental_preview_fallback_keeps_cancellation_token():
     )
 
     assert captured["cancel_token"] is token
+
+
+@pytest.mark.unit
+def test_preview_service_uses_without_layer_renderer_for_text_edit(monkeypatch):
+    calls = []
+
+    class _Renderer:
+        def render_preview_without_layer(self, document, **kwargs):
+            calls.append(("without", document, kwargs))
+            return Image.new("RGBA", (4, 4), (0, 0, 0, 0))
+
+        def render_preview_incremental(self, document, **kwargs):
+            calls.append(("incremental", document, kwargs))
+            return None
+
+        def render_preview(self, document, **kwargs):
+            calls.append(("full", document, kwargs))
+            return None
+
+    monkeypatch.setattr(
+        "app.utils.fast_renderer.get_global_fast_renderer",
+        lambda: _Renderer(),
+    )
+
+    request = PreviewRenderRequest(
+        document=object(),
+        active_layer_index=2,
+        omit_active_layer=True,
+        interactive_low_quality=True,
+    )
+    result = PreviewRenderService().render(request)
+
+    assert result.ok is True
+    assert calls[0][0] == "without"
+    assert calls[0][2]["active_layer_index"] == 2
+    assert calls[0][2]["interactive_low_quality"] is True

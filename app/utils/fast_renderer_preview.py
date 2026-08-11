@@ -254,6 +254,42 @@ class FastRendererPreview(object):
                 interactive_low_quality=interactive_low_quality,
                 cancel_token=cancel_token,
             )
+
+    @_serialized_preview
+    def render_preview_without_layer(
+        self,
+        document,
+        active_layer_index: int,
+        force_refresh: bool = False,
+        interactive_low_quality: bool = True,
+        cancel_token=None,
+    ) -> Optional[Image.Image]:
+        """Render a preview base with the active layer omitted for direct editing."""
+        try:
+            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+                return None
+            if active_layer_index < 0 or active_layer_index >= len(document.layers):
+                return self.render_preview(
+                    document=document,
+                    force_refresh=force_refresh,
+                    interactive_low_quality=interactive_low_quality,
+                    cancel_token=cancel_token,
+                )
+            return self._get_or_build_interaction_base(
+                document=document,
+                active_layer_index=active_layer_index,
+                force_refresh=force_refresh,
+                interactive_low_quality=interactive_low_quality,
+                cancel_token=cancel_token,
+            )
+        except Exception as e:
+            print(f"[快速渲染] 编辑底图预览失败，回退普通预览: {e}")
+            return self.render_preview(
+                document=document,
+                force_refresh=force_refresh,
+                interactive_low_quality=interactive_low_quality,
+                cancel_token=cancel_token,
+            )
     
     @_serialized_preview
     def render_preview_live(
