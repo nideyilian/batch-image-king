@@ -167,6 +167,15 @@ def build():
         安装版使用 onedir，便携版继续生成 onefile。两者共用同一组资源和
         hidden imports，避免 build.py 与 spec 文件逐渐漂移。
         """
+        specpath = str(Path(workpath) / 'spec')
+        # 保持打包资源清单集中可读；执行时再解析为绝对路径。
+        data_files = [
+            ('app/resources', 'app/resources'),
+            ('app/qml/Main.qml', 'app/qml'),
+            ('app/qml/components', 'app/qml/components'),
+            ('app/qml/icons', 'app/qml/icons'),
+            ('app/qml/assets', 'app/qml/assets'),
+        ]
         cmd = [
             sys.executable,
             '-m',
@@ -177,14 +186,9 @@ def build():
             f'--{mode}',
             f'--distpath={distpath}',
             f'--workpath={workpath}',
+            f'--specpath={specpath}',
             f'--name={APP_NAME}',
-            '--icon=app/resources/app_icon.ico',
-            # 添加资源目录
-            '--add-data=app/resources;app/resources',
-            '--add-data=app/qml/Main.qml;app/qml',
-            '--add-data=app/qml/components;app/qml/components',
-            '--add-data=app/qml/icons;app/qml/icons',
-            '--add-data=app/qml/assets;app/qml/assets',
+            f'--icon={REPO_ROOT / "app" / "resources" / "app_icon.ico"}',
             # 版本信息
             f'--version-file={version_info_path}',
             # 隐藏导入
@@ -203,11 +207,14 @@ def build():
             # 排除不需要的模块以减小体积（可选）
             # '--exclude-module=matplotlib',
             # 入口文件
-            'main.py'
+            str(REPO_ROOT / 'main.py')
         ]
 
+        for source, target in reversed(data_files):
+            cmd.insert(-1, f'--add-data={REPO_ROOT / source};{target}')
+
         if os.path.exists('presets'):
-            cmd.insert(-1, '--add-data=presets;presets')
+            cmd.insert(-1, f'--add-data={REPO_ROOT / "presets"};presets')
         return [arg for arg in cmd if arg is not None]
 
     # 安装版优先：目录内直接加载 DLL/Python 模块，不再启动时解压 250MB 单文件。
