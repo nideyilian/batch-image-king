@@ -36,8 +36,16 @@ def qapp():
 
     集成/UI 测试无需各自创建 QApplication；统一在此创建，unittest.TestCase 式的
     测试也会通过 ``QApplication.instance()`` 自动复用同一实例。
+
+    若当前 Python 环境未安装 PySide6（例如只装了 pytest 做纯逻辑契约测试），
+    则不创建 QApplication 并 yield None，允许非 UI 用例照常执行；真正依赖
+    QApplication 的集成用例会在首次使用 Qt 类时自行失败，错误信息也会更准确。
     """
-    from PySide6.QtWidgets import QApplication
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ModuleNotFoundError:
+        yield None
+        return
 
     app = QApplication.instance() or QApplication([])
     yield app

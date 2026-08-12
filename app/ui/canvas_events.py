@@ -887,17 +887,22 @@ class CanvasWidgetCanvasEvents(object):
                 return
 
             # 阶段 1：Ctrl+P 打印预览性能报告（仅在 BTPW_PREVIEW_PERF=1 时有效）
+            # 注意：仅当性能模式真的启用且成功输出时才 accept 事件，
+            # 否则放行让菜单级 Shortcut（如未来打印）有机会响应。
             if event.key() == Qt.Key_P:
+                handled = False
                 try:
                     from app.utils.preview_perf import is_perf_enabled, PreviewPerfMonitor
                     if is_perf_enabled():
                         report = PreviewPerfMonitor.instance().report(force=True)
                         if report:
                             print(report)
+                            handled = True
                 except Exception as exc:
                     logger.warning("打印预览性能报告失败: %s", exc)
-                event.accept()
-                return
+                if handled:
+                    event.accept()
+                    return
 
         # 路径节点快捷键（AI风格）：1=尖角 2=平滑 3=对称
         if self.document.selected_layer_index >= 0 and self.selected_vector_node_index >= 0:

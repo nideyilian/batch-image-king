@@ -113,10 +113,23 @@ class MainWindowTabs(object):
             # 禁用撤销/重做按钮
             self.undo_action.setEnabled(False)
             self.redo_action.setEnabled(False)
+            if hasattr(self, 'step_backward_action'):
+                self.step_backward_action.setEnabled(False)
         
             # 禁用复制粘贴按钮
             self.copy_layer_action.setEnabled(False)
             self.paste_layer_action.setEnabled(False)
+            # 同时禁用新增的 PS 图层编辑快捷键（避免灰底但显示可触发）
+            for attr in (
+                'duplicate_layer_via_copy_action', 'free_transform_action',
+                'merge_selected_down_action', 'group_layers_action',
+                'ungroup_groups_action', 'send_to_back_action',
+                'bring_to_front_action', 'step_backward_layer_action',
+                'step_forward_layer_action',
+            ):
+                act = getattr(self, attr, None)
+                if act is not None:
+                    act.setEnabled(False)
 
     def update_window_title(self):
         """更新窗口标题"""

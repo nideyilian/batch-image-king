@@ -471,9 +471,17 @@ class WorkspaceViewModel(QObject):
     def setShowRulers(self, enabled: bool) -> bool:
         return self._set_view_setting("show_rulers", bool(enabled), "切换标尺显示")
 
+    @Slot(result=bool)
+    def toggleRulers(self) -> bool:
+        return self.setShowRulers(not self.showRulers)
+
     @Slot(bool, result=bool)
     def setShowGuides(self, enabled: bool) -> bool:
         return self._set_view_setting("show_guides", bool(enabled), "切换参考线显示")
+
+    @Slot(result=bool)
+    def toggleGuides(self) -> bool:
+        return self.setShowGuides(not self.showGuides)
 
     @Slot(bool, result=bool)
     def setSnapToGuides(self, enabled: bool) -> bool:
@@ -3763,6 +3771,10 @@ class WorkspaceViewModel(QObject):
         if not self._ensure_operations_available():
             return False
         direction = str(direction or "").lower()
+        if direction == "to_front":
+            return self._move_selected_layer_to_boundary("front")
+        if direction == "to_back":
+            return self._move_selected_layer_to_boundary("back")
         allowed = self.canMoveLayerForward if direction == "forward" else self.canMoveLayerBackward
         if direction not in {"forward", "backward"} or not allowed:
             self._set_status("图层已在边界或相邻图层已锁定", toast=True)
@@ -3795,6 +3807,73 @@ class WorkspaceViewModel(QObject):
         self.requestPreview(force=True)
         self._set_status(f"图层已{action_text}", toast=True)
         return True
+
+    def _move_selected_layer_to_boundary(self, side: str) -> bool:
+        """将选中图层移到顶层 (front) 或底层 (back)。"""
+        if not self._ensure_operations_available() or self.selectedLayerIndex < 0:
+            self._set_status("请先选择一个图层", toast=True)
+            return False
+        selected_layer = self._selected_layer()
+        if selected_layer is None or self._is_effectively_locked(selected_layer):
+            self._set_status("图层已锁定或不可移动", toast=True)
+            return False
+
+        n = len(self._document.layers)
+        current = self.selectedLayerIndex
+        target = (n - 1) if side == "front" else 0
+        if target == current:
+            return True
+
+        with self._document_lock:
+            self._ensure_history_baseline()
+            layer = self._document.layers.pop(current)
+            self._document.layers.insert(target, layer)
+            action_text = "置于顶层" if side == "front" else "置于底层"
+            self._document.is_modified = True
+            self._document._invalidate_render_cache()
+            self._document.save_state(action_text)
+            self._document.document_changed.emit()
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status(f"图层已{action_text}", toast=True)
+        return True
+
+    @Slot(result=bool)
+    def beginFreeTransform(self) -> bool:
+        """Ctrl+T（PS 自由变换）入口：有选中层时显示提示并沿用画布现有的变换手柄。"""
+        if not self._ensure_operations_available() or self.selectedLayerIndex < 0:
+            self._set_status("请先选择一个图层再使用自由变换(Ctrl+T)", toast=True)
+            return False
+        self._set_status("自由变换：拖拽控制点缩放，Esc 取消", toast=True)
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        return True
+
+    @Slot(result=bool)
+    def mergeSelectedDown(self) -> bool:
+        """Ctrl+E（PS 向下合并图层）占位：当前实现等价于「编组为合并容器」。
+
+        应用暂未实现像素级扁平化渲染，这里复用 groupSelectedLayers，
+        但在状态栏中明确说明是 Ctrl+E 触发的向下合并动作。"""
+        if not self._ensure_operations_available():
+            return False
+        idx = self.selectedLayerIndex
+        if idx <= 0 or idx >= len(self._document.layers):
+            self._set_status("请选择一个非最底层的图层以执行向下合并(Ctrl+E)", toast=True)
+            return False
+        upper = self._document.layers[idx]
+        lower = self._document.layers[idx - 1]
+        if self._is_effectively_locked(upper) or self._is_effectively_locked(lower):
+            self._set_status("存在锁定图层，无法合并", toast=True)
+            return False
+        ok = self.groupSelectedLayers()
+        if ok:
+            self._set_status("已编组为合并容器（向下合并：Ctrl+E）", toast=True)
+        return ok
 
     def _finish_arrangement(self, action: str, status: str, *, render: bool = True) -> None:
         self._document.is_modified = True

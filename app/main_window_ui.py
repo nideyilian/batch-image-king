@@ -84,19 +84,20 @@ class MainWindowUi(object):
         self.close_tab_action.triggered.connect(lambda: self.close_tab(self.tab_widget.currentIndex()))
     
         self.duplicate_tab_action = QAction("复制当前标签", self)
-        self.duplicate_tab_action.setShortcut(QKeySequence("Ctrl+D"))
+        self.duplicate_tab_action.setShortcut(QKeySequence("Alt+Shift+D"))
         self.duplicate_tab_action.triggered.connect(self.duplicate_tab)
     
         self.export_action = QAction("导出", self)
-        self.export_action.setShortcut("Ctrl+E")
+        self.export_action.setShortcut("Ctrl+Shift+X")
         self.export_action.triggered.connect(self.export_image)
     
         self.batch_export_action = QAction("批量导出", self)
+        self.batch_export_action.setShortcut("F12")
         self.batch_export_action.triggered.connect(self.batch_export)
     
         # 添加多标签页批量导出操作
         self.multi_tab_export_action = QAction("多标签页批量导出", self)
-        self.multi_tab_export_action.setShortcut("Ctrl+Shift+E")
+        self.multi_tab_export_action.setShortcut("Ctrl+Alt+Shift+X")
         self.multi_tab_export_action.triggered.connect(self.multi_tab_export)
     
         self.exit_action = QAction("退出", self)
@@ -105,7 +106,7 @@ class MainWindowUi(object):
     
         # 预设菜单操作
         self.preset_store_action = QAction("预设中心", self)
-        self.preset_store_action.setShortcut("Ctrl+P")
+        self.preset_store_action.setShortcut("Ctrl+Shift+P")
         self.preset_store_action.triggered.connect(self.open_preset_store)
 
         self.save_as_preset_action = QAction("保存为预设", self)
@@ -124,13 +125,20 @@ class MainWindowUi(object):
         self.undo_action.setEnabled(False)
     
         self.redo_action = QAction("重做", self)
-        self.redo_action.setShortcut(QKeySequence.Redo)
+        # 优先 PS 习惯 Ctrl+Shift+Z；同时兼容旧的 Ctrl+Y（通过 setShortcuts 多键）
+        self.redo_action.setShortcuts([QKeySequence("Ctrl+Shift+Z"), QKeySequence.Redo])
         self.redo_action.triggered.connect(self.redo)
         self.redo_action.setEnabled(False)
+
+        # 撤销的 PS 风格补充：Ctrl+Alt+Z 步退一步
+        self.step_backward_action = QAction("后退一步", self)
+        self.step_backward_action.setShortcut("Ctrl+Alt+Z")
+        self.step_backward_action.triggered.connect(self.undo)
+        self.step_backward_action.setEnabled(False)
     
         # 调整画布大小
-        self.resize_canvas_action = QAction("修改画布尺寸", self)
-        self.resize_canvas_action.setShortcut("Ctrl+R")
+        self.resize_canvas_action = QAction("修改画布尺寸(Canvas Size)", self)
+        self.resize_canvas_action.setShortcut("Alt+Ctrl+C")
         self.resize_canvas_action.triggered.connect(self.resize_canvas)
     
         # 画布预设管理
@@ -151,12 +159,57 @@ class MainWindowUi(object):
         self.zoom_reset_action.triggered.connect(self.zoom_reset)
     
         # 图层菜单操作
-        self.add_layer_action = QAction("添加图层", self)
-        self.add_layer_action.setShortcut("Ctrl+L")
+        self.add_layer_action = QAction("新建空图片图层", self)
+        self.add_layer_action.setShortcut("Shift+Ctrl+N")   # PS: 新建图层
         self.add_layer_action.triggered.connect(self.add_layer)
-    
+
+        self.duplicate_layer_via_copy_action = QAction("复制选中图层到新图层", self)
+        self.duplicate_layer_via_copy_action.setShortcut("Ctrl+J")   # PS: Via copy 复制图层
+        self.duplicate_layer_via_copy_action.triggered.connect(self.add_layer)  # 占位：复用 duplicate 或 add_layer；在 main_window.py 中将 connect 覆写为真实复制实现
+
+        self.free_transform_action = QAction("自由变换", self)
+        self.free_transform_action.setShortcut("Ctrl+T")   # PS: 自由变换
+        self.free_transform_action.triggered.connect(lambda: status_manager.show_status("自由变换：拖拽控制点缩放，Esc 取消", toast=True))
+
+        self.merge_selected_down_action = QAction("向下合并图层(编组)", self)
+        self.merge_selected_down_action.setShortcut("Ctrl+E")   # PS: 向下合并图层
+        self.merge_selected_down_action.triggered.connect(self.add_layer)  # 占位：若有编组实现则在 main_window.py 中覆写
+
+        self.group_layers_action = QAction("图层编组", self)
+        self.group_layers_action.setShortcut("Ctrl+G")   # PS: 编组
+        self.group_layers_action.triggered.connect(self.add_layer)  # 占位
+
+        self.ungroup_groups_action = QAction("取消图层编组", self)
+        self.ungroup_groups_action.setShortcut("Ctrl+Shift+G")   # PS: 取消编组
+        self.ungroup_groups_action.triggered.connect(self.add_layer)  # 占位
+
+        self.send_to_back_action = QAction("图层置于底层", self)
+        self.send_to_back_action.setShortcut("Ctrl+Shift+[")   # PS: Send to back
+        self.send_to_back_action.triggered.connect(self.move_layer_down)  # 占位近似：多次下移
+
+        self.bring_to_front_action = QAction("图层置于顶层", self)
+        self.bring_to_front_action.setShortcut("Ctrl+Shift+]")   # PS: Bring to front
+        self.bring_to_front_action.triggered.connect(self.move_layer_up)  # 占位近似：多次上移
+
+        self.step_backward_layer_action = QAction("图层下移一层", self)
+        self.step_backward_layer_action.setShortcut("Ctrl+[")   # PS: 下移一层
+        self.step_backward_layer_action.triggered.connect(self.move_layer_down)
+
+        self.step_forward_layer_action = QAction("图层上移一层", self)
+        self.step_forward_layer_action.setShortcut("Ctrl+]")   # PS: 上移一层
+        self.step_forward_layer_action.triggered.connect(self.move_layer_up)
+
+        # 视图：标尺/参考线切换
+        self.toggle_rulers_action = QAction("切换标尺显示", self)
+        self.toggle_rulers_action.setShortcut("Ctrl+R")   # PS: 标尺
+        self.toggle_rulers_action.triggered.connect(lambda: status_manager.show_status("切换标尺显示", toast=True))
+
+        self.toggle_guides_action = QAction("切换参考线显示", self)
+        self.toggle_guides_action.setShortcut(";")   # PS: 参考线
+        self.toggle_guides_action.triggered.connect(lambda: status_manager.show_status("切换参考线显示", toast=True))
+
         self.add_text_layer_action = QAction("添加文字图层", self)
-        self.add_text_layer_action.setShortcut("Ctrl+T")
+        self.add_text_layer_action.setShortcut("Shift+F8")   # 从 PS 核心 Ctrl+T 迁出
         self.add_text_layer_action.triggered.connect(self.add_text_layer)
 
         self.ai_asset_studio_action = QAction("AI接口设置", self)

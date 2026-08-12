@@ -46,11 +46,18 @@ class MainWindowMisc(object):
         else:
             self.undo_action.setEnabled(False)
             self.redo_action.setEnabled(False)
+        # PS 风格补充：Ctrl+Alt+Z 后退一步与撤销状态保持一致
+        if hasattr(self, 'step_backward_action'):
+            self.step_backward_action.setEnabled(self.undo_action.isEnabled())
 
     def update_copy_paste_actions(self):
         """更新复制粘贴操作的状态"""
-        if self.document and self.document.selected_layer_index >= 0 and \
-           self.document.selected_layer_index < len(self.document.layers):
+        has_selection = bool(
+            self.document
+            and self.document.selected_layer_index >= 0
+            and self.document.selected_layer_index < len(self.document.layers)
+        )
+        if has_selection:
             # 有选中的图层，启用复制功能
             self.copy_layer_action.setEnabled(True)
         else:
@@ -62,6 +69,24 @@ class MainWindowMisc(object):
             self.paste_layer_action.setEnabled(True)
         else:
             self.paste_layer_action.setEnabled(False)
+
+        # PS 风格快捷键：需要选中图层时同步启用/禁用（hasattr 避免经典入口之外的运行时报错）
+        for attr in (
+            'duplicate_layer_via_copy_action',
+            'free_transform_action',
+            'step_backward_layer_action',
+            'step_forward_layer_action',
+            'bring_to_front_action',
+            'send_to_back_action',
+        ):
+            act = getattr(self, attr, None)
+            if act is not None:
+                act.setEnabled(has_selection)
+        # 向下合并需要至少两个层（下方有一层可合并）
+        act = getattr(self, 'merge_selected_down_action', None)
+        if act is not None:
+            act.setEnabled(bool(self.document) and self.document.selected_layer_index >= 1
+                           and self.document.selected_layer_index < len(self.document.layers))
 
     def update_document_info(self):
         """更新文档信息显示"""

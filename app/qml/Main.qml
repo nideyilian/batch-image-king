@@ -29,7 +29,22 @@ ApplicationWindow {
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
-    property bool layerShortcutsEnabled: hasOpenDocument && !selectedTextEditor.editing && !workspace.operationsBlocked
+
+    // 统一的快捷键焦点门控：画布文字编辑中 / 阻塞态 / 任意属性面板输入框取得焦点时
+    // 都会抑制图层编辑类与单字母工具类快捷键，避免抢输入或误触发。
+    function _activeFocusIsEditable() {
+        var it = window.activeFocusItem
+        if (!it) return false
+        // selectByMouse -> TextField/TextArea; inputMethodHints/cursorPosition -> SpinBox/ValueBox/SelectBox 等可编辑
+        if (it.hasOwnProperty && it.hasOwnProperty("selectByMouse")) return true
+        if (it.hasOwnProperty && it.hasOwnProperty("cursorPosition")) return true
+        if (it.hasOwnProperty && it.hasOwnProperty("inputMethodHints")) return true
+        return false
+    }
+    property bool _editableInputHasFocus: _activeFocusIsEditable()
+    property bool layerShortcutsEnabled: hasOpenDocument && !selectedTextEditor.editing
+                                          && !workspace.operationsBlocked && !_editableInputHasFocus
+    property bool toolShortcutsEnabled: !selectedTextEditor.editing && !_editableInputHasFocus
     property string pendingCloseTitle: ""
     property int contextDocumentIndex: -1
     property bool updateBannerDismissed: false
@@ -441,51 +456,72 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequence: "Ctrl+N"; enabled: !workspace.operationsBlocked; onActivated: window.openNewCanvasDialog() }
-    Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
-    Shortcut { sequence: "Ctrl+S"; enabled: window.hasOpenDocument; onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-    Shortcut { sequence: "Ctrl+Shift+S"; enabled: window.hasOpenDocument; onActivated: saveDialog.open() }
-    Shortcut { sequence: "Ctrl+W"; enabled: window.hasOpenDocument; onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
-    Shortcut { sequence: "Ctrl+E"; enabled: window.hasOpenDocument; onActivated: exportDialog.open() }
-    Shortcut { sequence: "Ctrl+Shift+E"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onActivated: window.openMultiTabExportDrawer() }
-    Shortcut { sequence: "Ctrl+P"; enabled: !workspace.operationsBlocked; onActivated: window.openProjectPresetDrawer() }
-    Shortcut { sequence: "Ctrl+R"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onActivated: window.openResizeCanvasDialog() }
-    Shortcut { sequence: "Ctrl+Z"; enabled: workspace.canUndo; onActivated: workspace.undo() }
-    Shortcut { sequence: "Ctrl+Y"; enabled: workspace.canRedo; onActivated: workspace.redo() }
-    Shortcut { sequence: "Ctrl+C"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.copySelectedLayers() }
-    Shortcut { sequence: "Ctrl+V"; enabled: window.layerShortcutsEnabled && legacyTools.hasLayerClipboard; onActivated: legacyTools.pasteLayers() }
-    Shortcut { sequence: "Ctrl+Shift+C"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.copySelectedLayerStyle() }
-    Shortcut { sequence: "Ctrl+Shift+V"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.pasteSelectedLayerStyle() }
-    Shortcut { sequence: "Ctrl+A"; enabled: window.layerShortcutsEnabled; onActivated: legacyTools.selectAllLayers() }
-    Shortcut { sequence: "Ctrl+L"; enabled: window.layerShortcutsEnabled; onActivated: workspace.addEmptyImageLayer() }
-    Shortcut { sequence: "Ctrl+T"; enabled: window.layerShortcutsEnabled; onActivated: textLayerDialog.openFresh() }
-    Shortcut { sequence: "Ctrl+Up"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward; onActivated: workspace.moveSelectedLayer("forward") }
-    Shortcut { sequence: "Ctrl+Down"; enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") }
-    Shortcut { sequence: "Ctrl++"; enabled: window.hasOpenDocument; onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
-    Shortcut { sequence: "Ctrl+-"; enabled: window.hasOpenDocument; onActivated: workspace.setZoomFactor(workspace.zoomFactor / 1.1) }
-    Shortcut { sequence: "Ctrl+0"; enabled: window.hasOpenDocument; onActivated: workspace.resetView() }
-    Shortcut { sequence: "V"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 0 }
-    Shortcut { sequence: "H"; enabled: !selectedTextEditor.editing; onActivated: activeTool = 1 }
-    Shortcut { sequence: "F2"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: window.revealLayerNameEditor() }
-    Shortcut { sequence: "Delete"; enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.deleteSelectedLayers() }
+    // ============================================================
+    // 统一 Photoshop 风格快捷键（与 app/utils/shortcut_contract.py 同步）
+    // 修改任何键位请先改契约模块，再同步到这里与经典 UI
+    // ============================================================
 
-    Shortcut {
-        sequence: "Ctrl+D"
-        enabled: !workspace.operationsBlocked && workspaceSessions.activeIndex >= 0
-        onActivated: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex)
-    }
+    // --- 1. 文件 / 历史 --------------------------------------------------
+    Shortcut { sequence: "Ctrl+N";        enabled: !workspace.operationsBlocked;                         onActivated: window.openNewCanvasDialog() }
+    Shortcut { sequence: "Ctrl+O";        onActivated: openDialog.open() }
+    Shortcut { sequence: "Ctrl+S";        enabled: window.hasOpenDocument;                                  onActivated: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+    Shortcut { sequence: "Ctrl+Shift+S";  enabled: window.hasOpenDocument;                                  onActivated: saveDialog.open() }
+    Shortcut { sequence: "Ctrl+W";        enabled: window.hasOpenDocument;                                  onActivated: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
+    Shortcut { sequence: "Ctrl+Z";        enabled: workspace.canUndo;                                        onActivated: workspace.undo() }
+    Shortcut { sequence: "Ctrl+Shift+Z";  enabled: workspace.canRedo;                                        onActivated: workspace.redo() }   // PS 标准重做
+    Shortcut { sequence: "Ctrl+Y";        enabled: workspace.canRedo;                                        onActivated: workspace.redo() }   // Windows 兼容别名
+    Shortcut { sequence: "Ctrl+Alt+Z";    enabled: workspace.canUndo;                                        onActivated: workspace.undo() }   // PS「后退一步」别名
 
-    Shortcut {
-        sequence: "Ctrl+["
-        enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward
-        onActivated: workspace.moveSelectedLayer("backward")
-    }
+    // --- 2. 图层编辑（Photoshop 核心语义区 —— 应用专属功能严禁占用） ---
+    Shortcut { sequence: "Ctrl+C";        enabled: window.layerShortcutsEnabled;                             onActivated: legacyTools.copySelectedLayers() }
+    Shortcut { sequence: "Ctrl+V";        enabled: window.layerShortcutsEnabled && legacyTools.hasLayerClipboard; onActivated: legacyTools.pasteLayers() }
+    Shortcut { sequence: "Ctrl+Shift+C";  enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.copySelectedLayerStyle() }
+    Shortcut { sequence: "Ctrl+Shift+V";  enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.pasteSelectedLayerStyle() }
+    Shortcut { sequence: "Ctrl+A";        enabled: window.layerShortcutsEnabled;                             onActivated: legacyTools.selectAllLayers() }
+    Shortcut { sequence: "Ctrl+J";        enabled: window.layerShortcutsEnabled;                             onActivated: workspace.duplicateSelectedLayers() }        // PS:复制选中图层到新图层
+    Shortcut { sequence: "Delete";        enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.deleteSelectedLayers() }
+    Shortcut { sequence: "F2";            enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: window.revealLayerNameEditor() }
+    // 变换 / 合并 / 编组
+    Shortcut { sequence: "Ctrl+T";        enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.beginFreeTransform() }        // PS:自由变换
+    Shortcut { sequence: "Ctrl+E";        enabled: window.layerShortcutsEnabled && workspace.selectedLayerIndex >= 0; onActivated: workspace.mergeSelectedDown() }            // PS:向下合并
+    Shortcut { sequence: "Ctrl+G";        enabled: window.layerShortcutsEnabled;                             onActivated: workspace.groupSelectedLayers() }                     // PS:图层编组
+    Shortcut { sequence: "Ctrl+Shift+G";  enabled: window.layerShortcutsEnabled;                             onActivated: workspace.ungroupSelectedGroups() }                   // PS:取消编组
+    // 顺序移动
+    Shortcut { sequence: "Ctrl+[";        enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") }
+    Shortcut { sequence: "Ctrl+]";        enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward;  onActivated: workspace.moveSelectedLayer("forward") }
+    Shortcut { sequence: "Ctrl+Shift+[";  enabled: window.layerShortcutsEnabled;                             onActivated: workspace.moveSelectedLayer("to_back") }     // PS:置于底层
+    Shortcut { sequence: "Ctrl+Shift+]";  enabled: window.layerShortcutsEnabled;                             onActivated: workspace.moveSelectedLayer("to_front") }    // PS:置于顶层
+    Shortcut { sequence: "Ctrl+Down";     enabled: window.layerShortcutsEnabled && workspace.canMoveLayerBackward; onActivated: workspace.moveSelectedLayer("backward") } // 兼容别名
+    Shortcut { sequence: "Ctrl+Up";       enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward;  onActivated: workspace.moveSelectedLayer("forward") }  // 兼容别名
 
-    Shortcut {
-        sequence: "Ctrl+]"
-        enabled: window.layerShortcutsEnabled && workspace.canMoveLayerForward
-        onActivated: workspace.moveSelectedLayer("forward")
-    }
+    // --- 3. 视图（Ctrl+R 还给 PS 标尺，Alt+Ctrl+C=修改画布尺寸） ---
+    Shortcut { sequence: "Ctrl+R";        enabled: window.hasOpenDocument;                                   onActivated: workspace.toggleRulers() }   // PS:切换标尺
+    Shortcut { sequence: ";";             enabled: window.hasOpenDocument;                                   onActivated: workspace.toggleGuides() }   // PS:切换参考线（保留简洁形式）
+    Shortcut { sequence: "Ctrl++";        enabled: window.hasOpenDocument;                                   onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
+    Shortcut { sequence: "Ctrl+-";        enabled: window.hasOpenDocument;                                   onActivated: workspace.setZoomFactor(workspace.zoomFactor / 1.1) }
+    Shortcut { sequence: "Ctrl+0";        enabled: window.hasOpenDocument;                                   onActivated: workspace.resetView() }
+
+    // --- 4. 工具切换（单字母 —— 非文字编辑且非输入框焦点时生效） -----
+    Shortcut { sequence: "V"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 0 }   // 移动/选择
+    Shortcut { sequence: "H"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 1 }   // 抓手
+    Shortcut { sequence: "Z"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 2 }   // 缩放（PS 标准，新增）
+    Shortcut { sequence: "T"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 3 }   // 文字工具（PS 标准；新建图层→Shift+F8）
+    Shortcut { sequence: "C"; enabled: window.toolShortcutsEnabled; onActivated: workspace.startCropEdit() }   // 裁剪工具（PS 标准）
+    Shortcut { sequence: "P"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 4 }   // 路径/钢笔
+    Shortcut { sequence: "G"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 5 }   // 渐变/油漆桶
+    Shortcut { sequence: "I"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 6 }   // 吸管
+    Shortcut { sequence: "U"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 7 }   // 形状/矢量
+    Shortcut { sequence: "A"; enabled: window.toolShortcutsEnabled && workspace.selectedVectorPathEnabled; onActivated: activeTool = 8 }   // 路径选择（仅路径模式）
+
+    // --- 5. 批图王专属（避开 PS 核心键位，参见 shortcut_contract.py） ---
+    Shortcut { sequence: "Ctrl+Shift+X";        enabled: window.hasOpenDocument;                                  onActivated: exportDialog.open() }                              // 原 Ctrl+E：导出当前画面
+    Shortcut { sequence: "F12";                  enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running); onActivated: window.openBatchExportDrawer() } // 批量导出
+    Shortcut { sequence: "Ctrl+Alt+Shift+X";    enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onActivated: window.openMultiTabExportDrawer() } // 原 Ctrl+Shift+E：多标签导出
+    Shortcut { sequence: "Alt+Shift+D";         enabled: !workspace.operationsBlocked && workspaceSessions.activeIndex >= 0;               onActivated: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) } // 原 Ctrl+D：复制标签页
+    Shortcut { sequence: "Shift+F8";            enabled: window.layerShortcutsEnabled;                                                         onActivated: textLayerDialog.openFresh() } // 原 Ctrl+T：添加文字图层
+    Shortcut { sequence: "Shift+Ctrl+N";        enabled: window.layerShortcutsEnabled;                                                         onActivated: workspace.addEmptyImageLayer() } // 原 Ctrl+L：新建空图片图层（对齐 PS 新建图层习惯）
+    Shortcut { sequence: "Ctrl+Shift+P";        enabled: !workspace.operationsBlocked;                                                        onActivated: window.openProjectPresetDrawer() } // 原 Ctrl+P：预设中心
+    Shortcut { sequence: "Alt+Ctrl+C";          enabled: window.hasOpenDocument && !workspace.operationsBlocked;                             onActivated: window.openResizeCanvasDialog() } // 原 Ctrl+R：修改画布尺寸（对齐 PS Alt+Ctrl+C=Canvas Size）
 
     FileDialog {
         id: openDialog
@@ -2245,11 +2281,11 @@ ApplicationWindow {
         ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; enabled: window.hasOpenDocument; onTriggered: saveDialog.open() }
         MenuSeparator { }
         ShapeMenuItem { text: "关闭当前标签\tCtrl+W"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
-        ShapeMenuItem { text: "复制当前标签"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
+        ShapeMenuItem { text: "复制当前标签\tAlt+Shift+D"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
         MenuSeparator { }
-        ShapeMenuItem { text: "导出当前画面\tCtrl+E"; enabled: window.hasOpenDocument; onTriggered: exportDialog.open() }
-        ShapeMenuItem { text: "完整批量导出"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running); onTriggered: window.openBatchExportDrawer() }
-        ShapeMenuItem { text: "多标签高级导出\tCtrl+Shift+E"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onTriggered: window.openMultiTabExportDrawer() }
+        ShapeMenuItem { text: "导出当前画面\tCtrl+Shift+X"; enabled: window.hasOpenDocument; onTriggered: exportDialog.open() }
+        ShapeMenuItem { text: "完整批量导出\tF12"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running); onTriggered: window.openBatchExportDrawer() }
+        ShapeMenuItem { text: "多标签高级导出\tCtrl+Alt+Shift+X"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onTriggered: window.openMultiTabExportDrawer() }
         MenuSeparator { }
         ShapeMenuItem { text: "退出"; onTriggered: window.close() }
     }
@@ -2257,25 +2293,36 @@ ApplicationWindow {
     AppMenu {
         id: editMenu
         ShapeMenuItem { text: "撤销\tCtrl+Z"; enabled: workspace.canUndo; onTriggered: workspace.undo() }
-        ShapeMenuItem { text: "重做\tCtrl+Y"; enabled: workspace.canRedo; onTriggered: workspace.redo() }
+        ShapeMenuItem { text: "重做\tCtrl+Shift+Z"; enabled: workspace.canRedo; onTriggered: workspace.redo() }
+        ShapeMenuItem { text: "后退一步\tCtrl+Alt+Z"; enabled: workspace.canUndo; onTriggered: workspace.undo() }
         MenuSeparator { }
         ShapeMenuItem { text: "复制图层\tCtrl+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.copySelectedLayers() }
         ShapeMenuItem { text: "粘贴图层\tCtrl+V"; enabled: window.hasOpenDocument && legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
         ShapeMenuItem { text: "复制图层样式\tCtrl+Shift+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.copySelectedLayerStyle() }
         ShapeMenuItem { text: "粘贴图层样式\tCtrl+Shift+V"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.pasteSelectedLayerStyle() }
+        ShapeMenuItem { text: "复制选中图层到新图层\tCtrl+J"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onTriggered: workspace.duplicateSelectedLayers() }
         MenuSeparator { }
         ShapeMenuItem { text: "全选图层\tCtrl+A"; enabled: window.hasOpenDocument; onTriggered: legacyTools.selectAllLayers() }
     }
 
     AppMenu {
         id: layerMenu
-        ShapeMenuItem { text: "新建空图片图层\tCtrl+L"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
+        ShapeMenuItem { text: "新建空图片图层\tShift+Ctrl+N"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
         ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
         ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: imageFolderDialog.open() }
-        ShapeMenuItem { text: "添加文字图层\tCtrl+T"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+        ShapeMenuItem { text: "添加文字图层\tShift+F8"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
         ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
         MenuSeparator { }
+        ShapeMenuItem { text: "自由变换\tCtrl+T"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.beginFreeTransform() }
+        ShapeMenuItem { text: "向下合并图层(编组)\tCtrl+E"; enabled: workspace.selectedLayerIndex >= 1; onTriggered: workspace.mergeSelectedDown() }
+        ShapeMenuItem { text: "图层编组\tCtrl+G"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onTriggered: workspace.groupSelectedLayers() }
+        ShapeMenuItem { text: "取消图层编组\tCtrl+Shift+G"; enabled: window.hasOpenDocument; onTriggered: workspace.ungroupSelectedGroups() }
+        MenuSeparator { }
         ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealLayerNameEditor() }
+        ShapeMenuItem { text: "图层下移一层\tCtrl+["; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("backward") }
+        ShapeMenuItem { text: "图层上移一层\tCtrl+]"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("forward") }
+        ShapeMenuItem { text: "图层置于底层\tCtrl+Shift+["; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("to_back") }
+        ShapeMenuItem { text: "图层置于顶层\tCtrl+Shift+]"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("to_front") }
         ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
         ShapeMenuItem { text: "绑定管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(0) }
         ShapeMenuItem { text: "尺寸匹配管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(1) }
@@ -2285,14 +2332,17 @@ ApplicationWindow {
 
     AppMenu {
         id: canvasMenu
-        ShapeMenuItem { text: "修改画布尺寸\tCtrl+R"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openResizeCanvasDialog() }
+        ShapeMenuItem { text: "修改画布尺寸(Canvas Size)\tAlt+Ctrl+C"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openResizeCanvasDialog() }
         ShapeMenuItem { text: "画布预设管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openCanvasPresetDrawer() }
         MenuSeparator { }
-        ShapeMenuItem { text: "项目预设中心\tCtrl+P"; enabled: !workspace.operationsBlocked; onTriggered: window.openProjectPresetDrawer() }
+        ShapeMenuItem { text: "项目预设中心\tCtrl+Shift+P"; enabled: !workspace.operationsBlocked; onTriggered: window.openProjectPresetDrawer() }
     }
 
     AppMenu {
         id: viewMenu
+        ShapeMenuItem { text: "切换标尺显示\tCtrl+R"; enabled: window.hasOpenDocument; onTriggered: workspace.toggleRulers() }
+        ShapeMenuItem { text: "切换参考线\t;"; enabled: window.hasOpenDocument; onTriggered: workspace.toggleGuides() }
+        MenuSeparator { }
         ShapeMenuItem { text: "放大\tCtrl++"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
         ShapeMenuItem { text: "缩小\tCtrl+-"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
         ShapeMenuItem { text: "实际大小 100%\tCtrl+0"; enabled: window.hasOpenDocument; onTriggered: workspace.resetView() }
