@@ -7146,7 +7146,7 @@ ApplicationWindow {
 
                     Row {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 40
+                        Layout.preferredHeight: 30
 
                         Repeater {
                             model: ["基本参数", "更多参数"]
@@ -7154,7 +7154,7 @@ ApplicationWindow {
                                 required property int index
                                 required property string modelData
                                 width: inspector.width / 2
-                                height: 40
+                                height: 30
                                 color: inspectorTab === index ? Theme.bgRaised : "transparent"
                                 Text { anchors.centerIn: parent; text: modelData; color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal }
                                 Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 2; color: inspectorTab === index ? Theme.accent : "transparent" }
@@ -7680,7 +7680,7 @@ ApplicationWindow {
 
                                 Row {
                                     width: parent.width
-                                    height: 32
+                                    height: Theme.compactControlHeight
                                     spacing: 4
                                     Repeater {
                                         model: [
@@ -7690,7 +7690,7 @@ ApplicationWindow {
                                         delegate: Rectangle {
                                             required property var modelData
                                             width: (parent.width - 4) / 2
-                                            height: 32
+                                            height: Theme.compactControlHeight
                                             radius: Theme.radiusSmall
                                             color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentSoft : Theme.bgControl
                                             border.width: 1
@@ -7700,7 +7700,7 @@ ApplicationWindow {
                                                 text: parent.modelData.label
                                                 color: workspace.selectedTextBindingEnabled === parent.modelData.enabled ? Theme.accent : Theme.textSecondary
                                                 font.family: Theme.bodyFont
-                                                font.pixelSize: 11
+                                                font.pixelSize: 10
                                                 font.weight: Font.DemiBold
                                             }
                                             MouseArea {
@@ -7941,6 +7941,7 @@ ApplicationWindow {
                                 Layout.row: 0
                                 title: "基本属性"
                                 summary: workspace.selectedWidth + " × " + workspace.selectedHeight
+                                expanded: false
                                 visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
@@ -8606,12 +8607,19 @@ ApplicationWindow {
                                 visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
-                                    label: "启用"
-                                    TrailingToggle {
-                                        accessibleName: "文字背景"
-                                        checked: workspace.selectedTextBackgroundEnabled
+                                    label: "模式"
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "文字背景模式"
+                                        options: [
+                                            { label: "关闭", value: "off" },
+                                            { label: "纯色", value: "solid" }
+                                        ]
+                                        value: workspace.selectedTextBackgroundEnabled ? "solid" : "off"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedTextBackgroundEnabled(checkedValue)
+                                        onActivated: function(value) {
+                                            workspace.setSelectedTextBackgroundEnabled(value === "solid")
+                                        }
                                     }
                                 }
                                 InspectorRow {
@@ -8642,7 +8650,7 @@ ApplicationWindow {
                                     ValueBox {
                                         value: workspace.selectedTextBackgroundPadding.toString()
                                         bindValue: true
-                                        suffix: "扩展px"
+                                        suffix: "扩px"
                                         Layout.fillWidth: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
@@ -8662,12 +8670,19 @@ ApplicationWindow {
                                 visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
-                                    label: "启用"
-                                    TrailingToggle {
-                                        accessibleName: "文字阴影"
-                                        checked: workspace.selectedTextShadowEnabled
+                                    label: "模式"
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "文字阴影模式"
+                                        options: [
+                                            { label: "关闭", value: "off" },
+                                            { label: "开启", value: "on" }
+                                        ]
+                                        value: workspace.selectedTextShadowEnabled ? "on" : "off"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedTextShadowEnabled(checkedValue)
+                                        onActivated: function(value) {
+                                            workspace.setSelectedTextShadowEnabled(value === "on")
+                                        }
                                     }
                                 }
                                 InspectorRow {
@@ -8676,7 +8691,7 @@ ApplicationWindow {
                                     ValueBox {
                                         value: workspace.selectedTextShadowOffsetX.toString()
                                         bindValue: true
-                                        suffix: "X px"
+                                        suffix: "X"
                                         Layout.fillWidth: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
@@ -8688,7 +8703,7 @@ ApplicationWindow {
                                     ValueBox {
                                         value: workspace.selectedTextShadowOffsetY.toString()
                                         bindValue: true
-                                        suffix: "Y px"
+                                        suffix: "Y"
                                         Layout.fillWidth: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
@@ -8699,7 +8714,7 @@ ApplicationWindow {
                                     }
                                 }
                                 InspectorRow {
-                                    label: "模糊"
+                                    label: "模糊/色"
                                     visible: workspace.selectedTextShadowEnabled
                                     ValueBox {
                                         value: workspace.selectedTextShadowBlur.toString()
@@ -8712,10 +8727,6 @@ ApplicationWindow {
                                             if (!isNaN(parsed)) workspace.setSelectedTextShadowBlur(parsed)
                                         }
                                     }
-                                }
-                                InspectorRow {
-                                    label: "颜色"
-                                    visible: workspace.selectedTextShadowEnabled
                                     ColorValueField {
                                         Layout.fillWidth: true
                                         value: workspace.selectedTextShadowColor
@@ -8750,12 +8761,19 @@ ApplicationWindow {
                                 visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
-                                    label: "启用"
-                                    TrailingToggle {
-                                        accessibleName: "文字发光"
-                                        checked: workspace.selectedTextGlowEnabled
+                                    label: "模式"
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "文字发光模式"
+                                        options: [
+                                            { label: "关闭", value: "off" },
+                                            { label: "开启", value: "on" }
+                                        ]
+                                        value: workspace.selectedTextGlowEnabled ? "on" : "off"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedTextGlowEnabled(checkedValue)
+                                        onActivated: function(value) {
+                                            workspace.setSelectedTextGlowEnabled(value === "on")
+                                        }
                                     }
                                 }
                                 InspectorRow {
@@ -8785,7 +8803,7 @@ ApplicationWindow {
                                     }
                                 }
                                 InspectorRow {
-                                    label: "颜色"
+                                    label: "颜色/透"
                                     visible: workspace.selectedTextGlowEnabled
                                     ColorValueField {
                                         Layout.fillWidth: true
@@ -8794,10 +8812,6 @@ ApplicationWindow {
                                         onPickRequested: effectColorDialog.openFor("textGlow", workspace.selectedTextGlowColor)
                                         onValueCommitted: value => workspace.setSelectedTextGlowColor(value)
                                     }
-                                }
-                                InspectorRow {
-                                    label: "透明度"
-                                    visible: workspace.selectedTextGlowEnabled
                                     ValueBox {
                                         value: workspace.selectedTextGlowOpacity.toString()
                                         bindValue: true
@@ -8810,8 +8824,6 @@ ApplicationWindow {
                                         }
                                     }
                                 }
-                                Accessible.name: "颜色 " + modelData
-                                Accessible.role: Accessible.Button
                             }
 
                             PropertySection {
@@ -8821,17 +8833,50 @@ ApplicationWindow {
                                 title: "描边"
                                 summary: workspace.selectedStrokeEnabled ? workspace.selectedStrokeWidth + " px" : "关闭"
                                 visible: inspectorTab === 0 && workspace.selectedSupportsStroke
+
                                 InspectorRow {
-                                    label: "启用"
-                                    TrailingToggle {
-                                        accessibleName: "描边"
-                                        checked: workspace.selectedStrokeEnabled
+                                    label: "模式"
+                                    SegmentedControl {
+                                        Layout.fillWidth: true
+                                        accessibleName: "描边模式"
+                                        options: workspace.selectedSupportsAdvancedStroke
+                                            ? [
+                                                { label: "关闭", value: "off" },
+                                                { label: "外", value: "outer" },
+                                                { label: "中", value: "center" },
+                                                { label: "内", value: "inner" }
+                                            ]
+                                            : [
+                                                { label: "关闭", value: "off" },
+                                                { label: "开启", value: "on" }
+                                            ]
+                                        value: {
+                                            if (!workspace.selectedStrokeEnabled) return "off"
+                                            if (!workspace.selectedSupportsAdvancedStroke) return "on"
+                                            var t = workspace.selectedStrokeType
+                                            if (t === 0) return "inner"
+                                            if (t === 1) return "center"
+                                            return "outer"
+                                        }
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedStrokeEnabled(checkedValue)
+                                        onActivated: function(value) {
+                                            if (value === "off") {
+                                                workspace.setSelectedStrokeEnabled(false)
+                                                return
+                                            }
+                                            if (value === "on") {
+                                                workspace.setSelectedStrokeEnabled(true)
+                                                return
+                                            }
+                                            workspace.setSelectedStrokeEnabled(true)
+                                            if (value === "inner") workspace.setSelectedStrokeType(0)
+                                            else if (value === "center") workspace.setSelectedStrokeType(1)
+                                            else if (value === "outer") workspace.setSelectedStrokeType(2)
+                                        }
                                     }
                                 }
                                 InspectorRow {
-                                    label: "宽度"
+                                    label: "宽/色"
                                     visible: workspace.selectedStrokeEnabled
                                     ValueBox {
                                         value: workspace.selectedStrokeWidth.toString()
@@ -8844,21 +8889,6 @@ ApplicationWindow {
                                             if (!isNaN(parsed)) workspace.setSelectedStrokeWidth(parsed)
                                         }
                                     }
-                                }
-                                InspectorRow {
-                                    label: "对齐"
-                                    visible: workspace.selectedStrokeEnabled && workspace.selectedSupportsAdvancedStroke
-                                    SelectBox {
-                                        Layout.fillWidth: true
-                                        model: window.strokeTypeOptions
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        currentIndex: window.optionIndex(window.strokeTypeOptions, workspace.selectedStrokeType)
-                                        onActivated: workspace.setSelectedStrokeType(currentValue)
-                                    }
-                                }
-                                InspectorRow {
-                                    label: "颜色"
-                                    visible: workspace.selectedStrokeEnabled
                                     ColorValueField {
                                         value: workspace.selectedStrokeColor
                                         Layout.fillWidth: true
@@ -8877,8 +8907,8 @@ ApplicationWindow {
                                             model: ["#000000", "#F2F4F3", "#46D7AD", "#F1786D", "#F7BD63"]
                                             delegate: Rectangle {
                                                 required property string modelData
-                                                width: 24
-                                                height: 24
+                                                width: 22
+                                                height: 22
                                                 radius: Theme.radiusSmall
                                                 color: modelData
                                                 border.width: workspace.selectedStrokeColor.toUpperCase() === modelData ? 2 : 1

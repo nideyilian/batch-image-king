@@ -8,7 +8,7 @@ Item {
     property bool expanded: true
     default property alias sectionData: contentColumn.data
 
-    implicitHeight: header.height + (expanded ? contentColumn.implicitHeight + 18 : 0)
+    implicitHeight: header.height + (expanded ? contentColumn.implicitHeight + 10 : 0)
     height: implicitHeight
 
     Rectangle {
@@ -20,7 +20,7 @@ Item {
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 12
+            anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             text: root.title
             color: Theme.textPrimary
@@ -31,7 +31,7 @@ Item {
 
         Text {
             anchors.right: chevron.left
-            anchors.rightMargin: 9
+            anchors.rightMargin: 7
             anchors.verticalCenter: parent.verticalCenter
             text: root.summary
             color: Theme.textMuted
@@ -42,10 +42,10 @@ Item {
         AppIcon {
             id: chevron
             anchors.right: parent.right
-            anchors.rightMargin: 12
+            anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             iconName: AppIcons.chevronDown
-            iconSize: 13
+            iconSize: 12
             iconColor: Theme.textMuted
             rotation: root.expanded ? 0 : -90
 
@@ -68,10 +68,10 @@ Item {
         anchors.top: header.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 12
-        anchors.rightMargin: 12
-        anchors.topMargin: 8
-        spacing: 9
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
+        anchors.topMargin: 5
+        spacing: 6
         visible: root.expanded
     }
 

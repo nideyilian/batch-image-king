@@ -67,12 +67,12 @@ QtObject {
     readonly property int radiusSmall: 4
     readonly property int radius: 6
     readonly property int radiusLarge: 8
-    readonly property int controlHeight: 30
-    readonly property int compactControlHeight: 28
-    readonly property int commandHeight: 34
-    readonly property int toolButtonSize: 32
-    readonly property int railButtonSize: 36
-    readonly property int sectionHeaderHeight: 40
+    readonly property int controlHeight: 28
+    readonly property int compactControlHeight: 26
+    readonly property int commandHeight: 32
+    readonly property int toolButtonSize: 30
+    readonly property int railButtonSize: 34
+    readonly property int sectionHeaderHeight: 34
     readonly property int motionFast: 120
     readonly property int motionNormal: 180
 }
