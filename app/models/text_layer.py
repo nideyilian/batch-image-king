@@ -729,7 +729,8 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         parsed_lines = self.parse_text_input_to_lines(source_text)
         self._text_lines = parsed_lines
         self._current_text = parsed_lines[0] if parsed_lines else ""
-        self._clip_text_color_ranges_to_current_text()
+        self._text_color_ranges = []
+        self._font_size_ranges = []
         self._cached_image = None
         self._update_text_box_size_if_needed()
         self.text_changed.emit()

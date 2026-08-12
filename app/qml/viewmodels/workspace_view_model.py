@@ -14,6 +14,7 @@ from PySide6.QtCore import QObject, QPointF, Property, QRunnable, QThreadPool, Q
 from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage, QPainterPath
 
 from app.models.document import Document
+from app.constants import DEFAULT_TEXT_FONT_FAMILY
 from app.models.layer_group import LayerGroup
 from app.models.layer_new import Layer
 from app.models.layer_properties import ShapeType
@@ -26,7 +27,9 @@ from app.utils.text_rich_format import (
     build_editor_html,
     inspect_editor_selection,
     parse_editor_html,
+    qt_index_to_python,
 )
+from app.utils.text_style_ranges import remap_text_style_ranges
 from app.utils.layer_tree import (
     child_indices_for_group,
     expand_group_indices,
@@ -1435,9 +1438,22 @@ class WorkspaceViewModel(QObject):
             return ""
         binding_enabled = bool(getattr(layer, "text_binding_enabled", False))
         text = str(getattr(layer, "text_content", "") or "")
+        requested_family = str(
+            getattr(layer, "font_family", DEFAULT_TEXT_FONT_FAMILY)
+            or DEFAULT_TEXT_FONT_FAMILY
+        )
+        resolver = getattr(layer, "resolve_font_family", None)
+        if callable(resolver):
+            try:
+                font_family = str(resolver(requested_family).get("resolved_family") or requested_family)
+            except Exception:
+                font_family = requested_family
+        else:
+            resolver = getattr(layer, "_resolve_font_family", None)
+            font_family = str(resolver(requested_family) if callable(resolver) else requested_family)
         return build_editor_html(
             text,
-            font_family=str(getattr(layer, "font_family", "sans-serif") or "sans-serif"),
+            font_family=font_family,
             font_size=max(1, int(getattr(layer, "font_size", 24) or 24)),
             text_color=getattr(layer, "text_color", (0, 0, 0, 255)),
             font_weight=int(
@@ -1489,10 +1505,51 @@ class WorkspaceViewModel(QObject):
             return ""
         return str(getattr(self._selected_layer(), "font_family", "") or "")
 
+    @Property(str, notify=selectionChanged)
+    def selectedTextResolvedFontFamily(self) -> str:
+        if not self.selectedIsTextLayer:
+            return ""
+        layer = self._selected_layer()
+        family = str(getattr(layer, "font_family", DEFAULT_TEXT_FONT_FAMILY) or DEFAULT_TEXT_FONT_FAMILY)
+        resolver = getattr(layer, "resolve_font_family", None)
+        if callable(resolver):
+            try:
+                return str(resolver(family).get("resolved_family") or family)
+            except Exception:
+                pass
+        resolver = getattr(layer, "_resolve_font_family", None)
+        return str(resolver(family) if callable(resolver) else family)
+
+    @Property(bool, notify=selectionChanged)
+    def selectedTextFontAvailable(self) -> bool:
+        if not self.selectedIsTextLayer:
+            return False
+        layer = self._selected_layer()
+        resolver = getattr(layer, "resolve_font_family", None)
+        if callable(resolver):
+            try:
+                return bool(resolver(getattr(layer, "font_family", "")).get("available"))
+            except Exception:
+                logger.debug("检查当前文字字体失败", exc_info=True)
+        return True
+
+    @Property(str, notify=selectionChanged)
+    def selectedTextFontWarning(self) -> str:
+        if self.selectedIsTextLayer and not self.selectedTextFontAvailable:
+            return "字体不可用，当前使用回退字体"
+        return ""
+
     def _load_text_font_names(self, layer):
         try:
             categories = layer.get_categorized_fonts()
-            font_names = categories.get("chinese", [])
+            font_names = []
+            seen = set()
+            for category in ("chinese", "english", "monospace", "decorative", "other"):
+                for name in categories.get(category, []) or []:
+                    key = str(name or "").strip().casefold()
+                    if key and key not in seen:
+                        seen.add(key)
+                        font_names.append(name)
             if font_names:
                 return font_names
         except Exception:
@@ -1502,15 +1559,11 @@ class WorkspaceViewModel(QObject):
                 writing_system = QFontDatabase.WritingSystem
                 font_names = []
                 seen = set()
-                for system in (
-                    writing_system.SimplifiedChinese,
-                    writing_system.TraditionalChinese,
-                ):
-                    for name in QFontDatabase.families(system):
-                        key = str(name or "").strip().casefold()
-                        if key and key not in seen:
-                            seen.add(key)
-                            font_names.append(name)
+                for name in QFontDatabase.families():
+                    key = str(name or "").strip().casefold()
+                    if key and key not in seen:
+                        seen.add(key)
+                        font_names.append(name)
                 return font_names
             except Exception:
                 logger.debug("从 Qt 字体库加载中文字体失败", exc_info=True)
@@ -1543,9 +1596,15 @@ class WorkspaceViewModel(QObject):
             "KaiTi",
             "FangSong",
         ]
-        options = []
-        seen = set()
-        for name in list(font_names or []) or fallbacks:
+        options = [{"label": "sans-serif", "value": "sans-serif"}]
+        seen = {"sans-serif"}
+        current_family = str(getattr(layer, "font_family", "") or "").strip()
+        names = list(font_names or []) or fallbacks
+        if current_family and current_family.casefold() not in {
+            str(name or "").strip().casefold() for name in names
+        }:
+            names.insert(0, current_family)
+        for name in names:
             family = str(name or "").strip()
             key = family.casefold()
             if not family or key in seen:
@@ -1601,8 +1660,13 @@ class WorkspaceViewModel(QObject):
             family = str(family_option.get("value", "") or "").strip()
             if not family:
                 continue
+            resolved_family = (
+                layer._resolve_font_family(family)
+                if hasattr(layer, "_resolve_font_family")
+                else family
+            )
             faces = []
-            for face in faces_by_family.get(family, []) or []:
+            for face in faces_by_family.get(resolved_family, []) or []:
                 style = str(face.get("style", "Regular") or "Regular").strip()
                 faces.append({
                     "label": self._font_face_label(style),
@@ -1636,6 +1700,7 @@ class WorkspaceViewModel(QObject):
         current = str(getattr(self._selected_layer(), "font_family", "") or "").strip()
         families = [
             current,
+            "sans-serif",
             "Microsoft YaHei",
             "SimHei",
             "SimSun",
@@ -1771,6 +1836,9 @@ class WorkspaceViewModel(QObject):
         return None
 
     def _nearest_font_face(self, bold: bool, italic: bool):
+        return self._nearest_font_face_for_weight(700 if bold else 400, italic)
+
+    def _nearest_font_face_for_weight(self, weight: int, italic: bool):
         family = self.selectedTextFontFamily
         candidates = []
         for group in self.textFontTreeOptions:
@@ -1785,7 +1853,7 @@ class WorkspaceViewModel(QObject):
         same_italic = [item for item in candidates if bool(item.get("italic")) == bool(italic)]
         if same_italic:
             candidates = same_italic
-        target_weight = 700 if bold else 400
+        target_weight = max(100, min(900, int(weight)))
         return min(candidates, key=lambda item: abs(int(item.get("weight", 400)) - target_weight))
 
     def _canonical_text_font_family(self, family: str) -> str:
@@ -1820,6 +1888,48 @@ class WorkspaceViewModel(QObject):
         if face is not None:
             return bool(face.get("italic", False))
         return self._selected_text_style_name() in ("ITALIC", "BOLD_ITALIC")
+
+    @Property(int, notify=selectionChanged)
+    def selectedTextFontWeight(self) -> int:
+        if not self.selectedIsTextLayer:
+            return 400
+        face = self._selected_font_face()
+        if face is not None:
+            return int(face.get("weight", 400) or 400)
+        return 700 if self.selectedTextBold else 400
+
+    @Property("QVariantList", notify=selectionChanged)
+    def selectedTextFontWeightOptions(self):
+        if not self.selectedIsTextLayer:
+            return []
+        family = self.selectedTextFontFamily.casefold()
+        candidates = []
+        for group in self.textFontTreeOptions:
+            if str(group.get("family", "")).casefold() != family:
+                continue
+            candidates = [
+                item for item in (group.get("children", []) or [])
+                if not bool(item.get("synthetic", False))
+                and bool(item.get("italic", False)) == self.selectedTextItalic
+            ]
+            break
+        if not candidates:
+            return [
+                {"label": "400 · 常规", "value": 400},
+                {"label": "700 · 粗体", "value": 700},
+            ]
+        options = []
+        seen = set()
+        for face in sorted(candidates, key=lambda item: int(item.get("weight", 400))):
+            weight = int(face.get("weight", 400) or 400)
+            if weight in seen:
+                continue
+            seen.add(weight)
+            options.append({
+                "label": f"{weight} · {self._font_face_label(face.get('face', 'Regular'))}",
+                "value": weight,
+            })
+        return options
 
     @Property(str, notify=selectionChanged)
     def selectedTextAlignmentId(self) -> str:
@@ -2789,7 +2899,7 @@ class WorkspaceViewModel(QObject):
         config = dict(config or {})
         name = str(config.get("name", "") or "").strip()[:120]
         content = str(config.get("content", "") or "")
-        font_family = str(config.get("fontFamily", "Microsoft YaHei") or "").strip()
+        font_family = str(config.get("fontFamily", DEFAULT_TEXT_FONT_FAMILY) or "").strip()
         alignment = str(config.get("alignment", "left") or "left").strip().lower()
         color = self._parse_hex_color(str(config.get("color", "#000000") or "#000000"))
         try:
@@ -2873,9 +2983,20 @@ class WorkspaceViewModel(QObject):
         content = str(content or "")
 
         def apply(layer) -> None:
+            old_text = str(getattr(layer, "current_text", "") or "")
+            old_colors = layer.get_text_color_ranges()
+            old_sizes = layer.get_font_size_ranges()
             lines = layer.parse_text_input_to_lines(content)
+            new_text = str(lines[0] if lines else "")
+            colors, sizes = remap_text_style_ranges(
+                old_text,
+                new_text,
+                old_colors,
+                old_sizes,
+            )
             layer.set_text_lines(lines)
-            layer.set_current_text(lines[0] if lines else "", force=True)
+            layer.set_current_text(new_text, force=True)
+            layer.replace_text_style_ranges(colors, sizes)
 
         return self._change_text_layer(
             int(index),
@@ -2944,6 +3065,22 @@ class WorkspaceViewModel(QObject):
             "修改文字字体字重",
             apply,
             f"文字字重 · {family} · {self._font_face_label(face)}",
+        )
+
+    @Slot(int, result=bool)
+    def setSelectedTextFontWeight(self, weight: int) -> bool:
+        weight = int(weight)
+        if not 100 <= weight <= 900:
+            self._set_status("字体字重必须在 100 到 900 之间", toast=True)
+            return False
+        face = self._nearest_font_face_for_weight(weight, self.selectedTextItalic)
+        if face is not None:
+            return self.setSelectedTextFontFace(self.selectedTextFontFamily, face["face"])
+        style = self._font_style_name(weight >= 600, self.selectedTextItalic)
+        return self._change_selected_text(
+            "修改文字字体字重",
+            lambda layer: setattr(layer, "font_style", style),
+            f"文字字重 · {700 if weight >= 600 else 400}",
         )
 
     @staticmethod
@@ -3293,7 +3430,7 @@ class WorkspaceViewModel(QObject):
         if start > end:
             start, end = end, start
         if start >= end:
-            self._set_status(f"请先选择需要设置的文字", toast=True)
+            self._set_status(f"请先选择需要设置{label}的文字", toast=True)
             return None
         return start, end
 
@@ -3330,27 +3467,67 @@ class WorkspaceViewModel(QObject):
             f"已清除 {end - start} 个字符的局部颜色",
         )
 
-    @Slot(int, int, int, result=bool)
-    def setSelectedTextFontSizeRange(self, start: int, end: int, value: int) -> bool:
-        selected_range = self._validated_selected_text_range(start, end, label="局部字号")
+    def _qt_text_range_to_python(self, start_qt: int, end_qt: int):
+        if not self.selectedIsTextLayer:
+            self._set_status("当前图层不是文字图层", toast=True)
+            return None
+        text = str(getattr(self._selected_layer(), "current_text", "") or "")
+        try:
+            start_qt = int(start_qt)
+            end_qt = int(end_qt)
+            max_qt = len(text.encode("utf-16-le")) // 2
+            if start_qt < 0 or end_qt < 0 or start_qt > max_qt or end_qt > max_qt:
+                self._set_status("文字选区超出范围", toast=True)
+                return None
+            start = qt_index_to_python(text, start_qt)
+            end = qt_index_to_python(text, end_qt)
+        except (TypeError, ValueError):
+            self._set_status("文字选区无效", toast=True)
+            return None
+        if start == end:
+            self._set_status("请先选择需要设置局部样式的文字", toast=True)
+            return None
+        return start, end
+
+    @Slot(int, int, str, result=bool)
+    def setSelectedTextColorRangeQt(self, start_qt: int, end_qt: int, value: str) -> bool:
+        selected_range = self._qt_text_range_to_python(start_qt, end_qt)
         if selected_range is None:
             return False
-        value = max(1, min(1000, int(value)))
+        return self.setSelectedTextColorRange(*selected_range, value)
+
+    @Slot(int, int, result=bool)
+    def clearSelectedTextColorRangeQt(self, start_qt: int, end_qt: int) -> bool:
+        selected_range = self._qt_text_range_to_python(start_qt, end_qt)
+        if selected_range is None:
+            return False
+        return self.clearSelectedTextColorRange(*selected_range)
+
+    @Slot(int, int, int, result=bool)
+    def setSelectedTextFontSizeRange(self, start: int, end: int, value: int) -> bool:
+        selected_range = self._validated_selected_text_range(start, end, "局部字号")
+        if selected_range is None:
+            return False
+        try:
+            value = max(1, min(1000, int(value)))
+        except (TypeError, ValueError):
+            self._set_status("局部字号无效", toast=True)
+            return False
         start, end = selected_range
         return self._change_selected_text(
             "修改局部文字字号",
             lambda layer: layer.set_font_size_range(start, end, value),
-            f"已设置 {end - start} 个字符为 {value} px",
+            f"已设置 {end - start} 个字符的局部字号",
         )
 
     @Slot(int, int, result=bool)
     def clearSelectedTextFontSizeRange(self, start: int, end: int) -> bool:
-        selected_range = self._validated_selected_text_range(start, end, label="局部字号")
+        selected_range = self._validated_selected_text_range(start, end, "局部字号")
         if selected_range is None:
             return False
         start, end = selected_range
         layer = self._selected_layer()
-        ranges = layer.get_font_size_ranges() if hasattr(layer, "get_font_size_ranges") else []
+        ranges = layer.get_font_size_ranges()
         if not any(item["end"] > start and item["start"] < end for item in ranges):
             self._set_status("当前选区没有局部字号", toast=True)
             return False
@@ -3359,6 +3536,20 @@ class WorkspaceViewModel(QObject):
             lambda selected: selected.clear_font_size_range(start, end),
             f"已清除 {end - start} 个字符的局部字号",
         )
+
+    @Slot(int, int, int, result=bool)
+    def setSelectedTextFontSizeRangeQt(self, start_qt: int, end_qt: int, value: int) -> bool:
+        selected_range = self._qt_text_range_to_python(start_qt, end_qt)
+        if selected_range is None:
+            return False
+        return self.setSelectedTextFontSizeRange(*selected_range, value)
+
+    @Slot(int, int, result=bool)
+    def clearSelectedTextFontSizeRangeQt(self, start_qt: int, end_qt: int) -> bool:
+        selected_range = self._qt_text_range_to_python(start_qt, end_qt)
+        if selected_range is None:
+            return False
+        return self.clearSelectedTextFontSizeRange(*selected_range)
 
     def _style_attributes_for_layer(self, layer) -> tuple:
         attrs = list(_COMMON_STYLE_ATTRIBUTES)
@@ -4208,6 +4399,9 @@ class WorkspaceViewModel(QObject):
         layer = self._selected_layer()
         if is_effectively_locked(layer, self._document.layers):
             self._set_status("图层已锁定，无法编辑文字", toast=True)
+            return False
+        if bool(getattr(layer, "vertical_layout", False)):
+            self._set_status("竖排文字请在右侧编辑", toast=True)
             return False
         self._text_edit_layer_index = self.selectedLayerIndex
         self._text_edit_draft_html = self._text_editor_html_for_layer(layer)

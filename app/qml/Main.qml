@@ -911,7 +911,7 @@ ApplicationWindow {
         padding: 0
         closePolicy: Popup.CloseOnEscape
         // impeccable-disable-next-line design-system-font: output-content font, not UI typography
-        property string fontFamily: "Microsoft YaHei"
+        property string fontFamily: "sans-serif"
         property string fontFace: ""
         property string alignment: "left"
         property bool bindingEnabled: true
@@ -922,7 +922,7 @@ ApplicationWindow {
             textLayerContentInput.text = "示例文字"
             bindingEnabled = true
             // impeccable-disable-next-line design-system-font: output-content font, not UI typography
-            fontFamily = "Microsoft YaHei"
+            fontFamily = "sans-serif"
             fontFace = ""
             textLayerFontSizeInput.text = "24"
             textLayerColorInput.text = "#000000"
@@ -1415,6 +1415,7 @@ ApplicationWindow {
         dim: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         padding: 0
+
         property string selectedPresetId: ""
 
         function clearEditor() {
@@ -2594,8 +2595,6 @@ ApplicationWindow {
         onAccepted: multiTabExport.outputDirectory = selectedFolder.toString()
     }
 
-        header: null
-        footer: null
     AppDialog {
         id: effectColorDialog
         objectName: "effectColorDialog"
@@ -2606,6 +2605,8 @@ ApplicationWindow {
         focus: true
         padding: 0
         closePolicy: Popup.CloseOnEscape
+        header: null
+        footer: null
         property string target: "stroke"
         property int colorIndex: 0
         property int rangeStart: 0
@@ -2739,7 +2740,7 @@ ApplicationWindow {
             else if (target === "textBackground") workspace.setSelectedTextBackgroundColor(hexValue)
             else if (target === "textShadow") workspace.setSelectedTextShadowColor(hexValue)
             else if (target === "textGlow") workspace.setSelectedTextGlowColor(hexValue)
-            else if (target === "textRange") workspace.setSelectedTextColorRange(rangeStart, rangeEnd, hexValue)
+            else if (target === "textRange") workspace.setSelectedTextColorRangeQt(rangeStart, rangeEnd, hexValue)
             else if (target === "canvasTextRange") {
                 var updatedHtml = workspace.applyTextEditorColor(
                     editorHtml,
@@ -3066,10 +3067,6 @@ ApplicationWindow {
                                 Layout.preferredHeight: 27
                                 radius: Theme.radiusSmall
                                 color: modelData
-                                Keys.onSpacePressed: effectColorDialog.selectPaletteColor(modelData)
-                                Keys.onReturnPressed: effectColorDialog.selectPaletteColor(modelData)
-                                Accessible.name: "颜色 " + modelData
-                                Accessible.role: Accessible.Button
                                 border.width: effectColorDialog.colorToHex(effectColorDialog.selectedColor).slice(0, 7) === modelData ? 2 : 1
                                 border.color: paletteMouse.containsMouse || border.width === 2 ? Theme.accent : Theme.borderStrong
                                 activeFocusOnTab: true
@@ -3081,6 +3078,10 @@ ApplicationWindow {
                                     onPressed: parent.forceActiveFocus(Qt.MouseFocusReason)
                                     onClicked: effectColorDialog.selectPaletteColor(parent.modelData)
                                 }
+                                Keys.onSpacePressed: effectColorDialog.selectPaletteColor(modelData)
+                                Keys.onReturnPressed: effectColorDialog.selectPaletteColor(modelData)
+                                Accessible.name: "颜色 " + modelData
+                                Accessible.role: Accessible.Button
                             }
                         }
                     }
@@ -6064,8 +6065,13 @@ ApplicationWindow {
                                 canvasWorkspace.marqueeActive = false
                             }
                             onDoubleClicked: mouse => {
-                                if (workspace.cropEditing || canvasWorkspace.transformActive)
+                                if (workspace.cropEditing)
                                     return
+                                // The second press can start the normal move gesture before
+                                // MouseArea emits doubleClicked. Cancel that no-op gesture so
+                                // text editing is not swallowed by transformActive.
+                                if (canvasWorkspace.transformActive)
+                                    canvasWorkspace.cancelTransform()
                                 if (workspace.beginTextEditAt(mouse.x, mouse.y)) {
                                     window.revealTextContentEditing()
                                     if (workspace.startTextEditOverlay())
@@ -6384,6 +6390,7 @@ ApplicationWindow {
                                 border.width: Math.max(1, 1.5 / canvasWorkspace.actualScale)
                                 border.color: workspace.selectedLocked ? Theme.textMuted : Theme.accent
                                 clip: false
+                                property int editingIndex: -1
                                 readonly property real overlayScale: Math.max(0.05, canvasWorkspace.actualScale)
                                 readonly property real handleSize: Math.max(7 / overlayScale, 7)
 
@@ -6468,8 +6475,6 @@ ApplicationWindow {
                                     canvasTextSelectionToolbar.refreshStyleInfo()
                                 }
 
-                                property int editingIndex: -1
-
                                 TextEdit {
                                     id: canvasTextEditInput
                                     objectName: "canvasTextEditInput"
@@ -6479,22 +6484,24 @@ ApplicationWindow {
                                     color: workspace.selectedTextColor
                                     selectionColor: Theme.accentPressed
                                     selectedTextColor: Theme.textPrimary
-                                    font.family: workspace.selectedTextFontFamily
+                                    font.family: workspace.selectedTextResolvedFontFamily
                                     font.pixelSize: workspace.selectedTextFontSize
-                                    font.bold: workspace.selectedTextBold
+                                    font.weight: workspace.selectedTextFontWeight
                                     font.italic: workspace.selectedTextItalic
                                     font.letterSpacing: workspace.selectedTextLetterSpacing
                                     horizontalAlignment: workspace.selectedTextAlignmentId === "center"
                                                          ? TextEdit.AlignHCenter
                                                          : (workspace.selectedTextAlignmentId === "right"
                                                             ? TextEdit.AlignRight
-                                                            : TextEdit.AlignLeft)
+                                                             : TextEdit.AlignLeft)
+                                    verticalAlignment: workspace.selectedTextAutoFitTextBox
+                                                       ? TextEdit.AlignTop
+                                                       : TextEdit.AlignVCenter
                                     wrapMode: TextEdit.Wrap
                                     selectByMouse: true
                                     persistentSelection: true
                                     readOnly: workspace.selectedLocked || !workspace.textEditOverlayVisible
                                     z: 61
-
                                     readonly property bool editing: canvasTextEditOverlay.editingIndex >= 0
                                                                     && workspace.textEditOverlayVisible
 
@@ -6539,6 +6546,7 @@ ApplicationWindow {
                                     }
                                 }
                             }
+
                             Rectangle {
                                 id: canvasTextSelectionToolbar
                                 objectName: "canvasTextSelectionToolbar"
@@ -7520,7 +7528,7 @@ ApplicationWindow {
                                                  && workspace.selectedTextColorRangeCount > 0
                                                  && !workspace.selectedLocked
                                                  && !workspace.operationsBlocked
-                                        onClicked: workspace.clearSelectedTextColorRange(
+                                        onClicked: workspace.clearSelectedTextColorRangeQt(
                                             selectedTextEditor.selectionStart,
                                             selectedTextEditor.selectionEnd
                                         )
@@ -7547,13 +7555,12 @@ ApplicationWindow {
                                                  && !workspace.operationsBlocked
                                         onClicked: {
                                             var parsed = parseInt(rangeFontSizeInput.text)
-                                            if (!isNaN(parsed) && parsed >= 1) {
-                                                workspace.setSelectedTextFontSizeRange(
+                                            if (!isNaN(parsed) && parsed >= 1)
+                                                workspace.setSelectedTextFontSizeRangeQt(
                                                     selectedTextEditor.selectionStart,
                                                     selectedTextEditor.selectionEnd,
                                                     parsed
                                                 )
-                                            }
                                         }
                                     }
                                     CompactActionButton {
@@ -7564,7 +7571,7 @@ ApplicationWindow {
                                                  && workspace.selectedTextFontSizeRangeCount > 0
                                                  && !workspace.selectedLocked
                                                  && !workspace.operationsBlocked
-                                        onClicked: workspace.clearSelectedTextFontSizeRange(
+                                        onClicked: workspace.clearSelectedTextFontSizeRangeQt(
                                             selectedTextEditor.selectionStart,
                                             selectedTextEditor.selectionEnd
                                         )
@@ -7677,6 +7684,25 @@ ApplicationWindow {
                                         active: workspace.selectedTextItalic
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.setSelectedTextItalic(!workspace.selectedTextItalic)
+                                    }
+                                }
+                                Text {
+                                    visible: workspace.selectedTextFontWarning.length > 0
+                                    text: workspace.selectedTextFontWarning
+                                    color: Theme.errorText
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: 11
+                                    wrapMode: Text.Wrap
+                                    Layout.fillWidth: true
+                                }
+                                InspectorRow {
+                                    label: "字重"
+                                    SelectBox {
+                                        Layout.fillWidth: true
+                                        model: workspace.selectedTextFontWeightOptions
+                                        currentIndex: window.optionIndex(model, workspace.selectedTextFontWeight)
+                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                        onActivated: workspace.setSelectedTextFontWeight(currentValue)
                                     }
                                 }
                             }

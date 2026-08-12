@@ -193,7 +193,8 @@ class AddTextLayerDialog(QDialog):
         )
 
         # 只设置最基本的属性，其他都在属性面板调整
-        self.text_layer.font_family = self.font_combo.currentText().strip() or "Microsoft YaHei"
+        from app.constants import DEFAULT_TEXT_FONT_FAMILY
+        self.text_layer.font_family = self.font_combo.currentText().strip() or DEFAULT_TEXT_FONT_FAMILY
         self.text_layer.font_size = int(self.font_size_spin.value())
         self.text_layer.text_color = self.text_color
         align_map = {

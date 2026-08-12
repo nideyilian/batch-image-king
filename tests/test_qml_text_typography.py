@@ -53,8 +53,10 @@ def test_text_font_options_and_style_combinations(monkeypatch):
 
     assert workspace.selectedTextFontFamily == layer.font_family
     assert [item["value"] for item in workspace.selectedTextFontOptions] == [
+        "sans-serif",
         "Microsoft YaHei",
         "Source Han Sans SC",
+        "Arial",
     ]
 
     assert workspace.setSelectedTextFontFamily("  Source Han Sans SC  ") is True
@@ -70,6 +72,20 @@ def test_text_font_options_and_style_combinations(monkeypatch):
     assert workspace.setSelectedTextItalic(False) is True
     assert layer.font_style == "NORMAL"
     assert workspace.setSelectedTextFontFamily("   ") is False
+
+
+@pytest.mark.unit
+def test_missing_font_uses_deterministic_runtime_fallback(monkeypatch):
+    workspace, layer = _workspace()
+    layer.font_family = "Definitely Missing Poster Font"
+    monkeypatch.setattr(layer, "_find_font_path", lambda *_args, **_kwargs: None)
+
+    resolution = layer.resolve_font_family(layer.font_family)
+
+    assert resolution["available"] is False
+    assert resolution["resolved_family"] == layer._get_platform_sans_font()
+    assert workspace.selectedTextResolvedFontFamily == layer._get_platform_sans_font()
+    assert workspace.selectedTextFontWarning == "字体不可用，当前使用回退字体"
 
 
 @pytest.mark.unit
@@ -92,12 +108,14 @@ def test_local_font_catalog_uses_canonical_family_names_and_chinese_labels(monke
     _install_font_catalog(workspace, layer)
 
     assert workspace.textFontOptions == [
+        {"label": "sans-serif", "value": "sans-serif"},
         {"label": "微软雅黑 (Microsoft YaHei)", "value": "Microsoft YaHei"},
         {"label": "本地海报体 (Local Poster Font)", "value": "Local Poster Font"},
+        {"label": "Arial", "value": "Arial"},
     ]
     assert workspace.selectedTextFontOptions[0] == {
-        "label": "微软雅黑 (Microsoft YaHei)",
-        "value": "Microsoft YaHei",
+        "label": "sans-serif",
+        "value": "sans-serif",
     }
 
     assert workspace.setSelectedTextFontFamily("本地海报体") is True
@@ -105,7 +123,7 @@ def test_local_font_catalog_uses_canonical_family_names_and_chinese_labels(monke
 
 
 @pytest.mark.unit
-def test_non_chinese_current_font_is_not_added_to_the_visible_catalog(monkeypatch):
+def test_all_current_fonts_are_visible_in_the_catalog(monkeypatch):
     workspace, layer = _workspace()
     layer.font_family = "Arial"
     monkeypatch.setattr(
@@ -121,10 +139,13 @@ def test_non_chinese_current_font_is_not_added_to_the_visible_catalog(monkeypatc
 
     assert workspace.selectedTextFontFamily == "Arial"
     assert [item["value"] for item in workspace.textFontOptions] == [
+        "sans-serif",
         "Microsoft YaHei",
         "SimSun",
+        "Arial",
+        "Segoe UI",
     ]
-    assert workspace.selectedTextFontOptions == workspace.textFontOptions
+    assert workspace.selectedTextFontOptions[0]["value"] == "Arial"
 
 
 @pytest.mark.unit
@@ -154,8 +175,8 @@ def test_font_tree_groups_faces_and_maps_bold_italic_to_real_faces(monkeypatch):
     _install_font_catalog(workspace, layer)
 
     tree = workspace.textFontTreeOptions
-    assert tree[0]["value"] == "Demo Sans SC"
-    assert [face["value"] for face in tree[0]["children"]] == [
+    demo_group = next(group for group in tree if group["value"] == "Demo Sans SC")
+    assert [face["value"] for face in demo_group["children"]] == [
         "Light",
         "Regular",
         "Italic",
@@ -169,6 +190,20 @@ def test_font_tree_groups_faces_and_maps_bold_italic_to_real_faces(monkeypatch):
     assert layer.font_style == "NORMAL"
     assert workspace.selectedTextBold is True
     assert workspace.selectedTextItalic is False
+    assert workspace.selectedTextFontWeight == 700
+    assert [item["value"] for item in workspace.selectedTextFontWeightOptions] == [
+        300,
+        400,
+        700,
+    ]
+
+    assert workspace.setSelectedTextFontWeight(650) is True
+    assert layer.font_face == "Bold"
+    assert workspace.setSelectedTextFontWeight(350) is True
+    assert layer.font_face == "Light"
+    assert workspace.selectedTextFontWeight == 300
+    assert workspace.setSelectedTextFontWeight(700) is True
+    assert layer.font_face == "Bold"
 
     assert workspace.setSelectedTextItalic(True) is True
     assert layer.font_face == "Bold Italic"
@@ -185,7 +220,39 @@ def test_new_text_dialog_uses_local_font_catalog():
     qml_source = (Path(__file__).resolve().parents[1] / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
 
     assert "options: workspace.textFontTreeOptions" in qml_source
+    assert 'property string fontFamily: "sans-serif"' in qml_source
+    assert 'fontFamily = "sans-serif"' in qml_source
     assert '{ label: "Microsoft YaHei", value: "Microsoft YaHei" }' not in qml_source
+
+
+@pytest.mark.unit
+def test_new_configured_text_layer_defaults_to_sans_serif():
+    document = Document()
+    document.create_new(420, 320)
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+
+    assert workspace.addConfiguredTextLayer(
+        {
+            "name": "默认字体",
+            "content": "示例文字",
+            "fontSize": 24,
+            "color": "#000000",
+            "alignment": "left",
+        }
+    ) is True
+    assert workspace.document.layers[0].font_family == "sans-serif"
+
+
+@pytest.mark.unit
+def test_qml_text_font_section_exposes_weight_selector():
+    qml_source = (Path(__file__).resolve().parents[1] / "app" / "qml" / "Main.qml").read_text(encoding="utf-8")
+
+    assert "model: workspace.selectedTextFontWeightOptions" in qml_source
+    assert "workspace.setSelectedTextFontWeight(currentValue)" in qml_source
 
 
 @pytest.mark.unit

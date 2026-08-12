@@ -9,6 +9,7 @@ from app.models.text_layer import TextLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 from app.utils.text_rich_format import parse_editor_html
+from app.utils.text_rich_format import qt_index_to_python
 
 
 pytestmark = pytest.mark.unit
@@ -145,3 +146,27 @@ def test_qml_canvas_editor_declares_rich_text_selection_contract():
     assert "workspace.applyTextEditorFontSize(" in source
     assert "workspace.commitTextEditOverlayRichText(" in source
     assert "workspace.stageTextEditOverlayDraft(" in source
+
+
+def test_qt_utf16_selection_targets_b_after_emoji():
+    workspace, layer = _workspace()
+    text = layer.current_text
+    assert qt_index_to_python(text, 3) == 2
+    assert qt_index_to_python(text, 4) == 3
+    assert workspace.setSelectedTextColorRangeQt(3, 4, "#FF0000") is True
+    assert layer.get_text_color_ranges() == [
+        {"start": 2, "end": 3, "color": (255, 0, 0, 255)}
+    ]
+    assert workspace.setSelectedTextFontSizeRangeQt(3, 4, 60) is True
+    assert layer.get_font_size_ranges() == [{"start": 2, "end": 3, "size": 60}]
+
+
+def test_plain_text_edit_migrates_inline_styles_before_model_clips():
+    workspace, layer = _workspace()
+    layer.set_text_color_range(2, 3, (255, 0, 0, 255))
+    layer.set_font_size_range(2, 3, 60)
+    assert workspace.setSelectedTextContent("XA😀BC") is True
+    assert layer.get_text_color_ranges() == [
+        {"start": 3, "end": 4, "color": (255, 0, 0, 255)}
+    ]
+    assert layer.get_font_size_ranges() == [{"start": 3, "end": 4, "size": 60}]

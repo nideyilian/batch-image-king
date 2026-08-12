@@ -102,10 +102,13 @@ class TextLayerSerializeMixin:
                 continue
             if end <= start:
                 continue
+            color = self._normalize_color_tuple(item.get("color", self._text_color))
+            if color == self._normalize_color_tuple(self._text_color):
+                continue
             valid_ranges.append({
                 "start": start,
                 "end": end,
-                "color": self._normalize_color_tuple(item.get("color", self._text_color)),
+                "color": color,
             })
 
         valid_ranges.sort(key=lambda item: (item["start"], item["end"]))
@@ -174,6 +177,8 @@ class TextLayerSerializeMixin:
                 logger.warning("静默异常已忽略: except (TypeError, ValueError): in text_layer_serialize.py", exc_info=True)
                 continue
             if end <= start:
+                continue
+            if size == int(self._font_size):
                 continue
             valid_ranges.append({"start": start, "end": end, "size": size})
 

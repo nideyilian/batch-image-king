@@ -22,6 +22,16 @@ pytestmark = pytest.mark.unit
 
 
 class TestTextLayerLines:
+    def test_default_font_uses_cross_platform_sans_serif_alias(self, tmp_path, monkeypatch):
+        regular = tmp_path / "msyh.ttc"
+        regular.write_bytes(b"font")
+        layer = TextLayer()
+        layer._cached_font_paths = {"Microsoft YaHei": str(regular)}
+        monkeypatch.setattr("app.models.text_layer_font.platform.system", lambda: "Windows")
+
+        assert layer.font_family == "sans-serif"
+        assert layer._find_font_path("sans-serif") == str(regular)
+
     def test_set_text_lines_replaces_lines(self):
         layer = TextLayer()
         # 显式把 current_text 清空，触发 set_text_lines 中的自动设置
@@ -53,6 +63,19 @@ class TestTextLayerLines:
 
 
 class TestTextLayerSerialize:
+    def test_binding_mode_clears_color_and_font_size_ranges(self):
+        layer = TextLayer()
+        layer._text_binding_enabled = False
+        layer.set_text_lines(["ABCD"])
+        layer.set_current_text("ABCD", force=True)
+        layer.set_text_color_range(1, 2, (255, 0, 0, 255))
+        layer.set_font_size_range(1, 2, 60)
+
+        layer.text_binding_enabled = True
+
+        assert layer.get_text_color_ranges() == []
+        assert layer.get_font_size_ranges() == []
+
     def test_serialize_round_trip_keeps_textlayer_type(self):
         layer = TextLayer(name="banner", x=5, y=5, width=300, height=80)
         layer.set_text_lines(["promo-1", "promo-2", "promo-3"])

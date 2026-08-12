@@ -85,11 +85,34 @@ def test_qml_canvas_pointer_has_double_click_text_edit_handler():
 
 
 @pytest.mark.unit
+def test_canvas_text_overlay_commits_and_cancels_through_view_model():
+    workspace = _workspace()
+    text = TextLayer(name="标题", x=20, y=30, width=180, height=60)
+    text.text_binding_enabled = False
+    text.set_text_lines(["原文字"])
+    text.set_current_text("原文字", force=True)
+    workspace.document.add_text_layer(text)
+
+    assert workspace.beginTextEditAt(30, 40) is True
+    assert workspace.startTextEditOverlay() is True
+    assert workspace.textEditOverlayVisible is True
+    assert workspace.commitTextEditOverlay("新文字") is True
+    assert workspace.textEditOverlayVisible is False
+    assert text.current_text == "新文字"
+
+    assert workspace.startTextEditOverlay() is True
+    assert workspace.cancelTextEditOverlay() is True
+    assert workspace.textEditOverlayVisible is False
+
+
+@pytest.mark.unit
 def test_qml_canvas_pointer_double_click_starts_overlay_edit():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
     assert "workspace.startTextEditOverlay()" in source
     assert "window.focusCanvasTextEditor()" in source
+    assert "canvasWorkspace.cancelTransform()" in source
+    assert "workspace.cropEditing || canvasWorkspace.transformActive" not in source
     assert "id: canvasTextEditOverlay" in source
     assert 'color: "transparent"' in source
     assert "readonly property real handleSize" in source
@@ -107,3 +130,14 @@ def test_qml_text_content_section_has_reveal_id():
 
     assert "id: textContentSection" in source
     assert "selectedTextEditor.beginEdit()" in source
+
+
+@pytest.mark.unit
+def test_vertical_text_double_click_falls_back_to_sidebar_editor():
+    workspace = _workspace()
+    text = TextLayer(name="竖排", x=20, y=30, width=180, height=60)
+    text.vertical_layout = True
+    workspace.document.add_text_layer(text)
+    assert workspace.beginTextEditAt(30, 40) is True
+    assert workspace.startTextEditOverlay() is False
+    assert workspace.textEditOverlayVisible is False

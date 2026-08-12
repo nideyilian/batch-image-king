@@ -213,7 +213,8 @@ if __name__ == "__main__":
     text_layer = TextLayer()
     text_layer.name = "测试文字图层"
     text_layer.current_text = "专业UI整合设计"
-    text_layer.font_family = "Microsoft YaHei"
+    from app.constants import DEFAULT_TEXT_FONT_FAMILY
+    text_layer.font_family = DEFAULT_TEXT_FONT_FAMILY
     text_layer.font_size = 32
     text_layer.text_color = (255, 100, 100, 255)
     text_layer.opacity = 0.85

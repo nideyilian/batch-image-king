@@ -435,10 +435,16 @@ class IntegratedTextPanelHandlers(object):
             return
 
         final_text = "" if text is None else str(text)
-        self.text_layer.text_content = final_text
-        new_lines = self.text_layer.get_text_lines() if hasattr(self.text_layer, 'get_text_lines') else []
-        next_text = new_lines[0] if new_lines else final_text
-        self.text_layer.current_text = next_text
+        old_text = str(getattr(self.text_layer, "current_text", "") or "")
+        old_colors = self.text_layer.get_text_color_ranges()
+        old_sizes = self.text_layer.get_font_size_ranges()
+        new_lines = self.text_layer.parse_text_input_to_lines(final_text)
+        next_text = new_lines[0] if new_lines else ""
+        from app.utils.text_style_ranges import remap_text_style_ranges
+        colors, sizes = remap_text_style_ranges(old_text, str(next_text or ""), old_colors, old_sizes)
+        self.text_layer.set_text_lines(new_lines)
+        self.text_layer.set_current_text(next_text, force=True)
+        self.text_layer.replace_text_style_ranges(colors, sizes)
         self.property_changed.emit("text_lines", new_lines)
         self.property_changed.emit("current_text", self.text_layer.current_text)
         self.update_preview()
@@ -466,7 +472,8 @@ class IntegratedTextPanelHandlers(object):
         """只重置核心文字参数，保留位置、背景和文案。"""
         if not self.text_layer:
             return
-        self.text_layer.font_family = "Microsoft YaHei"
+        from app.constants import DEFAULT_TEXT_FONT_FAMILY
+        self.text_layer.font_family = DEFAULT_TEXT_FONT_FAMILY
         self.text_layer.font_size = 24
         self.text_layer.font_style = FontStyle.NORMAL
         self.text_layer.text_align = TextAlign.LEFT
@@ -778,7 +785,8 @@ class IntegratedTextPanelHandlers(object):
 
         if reply == QMessageBox.Yes:
             # 重置为默认值
-            self.text_layer.font_family = "Microsoft YaHei"
+            from app.constants import DEFAULT_TEXT_FONT_FAMILY
+            self.text_layer.font_family = DEFAULT_TEXT_FONT_FAMILY
             self.text_layer.font_size = 24
             self.text_layer.font_style = FontStyle.NORMAL
             self.text_layer.text_align = TextAlign.LEFT

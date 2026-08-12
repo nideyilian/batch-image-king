@@ -240,6 +240,31 @@ class TestCanvasTextEditor:
         editor._cancel()
         assert layer.current_text == "就地编辑测试"
 
+    def test_editor_cancel_restores_inline_styles_and_auto_fit(self):
+        _app, _canvas, _doc, layer, _editor = self._make_editor()
+        layer.text_binding_enabled = False
+        layer.set_text_lines(["就地编辑测试"])
+        layer.set_current_text("就地编辑测试", force=True)
+        layer.set_text_color_range(1, 3, (255, 0, 0, 255))
+        layer.set_font_size_range(2, 4, 60)
+        original_colors = layer.get_text_color_ranges()
+        original_sizes = layer.get_font_size_ranges()
+        original_auto_fit = layer.auto_fit_text_box
+
+        from app.ui.canvas_text_editor import CanvasTextEditor
+        class _Rect:
+            x = y = 100
+            width = 220
+            height = 80
+        editor = CanvasTextEditor(_canvas, layer, _Rect(), 1.0)
+        editor.setPlainText("不应保存的修改")
+        editor._cancel()
+
+        assert layer.current_text == "就地编辑测试"
+        assert layer.get_text_color_ranges() == original_colors
+        assert layer.get_font_size_ranges() == original_sizes
+        assert layer.auto_fit_text_box is original_auto_fit
+
     def test_editor_ctrl_wheel_adjusts_selected_size(self):
         _app, _canvas, _doc, layer, editor = self._make_editor()
         cursor = editor.textCursor()

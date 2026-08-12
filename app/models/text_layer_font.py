@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 class TextLayerFontMixin:
 
     def _get_default_font(self):
-        """获取系统默认字体"""
+        """获取跨平台默认无衬线字体别名。"""
+        return "sans-serif"
+
+    @staticmethod
+    def _get_platform_sans_font():
+        """返回适合当前平台且支持中文的系统无衬线字体。"""
         system = platform.system()
         if system == "Windows":
             return "Microsoft YaHei"  # 微软雅黑
@@ -30,6 +35,30 @@ class TextLayerFontMixin:
             return "PingFang SC"  # 苹方
         else:  # Linux
             return "Noto Sans CJK SC"  # 思源黑体
+
+    def _resolve_font_family(self, font_name: str) -> str:
+        """把通用字体家族解析为渲染器可定位的真实系统家族。"""
+        family = str(font_name or "").strip()
+        if family.casefold() in {"sans-serif", "sans serif", "sans_serif"}:
+            return self._get_platform_sans_font()
+        return family
+
+    def resolve_font_family(self, font_name: str) -> dict:
+        """返回文档字体名对应的运行时家族和可用状态。"""
+        requested = str(font_name or "").strip()
+        resolved = self._resolve_font_family(requested)
+        try:
+            available = bool(self._find_font_path(requested))
+        except Exception:
+            logger.debug("检查文字字体可用性失败", exc_info=True)
+            available = False
+        fallback = None if available else self._get_platform_sans_font()
+        return {
+            "requested_family": requested,
+            "resolved_family": resolved if available or requested.casefold() in {"sans-serif", "sans serif", "sans_serif"} else fallback,
+            "available": available,
+            "fallback_family": fallback,
+        }
 
     def get_system_fonts(self) -> List[str]:
         """获取系统可用字体列表（增强版，支持文件缓存）"""
@@ -683,8 +712,10 @@ class TextLayerFontMixin:
         if size is None:
             size = self._font_size
         size = max(1, int(size))
+        resolution = self.resolve_font_family(self._font_family)
+        resolved_family = str(resolution.get("resolved_family") or self._resolve_font_family(self._font_family))
         cache_key = (
-            f"{self._font_family}_{getattr(self, '_font_face', '')}_"
+            f"{resolved_family}_{getattr(self, '_font_face', '')}_"
             f"{size}_{self._font_style.name}"
         )
 
@@ -693,7 +724,7 @@ class TextLayerFontMixin:
 
         # 优先根据字体家族定位文件路径
         font_path = self._find_font_path(
-            self._font_family,
+            resolved_family,
             getattr(self, '_font_face', ''),
         )
 
@@ -736,6 +767,7 @@ class TextLayerFontMixin:
 
     def _find_font_path(self, font_name: str, face_style: str = '') -> str:
         """查找字体文件路径；显式 face 优先于旧版合成样式。"""
+        font_name = self._resolve_font_family(font_name)
         requested_face = str(face_style or '').strip().casefold()
         if requested_face:
             cached_faces = getattr(self, '_cached_font_faces', None)

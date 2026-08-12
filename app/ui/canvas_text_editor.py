@@ -9,7 +9,8 @@
 """
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtGui import QTextCharFormat, QTextCursor, QTextOption, QFont, QColor, QPainter
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, QPoint
+from app.constants import DEFAULT_TEXT_FONT_FAMILY
 
 
 class CanvasTextEditor(QTextEdit):
@@ -22,6 +23,14 @@ class CanvasTextEditor(QTextEdit):
         self._zoom = max(0.1, float(zoom_factor))
         self._binding_enabled = bool(getattr(layer, "text_binding_enabled", True))
         self._prev_auto_fit = bool(getattr(layer, "auto_fit_text_box", True))
+        self._original_text_lines = list(layer.get_text_lines()) if hasattr(layer, "get_text_lines") else []
+        self._original_current_text = str(getattr(layer, "current_text", "") or "")
+        self._original_text_color_ranges = (
+            layer.get_text_color_ranges() if hasattr(layer, "get_text_color_ranges") else []
+        )
+        self._original_font_size_ranges = (
+            layer.get_font_size_ranges() if hasattr(layer, "get_font_size_ranges") else []
+        )
         self._committed = False
         self._closed = False
 
@@ -45,7 +54,11 @@ class CanvasTextEditor(QTextEdit):
         self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.setCursorWidth(max(1, int(2 * self._zoom)))
 
-        base_font = QFont(str(getattr(layer, "font_family", "") or "Microsoft YaHei"))
+        family = str(getattr(layer, "font_family", "") or DEFAULT_TEXT_FONT_FAMILY)
+        resolver = getattr(layer, "_resolve_font_family", None)
+        if callable(resolver):
+            family = str(resolver(family) or family)
+        base_font = QFont(family)
         base_size = max(1, int(round(int(getattr(layer, "font_size", 24)) * self._zoom)))
         base_font.setPixelSize(base_size)
         self.setFont(base_font)
@@ -187,21 +200,25 @@ class CanvasTextEditor(QTextEdit):
         text = self.toPlainText()
         if layer is not None:
             try:
-                # 恢复自动适配
+                lines = layer.parse_text_input_to_lines(text) if hasattr(layer, "parse_text_input_to_lines") else [text]
+                current_text = lines[0] if lines else ""
+                if text != self._original_current_text and hasattr(layer, "replace_text_style_ranges"):
+                    from app.utils.text_style_ranges import remap_text_style_ranges
+                    colors, sizes = remap_text_style_ranges(
+                        self._original_current_text,
+                        current_text,
+                        self._original_text_color_ranges,
+                        self._original_font_size_ranges,
+                    )
+                else:
+                    colors = layer.get_text_color_ranges() if hasattr(layer, "get_text_color_ranges") else []
+                    sizes = layer.get_font_size_ranges() if hasattr(layer, "get_font_size_ranges") else []
+                layer.set_text_lines(lines)
+                layer.set_current_text(current_text, force=True)
+                if hasattr(layer, "replace_text_style_ranges"):
+                    layer.replace_text_style_ranges(colors, sizes)
                 if hasattr(layer, "auto_fit_text_box"):
                     layer.auto_fit_text_box = self._prev_auto_fit
-
-                lines = layer.get_text_lines() if hasattr(layer, "get_text_lines") else []
-                current = str(getattr(layer, "current_text", "") or "")
-                if current in lines:
-                    idx = lines.index(current)
-                    lines[idx] = text
-                else:
-                    lines = [text] if not lines else lines
-                    if current not in lines:
-                        lines = [text]
-                layer.set_text_lines(lines)
-                layer.current_text = text
                 if hasattr(layer, "_update_text_box_size_if_needed"):
                     layer._update_text_box_size_if_needed()
                 self._canvas.document.document_changed.emit()
@@ -224,7 +241,13 @@ class CanvasTextEditor(QTextEdit):
         if layer is not None:
             try:
                 layer.auto_fit_text_box = self._prev_auto_fit
-                layer.current_text = layer.current_text  # 触发缓存清理，恢复原渲染
+                layer.set_text_lines(list(self._original_text_lines))
+                layer.set_current_text(self._original_current_text, force=True)
+                if hasattr(layer, "replace_text_style_ranges"):
+                    layer.replace_text_style_ranges(
+                        list(self._original_text_color_ranges),
+                        list(self._original_font_size_ranges),
+                    )
                 layer._cached_image = None
                 layer.changed.emit()
                 self._canvas.document.document_changed.emit()
