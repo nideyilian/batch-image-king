@@ -321,7 +321,19 @@ class TextLayerFontMixin:
                 pass
 
         font_extensions = {'.ttf', '.otf', '.ttc', '.fon', '.fnt'}
+        # 位图字体后缀：fontTools 无法解析，直接走文件名回退以节省 try/except 时间
+        bitmap_extensions = {'.fon', '.fnt'}
         processed_files = set()
+
+        def _norm_path(p: str) -> str:
+            try:
+                return os.path.normcase(os.path.realpath(p))
+            except Exception:
+                return os.path.normcase(p)
+
+        # 收集待解析的字体路径：位图字体立即回退，其余（TTF/OTF/TTC）放到列表里
+        # 然后用线程池并行解析（name table 解析是磁盘 I/O 密集，并行显著缩短首扫时间）
+        pending_paths: List[str] = []
 
         for font_dir in font_dirs:
             if not os.path.exists(font_dir):
@@ -331,26 +343,113 @@ class TextLayerFontMixin:
                 for root, dirs, files in os.walk(font_dir):
                     for file in files:
                         file_lower = file.lower()
-                        if any(file_lower.endswith(ext) for ext in font_extensions):
-                            file_path = os.path.join(root, file)
-                            if file_path not in processed_files:
-                                processed_files.add(file_path)
+                        if not any(file_lower.endswith(ext) for ext in font_extensions):
+                            continue
+                        file_path = os.path.join(root, file)
+                        key = _norm_path(file_path)
+                        if key in processed_files:
+                            continue
+                        processed_files.add(key)
 
-                            # 对 TTC 会返回多份，每份对应一个字体成员（字重/语言等）
-                            fonts.extend(self._extract_font_info_all(file_path))
+                        ext = os.path.splitext(file)[1].lower()
+                        if ext in bitmap_extensions:
+                            fallback = self._fallback_font_info_from_filename(file_path)
+                            if fallback:
+                                fonts.append(fallback)
+                            continue
+                        pending_paths.append(file_path)
             except (PermissionError, OSError):
                 logger.warning("静默异常已忽略: except (PermissionError, OSError): in text_layer_font.py", exc_info=True)
                 continue
 
-        # 尝试从Windows注册表获取字体
+        # 尝试从Windows注册表获取字体（补漏：用户级字体、Office 安装字体、安装器写入绝对路径字体等）
         try:
-            registry_fonts = self._get_windows_registry_fonts()
-            fonts.extend(registry_fonts)
+            registry_font_paths = self._get_windows_registry_font_paths()
+            for font_path in registry_font_paths:
+                if not font_path:
+                    continue
+                key = _norm_path(font_path)
+                if key in processed_files:
+                    continue
+                processed_files.add(key)
+
+                ext = os.path.splitext(font_path)[1].lower()
+                if ext in bitmap_extensions:
+                    fallback = self._fallback_font_info_from_filename(font_path)
+                    if fallback:
+                        fonts.append(fallback)
+                    continue
+                pending_paths.append(font_path)
         except Exception:
             logger.warning("静默异常已忽略: except: in text_layer_font.py", exc_info=True)
-            pass
+
+        # 并行解析 pending_paths 中的 TTF/OTF/TTC；失败时退回顺序扫描以保证安全
+        if pending_paths:
+            def _safe_extract(path: str) -> List[Dict[str, str]]:
+                try:
+                    return self._extract_font_info_all(path)
+                except Exception:
+                    return []
+
+            extracted_ok = False
+            try:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+                max_workers = min(16, max(2, (os.cpu_count() or 4)))
+                with ThreadPoolExecutor(max_workers=max_workers) as pool:
+                    future_map = {pool.submit(_safe_extract, p): p for p in pending_paths}
+                    for fut in as_completed(future_map):
+                        try:
+                            res = fut.result()
+                        except Exception:
+                            res = []
+                        if res:
+                            fonts.extend(res)
+                extracted_ok = True
+            except Exception as exc:
+                logger.debug("并行字体解析失败，回退到顺序解析: %s", exc)
+                extracted_ok = False
+
+            if not extracted_ok:
+                for p in pending_paths:
+                    fonts.extend(_safe_extract(p))
 
         return fonts
+
+    def _fallback_font_info_from_filename(self, file_path: str) -> Dict[str, str]:
+        """仅从文件名推断字体信息（用于 fontTools 无法处理的位图字体或扫描兜底）。"""
+        try:
+            file_name = os.path.basename(file_path)
+            name_without_ext = os.path.splitext(file_name)[0]
+            style_name = 'Regular'
+            family_name = name_without_ext or 'Unknown'
+            # 粗扫常见样式后缀，把 "Arial Bold" -> family=Arial, style=Bold
+            lower = family_name.lower()
+            suffixes = [
+                (' bold italic', 'Bold Italic'),
+                (' bold oblique', 'Bold Oblique'),
+                (' italic', 'Italic'),
+                (' oblique', 'Oblique'),
+                (' bold', 'Bold'),
+                (' black', 'Black'),
+                (' heavy', 'Heavy'),
+                (' medium', 'Medium'),
+                (' light', 'Light'),
+                (' thin', 'Thin'),
+                (' regular', 'Regular'),
+            ]
+            for suf, style in suffixes:
+                if lower.endswith(suf):
+                    family_name = family_name[:-len(suf)].strip(' -_') or family_name
+                    style_name = style
+                    break
+            return {
+                'name': family_name,
+                'cn_name': '',
+                'style': style_name,
+                'path': file_path,
+            }
+        except Exception:
+            return {}
 
     def _scan_macos_fonts(self) -> List[Dict[str, str]]:
         """扫描macOS系统所有字体"""
@@ -367,6 +466,12 @@ class TextLayerFontMixin:
         font_extensions = {'.ttf', '.otf', '.ttc', '.dfont'}
         processed_files = set()
 
+        def _norm_path(p: str) -> str:
+            try:
+                return os.path.normcase(os.path.realpath(p))
+            except Exception:
+                return os.path.normcase(p)
+
         for font_dir in font_dirs:
             if not os.path.exists(font_dir):
                 continue
@@ -377,9 +482,10 @@ class TextLayerFontMixin:
                         file_lower = file.lower()
                         if any(file_lower.endswith(ext) for ext in font_extensions):
                             file_path = os.path.join(root, file)
-                            if file_path not in processed_files:
-                                processed_files.add(file_path)
-
+                            key = _norm_path(file_path)
+                            if key in processed_files:
+                                continue
+                            processed_files.add(key)
                             # 对 TTC 会返回多份，每份对应一个字体成员
                             fonts.extend(self._extract_font_info_all(file_path))
             except (PermissionError, OSError):
@@ -404,6 +510,12 @@ class TextLayerFontMixin:
         font_extensions = {'.ttf', '.otf', '.ttc', '.pfb', '.pfa'}
         processed_files = set()
 
+        def _norm_path(p: str) -> str:
+            try:
+                return os.path.normcase(os.path.realpath(p))
+            except Exception:
+                return os.path.normcase(p)
+
         for font_dir in font_dirs:
             if not os.path.exists(font_dir):
                 continue
@@ -414,9 +526,10 @@ class TextLayerFontMixin:
                         file_lower = file.lower()
                         if any(file_lower.endswith(ext) for ext in font_extensions):
                             file_path = os.path.join(root, file)
-                            if file_path not in processed_files:
-                                processed_files.add(file_path)
-
+                            key = _norm_path(file_path)
+                            if key in processed_files:
+                                continue
+                            processed_files.add(key)
                             # 对 TTC 会返回多份，每份对应一个字体成员
                             fonts.extend(self._extract_font_info_all(file_path))
             except (PermissionError, OSError):
@@ -525,39 +638,92 @@ class TextLayerFontMixin:
                 name_table = font_one.get('name')
                 if name_table is None:
                     return
-                family_en = None
-                family_zh = None
-                style_name = 'Regular'
+
+                # 分类收集 nameID=16 / 1 / 17 / 2 的候选，按置信度加权
+                fam16_en: List[Tuple[int, str]] = []   # (priority, value) for nameID=16 English
+                fam16_zh: List[Tuple[int, str]] = []   # nameID=16 CJK
+                fam1_en: List[Tuple[int, str]] = []    # nameID=1 English
+                fam1_zh: List[Tuple[int, str]] = []    # nameID=1 CJK
+                subfamily: List[Tuple[int, str]] = []  # nameID=17 / 2
+
+                def _is_cjk_lang(lid: int) -> bool:
+                    # 简体/繁体/香港/新加坡/澳门 中文、日文、韩文等都视为含中文名候选
+                    return lid in (
+                        0x0404, 0x0804, 0x0C04, 0x1004, 0x1404, 0x7C04,
+                        0x0411, 0x0412,
+                    )
+
                 for record in name_table.names:
-                    if record.nameID not in (1, 16):
-                        continue
                     try:
                         value = record.toUnicode().strip()
                     except Exception:
                         continue
                     if not value:
                         continue
-                    lang_id = record.langID
-                    if lang_id in (0x0804, 0x1004):
-                        family_zh = family_zh or value
-                    elif lang_id == 0x0409:
-                        family_en = family_en or value
-                    elif family_en is None and record.platformID in (0, 1, 3):
-                        # Unicode / Mac / Windows 平台下的其他 langID（0x0411 日文等）兜底
-                        family_en = family_en or value
+                    nid = record.nameID
+                    lid = record.langID
+                    pid = record.platformID
+                    # 按 platform/lang 计算一个基础优先级（越大越可信）：Win > Mac > Unicode
+                    base = {3: 300, 1: 200, 0: 100}.get(pid, 0)
+                    en_ok = (lid == 0x0409)
+                    cjk_ok = _is_cjk_lang(lid)
+                    if nid == 16:
+                        if en_ok:
+                            fam16_en.append((base + 90, value))
+                        elif cjk_ok:
+                            fam16_zh.append((base + 90, value))
+                        elif pid in (0, 1, 3):
+                            fam16_en.append((base + 20, value))
+                    elif nid == 1:
+                        if en_ok:
+                            fam1_en.append((base + 80, value))
+                        elif cjk_ok:
+                            fam1_zh.append((base + 80, value))
+                        elif pid in (0, 1, 3):
+                            fam1_en.append((base + 10, value))
+                    elif nid == 17:
+                        subfamily.append((base + 50, value))
+                    elif nid == 2:
+                        subfamily.append((base + 40, value))
 
-                for record in name_table.names:
-                    if record.nameID == 2:
+                def _pick(pool: List[Tuple[int, str]]) -> Optional[str]:
+                    if not pool:
+                        return None
+                    pool.sort(key=lambda x: x[0], reverse=True)
+                    return pool[0][1]
+
+                family_zh = _pick(fam16_zh) or _pick(fam1_zh)
+                # 家族英文名：nameID=16 优先（Typographic Family 更干净，不含字重）
+                family_en = _pick(fam16_en) or _pick(fam1_en)
+
+                style_name = 'Regular'
+                sf = _pick(subfamily)
+                if sf and sf.strip():
+                    s = sf.strip()
+                    if s.lower() not in ('regular', 'normal', 'book', ''):
+                        style_name = s
+
+                # 最终兜底：如果没有 nameID=1/16 的优先语言命中，尝试任何 nameID=1/16 的值
+                if not family_en and not family_zh:
+                    any16 = None
+                    any1 = None
+                    for record in name_table.names:
+                        if record.nameID not in (1, 16):
+                            continue
                         try:
-                            style_value = record.toUnicode().strip()
+                            v = record.toUnicode().strip()
                         except Exception:
                             continue
-                        if style_value and style_value.lower() not in ('regular', 'normal', 'book'):
-                            style_name = style_value
-                        break
+                        if not v:
+                            continue
+                        if record.nameID == 16 and not any16:
+                            any16 = v
+                        elif record.nameID == 1 and not any1:
+                            any1 = v
+                    family_en = any16 or any1
+                    if not family_en and family_zh:
+                        family_en = family_zh
 
-                if not family_en:
-                    family_en = family_zh
                 if not family_en:
                     return
                 key = (str(family_en), str(family_zh or ''), str(style_name))
@@ -616,18 +782,19 @@ class TextLayerFontMixin:
 
         return results
 
-    def _get_windows_registry_fonts(self) -> List[Dict[str, str]]:
-        """从Windows注册表获取字体信息（HKLM + HKCU 两处，优先读取字体文件内嵌名）。
+    def _get_windows_registry_font_paths(self) -> List[str]:
+        """从Windows注册表获取字体文件路径（HKLM + HKCU 两处）。
 
         修复点：
         - 同时读取系统字体（HKLM）和用户安装字体（HKCU），避免"为我安装"的字体漏掉。
         - 注册表值若为完整绝对路径，直接使用而不再拼接目录。
+        - 不再内部解析 name table：调用方统一解析，避免目录+注册表重复打开字体文件浪费时间。
         """
-        fonts: List[Dict[str, str]] = []
+        paths: List[str] = []
         try:
             import winreg
         except ImportError:
-            return fonts
+            return paths
 
         reg_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
         # 用户字体搜索顺序：先用户本地字体目录，再系统字体目录
@@ -635,6 +802,13 @@ class TextLayerFontMixin:
             os.path.expanduser("~/AppData/Local/Microsoft/Windows/Fonts/"),
             "C:/Windows/Fonts/",
         ]
+        seen: Set[str] = set()
+
+        def _norm(p: str) -> str:
+            try:
+                return os.path.normcase(os.path.realpath(p))
+            except Exception:
+                return os.path.normcase(p)
 
         def _collect_from_root(root_hive) -> None:
             try:
@@ -647,7 +821,6 @@ class TextLayerFontMixin:
                             if not font_file:
                                 continue
 
-                            # 定位文件：支持绝对路径（某些安装器会写入完整路径）
                             resolved = None
                             if os.path.isabs(font_file):
                                 if os.path.exists(font_file):
@@ -661,34 +834,11 @@ class TextLayerFontMixin:
                             if not resolved:
                                 continue
 
-                            # 优先读取字体文件内嵌的真实家族名
-                            embedded = self._read_embedded_font_names(resolved)
-                            if embedded and embedded.get('name'):
-                                fonts.append({
-                                    'name': embedded['name'],
-                                    'cn_name': embedded.get('cn_name') or '',
-                                    'family': embedded['name'],
-                                    'style': embedded.get('style') or 'Regular',
-                                    'path': resolved,
-                                    'filename': os.path.basename(font_file),
-                                })
+                            k = _norm(resolved)
+                            if k in seen:
                                 continue
-
-                            # 回退：使用注册表名，但去掉 "(TrueType)" / "(OpenType)" 后缀
-                            clean_name = font_name
-                            for suffix in (' (TrueType)', ' (OpenType)', ' (All res)'):
-                                if clean_name.endswith(suffix):
-                                    clean_name = clean_name[:-len(suffix)]
-                                    break
-                            family_name = clean_name.split()[0] if ' ' in clean_name else clean_name
-                            fonts.append({
-                                'name': clean_name,
-                                'cn_name': '',
-                                'family': family_name,
-                                'style': 'Regular',
-                                'path': resolved,
-                                'filename': os.path.basename(font_file),
-                            })
+                            seen.add(k)
+                            paths.append(resolved)
                         except Exception:
                             logger.debug("枚举注册表字体条目失败", exc_info=True)
                             continue
@@ -696,7 +846,6 @@ class TextLayerFontMixin:
                 # 该根键下可能不存在 Fonts 项（尤其 HKCU 若无用户安装字体则可能缺失）
                 return
             except OSError:
-                # 权限问题等静默忽略
                 return
             except Exception:
                 logger.debug("读取注册表字体失败 hive=%s", root_hive, exc_info=True)
@@ -705,7 +854,7 @@ class TextLayerFontMixin:
         # 系统级 + 用户级；用户级放前面，这样用户自定义字体在同家族情况下优先
         _collect_from_root(winreg.HKEY_CURRENT_USER)
         _collect_from_root(winreg.HKEY_LOCAL_MACHINE)
-        return fonts
+        return paths
 
     def _load_fonts_from_cache(self) -> Optional[Tuple[List[str], Dict[str, str], Dict[str, str], Dict[str, List[Dict[str, object]]]]]:
         """从文件缓存加载字体列表、名称、默认路径与 face 目录。"""
