@@ -208,6 +208,11 @@ def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
     assert "sys.exit(qml_main())" in main_source
     assert "from app.qml.qml_main import main" in qml_launcher_source
     assert "raise SystemExit(main())" in qml_launcher_source
+    qml_main_source = (repo_root / "app" / "qml" / "qml_main.py").read_text(encoding="utf-8")
+    assert "auto_render=False" in qml_main_source
+    assert "defer_font_catalog_preload=True" in qml_main_source
+    assert "workspace.renderInitialPreview()" in qml_main_source
+    assert "workspace.enableDeferredFontCatalogPreload" in qml_main_source
     assert 'cd /d "%~dp0"' in windows_launcher_source
     assert '"%~dp0start_qml.py" %*' in windows_launcher_source
     assert "if not errorlevel 1" in windows_launcher_source

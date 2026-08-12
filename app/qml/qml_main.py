@@ -131,10 +131,11 @@ def main() -> int:
     auto_render = os.environ.get("BTPW_QML_DISABLE_AUTO_RENDER") != "1"
     workspace = WorkspaceViewModel(
         preview_provider=preview_provider,
-        auto_render=auto_render,
+        # 文档尚未完成初始化时不启动默认空文档预览，避免首屏重复渲染。
+        auto_render=False,
+        defer_font_catalog_preload=True,
         parent=engine,
     )
-    workspace.startFontCatalogPreload()
     batch_export = BatchExportViewModel(workspace=workspace, parent=engine)
     canvas_presets = CanvasPresetViewModel(workspace=workspace, parent=engine)
     binding_manager = BindingManagerViewModel(workspace=workspace, parent=engine)
@@ -312,6 +313,11 @@ def main() -> int:
         workspace_sessions.newDocument(1920, 1080)
         workspace_sessions.activateDocument(0)
 
+    # 完成启动参数对应的文档/标签初始化后，只提交一次首屏预览。
+    workspace.setAutoRender(auto_render)
+    if auto_render:
+        workspace.renderInitialPreview()
+
     engine.rootContext().setContextProperty("workspace", workspace)
     engine.rootContext().setContextProperty("workspaceSessions", workspace_sessions)
     engine.rootContext().setContextProperty("layerModel", workspace.layerModel)
@@ -331,6 +337,16 @@ def main() -> int:
     if not engine.rootObjects():
         print(f"QML 工作台加载失败：{qml_path}", file=sys.stderr)
         return 2
+
+    # 字体目录扫描放到首屏空闲后，避免与 QML 组件创建争用 CPU/磁盘。
+    try:
+        font_preload_delay_ms = max(
+            500,
+            int(os.environ.get("BTPW_QML_FONT_PRELOAD_DELAY_MS", "2000")),
+        )
+    except (TypeError, ValueError):
+        font_preload_delay_ms = 2000
+    QTimer.singleShot(font_preload_delay_ms, workspace.enableDeferredFontCatalogPreload)
 
     window = engine.rootObjects()[0]
     debug(

@@ -63,6 +63,40 @@ def test_font_catalog_property_never_scans_fonts_on_gui_thread(monkeypatch):
 
 
 @pytest.mark.unit
+def test_deferred_font_catalog_waits_until_idle_callback(monkeypatch):
+    workspace = _text_workspace()
+    workspace._defer_font_catalog_preload = True
+    preload_calls = []
+    monkeypatch.setattr(
+        workspace,
+        "startFontCatalogPreload",
+        lambda: preload_calls.append(True),
+        raising=False,
+    )
+
+    options = workspace.textFontOptions
+
+    assert options
+    assert preload_calls == []
+    workspace.enableDeferredFontCatalogPreload()
+    assert preload_calls == [True]
+
+
+@pytest.mark.unit
+def test_initial_preview_is_submitted_only_after_auto_render_is_enabled():
+    workspace = _text_workspace(auto_render=False)
+
+    assert workspace._preview_generation == 0
+    workspace.setAutoRender(True)
+    assert workspace._preview_generation == 0
+
+    workspace.renderInitialPreview()
+
+    assert workspace._preview_generation == 1
+    workspace._preview_timer.stop()
+
+
+@pytest.mark.unit
 def test_preview_provider_uses_qimage_implicit_sharing():
     provider = PreviewImageProvider()
     source = QImage(3840, 2160, QImage.Format_RGBA8888)

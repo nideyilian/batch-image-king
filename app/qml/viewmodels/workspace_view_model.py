@@ -281,6 +281,7 @@ class WorkspaceViewModel(QObject):
         preview_provider: Optional[PreviewImageProvider] = None,
         *,
         auto_render: bool = True,
+        defer_font_catalog_preload: bool = False,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -293,6 +294,7 @@ class WorkspaceViewModel(QObject):
         self._busy = False
         self._export_running = False
         self._auto_render = bool(auto_render)
+        self._defer_font_catalog_preload = bool(defer_font_catalog_preload)
         self._document_lock = threading.RLock()
         self._render_request_id = 0
         self._preview_generation = 0
@@ -331,6 +333,24 @@ class WorkspaceViewModel(QObject):
         self._set_document(document or Document())
         if self._auto_render:
             self.requestPreview()
+
+    @Slot(bool)
+    def setAutoRender(self, enabled: bool) -> None:
+        """切换自动预览；启动阶段可先关闭，完成文档初始化后再开启。"""
+        enabled = bool(enabled)
+        if enabled == self._auto_render:
+            return
+        self._auto_render = enabled
+        if not enabled:
+            self._preview_timer.stop()
+            self._final_preview_timer.stop()
+            self._preview_token_source.cancel()
+
+    @Slot()
+    def renderInitialPreview(self) -> None:
+        """在启动文档准备完成后提交首个预览请求。"""
+        if self._auto_render:
+            self.requestPreview(force=True)
 
     @property
     def document(self) -> Document:
@@ -1748,14 +1768,16 @@ class WorkspaceViewModel(QObject):
     @Property("QVariantList", notify=fontCatalogChanged)
     def textFontOptions(self):
         if self._text_font_options_cache is None:
-            self.startFontCatalogPreload()
+            if not self._defer_font_catalog_preload:
+                self.startFontCatalogPreload()
             return self._font_catalog_fallback_options()
         return list(self._text_font_options_cache)
 
     @Property("QVariantList", notify=fontCatalogChanged)
     def textFontTreeOptions(self):
         if self._text_font_tree_options_cache is None:
-            self.startFontCatalogPreload()
+            if not self._defer_font_catalog_preload:
+                self.startFontCatalogPreload()
             return self._font_catalog_fallback_tree()
         return list(self._text_font_tree_options_cache)
 
@@ -1768,6 +1790,12 @@ class WorkspaceViewModel(QObject):
             name="QmlFontCatalog",
             daemon=True,
         ).start()
+
+    @Slot()
+    def enableDeferredFontCatalogPreload(self) -> None:
+        """允许首屏完成后启动字体目录预加载。"""
+        self._defer_font_catalog_preload = False
+        self.startFontCatalogPreload()
 
     def _font_catalog_worker(self):
         options = []
