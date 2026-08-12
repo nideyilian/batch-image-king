@@ -75,4 +75,29 @@ QtObject {
     readonly property int sectionHeaderHeight: 28
     readonly property int motionFast: 120
     readonly property int motionNormal: 180
+
+    // ================================================================
+    // Inspector 设计规范 (Figma-Inspector 紧凑二列风格)
+    // 用途：图层侧边栏参数面板（Main.qml / InspectorRow 及所有子控件）
+    // 所有宽度为固定紧凑值，除 SliderFill 动态外，不随面板宽度膨胀 → 杜绝大横条
+    // ================================================================
+    readonly property int inspectorLabelColWidth: 42           // Label 列固定宽
+    readonly property int inspectorRowHeight: controlHeight    // 24px 标准行高
+    readonly property int inspectorColSpacing: 6               // 控件间横向间距
+
+    // —— 控件标准宽度（统一紧凑）
+    readonly property int inspectorWSelect: 160                // SelectBox / FontSelectBox
+    readonly property int inspectorWInput: 120                 // 单 ValueBox / ColorValueField
+    readonly property int inspectorWPair: 82                   // 双控件并排各占宽
+    readonly property int inspectorWSliderVB: 58               // Slider 配套 ValueBox
+    readonly property int inspectorWSwatch: 186                // ColorValueField + SwatchPanel
+
+    // —— 分段按钮宽度
+    readonly property int inspectorWSeg2: 86                   // 2 段
+    readonly property int inspectorWSeg3: 110                  // 3 段
+    readonly property int inspectorWSeg4: 144                  // 4 段
+
+    // —— 特殊控件宽度
+    readonly property int inspectorWAlign: 108                 // 三按钮对齐容器
+    readonly property int inspectorWBind: 90                   // 绑定按钮
 }
