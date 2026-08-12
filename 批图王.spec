@@ -38,8 +38,6 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
     name='批图王',
     debug=False,
@@ -56,4 +54,15 @@ exe = EXE(
     entitlements_file=None,
     version='version_info.txt',
     icon=['app\\resources\\app_icon.ico'],
+    exclude_binaries=True,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='批图王',
 )

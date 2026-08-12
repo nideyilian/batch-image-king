@@ -161,59 +161,76 @@ def build():
     # 生成 PyInstaller 版本信息文件
     version_info_path = write_version_info(REPO_ROOT / "build" / "version_info_generated.txt", version)
 
-    # PyInstaller 命令参数
-    cmd = [
-        sys.executable,
-        '-m',
-        'PyInstaller',
-        '--noconfirm',
-        '--clean',
-        '--windowed',
-        '--onefile',
-        f'--name={APP_NAME}',
-        '--icon=app/resources/app_icon.ico',
-        # 添加资源目录
-        '--add-data=app/resources;app/resources',
-        '--add-data=app/qml/Main.qml;app/qml',
-        '--add-data=app/qml/components;app/qml/components',
-        '--add-data=app/qml/icons;app/qml/icons',
-        '--add-data=app/qml/assets;app/qml/assets',
-        # 版本信息
-        f'--version-file={version_info_path}',
-        # 隐藏导入
-        '--hidden-import=PySide6',
-        '--hidden-import=PySide6.QtQml',
-        '--hidden-import=PySide6.QtQuick',
-        '--hidden-import=PySide6.QtQuickControls2',
-        '--hidden-import=PySide6.QtWidgets',
-        '--hidden-import=PIL',
-        '--hidden-import=pyvips',
-        '--hidden-import=app.workers.export_worker',
-        '--hidden-import=cv2',
-        '--hidden-import=numpy',
-        '--hidden-import=scipy',
-        '--hidden-import=psutil',
-        # 排除不需要的模块以减小体积（可选）
-        # '--exclude-module=matplotlib',
-        # 入口文件
-        'main.py'
-    ]
+    def pyinstaller_command(*, mode: str, distpath: str, workpath: str) -> list[str]:
+        """构造统一的 PyInstaller 命令。
 
-    # 检查 presets
-    if os.path.exists('presets'):
-        cmd.insert(6, '--add-data=presets;presets')
+        安装版使用 onedir，便携版继续生成 onefile。两者共用同一组资源和
+        hidden imports，避免 build.py 与 spec 文件逐渐漂移。
+        """
+        cmd = [
+            sys.executable,
+            '-m',
+            'PyInstaller',
+            '--noconfirm',
+            '--clean',
+            '--windowed',
+            f'--{mode}',
+            f'--distpath={distpath}',
+            f'--workpath={workpath}',
+            f'--name={APP_NAME}',
+            '--icon=app/resources/app_icon.ico',
+            # 添加资源目录
+            '--add-data=app/resources;app/resources',
+            '--add-data=app/qml/Main.qml;app/qml',
+            '--add-data=app/qml/components;app/qml/components',
+            '--add-data=app/qml/icons;app/qml/icons',
+            '--add-data=app/qml/assets;app/qml/assets',
+            # 版本信息
+            f'--version-file={version_info_path}',
+            # 隐藏导入
+            '--hidden-import=PySide6',
+            '--hidden-import=PySide6.QtQml',
+            '--hidden-import=PySide6.QtQuick',
+            '--hidden-import=PySide6.QtQuickControls2',
+            '--hidden-import=PySide6.QtWidgets',
+            '--hidden-import=PIL',
+            '--hidden-import=pyvips',
+            '--hidden-import=app.workers.export_worker',
+            '--hidden-import=cv2',
+            '--hidden-import=numpy',
+            '--hidden-import=scipy',
+            '--hidden-import=psutil',
+            # 排除不需要的模块以减小体积（可选）
+            # '--exclude-module=matplotlib',
+            # 入口文件
+            'main.py'
+        ]
 
-    # 过滤 None 值
-    cmd = [arg for arg in cmd if arg is not None]
+        if os.path.exists('presets'):
+            cmd.insert(-1, '--add-data=presets;presets')
+        return [arg for arg in cmd if arg is not None]
 
-    print("Executing command:", " ".join(cmd))
-
+    # 安装版优先：目录内直接加载 DLL/Python 模块，不再启动时解压 250MB 单文件。
+    # onedir 的应用目录由 PyInstaller 按 ``distpath/<name>`` 生成。
+    # 直接放在 dist 下，NSIS 可把该目录内容复制到安装根目录，避免额外一层目录。
+    install_dist = str(REPO_ROOT / 'dist')
+    install_work = str(REPO_ROOT / 'build' / 'installer')
+    install_cmd = pyinstaller_command(mode='onedir', distpath=install_dist, workpath=install_work)
+    print("Executing installer build command:", " ".join(install_cmd))
     try:
-        subprocess.check_call(cmd)
+        subprocess.check_call(install_cmd)
+        # 便携版仍保留 onefile，供更新清单和免安装分发使用。
+        portable_cmd = pyinstaller_command(
+            mode='onefile',
+            distpath=str(REPO_ROOT / 'dist'),
+            workpath=str(REPO_ROOT / 'build' / 'portable'),
+        )
+        print("Executing portable build command:", " ".join(portable_cmd))
+        subprocess.check_call(portable_cmd)
         print("\n" + "="*50)
         print("打包成功！")
-        print(f"输出目录: {os.path.abspath('dist')}")
-        print(f"可执行文件: {os.path.abspath(f'dist/{APP_NAME}.exe')}")
+        print(f"安装版目录: {os.path.abspath(f'dist/{APP_NAME}')}")
+        print(f"便携版文件: {os.path.abspath(f'dist/{APP_NAME}.exe')}")
         print("="*50)
     except subprocess.CalledProcessError as e:
         print(f"\n打包失败: {e}")

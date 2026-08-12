@@ -1,5 +1,5 @@
 ﻿; 批图王 NSIS 安装脚本
-; 使用说明：先运行 python build.py 生成 dist/批图王.exe，再由 build.py 自动调用本脚本。
+; 使用说明：先运行 python build.py 生成 dist/批图王/ 目录，再由 build.py 自动调用本脚本。
 ; 也可手动编译：makensis.exe 批图王.nsi（默认版本 1.0.0，可用 /DAPP_VERSION= 覆盖）
 
 Unicode true
@@ -31,7 +31,8 @@ UninstPage instfiles
 
 Section "MainSection" SEC01
     SetOutPath "$INSTDIR"
-    File "..\dist\${APP_EXE}"
+    ; 安装版使用 PyInstaller onedir，直接部署所有运行时文件，避免每次启动解压。
+    File /r "..\dist\${APP_NAME}\*"
     File "..\app\resources\app_icon.ico"
 
     WriteUninstaller "$INSTDIR\${UNINSTALL_EXE}"
@@ -52,15 +53,13 @@ SectionEnd
 
 Section "Uninstall"
     Delete "$INSTDIR\${UNINSTALL_EXE}"
-    Delete "$INSTDIR\${APP_EXE}"
-    Delete "$INSTDIR\${APP_EXE}.bak"
-    Delete "$INSTDIR\${APP_NAME}_new.exe"
     Delete "$INSTDIR\app_icon.ico"
-    RMDir "$INSTDIR"
 
     Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
     RMDir "$SMPROGRAMS\${APP_NAME}"
     Delete "$DESKTOP\${APP_NAME}.lnk"
 
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+    ; onedir 安装目录包含大量运行时文件，最后统一递归清理。
+    RMDir /r "$INSTDIR"
 SectionEnd

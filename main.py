@@ -36,21 +36,14 @@ def _safe_print(message):
 print("="*80)
 _safe_print("🔍 [代码版本验证] 新版本已加载！时间戳：2024-11-07-16:50")
 print("="*80)
+# 仅保留异常处理和测试所需的 Qt 类型。经典 UI、图像质量引擎和 PIL 均在
+# ``main()`` 的经典启动路径中延迟导入，避免默认 QML 启动时加载整套旧 UI。
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt, QTimer
-from app.main_window import MainWindow
-from app.ui.dark_theme import CursorDarkTheme
-from app.utils.image_quality import ImageQualityManager
 from app.utils.logger import Logger
-from PIL import Image
 
-# 导入启动优化器
-try:
-    from app.utils.core.startup_optimizer import get_startup_optimizer, optimize_imports, measure_startup_time
-    STARTUP_OPTIMIZER_AVAILABLE = True
-except ImportError as e:
-    print(f"[警告] 启动优化器导入失败: {e}")
-    STARTUP_OPTIMIZER_AVAILABLE = False
+# 保留该名称作为兼容标记，但不在模块导入阶段加载启动优化器。
+STARTUP_OPTIMIZER_AVAILABLE = None
 
 def check_system_dependencies_fast() -> bool:
     """快速检查关键系统依赖"""
@@ -81,6 +74,8 @@ def check_system_dependencies_fast() -> bool:
 def check_system_dependencies_full() -> bool:
     """完整的系统依赖检查（延迟执行）"""
     try:
+        from PIL import Image
+        from app.utils.image_quality import ImageQualityManager
         # 检查混合模式模块是否可以导入
         from app.models.document_blend import BlendMode, Blender
 
@@ -221,6 +216,7 @@ def handle_exception(exc_type: type, exc_value: BaseException, exc_traceback: Op
 
 def setup_fixed_theme(app: QApplication) -> None:
     """设置固定的暗色主题，不跟随系统主题变化"""
+    from app.ui.dark_theme import CursorDarkTheme
     # 强制设置样式为Fusion，但使用自定义调色板覆盖
     app.setStyle('Fusion')
     
@@ -232,9 +228,17 @@ def setup_fixed_theme(app: QApplication) -> None:
 
 def main() -> int:
     """程序主函数（优化版本）"""
-    # 预优化导入
-    if STARTUP_OPTIMIZER_AVAILABLE:
-        optimize_imports()
+    # 经典界面专用依赖全部延迟到真正进入 classic 模式后导入。
+    from app.main_window import MainWindow
+    from PIL import Image
+
+    # 启动优化器自身依赖 Qt，但不应拖慢默认 QML 入口的模块导入。
+    startup_optimizer_available = False
+    try:
+        from app.utils.core.startup_optimizer import get_startup_optimizer
+        startup_optimizer_available = True
+    except ImportError as e:
+        print(f"[警告] 启动优化器导入失败: {e}")
 
     # 记录启动开始时间
     start_time = time.time()
@@ -271,7 +275,7 @@ def main() -> int:
     multiprocessing.freeze_support()
     
     try:
-        if STARTUP_OPTIMIZER_AVAILABLE:
+        if startup_optimizer_available:
             # 使用启动优化器
             optimizer = get_startup_optimizer()
 
@@ -393,7 +397,7 @@ def main() -> int:
             QTimer.singleShot(500, run_shape_layer_tests)
 
         # 延迟执行完整的系统检查（仅在非优化模式下）
-        if not STARTUP_OPTIMIZER_AVAILABLE:
+        if not startup_optimizer_available:
             # QTimer 已在模块顶部导入，避免在此处再次 import 把 QTimer 变成 main() 的局部变量
             def delayed_full_check():
                 logger.info("执行完整系统依赖检查...")
