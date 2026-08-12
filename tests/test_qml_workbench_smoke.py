@@ -61,7 +61,9 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'sequence: "Ctrl+D"' in qml_source
     assert 'id: effectColorDialog' in qml_source
     assert 'objectName: "opacitySlider"' in qml_source
-    assert 'onMoved: workspace.setSelectedOpacity(Math.round(value))' in qml_source
+    assert 'workspace.beginSelectedOpacityEdit()' in qml_source
+    assert 'onMoved: workspace.updateSelectedOpacityEdit(Math.round(value))' in qml_source
+    assert 'workspace.endSelectedOpacityEdit()' in qml_source
     assert 'workspace.setSelectedBlendMode(currentValue)' in qml_source
     assert 'workspace.setSelectedStrokeEnabled(checkedValue)' in qml_source
     assert 'workspace.setSelectedStrokeColor(modelData)' in qml_source

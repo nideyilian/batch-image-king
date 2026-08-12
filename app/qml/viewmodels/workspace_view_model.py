@@ -312,6 +312,7 @@ class WorkspaceViewModel(QObject):
         self._text_edit_layer_index = -1
         self._text_edit_draft_html = None
         self._layer_style_clipboard = None
+        self._opacity_edit_context = None
         self._crop_edit_index = -1
         self._crop_edit_original = None
         self._crop_edit_was_modified = False
@@ -4597,7 +4598,15 @@ class WorkspaceViewModel(QObject):
         if manager.get_history_count() == 0:
             self._document.save_state("初始状态")
 
-    def _set_layer_attrs(self, index: int, changes: dict, action: str, *, render: bool = True) -> bool:
+    def _set_layer_attrs(
+        self,
+        index: int,
+        changes: dict,
+        action: str,
+        *,
+        render: bool = True,
+        save_history: bool = True,
+    ) -> bool:
         if not self._ensure_operations_available():
             return False
         self._suppress_document_selection_notify += 1
@@ -4618,7 +4627,8 @@ class WorkspaceViewModel(QObject):
                 }
                 if not effective_changes:
                     return True
-                self._ensure_history_baseline()
+                if save_history:
+                    self._ensure_history_baseline()
                 for attr, value in effective_changes.items():
                     setattr(layer, attr, value)
                 if any(
@@ -4640,7 +4650,8 @@ class WorkspaceViewModel(QObject):
                     invalidate = getattr(self._document, "_invalidate_render_cache", None)
                     if callable(invalidate):
                         invalidate()
-                self._document.save_state(action)
+                if save_history:
+                    self._document.save_state(action)
         finally:
             self._suppress_document_selection_notify -= 1
         self._layer_model.notify_row(index)
@@ -4649,13 +4660,29 @@ class WorkspaceViewModel(QObject):
         else:
             self.selectionChanged.emit()
         self.documentInfoChanged.emit()
-        self.historyStateChanged.emit()
+        if save_history:
+            self.historyStateChanged.emit()
         if render:
             self.requestPreview(force=True)
         return True
 
-    def _set_layer_attr(self, index: int, attr: str, value, action: str, *, render: bool = True) -> bool:
-        return self._set_layer_attrs(index, {attr: value}, action, render=render)
+    def _set_layer_attr(
+        self,
+        index: int,
+        attr: str,
+        value,
+        action: str,
+        *,
+        render: bool = True,
+        save_history: bool = True,
+    ) -> bool:
+        return self._set_layer_attrs(
+            index,
+            {attr: value},
+            action,
+            render=render,
+            save_history=save_history,
+        )
 
     def _invalidate_direct_layer_edit(self, index: int, *, save_action: str = "") -> None:
         layer = self._layer_model.layer_at(index)
@@ -5550,6 +5577,74 @@ class WorkspaceViewModel(QObject):
     def setSelectedOpacity(self, value: int) -> bool:
         value = max(0, min(100, int(value)))
         return self._set_layer_attr(self.selectedLayerIndex, "opacity", value / 100.0, "修改不透明度")
+
+    @Slot(result=bool)
+    def beginSelectedOpacityEdit(self) -> bool:
+        """开始连续不透明度编辑，拖动期间不反复序列化历史。"""
+        if not self._ensure_operations_available():
+            return False
+        layer = self._selected_layer()
+        if layer is None or bool(getattr(layer, "locked", False)):
+            return False
+        if self._opacity_edit_context is not None:
+            self.endSelectedOpacityEdit()
+        self._opacity_edit_context = {
+            "document": self._document,
+            "layer": layer,
+            "index": self.selectedLayerIndex,
+            "initial": float(getattr(layer, "opacity", 1.0)),
+            "initial_modified": bool(getattr(self._document, "is_modified", False)),
+            "changed": False,
+            "baseline_ready": False,
+        }
+        return True
+
+    @Slot(int, result=bool)
+    def updateSelectedOpacityEdit(self, value: int) -> bool:
+        context = self._opacity_edit_context
+        if context is None:
+            return self.setSelectedOpacity(value)
+        if (
+            context["document"] is not self._document
+            or context["layer"] is not self._selected_layer()
+        ):
+            self._opacity_edit_context = None
+            return False
+        value = max(0, min(100, int(value))) / 100.0
+        if float(getattr(context["layer"], "opacity", 1.0)) == value:
+            return True
+        if not context["baseline_ready"]:
+            with self._document_lock:
+                self._ensure_history_baseline()
+            context["baseline_ready"] = True
+        changed = self._set_layer_attr(
+            context["index"],
+            "opacity",
+            value,
+            "修改不透明度",
+            save_history=False,
+        )
+        context["changed"] = context["changed"] or bool(changed)
+        return changed
+
+    @Slot(result=bool)
+    def endSelectedOpacityEdit(self) -> bool:
+        context = self._opacity_edit_context
+        self._opacity_edit_context = None
+        if context is None:
+            return True
+        if context["document"] is not self._document:
+            return False
+        if not context["changed"]:
+            return True
+        if float(getattr(context["layer"], "opacity", 1.0)) == context["initial"]:
+            self._document.is_modified = context["initial_modified"]
+            self.documentInfoChanged.emit()
+            return True
+        with self._document_lock:
+            self._document.save_state("修改不透明度")
+        self.historyStateChanged.emit()
+        return True
 
     @Slot(str, result=bool)
     def setSelectedBlendMode(self, mode_id: str) -> bool:

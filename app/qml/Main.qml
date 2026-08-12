@@ -7929,7 +7929,13 @@ ApplicationWindow {
                                         snapMode: Slider.SnapAlways
                                         value: workspace.selectedOpacity
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onMoved: workspace.setSelectedOpacity(Math.round(value))
+                                        onPressedChanged: {
+                                            if (pressed)
+                                                workspace.beginSelectedOpacityEdit()
+                                            else
+                                                workspace.endSelectedOpacityEdit()
+                                        }
+                                        onMoved: workspace.updateSelectedOpacityEdit(Math.round(value))
 
                                         background: Rectangle {
                                             x: opacitySlider.leftPadding

@@ -218,6 +218,54 @@ def test_opacity_change_avoids_full_selection_notification_fanout():
     assert appearance_notifications == [True]
 
 
+@pytest.mark.unit
+def test_opacity_drag_coalesces_history_and_preserves_undo_redo():
+    workspace = _text_workspace()
+    history = workspace.document._history_manager
+
+    assert workspace.beginSelectedOpacityEdit() is True
+    for value in range(99, 39, -1):
+        assert workspace.updateSelectedOpacityEdit(value) is True
+
+    assert history.get_history_count() == 1
+    assert workspace.endSelectedOpacityEdit() is True
+    assert history.get_history_count() == 2
+    assert workspace.selectedOpacity == 40
+
+    assert workspace.undo() is True
+    assert workspace.selectedOpacity == 100
+    assert workspace.redo() is True
+    assert workspace.selectedOpacity == 40
+
+
+@pytest.mark.unit
+def test_opacity_click_without_movement_does_not_create_history():
+    workspace = _text_workspace()
+    history = workspace.document._history_manager
+
+    assert workspace.beginSelectedOpacityEdit() is True
+    assert workspace.endSelectedOpacityEdit() is True
+
+    assert history.get_history_count() == 0
+    assert workspace.canUndo is False
+
+
+@pytest.mark.unit
+def test_opacity_drag_back_to_initial_value_skips_final_history():
+    workspace = _text_workspace()
+    history = workspace.document._history_manager
+
+    assert workspace.beginSelectedOpacityEdit() is True
+    assert workspace.updateSelectedOpacityEdit(40) is True
+    assert workspace.updateSelectedOpacityEdit(100) is True
+    assert workspace.endSelectedOpacityEdit() is True
+
+    assert history.get_history_count() == 1
+    assert workspace.canUndo is False
+    assert workspace.selectedOpacity == 100
+    assert workspace.isModified is False
+
+
 class _PreviewCacheProbe:
     def __init__(self):
         self.put_calls = []
