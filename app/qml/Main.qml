@@ -1019,7 +1019,7 @@ ApplicationWindow {
                 BodyLabel { text: "图层名称"; color: Theme.textMuted; Layout.preferredWidth: 72 }
                 ValueBox {
                     id: textLayerNameInput
-                    Layout.fillWidth: true
+                    Layout.fillWidth: false
                     text: "新文字图层"
                     onValueCommitted: value => text = value
                 }
@@ -1080,7 +1080,7 @@ ApplicationWindow {
 
                 BodyLabel { text: "字体"; color: Theme.textMuted; Layout.preferredWidth: 72 }
                 FontSelectBox {
-                    Layout.fillWidth: true
+                    Layout.fillWidth: false
                     value: textLayerDialog.fontFamily
                     face: textLayerDialog.fontFace
                     options: workspace.textFontTreeOptions
@@ -1095,7 +1095,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 8
                     ValueBox { id: textLayerFontSizeInput; text: "24"; suffix: "px"; Layout.preferredWidth: 104 }
-                    ValueBox { id: textLayerColorInput; text: "#000000"; Layout.fillWidth: true }
+                    ValueBox { id: textLayerColorInput; text: "#000000"; Layout.fillWidth: false }
                     Rectangle {
                         Layout.preferredWidth: Theme.controlHeight
                         Layout.preferredHeight: Theme.controlHeight
@@ -1110,9 +1110,9 @@ ApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
-                    CompactActionButton { label: "左对齐"; active: textLayerDialog.alignment === "left"; Layout.fillWidth: true; onClicked: textLayerDialog.alignment = "left" }
-                    CompactActionButton { label: "居中"; active: textLayerDialog.alignment === "center"; Layout.fillWidth: true; onClicked: textLayerDialog.alignment = "center" }
-                    CompactActionButton { label: "右对齐"; active: textLayerDialog.alignment === "right"; Layout.fillWidth: true; onClicked: textLayerDialog.alignment = "right" }
+                    CompactActionButton { label: "左对齐"; active: textLayerDialog.alignment === "left"; Layout.fillWidth: false; onClicked: textLayerDialog.alignment = "left" }
+                    CompactActionButton { label: "居中"; active: textLayerDialog.alignment === "center"; Layout.fillWidth: false; onClicked: textLayerDialog.alignment = "center" }
+                    CompactActionButton { label: "右对齐"; active: textLayerDialog.alignment === "right"; Layout.fillWidth: false; onClicked: textLayerDialog.alignment = "right" }
                 }
             }
 
@@ -1235,7 +1235,7 @@ ApplicationWindow {
                         columnSpacing: 12
 
                         BodyLabel { text: "图层名称"; color: Theme.textMuted; Layout.preferredWidth: 72 }
-                        ValueBox { id: shapedLayerNameInput; Layout.fillWidth: true; text: "异形图层" }
+                        ValueBox { id: shapedLayerNameInput; Layout.fillWidth: false; text: "异形图层" }
 
                         BodyLabel { text: "形状"; color: Theme.textMuted; Layout.alignment: Qt.AlignTop; Layout.topMargin: 8 }
                         GridLayout {
@@ -1293,15 +1293,15 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         spacing: 8
                         BodyLabel { text: "位置"; color: Theme.textMuted; Layout.preferredWidth: 72 }
-                        ValueBox { id: shapedLayerXInput; text: "0"; suffix: "X"; Layout.fillWidth: true }
-                        ValueBox { id: shapedLayerYInput; text: "0"; suffix: "Y"; Layout.fillWidth: true }
+                        ValueBox { id: shapedLayerXInput; text: "0"; suffix: "X"; Layout.fillWidth: false }
+                        ValueBox { id: shapedLayerYInput; text: "0"; suffix: "Y"; Layout.fillWidth: false }
                     }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
                         BodyLabel { text: "尺寸"; color: Theme.textMuted; Layout.preferredWidth: 72 }
-                        ValueBox { id: shapedLayerWidthInput; text: "200"; suffix: "W"; Layout.fillWidth: true }
-                        ValueBox { id: shapedLayerHeightInput; text: "200"; suffix: "H"; Layout.fillWidth: true }
+                        ValueBox { id: shapedLayerWidthInput; text: "200"; suffix: "W"; Layout.fillWidth: false }
+                        ValueBox { id: shapedLayerHeightInput; text: "200"; suffix: "H"; Layout.fillWidth: false }
                     }
 
                     BodyLabel { text: "内容源（可稍后设置）"; color: Theme.textPrimary; font.weight: Font.DemiBold }
@@ -1311,7 +1311,7 @@ ApplicationWindow {
                         BodyLabel { text: "来源"; color: Theme.textMuted; Layout.preferredWidth: 72 }
                         ValueBox {
                             id: shapedLayerSourceInput
-                            Layout.fillWidth: true
+                            Layout.fillWidth: false
                             text: ""
                             editable: false
                         }
@@ -1361,15 +1361,15 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 8
                             BodyLabel { text: "上下底"; color: Theme.textMuted; Layout.preferredWidth: 72 }
-                            ValueBox { id: shapedTrapezoidTopInput; text: "100"; suffix: "% 上"; Layout.fillWidth: true }
-                            ValueBox { id: shapedTrapezoidBottomInput; text: "80"; suffix: "% 下"; Layout.fillWidth: true }
+                            ValueBox { id: shapedTrapezoidTopInput; text: "100"; suffix: "% 上"; Layout.fillWidth: false }
+                            ValueBox { id: shapedTrapezoidBottomInput; text: "80"; suffix: "% 下"; Layout.fillWidth: false }
                         }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 6
                             BodyLabel { text: "斜边"; color: Theme.textMuted; Layout.preferredWidth: 72 }
-                            CompactActionButton { label: "右侧"; active: shapedLayerDialog.trapezoidSlopeSide === "right"; Layout.fillWidth: true; onClicked: shapedLayerDialog.trapezoidSlopeSide = "right" }
-                            CompactActionButton { label: "左侧"; active: shapedLayerDialog.trapezoidSlopeSide === "left"; Layout.fillWidth: true; onClicked: shapedLayerDialog.trapezoidSlopeSide = "left" }
+                            CompactActionButton { label: "右侧"; active: shapedLayerDialog.trapezoidSlopeSide === "right"; Layout.fillWidth: false; onClicked: shapedLayerDialog.trapezoidSlopeSide = "right" }
+                            CompactActionButton { label: "左侧"; active: shapedLayerDialog.trapezoidSlopeSide === "left"; Layout.fillWidth: false; onClicked: shapedLayerDialog.trapezoidSlopeSide = "left" }
                         }
                     }
 
@@ -1382,8 +1382,8 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 8
                             BodyLabel { text: "外观"; color: Theme.textMuted; Layout.preferredWidth: 72 }
-                            ValueBox { id: shapedPolygonRotationInput; text: "0"; suffix: "°"; Layout.fillWidth: true }
-                            ValueBox { id: shapedPolygonCornerInput; text: "0"; suffix: "px 圆角"; Layout.fillWidth: true }
+                            ValueBox { id: shapedPolygonRotationInput; text: "0"; suffix: "°"; Layout.fillWidth: false }
+                            ValueBox { id: shapedPolygonCornerInput; text: "0"; suffix: "px 圆角"; Layout.fillWidth: false }
                         }
                     }
                 }
@@ -1690,7 +1690,7 @@ ApplicationWindow {
                 IconButton { iconName: AppIcons.close; tooltip: "关闭"; buttonSize: 30; onClicked: dataRelationsDrawer.close() }
             }
             SegmentedControl {
-                Layout.fillWidth: true
+                Layout.fillWidth: false
                 Layout.preferredHeight: 34
                 accessibleName: "数据关系类型"
                 options: [
@@ -1872,7 +1872,7 @@ ApplicationWindow {
                     BodyLabel { text: "源图层"; Layout.preferredWidth: 54 }
                     SelectBox {
                         id: sizeSourceSelect
-                        Layout.fillWidth: true
+                        Layout.fillWidth: false
                         model: sizeMatch.layerNames.map(function(name) { return { label: name, value: name } })
                     }
                 }
@@ -1881,7 +1881,7 @@ ApplicationWindow {
                     BodyLabel { text: "目标图层"; Layout.preferredWidth: 54 }
                     SelectBox {
                         id: sizeTargetSelect
-                        Layout.fillWidth: true
+                        Layout.fillWidth: false
                         model: sizeMatch.layerNames.map(function(name) { return { label: name, value: name } })
                     }
                     BodyLabel { text: "留白" }
@@ -3063,17 +3063,17 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 6
                             TinyLabel { text: "HSV"; color: Theme.textSecondary; font.weight: Font.DemiBold }
-                            ValueBox { value: Math.round(effectColorDialog.hue * 359).toString(); bindValue: true; suffix: "H°"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(parseFloat(value) / 359, effectColorDialog.saturation, effectColorDialog.brightness) }
-                            ValueBox { value: Math.round(effectColorDialog.saturation * 100).toString(); bindValue: true; suffix: "S%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, parseFloat(value) / 100, effectColorDialog.brightness) }
-                            ValueBox { value: Math.round(effectColorDialog.brightness * 100).toString(); bindValue: true; suffix: "V%"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, effectColorDialog.saturation, parseFloat(value) / 100) }
+                            ValueBox { value: Math.round(effectColorDialog.hue * 359).toString(); bindValue: true; suffix: "H°"; Layout.fillWidth: false; onValueCommitted: value => effectColorDialog.setHsv(parseFloat(value) / 359, effectColorDialog.saturation, effectColorDialog.brightness) }
+                            ValueBox { value: Math.round(effectColorDialog.saturation * 100).toString(); bindValue: true; suffix: "S%"; Layout.fillWidth: false; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, parseFloat(value) / 100, effectColorDialog.brightness) }
+                            ValueBox { value: Math.round(effectColorDialog.brightness * 100).toString(); bindValue: true; suffix: "V%"; Layout.fillWidth: false; onValueCommitted: value => effectColorDialog.setHsv(effectColorDialog.hue, effectColorDialog.saturation, parseFloat(value) / 100) }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 6
                             TinyLabel { text: "RGB"; color: Theme.textSecondary; font.weight: Font.DemiBold }
-                            ValueBox { value: Math.round(effectColorDialog.selectedColor.r * 255).toString(); bindValue: true; suffix: "R"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(parseFloat(value), effectColorDialog.selectedColor.g * 255, effectColorDialog.selectedColor.b * 255) }
-                            ValueBox { value: Math.round(effectColorDialog.selectedColor.g * 255).toString(); bindValue: true; suffix: "G"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, parseFloat(value), effectColorDialog.selectedColor.b * 255) }
-                            ValueBox { value: Math.round(effectColorDialog.selectedColor.b * 255).toString(); bindValue: true; suffix: "B"; Layout.fillWidth: true; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, effectColorDialog.selectedColor.g * 255, parseFloat(value)) }
+                            ValueBox { value: Math.round(effectColorDialog.selectedColor.r * 255).toString(); bindValue: true; suffix: "R"; Layout.fillWidth: false; onValueCommitted: value => effectColorDialog.setRgb(parseFloat(value), effectColorDialog.selectedColor.g * 255, effectColorDialog.selectedColor.b * 255) }
+                            ValueBox { value: Math.round(effectColorDialog.selectedColor.g * 255).toString(); bindValue: true; suffix: "G"; Layout.fillWidth: false; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, parseFloat(value), effectColorDialog.selectedColor.b * 255) }
+                            ValueBox { value: Math.round(effectColorDialog.selectedColor.b * 255).toString(); bindValue: true; suffix: "B"; Layout.fillWidth: false; onValueCommitted: value => effectColorDialog.setRgb(effectColorDialog.selectedColor.r * 255, effectColorDialog.selectedColor.g * 255, parseFloat(value)) }
                         }
                     }
 
@@ -3090,7 +3090,7 @@ ApplicationWindow {
                         }
                         ValueBox {
                             id: effectColorInput
-                            Layout.fillWidth: true
+                            Layout.fillWidth: false
                             value: "#000000"
                             bindValue: true
                             invalid: effectColorDialog.errorMessage.length > 0
@@ -3631,41 +3631,53 @@ ApplicationWindow {
         ToolTip.delay: 420
     }
 
-    component InspectorRow: RowLayout {
+    component InspectorRow: Item {
         property string label: ""
-        spacing: 6
+        // ⚠️ 关键：把外部声明的子控件自动导入内部 controlArea，而非外层 Item
+        default property alias controls: controlArea.data
         width: parent ? parent.width : 300
         height: Theme.controlHeight
-        readonly property int controlAreaWidth: Math.max(80, (parent ? parent.width : 300) - 42 - 6)
-        // 标准宽度规范（控件右对齐时使用，禁止fillWidth）
-        readonly property int wSingle: controlAreaWidth        // 单控件独占行
-        readonly property int wDual1: Math.max(60, (controlAreaWidth - 6) / 2)   // 双控件第1个
-        readonly property int wDual2: Math.max(60, controlAreaWidth - 6 - wDual1) // 双控件第2个
-        readonly property int wSlider: Math.max(60, controlAreaWidth - 6 - 58)   // Slider+ValueBox中的Slider
-        readonly property int wValueBox: 58                     // 配套数值框
-        readonly property int wSeg2: 86                         // 2段分段按钮
-        readonly property int wSeg3: 110                        // 3段分段按钮
-        readonly property int wSeg4: 144                        // 4段分段按钮
-        readonly property int wAlignSeg: 108                    // 3段对齐按钮特殊宽度
-        readonly property int wBindSeg: 90                      // 绑定2段特殊宽度
+        readonly property int controlAreaWidth: Math.max(80, width - 42 - 6)
+
+        // === 设计规范：紧凑固定宽度（不再随面板宽度膨胀，杜绝大横条）===
+        readonly property int wSelect: 160     // SelectBox / FontSelectBox 独占一行
+        readonly property int wInput: 120      // ValueBox / ColorValueField 独占一行
+        readonly property int wPair: 82        // 双控件并排时各值（如行距/字距、X/Y）
+        readonly property int wSliderFill: Math.max(60, controlAreaWidth - 6 - 58) // 搭配Slider ValueBox
+        readonly property int wSliderVB: 58    // Slider 配套 ValueBox
+        readonly property int wSeg2: 86        // 2段分段
+        readonly property int wSeg3: 110       // 3段分段
+        readonly property int wSeg4: 144       // 4段分段
+        readonly property int wAlign: 108      // 3段对齐（稍宽，放左/中/右）
+        readonly property int wBind: 90        // 2段绑定
+        readonly property int wSwatch: 186     // 色块/预设 4 个一组
 
         BodyLabel {
+            id: rowLabel
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: 42
             text: parent.label
             color: Theme.textMuted
-            Layout.preferredWidth: 42
-            Layout.minimumWidth: 42
-            Layout.maximumWidth: 42
-            Layout.alignment: Qt.AlignVCenter
             elide: Text.ElideRight
             font.pixelSize: 10
         }
 
-        // 中间占位：外部控件会被追加到此项之后，从而强制靠右对齐
-        // ⚠️ 外部子控件必须使用 Layout.preferredWidth，禁止 Layout.fillWidth
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredWidth: 0
-            Layout.minimumWidth: 0
+        // 控件区：Label 右边到行尾的区域。最左放 fill 占位项，外部控件依次在其右侧 → 全部靠右对齐
+        RowLayout {
+            id: controlArea
+            anchors.left: rowLabel.right
+            anchors.leftMargin: 6
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+
+            // 始终第一个子项：fill 中间空白 → 后续所有子控件被推到最右侧
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                Layout.minimumWidth: 0
+            }
         }
     }
 
@@ -3797,7 +3809,7 @@ ApplicationWindow {
         ValueBox {
             value: colorField.value
             bindValue: true
-            Layout.fillWidth: true
+            Layout.fillWidth: false
             editable: colorField.enabled
             onValueCommitted: value => colorField.valueCommitted(value)
         }
@@ -4054,7 +4066,7 @@ ApplicationWindow {
                     spacing: 8
                     BodyLabel { text: "内存保护"; Layout.preferredWidth: 70 }
                     SelectBox {
-                        Layout.fillWidth: true
+                        Layout.fillWidth: false
                         model: [
                             { label: "自动", value: "auto" },
                             { label: "低内存", value: "low" },
@@ -4263,7 +4275,7 @@ ApplicationWindow {
                                         onToggled: checkedValue => batchExport.useDate = checkedValue
                                     }
                                     SelectBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         Layout.preferredHeight: 32
                                         enabled: batchExport.useDate
                                         model: [
@@ -4292,7 +4304,7 @@ ApplicationWindow {
                                     spacing: 6
                                     BodyLabel { text: "序号格式"; Layout.preferredWidth: 58; font.pixelSize: 11 }
                                     SelectBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         Layout.preferredHeight: 32
                                         model: [
                                             { label: "0001, 0002, ...", value: 0 },
@@ -4329,7 +4341,7 @@ ApplicationWindow {
                                 }
                                 BodyLabel { text: "大小 KB"; Layout.preferredWidth: 48; font.pixelSize: 11 }
                                 ExportField {
-                                    Layout.fillWidth: true
+                                    Layout.fillWidth: false
                                     Layout.preferredHeight: 32
                                     text: String(batchExport.maxFileSizeKB)
                                     placeholder: "0（不限制）"
@@ -4822,7 +4834,7 @@ ApplicationWindow {
                 }
             }
             RowLayout {
-                Layout.fillWidth: true
+                Layout.fillWidth: false
                 spacing: 8
 
                 OptionTile {
@@ -7120,7 +7132,7 @@ ApplicationWindow {
                         spacing: 9
                         AppIcon { iconName: AppIcons.info; iconSize: 15; iconColor: Theme.accent }
                         Column {
-                            Layout.fillWidth: true
+                            Layout.fillWidth: false
                             spacing: 2
                             BodyLabel { text: updateBannerText.length > 0 ? updateBannerText : "发现新版本"; color: Theme.textPrimary; elide: Text.ElideRight }
                             TinyLabel { text: "点击查看更新说明"; color: Theme.textMuted }
@@ -7233,7 +7245,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "路径"
                                     ValueBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         value: workspace.selectedImageSource
                                         bindValue: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -7314,7 +7326,7 @@ ApplicationWindow {
                                     label: "控制柄"
                                     visible: workspace.selectedVectorPathEnabled
                                     SelectBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         model: window.vectorHandleLinkOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: {
@@ -7376,7 +7388,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "适配"
                                     SelectBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         model: window.imageFitOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: {
@@ -7509,7 +7521,7 @@ ApplicationWindow {
                                         value: workspace.selectedTrapezoidTopWidth.toString()
                                         bindValue: true
                                         suffix: "上"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -7520,7 +7532,7 @@ ApplicationWindow {
                                         value: workspace.selectedTrapezoidBottomWidth.toString()
                                         bindValue: true
                                         suffix: "下"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -7569,7 +7581,7 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedPolygonRotation * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "°"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -7584,7 +7596,7 @@ ApplicationWindow {
                                         value: workspace.selectedPolygonCornerRadius.toString()
                                         bindValue: true
                                         suffix: "px"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -7623,7 +7635,7 @@ ApplicationWindow {
                                     label: "选区色"
                                     visible: !workspace.selectedTextBindingEnabled
                                     CompactActionButton {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: 90
                                         label: "选区颜色"
                                         enabled: selectedTextEditor.selectionLength > 0
                                                  && !workspace.selectedLocked
@@ -7637,7 +7649,7 @@ ApplicationWindow {
                                         )
                                     }
                                     CompactActionButton {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: 70
                                         label: "清除"
                                         enabled: selectedTextEditor.selectionLength > 0
                                                  && workspace.selectedTextColorRangeCount > 0
@@ -7661,7 +7673,7 @@ ApplicationWindow {
                                     label: "选区字"
                                     visible: !workspace.selectedTextBindingEnabled
                                     CompactActionButton {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: 90
                                         label: "应用字号"
                                         enabled: selectedTextEditor.selectionLength > 0
                                                  && !workspace.selectedLocked
@@ -7677,7 +7689,7 @@ ApplicationWindow {
                                         }
                                     }
                                     CompactActionButton {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: 70
                                         label: "清除"
                                         enabled: selectedTextEditor.selectionLength > 0
                                                  && workspace.selectedTextFontSizeRangeCount > 0
@@ -7701,7 +7713,7 @@ ApplicationWindow {
                                     visible: !workspace.selectedTextBindingEnabled
                                     ValueBox {
                                         id: rangeFontSizeInput
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextFontSize.toString()
                                         bindValue: true
                                         suffix: "px"
@@ -7712,7 +7724,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "绑定"
                                     Row {
-                                        Layout.preferredWidth: parent.wBindSeg
+                                        Layout.preferredWidth: parent.wBind
                                         height: 22
                                         spacing: 2
                                         Repeater {
@@ -7754,7 +7766,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: textFontSection
                                 objectName: "textFontSection"
-                                Layout.fillWidth: true
+                                Layout.fillWidth: false
                                 Layout.row: 20
                                 title: "字体"
                                 summary: workspace.selectedTextFontSize + " px"
@@ -7763,7 +7775,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "字体"
                                     FontSelectBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wSelect
                                         options: workspace.selectedTextFontTreeOptions
                                         value: workspace.selectedTextFontFamily
                                         face: workspace.selectedTextFontFace
@@ -7776,7 +7788,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "样式"
                                     ValueBox {
-                                        Layout.preferredWidth: Math.max(80, parent.wSingle - 6 - Theme.controlHeight * 2)
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextFontSize.toString()
                                         bindValue: true
                                         suffix: "px"
@@ -7809,12 +7821,12 @@ ApplicationWindow {
                                     font.family: Theme.bodyFont
                                     font.pixelSize: 11
                                     wrapMode: Text.Wrap
-                                    Layout.fillWidth: true
+                                    Layout.fillWidth: false
                                 }
                                 InspectorRow {
                                     label: "字重"
                                     SelectBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wSelect
                                         model: workspace.selectedTextFontWeightOptions
                                         currentIndex: window.optionIndex(model, workspace.selectedTextFontWeight)
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -7826,7 +7838,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: textTypographySection
                                 objectName: "textTypographySection"
-                                Layout.fillWidth: true
+                                Layout.fillWidth: false
                                 Layout.row: 30
                                 title: "排版"
                                 summary: workspace.selectedTextTypographySummary
@@ -7835,7 +7847,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "对齐"
                                     Row {
-                                        Layout.preferredWidth: parent.wAlignSeg
+                                        Layout.preferredWidth: parent.wAlign
                                         height: 22
                                         spacing: 2
                                         Repeater {
@@ -7891,7 +7903,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "间距"
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextLineSpacingPercent.toString()
                                         bindValue: true
                                         suffix: "行距%"
@@ -7902,7 +7914,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextLetterSpacing.toString()
                                         bindValue: true
                                         suffix: "字距px"
@@ -7930,7 +7942,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "内边距"
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextBoxPadding.toString()
                                         bindValue: true
                                         suffix: "px"
@@ -7945,7 +7957,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: groupSection
-                                Layout.fillWidth: true
+                                Layout.fillWidth: false
                                 Layout.row: 0
                                 title: "图层组"
                                 summary: workspace.selectedGroupChildCount + " 个图层"
@@ -7957,7 +7969,7 @@ ApplicationWindow {
                                         id: groupNameEditor
                                         value: workspace.selectedLayerName
                                         bindValue: true
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => workspace.setSelectedName(value)
                                     }
@@ -7986,7 +7998,7 @@ ApplicationWindow {
                                     label: "名称"
                                     ValueBox {
                                         id: layerNameEditor
-                                        value: workspace.selectedLayerName; bindValue: true; Layout.fillWidth: true
+                                        value: workspace.selectedLayerName; bindValue: true; Layout.fillWidth: false
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => workspace.setSelectedName(value)
                                     }
@@ -7994,12 +8006,12 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "位置"
                                     ValueBox {
-                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"; Layout.fillWidth: true
+                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"; Layout.fillWidth: false
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedX(parsed) }
                                     }
                                     ValueBox {
-                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"; Layout.fillWidth: true
+                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"; Layout.fillWidth: false
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedY(parsed) }
                                     }
@@ -8007,12 +8019,12 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "尺寸"
                                     ValueBox {
-                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"; Layout.fillWidth: true
+                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"; Layout.fillWidth: false
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedWidth(parsed) }
                                     }
                                     ValueBox {
-                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"; Layout.fillWidth: true
+                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"; Layout.fillWidth: false
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
                                     }
@@ -8040,7 +8052,7 @@ ApplicationWindow {
                                     Slider {
                                         id: opacitySlider
                                         objectName: "opacitySlider"
-                                        Layout.preferredWidth: parent.wSlider
+                                        Layout.preferredWidth: parent.wSliderFill
                                         Layout.preferredHeight: 14
                                         from: 0
                                         to: 100
@@ -8087,7 +8099,7 @@ ApplicationWindow {
                                         Accessible.name: "图层不透明度"
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wValueBox
+                                        Layout.preferredWidth: parent.wSliderVB
                                         value: workspace.selectedOpacity.toString(); bindValue: true; suffix: "%"
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedOpacity(parsed) }
@@ -8096,7 +8108,7 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "混合"
                                     SelectBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wSelect
                                         model: window.blendModeOptions
                                         enabled: workspace.selectedSupportsBlendMode && !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: {
@@ -8113,7 +8125,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: layerTransformSection
                                 objectName: "layerTransformSection"
-                                Layout.fillWidth: true
+                                Layout.fillWidth: false
                                 Layout.row: 20
                                 title: "图层变换"
                                 summary: Math.abs(workspace.selectedRotation) > 0.001
@@ -8127,7 +8139,7 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedRotation * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "°"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: workspace.selectedCanRotate && !workspace.selectedLocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -8219,7 +8231,7 @@ ApplicationWindow {
                                         value: workspace.selectedRandomPositionRange.toString()
                                         bindValue: true
                                         suffix: "± px"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8234,7 +8246,7 @@ ApplicationWindow {
                                         value: workspace.selectedRandomScaleMinPercent.toString()
                                         bindValue: true
                                         suffix: "min%"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8245,7 +8257,7 @@ ApplicationWindow {
                                         value: workspace.selectedRandomScaleMaxPercent.toString()
                                         bindValue: true
                                         suffix: "max%"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8260,7 +8272,7 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedRandomRotationRange * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "±°"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -8311,7 +8323,7 @@ ApplicationWindow {
                                     label: "布局"
                                     visible: workspace.selectedCloneEnabled
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         accessibleName: "分身布局模式"
                                         options: [
                                             { label: "固定行列", value: "fixed" },
@@ -8330,7 +8342,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneRows.toString()
                                         bindValue: true
                                         suffix: "行"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8341,7 +8353,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneColumns.toString()
                                         bindValue: true
                                         suffix: "列"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8357,7 +8369,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneRowSpacing.toString()
                                         bindValue: true
                                         suffix: "行px"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8368,7 +8380,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneColumnSpacing.toString()
                                         bindValue: true
                                         suffix: "列px"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8381,7 +8393,7 @@ ApplicationWindow {
                                     label: "镜像"
                                     visible: workspace.selectedCloneEnabled
                                     SelectBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         model: window.cloneMirrorOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: window.optionIndex(window.cloneMirrorOptions, workspace.selectedCloneMirrorMode)
@@ -8393,7 +8405,7 @@ ApplicationWindow {
                                     label: "尺寸"
                                     visible: workspace.selectedCloneEnabled
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         accessibleName: "分身尺寸模式"
                                         options: [
                                             { label: "沿用图层", value: "source" },
@@ -8412,7 +8424,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneCustomWidth.toString()
                                         bindValue: true
                                         suffix: "W"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8423,7 +8435,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneCustomHeight.toString()
                                         bindValue: true
                                         suffix: "H"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8436,7 +8448,7 @@ ApplicationWindow {
                                     label: "排列"
                                     visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fill"
                                     SelectBox {
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         model: window.cloneFillModeOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: window.optionIndex(window.cloneFillModeOptions, workspace.selectedCloneFillMode)
@@ -8451,7 +8463,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneFillSpacing.toString()
                                         bindValue: true
                                         suffix: "间距"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8462,7 +8474,7 @@ ApplicationWindow {
                                         value: workspace.selectedCloneFillMargin.toString()
                                         bindValue: true
                                         suffix: "边距"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8478,7 +8490,7 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedCloneFillAngle * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "°"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -8556,7 +8568,7 @@ ApplicationWindow {
                                     label: "颜色"
                                     visible: workspace.selectedTextFillModeId === "solid"
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("textFill", workspace.selectedTextColor)
@@ -8567,7 +8579,7 @@ ApplicationWindow {
                                     label: "类型"
                                     visible: workspace.selectedTextFillModeId === "gradient"
                                     SelectBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wSelect
                                         model: window.textGradientTypeOptions
                                         currentIndex: window.optionIndex(window.textGradientTypeOptions, workspace.selectedTextGradientTypeId)
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -8579,7 +8591,7 @@ ApplicationWindow {
                                     visible: workspace.selectedTextFillModeId === "gradient"
                                              && workspace.selectedTextGradientTypeId === "linear"
                                     SelectBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wSelect
                                         model: window.textGradientDirectionOptions
                                         currentIndex: window.optionIndex(window.textGradientDirectionOptions, workspace.selectedTextGradientDirectionId)
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -8590,7 +8602,7 @@ ApplicationWindow {
                                     label: "起始"
                                     visible: workspace.selectedTextFillModeId === "gradient"
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextGradientStartColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("textGradient", workspace.selectedTextGradientStartColor, 0)
@@ -8601,7 +8613,7 @@ ApplicationWindow {
                                     label: "结束"
                                     visible: workspace.selectedTextFillModeId === "gradient"
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextGradientEndColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("textGradient", workspace.selectedTextGradientEndColor, 1)
@@ -8613,7 +8625,7 @@ ApplicationWindow {
                                     visible: workspace.selectedTextFillModeId === "gradient"
                                              && workspace.selectedTextGradientTypeId === "radial"
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextGradientCenterXPercent.toString()
                                         bindValue: true
                                         suffix: "X%"
@@ -8625,7 +8637,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextGradientCenterYPercent.toString()
                                         bindValue: true
                                         suffix: "Y%"
@@ -8667,7 +8679,7 @@ ApplicationWindow {
                                     label: "颜色"
                                     visible: workspace.selectedTextBackgroundEnabled
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextBackgroundColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("textBackground", workspace.selectedTextBackgroundColor)
@@ -8678,7 +8690,7 @@ ApplicationWindow {
                                     label: "参数"
                                     visible: workspace.selectedTextBackgroundEnabled
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextBackgroundOpacity.toString()
                                         bindValue: true
                                         suffix: "%"
@@ -8689,7 +8701,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextBackgroundPadding.toString()
                                         bindValue: true
                                         suffix: "扩px"
@@ -8730,7 +8742,7 @@ ApplicationWindow {
                                     label: "偏移"
                                     visible: workspace.selectedTextShadowEnabled
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextShadowOffsetX.toString()
                                         bindValue: true
                                         suffix: "X"
@@ -8742,7 +8754,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextShadowOffsetY.toString()
                                         bindValue: true
                                         suffix: "Y"
@@ -8758,7 +8770,7 @@ ApplicationWindow {
                                     label: "模糊/色"
                                     visible: workspace.selectedTextShadowEnabled
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextShadowBlur.toString()
                                         bindValue: true
                                         suffix: "px"
@@ -8769,7 +8781,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextShadowColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("textShadow", workspace.selectedTextShadowColor)
@@ -8780,7 +8792,7 @@ ApplicationWindow {
                                     label: "透明度"
                                     visible: workspace.selectedTextShadowEnabled
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedTextShadowOpacity.toString()
                                         bindValue: true
                                         suffix: "%"
@@ -8821,7 +8833,7 @@ ApplicationWindow {
                                     label: "参数"
                                     visible: workspace.selectedTextGlowEnabled
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextGlowStrength.toString()
                                         bindValue: true
                                         suffix: "强度"
@@ -8832,7 +8844,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextGlowRadius.toString()
                                         bindValue: true
                                         suffix: "半径px"
@@ -8847,14 +8859,14 @@ ApplicationWindow {
                                     label: "颜色/透"
                                     visible: workspace.selectedTextGlowEnabled
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextGlowColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("textGlow", workspace.selectedTextGlowColor)
                                         onValueCommitted: value => workspace.setSelectedTextGlowColor(value)
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedTextGlowOpacity.toString()
                                         bindValue: true
                                         suffix: "%"
@@ -8920,7 +8932,7 @@ ApplicationWindow {
                                     label: "宽/色"
                                     visible: workspace.selectedStrokeEnabled
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedStrokeWidth.toString()
                                         bindValue: true
                                         suffix: "px"
@@ -8931,7 +8943,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedStrokeColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)
@@ -8969,14 +8981,14 @@ ApplicationWindow {
                                     label: "连接"
                                     visible: workspace.selectedStrokeEnabled && workspace.selectedSupportsAdvancedStroke
                                     SelectBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         model: window.strokeJoinOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: window.optionIndex(window.strokeJoinOptions, workspace.selectedStrokeJoin)
                                         onActivated: workspace.setSelectedStrokeJoin(currentValue)
                                     }
                                     SelectBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         model: window.strokeCapOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: window.optionIndex(window.strokeCapOptions, workspace.selectedStrokeCap)
@@ -8987,7 +8999,7 @@ ApplicationWindow {
                                     label: "虚线"
                                     visible: workspace.selectedStrokeEnabled && workspace.selectedSupportsAdvancedStroke
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual1
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedStrokeDashLength.toString()
                                         bindValue: true
                                         suffix: "段"
@@ -8998,7 +9010,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wDual2
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedStrokeDashGap.toString()
                                         bindValue: true
                                         suffix: "间隔"
@@ -9042,7 +9054,7 @@ ApplicationWindow {
                                     label: "颜色"
                                     visible: workspace.selectedOverlayMode === "color"
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedColorOverlayColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("overlay", workspace.selectedColorOverlayColor)
@@ -9053,7 +9065,7 @@ ApplicationWindow {
                                     label: "起始"
                                     visible: workspace.selectedOverlayMode === "gradient"
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedGradientStartColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("gradient", workspace.selectedGradientStartColor, 0)
@@ -9064,7 +9076,7 @@ ApplicationWindow {
                                     label: "结束"
                                     visible: workspace.selectedOverlayMode === "gradient"
                                     ColorValueField {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: workspace.selectedGradientEndColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("gradient", workspace.selectedGradientEndColor, 1)
@@ -9075,7 +9087,7 @@ ApplicationWindow {
                                     label: "强度"
                                     visible: workspace.selectedOverlayMode !== "none"
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: (workspace.selectedOverlayMode === "color"
                                                 ? workspace.selectedColorOverlayOpacity
                                                 : workspace.selectedGradientOverlayOpacity).toString()
@@ -9096,7 +9108,7 @@ ApplicationWindow {
                                     label: "角度"
                                     visible: workspace.selectedOverlayMode === "gradient"
                                     ValueBox {
-                                        Layout.preferredWidth: parent.wSingle
+                                        Layout.preferredWidth: parent.wInput
                                         value: (Math.round(workspace.selectedGradientOverlayAngle * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "°"
@@ -9172,7 +9184,7 @@ ApplicationWindow {
                                     label: "半径"
                                     visible: workspace.selectedCornerMode === "uniform"
                                     ValueBox {
-                                        Layout.preferredWidth: Math.max(60, parent.wSingle - 6 - 62)
+                                        Layout.preferredWidth: parent.wPair
                                         value: workspace.selectedCornerRadius.toString()
                                         bindValue: true
                                         suffix: "px"
@@ -9230,7 +9242,7 @@ ApplicationWindow {
                                         value: workspace.selectedVectorCornerRadii[0].toString()
                                         bindValue: true
                                         suffix: "TL"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -9242,7 +9254,7 @@ ApplicationWindow {
                                         value: workspace.selectedVectorCornerRadii[1].toString()
                                         bindValue: true
                                         suffix: "TR"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -9258,7 +9270,7 @@ ApplicationWindow {
                                         value: workspace.selectedVectorCornerRadii[3].toString()
                                         bindValue: true
                                         suffix: "BL"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -9270,7 +9282,7 @@ ApplicationWindow {
                                         value: workspace.selectedVectorCornerRadii[2].toString()
                                         bindValue: true
                                         suffix: "BR"
-                                        Layout.fillWidth: true
+                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
