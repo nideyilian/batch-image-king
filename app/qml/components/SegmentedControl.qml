@@ -5,7 +5,8 @@ Rectangle {
 
     property var options: []
     property var value: options.length > 0 ? options[0].value : undefined
-    property int optionHeight: 26
+    property int optionHeight: 20
+    property bool fillWidth: false // compact(inline pill) by default, true = full-width big bar
     property string accessibleName: "模式选择"
     signal activated(var value)
 
@@ -22,10 +23,21 @@ Rectangle {
         activated(options[boundedIndex].value)
     }
 
-    implicitWidth: 180
-    implicitHeight: Theme.controlHeight
-    radius: Theme.radiusSmall
-    color: Theme.bgControl
+    // In compact inline mode, use content-derived width and align right.
+    // When fillWidth=true, use the legacy full-width bar layout.
+    readonly property int __segCount: Math.max(1, options.length)
+    readonly property int __inlineWidth: {
+        // Each segment uses minimum 28px for 1-2 chars label, up to 48px.
+        var count = __segCount
+        var avg = 32
+        if (count <= 2) avg = 40
+        else if (count === 3) avg = 36
+        return avg * count + 4 + (count - 1) * 2
+    }
+    implicitWidth: fillWidth ? 180 : __inlineWidth
+    implicitHeight: fillWidth ? Theme.controlHeight : 22
+    radius: fillWidth ? Theme.radiusSmall : 4
+    color: fillWidth ? Theme.bgControl : Theme.bgControl
     border.width: 1
     border.color: Theme.border
     activeFocusOnTab: enabled
@@ -48,9 +60,11 @@ Rectangle {
                 required property var modelData
                 required property int index
 
-                width: (root.width - 4 - (root.options.length - 1) * 2) / Math.max(1, root.options.length)
+                width: fillWidth
+                    ? (root.width - 4 - (root.options.length - 1) * 2) / Math.max(1, root.options.length)
+                    : Math.max(24, (root.width - 4 - (root.options.length - 1) * 2) / Math.max(1, root.options.length))
                 height: root.height - 4
-                radius: Math.max(2, Theme.radiusSmall - 1)
+                radius: Math.max(2, 3)
                 enabled: root.enabled
                 color: root.value === modelData.value ? Theme.accentSoft : (segmentMouse.containsMouse ? Theme.bgHover : "transparent")
                 border.width: root.value === modelData.value ? 1 : 0
@@ -61,7 +75,7 @@ Rectangle {
                     text: parent.modelData.label
                     color: root.value === parent.modelData.value ? Theme.accent : Theme.textSecondary
                     font.family: Theme.bodyFont
-                    font.pixelSize: 10
+                    font.pixelSize: fillWidth ? 10 : 9
                     font.weight: root.value === parent.modelData.value ? Font.DemiBold : Font.Normal
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter

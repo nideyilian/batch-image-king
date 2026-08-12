@@ -3633,17 +3633,18 @@ ApplicationWindow {
 
     component InspectorRow: RowLayout {
         property string label: ""
-        spacing: 8
+        spacing: 6
         width: parent ? parent.width : 300
         height: Theme.controlHeight
 
         BodyLabel {
             text: parent.label
             color: Theme.textMuted
-            Layout.preferredWidth: 52
-            Layout.minimumWidth: 52
-            Layout.maximumWidth: 52
+            Layout.preferredWidth: 42
+            Layout.minimumWidth: 42
+            Layout.maximumWidth: 42
             elide: Text.ElideRight
+            font.pixelSize: 10
         }
     }
 
@@ -7146,7 +7147,7 @@ ApplicationWindow {
 
                     Row {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 30
+                        Layout.preferredHeight: 26
 
                         Repeater {
                             model: ["基本参数", "更多参数"]
@@ -7154,10 +7155,25 @@ ApplicationWindow {
                                 required property int index
                                 required property string modelData
                                 width: inspector.width / 2
-                                height: 30
-                                color: inspectorTab === index ? Theme.bgRaised : "transparent"
-                                Text { anchors.centerIn: parent; text: modelData; color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted; font.family: Theme.bodyFont; font.pixelSize: 11; font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal }
-                                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 2; color: inspectorTab === index ? Theme.accent : "transparent" }
+                                height: 26
+                                color: "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: 10
+                                    font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal
+                                    opacity: inspectorTab === index ? 1.0 : 0.7
+                                }
+                                Rectangle {
+                                    anchors.left: parent.left; anchors.leftMargin: 12
+                                    anchors.right: parent.right; anchors.rightMargin: 12
+                                    anchors.bottom: parent.bottom
+                                    height: 2
+                                    visible: inspectorTab === index
+                                    color: inspectorTab === index ? Theme.accent : "transparent"
+                                }
                                 MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.selectInspectorTab(index) }
                             }
                         }
@@ -7678,36 +7694,41 @@ ApplicationWindow {
                                     }
                                 }
 
-                                Row {
-                                    width: parent.width
-                                    height: Theme.compactControlHeight
-                                    spacing: 4
-                                    Repeater {
-                                        model: [
-                                            { label: "按行随机", enabled: true },
-                                            { label: "整段排版", enabled: false }
-                                        ]
-                                        delegate: Rectangle {
-                                            required property var modelData
-                                            width: (parent.width - 4) / 2
-                                            height: Theme.compactControlHeight
-                                            radius: Theme.radiusSmall
-                                            color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentSoft : Theme.bgControl
-                                            border.width: 1
-                                            border.color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentPressed : Theme.borderStrong
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: parent.modelData.label
-                                                color: workspace.selectedTextBindingEnabled === parent.modelData.enabled ? Theme.accent : Theme.textSecondary
-                                                font.family: Theme.bodyFont
-                                                font.pixelSize: 10
-                                                font.weight: Font.DemiBold
-                                            }
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                enabled: !workspace.selectedLocked
-                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                onClicked: workspace.setSelectedTextBindingEnabled(parent.modelData.enabled)
+                                InspectorRow {
+                                    label: "绑定"
+                                    Row {
+                                        Layout.preferredWidth: 90
+                                        height: 22
+                                        spacing: 2
+                                        Repeater {
+                                            model: [
+                                                { label: "行随机", enabled: true },
+                                                { label: "整段", enabled: false }
+                                            ]
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: (parent.width - 2) / 2
+                                                height: parent.height
+                                                radius: 3
+                                                color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentSoft : (bindMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
+                                                border.width: 1
+                                                border.color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentPressed : Theme.borderStrong
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: parent.modelData.label
+                                                    color: workspace.selectedTextBindingEnabled === parent.modelData.enabled ? Theme.accent : Theme.textSecondary
+                                                    font.family: Theme.bodyFont
+                                                    font.pixelSize: 9
+                                                    font.weight: Font.DemiBold
+                                                }
+                                                MouseArea {
+                                                    id: bindMouse
+                                                    anchors.fill: parent
+                                                    enabled: !workspace.selectedLocked
+                                                    hoverEnabled: true
+                                                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                    onClicked: workspace.setSelectedTextBindingEnabled(parent.modelData.enabled)
+                                                }
                                             }
                                         }
                                     }
@@ -7799,9 +7820,9 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "对齐"
                                     Row {
-                                        Layout.fillWidth: true
-                                        height: Theme.controlHeight
-                                        spacing: 4
+                                        Layout.preferredWidth: 108
+                                        height: 22
+                                        spacing: 2
                                         Repeater {
                                             model: [
                                                 { label: "左", value: "left" },
@@ -7810,10 +7831,10 @@ ApplicationWindow {
                                             ]
                                             delegate: Rectangle {
                                                 required property var modelData
-                                                width: (parent.width - 8) / 3
-                                                height: Theme.controlHeight
-                                                radius: Theme.radiusSmall
-                                                color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : Theme.bgControl
+                                                width: (parent.width - 4) / 3
+                                                height: parent.height
+                                                radius: 3
+                                                color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : (alignMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
                                                 border.width: 1
                                                 border.color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong
                                                 opacity: enabled ? 1 : 0.38
@@ -7823,12 +7844,14 @@ ApplicationWindow {
                                                     text: parent.modelData.label
                                                     color: workspace.selectedTextAlignmentId === parent.modelData.value ? Theme.accent : Theme.textSecondary
                                                     font.family: Theme.bodyFont
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 9
                                                     font.weight: Font.DemiBold
                                                 }
                                                 MouseArea {
+                                                    id: alignMouse
                                                     anchors.fill: parent
                                                     enabled: parent.enabled
+                                                    hoverEnabled: true
                                                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                                     onClicked: workspace.setSelectedTextAlignment(parent.modelData.value)
                                                 }
@@ -7839,11 +7862,11 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "方向"
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 90
                                         accessibleName: "文字排列方向"
                                         options: [
-                                            { label: "横排", value: "horizontal" },
-                                            { label: "竖排", value: "vertical" }
+                                            { label: "横", value: "horizontal" },
+                                            { label: "竖", value: "vertical" }
                                         ]
                                         value: workspace.selectedTextVerticalLayout ? "vertical" : "horizontal"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -7878,11 +7901,11 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "文本框"
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 90
                                         accessibleName: "文本框尺寸模式"
                                         options: [
-                                            { label: "手动尺寸", value: "manual" },
-                                            { label: "自动适配", value: "auto" }
+                                            { label: "手动", value: "manual" },
+                                            { label: "自动", value: "auto" }
                                         ]
                                         value: workspace.selectedTextAutoFitTextBox ? "auto" : "manual"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -8003,7 +8026,7 @@ ApplicationWindow {
                                         id: opacitySlider
                                         objectName: "opacitySlider"
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: Theme.controlHeight
+                                        Layout.preferredHeight: 14
                                         from: 0
                                         to: 100
                                         stepSize: 1
@@ -8022,7 +8045,7 @@ ApplicationWindow {
                                             x: opacitySlider.leftPadding
                                             y: opacitySlider.topPadding + opacitySlider.availableHeight / 2 - height / 2
                                             width: opacitySlider.availableWidth
-                                            height: 4
+                                            height: 3
                                             radius: 2
                                             color: Theme.borderStrong
 
@@ -8038,18 +8061,18 @@ ApplicationWindow {
                                             x: opacitySlider.leftPadding
                                                + opacitySlider.visualPosition * (opacitySlider.availableWidth - width)
                                             y: opacitySlider.topPadding + opacitySlider.availableHeight / 2 - height / 2
-                                            width: 14
-                                            height: 14
-                                            radius: 7
+                                            width: 10
+                                            height: 10
+                                            radius: 5
                                             color: opacitySlider.enabled ? Theme.textPrimary : Theme.textDisabled
-                                            border.width: 2
+                                            border.width: 1
                                             border.color: opacitySlider.activeFocus ? Theme.focusRing : Theme.accentPressed
                                         }
 
                                         Accessible.name: "图层不透明度"
                                     }
                                     ValueBox {
-                                        value: workspace.selectedOpacity.toString(); bindValue: true; suffix: "%"; Layout.preferredWidth: 66
+                                        value: workspace.selectedOpacity.toString(); bindValue: true; suffix: "%"; Layout.preferredWidth: 58
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedOpacity(parsed) }
                                     }
@@ -8475,9 +8498,9 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     Row {
-                                        Layout.fillWidth: true
-                                        height: Theme.controlHeight
-                                        spacing: 4
+                                        Layout.preferredWidth: 72
+                                        height: 22
+                                        spacing: 2
                                         Repeater {
                                             model: [
                                                 { label: "纯色", value: "solid" },
@@ -8485,10 +8508,10 @@ ApplicationWindow {
                                             ]
                                             delegate: Rectangle {
                                                 required property var modelData
-                                                width: (parent.width - 4) / 2
-                                                height: Theme.controlHeight
-                                                radius: Theme.radiusSmall
-                                                color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : Theme.bgControl
+                                                width: (parent.width - 2) / 2
+                                                height: parent.height
+                                                radius: 3
+                                                color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : (fillMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
                                                 border.width: 1
                                                 border.color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong
                                                 opacity: enabled ? 1 : 0.38
@@ -8498,12 +8521,14 @@ ApplicationWindow {
                                                     text: parent.modelData.label
                                                     color: workspace.selectedTextFillModeId === parent.modelData.value ? Theme.accent : Theme.textSecondary
                                                     font.family: Theme.bodyFont
-                                                    font.pixelSize: 11
+                                                    font.pixelSize: 9
                                                     font.weight: Font.DemiBold
                                                 }
                                                 MouseArea {
+                                                    id: fillMouse
                                                     anchors.fill: parent
                                                     enabled: parent.enabled
+                                                    hoverEnabled: true
                                                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                                     onClicked: workspace.setSelectedTextFillMode(parent.modelData.value)
                                                 }
@@ -8609,11 +8634,11 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 90
                                         accessibleName: "文字背景模式"
                                         options: [
-                                            { label: "关闭", value: "off" },
-                                            { label: "纯色", value: "solid" }
+                                            { label: "关", value: "off" },
+                                            { label: "纯", value: "solid" }
                                         ]
                                         value: workspace.selectedTextBackgroundEnabled ? "solid" : "off"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -8672,11 +8697,11 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 90
                                         accessibleName: "文字阴影模式"
                                         options: [
-                                            { label: "关闭", value: "off" },
-                                            { label: "开启", value: "on" }
+                                            { label: "关", value: "off" },
+                                            { label: "开", value: "on" }
                                         ]
                                         value: workspace.selectedTextShadowEnabled ? "on" : "off"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -8763,11 +8788,11 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 90
                                         accessibleName: "文字发光模式"
                                         options: [
-                                            { label: "关闭", value: "off" },
-                                            { label: "开启", value: "on" }
+                                            { label: "关", value: "off" },
+                                            { label: "开", value: "on" }
                                         ]
                                         value: workspace.selectedTextGlowEnabled ? "on" : "off"
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -8837,18 +8862,18 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     SegmentedControl {
-                                        Layout.fillWidth: true
+                                        Layout.preferredWidth: 140
                                         accessibleName: "描边模式"
                                         options: workspace.selectedSupportsAdvancedStroke
                                             ? [
-                                                { label: "关闭", value: "off" },
+                                                { label: "关", value: "off" },
                                                 { label: "外", value: "outer" },
                                                 { label: "中", value: "center" },
                                                 { label: "内", value: "inner" }
                                             ]
                                             : [
-                                                { label: "关闭", value: "off" },
-                                                { label: "开启", value: "on" }
+                                                { label: "关", value: "off" },
+                                                { label: "开", value: "on" }
                                             ]
                                         value: {
                                             if (!workspace.selectedStrokeEnabled) return "off"
@@ -8901,15 +8926,15 @@ ApplicationWindow {
                                     label: "色板"
                                     visible: workspace.selectedStrokeEnabled
                                     Row {
-                                        Layout.fillWidth: true
-                                        spacing: 7
+                                        Layout.preferredWidth: 130
+                                        spacing: 5
                                         Repeater {
                                             model: ["#000000", "#F2F4F3", "#46D7AD", "#F1786D", "#F7BD63"]
                                             delegate: Rectangle {
                                                 required property string modelData
-                                                width: 22
-                                                height: 22
-                                                radius: Theme.radiusSmall
+                                                width: 18
+                                                height: 18
+                                                radius: 3
                                                 color: modelData
                                                 border.width: workspace.selectedStrokeColor.toUpperCase() === modelData ? 2 : 1
                                                 border.color: workspace.selectedStrokeColor.toUpperCase() === modelData ? Theme.accent : Theme.borderStrong
