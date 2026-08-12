@@ -1810,14 +1810,108 @@ class WorkspaceViewModel(QObject):
         options = []
         tree = []
         try:
-            from app.models.text_layer_font import TextLayerFontMixin, get_fonts_cache_file
+            from app.models.text_layer import TextLayer
 
-            class _Scanner(TextLayerFontMixin):
-                _fonts_cache_file = get_fonts_cache_file()
+            # 直接用 TextLayer：其 _fonts_cache_file 已通过 property 默认指向用户数据目录，
+            # 且具备字体扫描、文件缓存读写、跨实例全局缓存等完整能力。
+            try:
+                scanner = TextLayer()
+            except Exception:
+                # TextLayer 初始化需要 QObject 环境；极端失败时退回到 mixin 手动构造
+                from app.models.text_layer_font import TextLayerFontMixin
+                scanner = TextLayerFontMixin()
 
-            scanner = _Scanner()
             options = self._load_text_font_options(scanner)
             tree = self._load_text_font_tree_options(scanner)
+
+            # 若 mixin 扫描结果为空（例如文件缓存+全局缓存都失效且扫描异常），
+            # 尝试回退到 Qt 自带 QFontDatabase 作为兜底，保证 UI 至少有一套系统字体列表
+            # （避免 fallback 只有 6~7 个字体，让用户误以为"程序识别不到字体"）。
+            if not options:
+                try:
+                    from PySide6.QtGui import QGuiApplication, QFontDatabase
+                    if QGuiApplication.instance() is not None:
+                        families = list(QFontDatabase.families())
+                        if families:
+                            layer_obj = scanner
+                            names = list(dict.fromkeys(families))  # 保序去重
+                            current_family = ""
+                            try:
+                                current_family = str(
+                                    getattr(self._selected_layer(), "font_family", "") or ""
+                                ).strip()
+                            except Exception:
+                                current_family = ""
+                            if current_family and current_family.casefold() not in {
+                                str(n or "").strip().casefold() for n in names
+                            }:
+                                names.insert(0, current_family)
+                            opts_qt = [{"label": "sans-serif", "value": "sans-serif"}]
+                            seen_qt = {"sans-serif"}
+                            chinese_names = {}
+                            try:
+                                chinese_names = layer_obj.get_font_cn_names()
+                            except Exception:
+                                chinese_names = {}
+                            for name in names:
+                                family = str(name or "").strip()
+                                key = family.casefold()
+                                if not family or key in seen_qt:
+                                    continue
+                                seen_qt.add(key)
+                                cn = str(chinese_names.get(family, "") or "").strip()
+                                label = (
+                                    f"{cn} ({family})"
+                                    if cn and cn != family
+                                    else family
+                                )
+                                opts_qt.append({"label": label, "value": family})
+                            if opts_qt:
+                                options = opts_qt
+                                # tree 重算基于新 options
+                                tree_qt = []
+                                try:
+                                    faces_by_family = layer_obj.get_font_faces()
+                                except Exception:
+                                    faces_by_family = {}
+                                for opt in options:
+                                    fam = str(opt.get("value", "") or "").strip()
+                                    if not fam:
+                                        continue
+                                    faces = []
+                                    for face in faces_by_family.get(fam, []) or []:
+                                        style = str(face.get("style", "Regular") or "Regular").strip()
+                                        faces.append({
+                                            "label": self._font_face_label(style),
+                                            "value": style,
+                                            "face": style,
+                                            "family": fam,
+                                            "weight": int(face.get("weight", 400) or 400),
+                                            "italic": bool(face.get("italic", False)),
+                                            "synthetic": False,
+                                        })
+                                    if not faces:
+                                        faces.append({
+                                            "label": "常规",
+                                            "value": "Regular",
+                                            "face": "Regular",
+                                            "family": fam,
+                                            "weight": 400,
+                                            "italic": False,
+                                            "synthetic": True,
+                                        })
+                                    faces.sort(key=lambda it: (it["weight"], it["italic"], it["value"].casefold()))
+                                    cn = str(chinese_names.get(fam, "") or fam or fam)
+                                    tree_qt.append({
+                                        "label": cn,
+                                        "value": fam,
+                                        "family": fam,
+                                        "children": faces,
+                                    })
+                                if tree_qt:
+                                    tree = tree_qt
+                except Exception:
+                    logger.debug("字体 catalog Qt 兜底失败", exc_info=True)
         except Exception:
             logger.debug("后台预加载字体目录失败", exc_info=True)
         self._fontCatalogLoaded.emit(options, tree)
@@ -1825,9 +1919,11 @@ class WorkspaceViewModel(QObject):
     @Slot(object, object)
     def _on_font_catalog_loaded(self, options, tree):
         self._font_catalog_loading = False
-        if options:
+        # 即使为空也要写缓存，避免"每次访问 textFontOptions 都重新启动扫描线程
+        # → 每次都失败又不填 cache → 永陷 fallback"的循环。
+        if options is not None:
             self._text_font_options_cache = list(options)
-        if tree:
+        if tree is not None:
             self._text_font_tree_options_cache = list(tree)
         self.fontCatalogChanged.emit()
 

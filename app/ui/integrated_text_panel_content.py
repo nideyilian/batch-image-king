@@ -505,50 +505,89 @@ class IntegratedTextPanelContent(object):
 
     def load_fonts(self):
         """加载字体列表"""
+        fonts = []
+        chinese_fonts = []
+        other_fonts = []
         try:
             # 创建临时TextLayer实例来获取字体列表
             from app.models.text_layer import TextLayer
             temp_layer = TextLayer()
-            fonts = temp_layer.get_system_fonts()
-            self._font_cn_names = temp_layer.get_font_cn_names()
-            categorized = temp_layer.get_categorized_fonts()
-            self.font_combo.clear()
-            self._all_fonts = list(fonts)
+            fonts = list(temp_layer.get_system_fonts() or [])
+            self._font_cn_names = dict(temp_layer.get_font_cn_names() or {})
+            categorized = temp_layer.get_categorized_fonts() or {}
 
-            # 中文字体优先，其次英文字体
-            chinese_fonts = categorized.get('chinese', [])
-            other_fonts = categorized.get('english', [])
+            # 中文字体优先；补齐 monospace / decorative / other 三档，避免漏字体
+            chinese_fonts = list(categorized.get('chinese', []) or [])
+            other_fonts = []
+            seen_cats = set()
+            for cat in ('english', 'monospace', 'decorative', 'other'):
+                for f in categorized.get(cat, []) or []:
+                    k = str(f or '').strip().casefold()
+                    if k and k not in seen_cats:
+                        seen_cats.add(k)
+                        other_fonts.append(f)
+        except Exception as e:
+            logger.debug("加载字体列表失败（TextLayer 路径），尝试 Qt 兜底：%s", e, exc_info=True)
 
-            # 先添加中文字体
+        # 兜底：如果上面拿不到任何字体（TextLayer 失败 / 扫描无结果），用 Qt 的系统字体库做最后兜底
+        if not fonts:
+            try:
+                from PySide6.QtGui import QGuiApplication, QFontDatabase
+                if QGuiApplication.instance() is not None:
+                    fonts = list(dict.fromkeys(QFontDatabase.families()))  # 保序去重
+                    chinese_fonts = []
+                    other_fonts = list(fonts)
+                    self._font_cn_names = self._font_cn_names or {}
+            except Exception as e2:
+                logger.debug("Qt 字体兜底加载失败：%s", e2, exc_info=True)
+
+        # 极端失败：仍为空 -> 保留最少 5 个常用字体，不至于字体下拉空白
+        if not fonts:
+            fonts = ["Microsoft YaHei", "Arial", "Times New Roman", "SimSun", "SimHei"]
+            chinese_fonts = [f for f in ["Microsoft YaHei", "SimSun", "SimHei"] if f in fonts]
+            other_fonts = [f for f in fonts if f not in chinese_fonts]
+
+        self.font_combo.clear()
+        self._all_fonts = list(fonts)
+
+        # 先添加中文字体（若分类未生成则回退为一次性全部加在中文字体区）
+        if not chinese_fonts and not other_fonts:
+            for f in fonts:
+                self.font_combo.addItem(self._font_display_name(f), f)
+        else:
             for font in chinese_fonts:
                 self.font_combo.addItem(self._font_display_name(font), font)
-
-            # 添加分隔线
             if chinese_fonts and other_fonts:
                 self.font_combo.insertSeparator(len(chinese_fonts))
-
-            # 添加英文字体
             for font in other_fonts:
+                # 避免重复：中/英分类区字体可能与 chinese_fonts 有交集（分类系统按 family 拆分时偶尔重合）
+                if font in chinese_fonts:
+                    continue
                 self.font_combo.addItem(self._font_display_name(font), font)
 
-            # 设置默认字体
+        # 设置默认字体
+        try:
             default_fonts = ["Microsoft YaHei", "SimSun", "SimHei"]
             for font in default_fonts:
                 if font in fonts:
                     self._set_font_combo_text(font)
                     break
-        except Exception as e:
-            print(f"加载字体列表失败: {e}")
-            # 加载基本字体作为备选
-            basic_fonts = ["Microsoft YaHei", "Arial", "Times New Roman", "SimSun", "SimHei"]
-            self._all_fonts = list(basic_fonts)
-            for font in basic_fonts:
-                self.font_combo.addItem(self._font_display_name(font), font)
+        except Exception:
+            logger.debug("设置字体下拉默认值失败", exc_info=True)
 
         display_entries = sorted(set(self._all_fonts + [self._font_display_name(f) for f in self._all_fonts]))
-        self.font_model.setStringList(display_entries)
-        self._refresh_recent_font_buttons()
-        self._sync_panel_summaries()
+        try:
+            self.font_model.setStringList(display_entries)
+        except Exception:
+            logger.debug("更新字体自动完成模型失败", exc_info=True)
+        try:
+            self._refresh_recent_font_buttons()
+        except Exception:
+            pass
+        try:
+            self._sync_panel_summaries()
+        except Exception:
+            pass
 
         # 其他信号连接
         self.font_size_spin.valueChanged.connect(self.on_font_size_changed)
