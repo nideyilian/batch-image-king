@@ -116,7 +116,8 @@ class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSeri
         # 缓存
         self._cached_image = None
         self._font_cache = {}  # 字体对象缓存
-        self._fonts_cache_file = "fonts_cache.json"  # 字体缓存文件
+        # 注意：_fonts_cache_file 由 TextLayerFontMixin 通过 property 提供（位于用户数据目录），
+        # 不要在此处覆盖为相对路径。
 
         # 渲染质量优化
         self._supersample_enabled = True
