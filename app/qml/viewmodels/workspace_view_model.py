@@ -271,6 +271,7 @@ class WorkspaceViewModel(QObject):
     viewSettingsChanged = Signal()
     layerAppearanceChanged = Signal()
     fontCatalogChanged = Signal()
+    recentTextFontsChanged = Signal()
     _fontCatalogLoaded = Signal(object, object)
     toastRequested = Signal(str)
     textEditingChanged = Signal()
@@ -307,7 +308,10 @@ class WorkspaceViewModel(QObject):
         self._text_font_names_cache = None
         self._text_font_options_cache = None
         self._text_font_tree_options_cache = None
+        self._text_font_tree_with_recent_cache_token = None
         self._font_catalog_loading = False
+        self._recent_text_fonts_cache = None
+        self._recent_text_font_limit = 8
         self._text_edit_overlay_visible = False
         self._text_edit_layer_index = -1
         self._text_edit_draft_html = None
@@ -1788,7 +1792,29 @@ class WorkspaceViewModel(QObject):
             if not self._defer_font_catalog_preload:
                 self.startFontCatalogPreload()
             return self._font_catalog_fallback_tree()
-        return list(self._text_font_tree_options_cache)
+        recent_group = self._build_recent_font_tree_group()
+        if not recent_group:
+            return list(self._text_font_tree_options_cache)
+        # 用 (recent 是否等于上次, 基础 tree 是否相等) 做 token 缓存拼接结果，避免每次 Property 访问都重建
+        try:
+            base_token = len(self._text_font_tree_options_cache)
+            recent_token = (len(recent_group), hash(tuple(
+                (str(it.get("family", "")), str(it.get("face", "")))
+                for entry in recent_group
+                for it in (entry.get("children") or [entry])
+            )))
+            combined_token = (base_token, recent_token)
+        except Exception:
+            combined_token = None
+        if combined_token is None or self._text_font_tree_with_recent_cache_token != combined_token:
+            combined = list(recent_group) + [
+                g for g in list(self._text_font_tree_options_cache)
+                if not isinstance(g.get("__recent_block__"), bool)
+            ]
+            self._text_font_tree_with_recent_cache_combined = combined
+            self._text_font_tree_with_recent_cache_token = combined_token
+        return list(getattr(self, "_text_font_tree_with_recent_cache_combined", None) or
+                    (list(recent_group) + list(self._text_font_tree_options_cache)))
 
     def startFontCatalogPreload(self):
         if self._font_catalog_loading or self._text_font_tree_options_cache is not None:
@@ -1925,7 +1951,216 @@ class WorkspaceViewModel(QObject):
             self._text_font_options_cache = list(options)
         if tree is not None:
             self._text_font_tree_options_cache = list(tree)
+        # 最近字体变更会影响 textFontTreeOptions 顶端"最近使用"分组，这里清 token
+        self._text_font_tree_with_recent_cache_token = None
         self.fontCatalogChanged.emit()
+
+    # ----------------------------- 最近使用字体 -----------------------------
+
+    def _recent_fonts_file_path(self) -> Path:
+        """与经典 UI（integrated_text_panel_content._recent_fonts_file）一致的存储位置。"""
+        try:
+            base_dir = Path.home()
+        except Exception:
+            import tempfile
+            base_dir = Path(tempfile.gettempdir())
+        config_dir = base_dir / ".config" / "批图王"
+        try:
+            config_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        return config_dir / "recent_fonts.json"
+
+    def _load_recent_text_fonts(self) -> list:
+        if self._recent_text_fonts_cache is not None:
+            return list(self._recent_text_fonts_cache)
+        entries: list = []
+        try:
+            file_path = self._recent_fonts_file_path()
+            if file_path.exists():
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    data = None
+                raw = data.get("recent", []) if isinstance(data, dict) else []
+                seen_keys: set = set()
+                for item in raw:
+                    # 兼容经典 UI 纯 family 字符串条目；兼容新版 {family, face} dict
+                    if isinstance(item, str):
+                        fam = item.strip()
+                        face = ""
+                    elif isinstance(item, dict):
+                        fam = str(item.get("family", "") or "").strip()
+                        face = str(item.get("face", "") or "").strip()
+                    else:
+                        continue
+                    if not fam:
+                        continue
+                    key = (fam.casefold(), face.casefold())
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    entries.append({"family": fam, "face": face})
+                    if len(entries) >= self._recent_text_font_limit:
+                        break
+        except Exception:
+            logger.debug("读取最近字体失败", exc_info=True)
+            entries = []
+        self._recent_text_fonts_cache = list(entries)
+        return list(entries)
+
+    def _save_recent_text_fonts(self, entries: list) -> None:
+        try:
+            file_path = self._recent_fonts_file_path()
+            out = []
+            for item in entries:
+                if isinstance(item, dict):
+                    fam = str(item.get("family", "") or "").strip()
+                    face = str(item.get("face", "") or "").strip()
+                elif isinstance(item, str):
+                    fam = item.strip()
+                    face = ""
+                else:
+                    continue
+                if not fam:
+                    continue
+                # 经典 UI 读 recent_fonts.json 的 data.get("recent", []) 只取字符串 str；
+                # 为兼容两端，没有 face 时写纯字符串，有 face 时写 dict（经典 UI 会过滤 dict 条目
+                # 但不会崩溃；后续经典 UI 若要支持字重，再升级读取逻辑）。
+                if face:
+                    out.append({"family": fam, "face": face})
+                else:
+                    out.append(fam)
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump({"recent": out}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.debug("写入最近字体失败", exc_info=True)
+
+    def _push_recent_text_font(self, family: str, face: str = "") -> None:
+        family = str(family or "").strip()
+        face = str(face or "").strip()
+        if not family:
+            return
+        entries = self._load_recent_text_fonts()
+        key_match = (family.casefold(), face.casefold())
+        new_entries = [e for e in entries if (e["family"].casefold(), e["face"].casefold()) != key_match]
+        new_entries.insert(0, {"family": family, "face": face})
+        new_entries = new_entries[: self._recent_text_font_limit]
+        if new_entries == entries:
+            return
+        self._recent_text_fonts_cache = list(new_entries)
+        # 清树缓存 token 并触发 UI 刷新
+        self._text_font_tree_with_recent_cache_token = None
+        self._save_recent_text_fonts(new_entries)
+        self.recentTextFontsChanged.emit()
+        self.fontCatalogChanged.emit()
+
+    @Property("QVariantList", notify=recentTextFontsChanged)
+    def recentTextFonts(self):
+        entries = self._load_recent_text_fonts()
+        options = []
+        for entry in entries:
+            family = entry.get("family", "") or ""
+            face = entry.get("face", "") or ""
+            entry_dict = {
+                "family": family,
+                "face": face,
+                "label": family + (" · " + face if face else ""),
+                "value": family,
+            }
+            options.append(entry_dict)
+        return options
+
+    def _build_recent_font_tree_group(self) -> list:
+        entries = self._load_recent_text_fonts()
+        if not entries:
+            return []
+        # 建立 family→faces 索引；按 entries 顺序为 family 排序
+        family_order = []
+        families: dict = {}
+        for entry in entries:
+            fam = str(entry.get("family", "") or "").strip()
+            face = str(entry.get("face", "") or "").strip()
+            if not fam:
+                continue
+            key = fam.casefold()
+            if key not in families:
+                families[key] = {"family": fam, "faces": []}
+                family_order.append(key)
+            if face and face.casefold() not in {f.casefold() for f in families[key]["faces"]}:
+                families[key]["faces"].append(face)
+
+        # 查 family→label 的映射（走字体目录树）
+        group_label_lookup: dict = {}
+        for group in list(self._text_font_tree_options_cache or []) or []:
+            fam = str(group.get("family", "") or group.get("value", "") or "").strip()
+            label = str(group.get("label", "") or fam).strip()
+            if fam:
+                group_label_lookup[fam.casefold()] = label
+
+        # 查 family→face item 的映射，用于复用真实字重 label/weight
+        face_lookup: dict = {}
+        for group in list(self._text_font_tree_options_cache or []) or []:
+            fam = str(group.get("family", "") or group.get("value", "") or "").strip()
+            if not fam:
+                continue
+            for child in group.get("children", []) or []:
+                f = str(child.get("face", "") or child.get("value", "") or "").strip()
+                if f:
+                    face_lookup[(fam.casefold(), f.casefold())] = child
+
+        children = []
+        for key in family_order:
+            fam_info = families[key]
+            fam = fam_info["family"]
+            faces = fam_info["faces"] or [""]
+            label = group_label_lookup.get(fam.casefold()) or fam
+            normalized_children = []
+            for face in faces:
+                if face:
+                    found = face_lookup.get((fam.casefold(), face.casefold()))
+                    if found is not None:
+                        normalized_children.append(dict(found))
+                    else:
+                        normalized_children.append({
+                            "label": self._font_face_label(face) or face,
+                            "value": face,
+                            "face": face,
+                            "family": fam,
+                            "weight": 400,
+                            "italic": False,
+                            "synthetic": True,
+                        })
+                else:
+                    # 没有 face 信息的条目（经典 UI 字符串），填一个默认 Regular 占位
+                    normalized_children.append({
+                        "label": self._font_face_label("Regular") or "常规",
+                        "value": "Regular",
+                        "face": "Regular",
+                        "family": fam,
+                        "weight": 400,
+                        "italic": False,
+                        "synthetic": True,
+                    })
+            if normalized_children:
+                children.append({
+                    "label": label,
+                    "value": fam,
+                    "family": fam,
+                    "group": "recent",
+                    "children": normalized_children,
+                })
+        if not children:
+            return []
+        return [{
+            "label": "最近使用",
+            "value": "__recent__",
+            "family": "",
+            "group": "__recent_header__",
+            "children": [],
+            "__recent_block__": True,
+        }] + children
 
     @Property("QVariantList", notify=fontCatalogChanged)
     def selectedTextFontOptions(self):
@@ -1961,6 +2196,11 @@ class WorkspaceViewModel(QObject):
         family = family or self.selectedTextFontFamily
         face = face or self.selectedTextFontFace
         for group in self.textFontTreeOptions:
+            # 跳过最近使用区块：它是真实字体族的"截断副本"（只含用户最近用的 face），
+            # 不应用于字重/字重选项/最近 face 查找；否则 Bold-only 的 recent 会让 selectedTextBold
+            # / selectedTextFontWeightOptions 只能看到 700，看不到 Light/Regular 等真实字重。
+            if bool(group.get("__recent_block__")) or group.get("group") in ("recent", "__recent_header__"):
+                continue
             if str(group.get("family", "")).casefold() != str(family).casefold():
                 continue
             for item in group.get("children", []) or []:
@@ -1975,6 +2215,8 @@ class WorkspaceViewModel(QObject):
         family = self.selectedTextFontFamily
         candidates = []
         for group in self.textFontTreeOptions:
+            if bool(group.get("__recent_block__")) or group.get("group") in ("recent", "__recent_header__"):
+                continue
             if str(group.get("family", "")).casefold() == family.casefold():
                 candidates = [
                     item for item in (group.get("children", []) or [])
@@ -2038,6 +2280,10 @@ class WorkspaceViewModel(QObject):
         family = self.selectedTextFontFamily.casefold()
         candidates = []
         for group in self.textFontTreeOptions:
+            # 跳过最近使用区块：其 children 列表只是真实字体族的子集（用户最近用的 face），
+            # 不能代表当前字体族的完整字重列表。
+            if bool(group.get("__recent_block__")) or group.get("group") in ("recent", "__recent_header__"):
+                continue
             if str(group.get("family", "")).casefold() != family:
                 continue
             candidates = [
@@ -3172,11 +3418,21 @@ class WorkspaceViewModel(QObject):
         if not family:
             self._set_status("字体名称不能为空", toast=True)
             return False
-        return self._change_selected_text(
+        # 同值短路：避免空操作 push undo 历史
+        layer = self._selected_layer() if self.selectedIsTextLayer else None
+        if layer is not None:
+            cur_family = str(getattr(layer, "font_family", "") or "")
+            if cur_family.casefold() == family.casefold():
+                self._push_recent_text_font(family, "")
+                return True
+        ok = self._change_selected_text(
             "修改文字字体",
             lambda layer: (setattr(layer, "font_family", family), setattr(layer, "font_face", "")),
             f"文字字体 · {family}",
         )
+        if ok:
+            self._push_recent_text_font(family, "")
+        return ok
 
     @Slot(str, str, result=bool)
     def setSelectedTextFontFace(self, family: str, face: str) -> bool:
@@ -3189,16 +3445,28 @@ class WorkspaceViewModel(QObject):
             self._set_status("未找到所选字体字重", toast=True)
             return False
 
+        # 同值短路：避免空操作 push undo 历史
+        layer = self._selected_layer() if self.selectedIsTextLayer else None
+        if layer is not None:
+            cur_family = str(getattr(layer, "font_family", "") or "")
+            cur_face = str(getattr(layer, "font_face", "") or "")
+            if cur_family.casefold() == family.casefold() and cur_face.casefold() == face.casefold():
+                self._push_recent_text_font(family, face)
+                return True
+
         def apply(layer) -> None:
             layer.font_family = family
             layer.font_face = face
             layer.font_style = "NORMAL"
 
-        return self._change_selected_text(
+        ok = self._change_selected_text(
             "修改文字字体字重",
             apply,
             f"文字字重 · {family} · {self._font_face_label(face)}",
         )
+        if ok:
+            self._push_recent_text_font(family, face)
+        return ok
 
     @Slot(int, result=bool)
     def setSelectedTextFontWeight(self, weight: int) -> bool:
