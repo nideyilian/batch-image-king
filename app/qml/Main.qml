@@ -5638,6 +5638,28 @@ ApplicationWindow {
                 property real marqueeCurrentX: 0
                 property real marqueeCurrentY: 0
 
+                // —— 空格临时抓手（Photoshop 风格：按住空格+左键拖拽平移视图）
+                property bool spacePressedTemp: false
+                focus: true
+                HoverHandler {
+                    // 鼠标进入画布时抢占焦点，确保画布能接收 Space 这类键盘事件
+                    onHoveredChanged: if (hovered) canvasWorkspace.forceActiveFocus(Qt.MouseFocusReason)
+                }
+                Keys.onPressed: event => {
+                    if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
+                        if (!selectedTextEditor.editing && !window._editableInputHasFocus) {
+                            spacePressedTemp = true
+                            event.accepted = true
+                        }
+                    }
+                }
+                Keys.onReleased: event => {
+                    if (event.key === Qt.Key_Space && !event.isAutoRepeat && spacePressedTemp) {
+                        spacePressedTemp = false
+                        event.accepted = true
+                    }
+                }
+
                 DropArea {
                     id: imageDropArea
                     anchors.fill: parent
@@ -5939,7 +5961,15 @@ ApplicationWindow {
                     id: canvasPanHandler
                     target: null
                     enabled: window.hasOpenDocument
-                    acceptedButtons: activeTool === 1 ? Qt.LeftButton | Qt.MiddleButton : Qt.MiddleButton
+                    // 抓手工具(H)或空格临时抓手时都允许左键拖拽平移；否则仅中键
+                    acceptedButtons: (activeTool === 1 || canvasWorkspace.spacePressedTemp)
+                                      ? Qt.LeftButton | Qt.MiddleButton
+                                      : Qt.MiddleButton
+                    cursorShape: active
+                                  ? Qt.ClosedHandCursor
+                                  : ((activeTool === 1 || canvasWorkspace.spacePressedTemp)
+                                     ? Qt.OpenHandCursor
+                                     : Qt.ArrowCursor)
                     property int startOffsetX: 0
                     property int startOffsetY: 0
                     onActiveChanged: {
