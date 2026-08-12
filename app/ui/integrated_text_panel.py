@@ -69,8 +69,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.load_fonts()  # 加载字体列表
 
     def setup_ui(self):
-        """设置UI界面"""
-        # 保持右侧属性栏宽度稳定，不被内容撑大
+        """设置UI界面 - 紧凑型布局，减少启用组件，一屏尽可能多展示"""
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.setMinimumWidth(0)
         self.setObjectName("IntegratedTextPanel")
@@ -84,21 +83,22 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.parameter_tabs.setDocumentMode(True)
         self.parameter_tabs.tabBar().setExpanding(True)
         self.parameter_tabs.tabBar().setUsesScrollButtons(False)
+        # Tab栏高度略紧凑
+        self.parameter_tabs.tabBar().setFixedHeight(34)
         self.basic_scroll_area, self.basic_tab_content, self.basic_layout = self._create_parameter_tab("基本参数")
         self.more_scroll_area, self.more_tab_content, self.more_layout = self._create_parameter_tab("更多参数")
         main_layout.addWidget(self.parameter_tabs)
 
-        # 1. 文字内容区：创建、编辑、绑定和候选文案入口合并展示
+        # 基本参数：文字内容、字体、排版、外观、位置尺寸（常用，折叠默认展开）
         self.create_text_content_card(self.basic_layout)
-
-        # 2. 字体、排版、外观分层展示，替代单个臃肿核心参数卡片
         self.create_font_card(self.basic_layout)
         self.create_typography_card(self.basic_layout)
         self.create_appearance_card(self.basic_layout)
+        self.create_position_dimension_card(self.basic_layout)
 
-        # 3. 低频视觉效果和几何参数统一收纳到“更多参数”页
+        # 更多参数：背景（低频）、阴影与发光（低频）
         self.create_background_card(self.more_layout)
-        self.create_advanced_settings(self.more_layout)
+        self.create_effects_only_settings(self.more_layout)
         self._sync_panel_summaries()
 
         self.basic_layout.addStretch()
@@ -120,10 +120,10 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
                 border-top: 1px solid {Tokens.BORDER_SUBTLE};
             }}
             #IntegratedTextPanel QTabWidget#textLayerPropertyTabs QTabBar::tab {{
-                min-height: 38px;
-                max-height: 38px;
+                min-height: 34px;
+                max-height: 34px;
                 margin: 0;
-                padding: 0 16px;
+                padding: 0 14px;
                 background-color: {PropertyPanelA2.CARD_BG};
                 color: {PropertyPanelA2.TEXT_MUTED};
                 border: none;
@@ -144,6 +144,11 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
             #IntegratedTextPanel QScrollArea {{
                 background: {PropertyPanelA2.PANEL_BG};
                 border: none;
+            }}
+            #IntegratedTextPanel QLabel[role="mutedLabel"] {{
+                min-height: 0px;
+                padding-top: 2px;
+                padding-bottom: 1px;
             }}
         """
 
@@ -483,11 +488,14 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         parent_layout.addWidget(action_card)
 
     def create_text_content_card(self, parent_layout):
-        """创建可直接编辑的文字内容卡片。"""
+        """创建可直接编辑的文字内容卡片（紧凑型）。"""
         card, card_layout = self._make_section_card("文字内容")
         self.content_card = card
         self.content_card_title = card.title_label
         self.content_summary_label = card.summary_label
+        # 紧凑内部边距和间距
+        card_layout.setContentsMargins(8, 5, 8, 6)
+        card_layout.setSpacing(5)
 
         self.create_btn = QPushButton("+ 文字", self)
         self.create_btn.setToolTip("创建新的文字图层")
@@ -511,13 +519,14 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         self.inline_text_edit = QTextEdit()
         self.inline_text_edit.setAcceptRichText(False)
-        self.inline_text_edit.setFixedHeight(PropertyPanelA2.TEXT_AREA_HEIGHT)
+        # 紧凑文字输入框：默认2-3行可见，避免首屏过高
+        self.inline_text_edit.setFixedHeight(72)
         self.inline_text_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.inline_text_edit.setPlaceholderText("输入当前文案；开启绑定模式时，每行可作为一个候选文案")
         card_layout.addWidget(self.inline_text_edit)
 
         text_actions = QHBoxLayout()
-        text_actions.setSpacing(PropertyPanelA2.ROW_GAP)
+        text_actions.setSpacing(4)
 
         self.apply_text_btn = QPushButton("应用", self)
         self.apply_text_btn.setProperty("actionButton", True)
@@ -561,14 +570,15 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         parent_layout.addWidget(card)
 
     def create_font_card(self, parent_layout):
-        """创建字体卡片。"""
+        """创建字体卡片（紧凑型）。"""
         card, card_layout = self._make_section_card("字体", self.reset_core_params)
         self.font_card = card
         self.font_card_title = card.title_label
         self.font_summary_label = card.summary_label
         self.font_reset_btn = getattr(card, "reset_button", None)
-        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
-        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
+        # 紧凑内部边距
+        card_layout.setContentsMargins(8, 5, 8, 6)
+        card_layout.setSpacing(5)
 
         self.font_combo = QComboBox()
         self.font_combo.setEditable(True)
@@ -597,8 +607,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.font_more_btn.hide()
         card_layout.addLayout(self._make_param_row("字体", self.font_combo, self.font_settings_btn, stretch_last=False))
 
-        card_layout.addWidget(self._make_core_divider())
-        card_layout.addWidget(self._muted_label("常用"))
+        # 常用字体按钮：直接展示，去掉"常用"小标题（节省约24px+间距）
         quick_buttons_row = QHBoxLayout()
         quick_buttons_row.setSpacing(PropertyPanelA2.ROW_GAP)
         self.quick_font_button_group = QButtonGroup(self)
@@ -614,6 +623,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
             self.quick_font_buttons.append(btn)
         card_layout.addLayout(quick_buttons_row)
 
+        # 最近字体：初始不显示（默认setVisible(False)，无内容时不占垂直空间）；有记录时_refresh会自动显示
         self.recent_fonts_layout = QHBoxLayout()
         self.recent_fonts_layout.setSpacing(PropertyPanelA2.ROW_GAP)
         self.recent_fonts_container = QWidget()
@@ -625,13 +635,14 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         parent_layout.addWidget(card)
 
     def create_typography_card(self, parent_layout):
-        """创建排版卡片。"""
+        """创建排版卡片（紧凑型）。"""
         card, card_layout = self._make_section_card("排版")
         self.typography_card = card
         self.typography_card_title = card.title_label
         self.typography_summary_label = card.summary_label
-        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
-        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
+        # 紧凑布局：减小边距和内部间距
+        card_layout.setContentsMargins(8, 5, 8, 6)
+        card_layout.setSpacing(5)
 
         self.font_size_spin = self._make_spin(76)
         self.font_size_spin.setRange(6, 200)
@@ -671,8 +682,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         )
         card_layout.addLayout(self.typography_align_row)
 
-        card_layout.addWidget(self._make_core_divider())
-
+        # 文本框（自动适配）和 间距/字距/边距 合并展示，去掉中间分割线，减少垂直空白
         self.auto_fit_check = QCheckBox("自动适配边框")
         self.auto_fit_check.setChecked(True)
         self.auto_fit_row = self._make_param_row("文本框", self.auto_fit_check)
@@ -703,15 +713,16 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         parent_layout.addWidget(card)
 
     def create_appearance_card(self, parent_layout):
-        """创建外观卡片。"""
+        """创建外观卡片（紧凑型）：删除独立启用面板，将描边开关与参数同一行合并。"""
         card, card_layout = self._make_section_card("外观")
         self.appearance_card = card
         self.appearance_card_title = card.title_label
         self.appearance_summary_label = card.summary_label
-        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
-        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
+        # 紧凑内部布局：去除多余空白
+        card_layout.setContentsMargins(8, 5, 8, 6)
+        card_layout.setSpacing(5)
 
-        card_layout.addWidget(self._muted_label("文字填充"))
+        # 文字填充模式分段按钮（无/纯色/渐变），去除"文字填充"小标题
         text_fill_layout, self.text_fill_button_group, self.text_fill_mode_buttons = self._make_segment_row(
             [("无", "none"), ("纯色", "solid"), ("渐变", "gradient")],
             "solid",
@@ -720,30 +731,38 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         )
         card_layout.addLayout(text_fill_layout)
 
+        # 纯色填充（颜色 + 透明度，纵向挨着，无分割线）
         self.text_color_controls, text_color_layout = self._make_subpanel()
+        # 减小子面板内边距
+        text_color_layout.setContentsMargins(6, 4, 6, 4)
+        text_color_layout.setSpacing(4)
         self.text_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.text_color_button = self._make_compact_value_button("文字颜色")
         self.text_color_button.clicked.connect(self.text_color.click)
         text_color_layout.addLayout(self._make_param_row("颜色", self.text_color_button, self.text_color, stretch_last=False))
-        card_layout.addWidget(self.text_color_controls)
 
+        # 透明度：紧跟颜色行，共用 subpanel，减少垂直间距
         self.opacity_slider = QSlider(Qt.Horizontal)
         self.opacity_slider.setRange(0, 100)
         self.opacity_slider.setValue(100)
         self.opacity_slider.setMinimumWidth(90)
         self.opacity_slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.opacity_label = QLabel("100%")
-        self.opacity_label.setFixedWidth(48)
+        self.opacity_label.setFixedWidth(42)
         self.opacity_label.setAlignment(Qt.AlignCenter)
-        card_layout.addLayout(self._make_param_row("透明度", self.opacity_slider, self.opacity_label, stretch_last=False))
+        text_color_layout.addLayout(self._make_param_row("透明", self.opacity_slider, self.opacity_label, stretch_last=False))
+        card_layout.addWidget(self.text_color_controls)
 
+        # 渐变填充控件（与纯色控件互斥显示）
         self.gradient_controls, gradient_controls_layout = self._make_subpanel()
+        gradient_controls_layout.setContentsMargins(6, 4, 6, 4)
+        gradient_controls_layout.setSpacing(4)
         self.gradient_enable_check = A2Switch()
-        self.gradient_enable_check.hide()
+        self.gradient_enable_check.hide()  # 隐藏独立开关：已用顶部分段按钮控制
         self.gradient_type_combo = QComboBox()
         self.gradient_type_combo.addItems(["线性", "径向", "角度"])
         self.gradient_type_combo.setFixedWidth(80)
-        gradient_controls_layout.addLayout(self._make_param_row("渐变类型", self.gradient_type_combo, stretch_last=False))
+        gradient_controls_layout.addLayout(self._make_param_row("类型", self.gradient_type_combo, stretch_last=False))
         gradient_color_layout = QHBoxLayout()
         self.gradient_start_color = ColorIndicator((0, 0, 0, 255))
         self.gradient_start_color.color_changed.connect(self.on_gradient_color_changed)
@@ -753,50 +772,58 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.gradient_end_color.color_changed.connect(self.on_gradient_color_changed)
         gradient_color_layout.addWidget(self.gradient_end_color)
         gradient_color_layout.addStretch()
-        gradient_controls_layout.addLayout(self._make_param_row("渐变颜色", QWidget(), stretch_last=False))
+        gradient_controls_layout.addLayout(self._make_param_row("渐变色", QWidget(), stretch_last=False))
         gradient_controls_layout.addLayout(gradient_color_layout)
         card_layout.addWidget(self.gradient_controls)
 
-        card_layout.addWidget(self._make_core_divider())
-        card_layout.addWidget(self._muted_label("描边"))
-        self.stroke_toggle_panel, stroke_toggle_layout = self._make_subpanel()
-        self.stroke_toggle_panel.setMinimumHeight(PropertyPanelA2.FEATURE_TOGGLE_HEIGHT)
-        stroke_toggle_row = QHBoxLayout()
-        stroke_toggle_row.setContentsMargins(0, 0, 0, 0)
-        stroke_toggle_row.setSpacing(PropertyPanelA2.ROW_GAP)
-        self.stroke_title_label = QLabel("启用描边")
-        self.stroke_title_label.setProperty("role", "featureTitle")
-        self.stroke_enable_check = A2Switch()
+        # 描边：紧凑一行布局——复选框代替独立的48px启用面板；不添加"描边"小标题和分割线
+        # □ 描边  [宽度spin]  [颜色按钮] [色板] —— 全塞入一行，极大节省空间
+        stroke_row_wrap = QHBoxLayout()
+        stroke_row_wrap.setContentsMargins(0, 0, 0, 0)
+        stroke_row_wrap.setSpacing(PropertyPanelA2.ROW_GAP)
+        self.stroke_enable_check = QCheckBox("描边")  # 替代 A2Switch + stroke_title_label 行
+        self.stroke_enable_check.setProperty("role", "inlineCheck")
+        self.stroke_enable_check.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
         self.stroke_enable_check.stateChanged.connect(self.on_stroke_enabled_changed)
-        stroke_toggle_row.addWidget(self.stroke_title_label)
-        stroke_toggle_row.addStretch()
-        stroke_toggle_row.addWidget(self.stroke_enable_check)
-        stroke_toggle_layout.addLayout(stroke_toggle_row)
-        card_layout.addWidget(self.stroke_toggle_panel)
-        self.stroke_controls, stroke_layout = self._make_subpanel()
-        self.stroke_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
-        self.stroke_color.setEnabled(False)
-        self.stroke_color_button = self._make_compact_value_button("描边色")
-        self.stroke_color_button.clicked.connect(self.stroke_color.click)
-        self.stroke_width_spin = self._make_spin(76)
+        self.stroke_width_spin = self._make_spin(68)
         self.stroke_width_spin.setRange(1, 20)
         self.stroke_width_spin.setValue(2)
         self.stroke_width_spin.setSuffix("px")
         self.stroke_width_spin.setEnabled(False)
-        stroke_layout.addLayout(self._make_param_row("描边宽", self.stroke_width_spin, self.stroke_color_button, self.stroke_color, stretch_last=False))
-        card_layout.addWidget(self.stroke_controls)
+        self.stroke_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
+        self.stroke_color.setEnabled(False)
+        self.stroke_color_button = self._make_compact_value_button("描边色")
+        self.stroke_color_button.clicked.connect(self.stroke_color.click)
+        self.stroke_color_button.setEnabled(False)
+
+        stroke_row_wrap.addWidget(self.stroke_enable_check)
+        stroke_row_wrap.addSpacing(4)
+        stroke_row_wrap.addWidget(self.stroke_width_spin)
+        stroke_row_wrap.addWidget(self.stroke_color_button, 1)
+        stroke_row_wrap.addWidget(self.stroke_color)
+        card_layout.addLayout(stroke_row_wrap)
+
+        # 占位兼容：保留旧的属性引用，避免handlers中对stroke_toggle_panel/stroke_controls的引用报错
+        self.stroke_toggle_panel, _ = self._make_subpanel()
+        self.stroke_toggle_panel.setVisible(False)
+        self.stroke_controls, _ = self._make_subpanel()
+        self.stroke_controls.setVisible(False)
+        # 隐藏不必要的标题标签（避免sync时找不到）
+        self.stroke_title_label = QLabel()
+        self.stroke_title_label.setVisible(False)
 
         parent_layout.addWidget(card)
 
     def create_background_card(self, parent_layout):
-        """创建文字背景卡片；该低频效果仅出现在“更多参数”页。"""
+        """创建文字背景卡片（紧凑型）；该低频效果仅出现在“更多参数”页。"""
         card, card_layout = self._make_section_card("文字背景")
         self.background_card = card
         self.background_card_title = card.title_label
         self.background_summary_label = card.summary_label
-        card_layout.setContentsMargins(*PropertyPanelA2.BODY_MARGINS)
-        card_layout.setSpacing(PropertyPanelA2.SECTION_GAP)
+        card_layout.setContentsMargins(8, 5, 8, 6)
+        card_layout.setSpacing(5)
 
+        # 背景模式（无/纯色/渐变）分段按钮，顶部分段即代表启用与否，无需独立开关
         background_layout, self.background_button_group, self.background_mode_buttons = self._make_segment_row(
             [("无", "none"), ("纯色", "solid"), ("渐变", "gradient")],
             "none",
@@ -806,14 +833,16 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         card_layout.addLayout(background_layout)
 
         self.background_controls, bg_layout = self._make_subpanel()
+        bg_layout.setContentsMargins(6, 4, 6, 4)
+        bg_layout.setSpacing(4)
         self.bg_enable_check = A2Switch()
-        self.bg_enable_check.hide()
+        self.bg_enable_check.hide()  # 用分段按钮控制显隐，不再显示独立开关
         self.bg_enable_check.stateChanged.connect(self.on_background_enabled_changed)
         self.bg_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.bg_color.color_changed.connect(self.on_background_color_changed)
         self.bg_color_button = self._make_compact_value_button("背景颜色")
         self.bg_color_button.clicked.connect(self.bg_color.click)
-        bg_layout.addLayout(self._make_param_row("背景颜色", self.bg_color_button, self.bg_color, stretch_last=False))
+        bg_layout.addLayout(self._make_param_row("颜色", self.bg_color_button, self.bg_color, stretch_last=False))
 
         self.bg_opacity_slider = QSlider(Qt.Horizontal)
         self.bg_opacity_slider.setRange(0, 100)
@@ -822,7 +851,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.bg_opacity_label = QLabel("100%")
         self.bg_opacity_label.setFixedWidth(42)
         self.bg_opacity_label.setAlignment(Qt.AlignCenter)
-        bg_layout.addLayout(self._make_param_row("背景透明", self.bg_opacity_slider, self.bg_opacity_label, stretch_last=False))
+        bg_layout.addLayout(self._make_param_row("透明", self.bg_opacity_slider, self.bg_opacity_label, stretch_last=False))
 
         self.bg_size_slider = QSlider(Qt.Horizontal)
         self.bg_size_slider.setRange(-50, 50)
@@ -831,23 +860,93 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.bg_size_label = QLabel("+5")
         self.bg_size_label.setFixedWidth(42)
         self.bg_size_label.setAlignment(Qt.AlignCenter)
-        bg_layout.addLayout(self._make_param_row("背景大小", self.bg_size_slider, self.bg_size_label, stretch_last=False))
+        bg_layout.addLayout(self._make_param_row("大小", self.bg_size_slider, self.bg_size_label, stretch_last=False))
         card_layout.addWidget(self.background_controls)
 
+        # 背景渐变类型：和背景控件合并到同一子面板（可见时显示），不用额外摘要行
+        # 背景高级摘要（保留引用兼容，默认隐藏）
         self.background_advanced_row, background_advanced_layout = self._make_subpanel()
+        self.background_advanced_row.setVisible(False)
         background_advanced_header = QHBoxLayout()
         background_advanced_header.setContentsMargins(0, 0, 0, 0)
-        background_advanced_header.addWidget(self._muted_label("背景高级"))
         self.background_advanced_summary = QLabel("透明度、大小、渐变类型")
         self.background_advanced_summary.setProperty("role", "summaryLabel")
         self.background_advanced_summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         background_advanced_header.addStretch()
         background_advanced_header.addWidget(self.background_advanced_summary)
         background_advanced_layout.addLayout(background_advanced_header)
-        card_layout.addWidget(self.background_advanced_row)
 
         self._sync_appearance_visibility()
         parent_layout.addWidget(card)
+
+    def create_position_dimension_card(self, parent_layout):
+        """基本参数页底部：位置和尺寸（默认折叠，节省首屏高度；展开时可编辑）。
+        保留与 handlers 兼容的属性名：x_spin, y_spin, width_spin, height_spin, position_summary_label。"""
+        self.pos_group = CollapsibleGroupBox("位置和尺寸", collapsed=True)  # 默认折叠：显著降低首屏高度
+        self.pos_group.title_frame.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
+        self.pos_group.container_layout.setContentsMargins(8, 5, 8, 6)
+        self.pos_group.container_layout.setSpacing(5)
+        self.position_summary_label = QLabel()
+        self.position_summary_label.setProperty("role", "summaryLabel")
+        self.position_summary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.position_summary_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        title_layout = self.pos_group.title_frame.layout()
+        if title_layout:
+            title_layout.insertWidget(1, self.position_summary_label)
+            self.position_summary_label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+
+        pos_layout = QVBoxLayout()
+        pos_layout.setContentsMargins(0, 0, 0, 0)
+        pos_layout.setSpacing(PropertyPanelA2.ROW_GAP)
+
+        self.position_box, position_layout = self._make_subpanel()
+        self.size_box, size_layout = self._make_subpanel()
+
+        def make_spin(attr):
+            spin = QSpinBox()
+            if attr in ("width", "height"):
+                spin.setRange(1, 9999)
+            else:
+                spin.setRange(-9999, 9999)
+            spin.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
+            spin.setMinimumWidth(74)
+            spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            return spin
+
+        def add_pair_row(layout, first, second):
+            row = QHBoxLayout()
+            row.setSpacing(PropertyPanelA2.ROW_GAP)
+            for title, attr in (first, second):
+                label = self._label(title, width=PropertyPanelA2.POSITION_LABEL_WIDTH)
+                spin = make_spin(attr)
+                setattr(self, f"{attr}_spin", spin)
+                row.addWidget(label)
+                row.addWidget(spin, 1)
+            layout.addLayout(row)
+
+        position_layout.addWidget(self._muted_label("位置"))
+        add_pair_row(position_layout, ("X", "x"), ("Y", "y"))
+        size_layout.addWidget(self._muted_label("尺寸"))
+        add_pair_row(size_layout, ("W", "width"), ("H", "height"))
+
+        pos_layout.addWidget(self.position_box)
+        pos_layout.addWidget(self.size_box)
+        self.pos_group.add_content_layout(pos_layout)
+        # 折叠/展开时同步摘要（值变化时由handlers触发刷新）
+        self._sync_position_summary()
+        parent_layout.addWidget(self.pos_group)
+
+    def create_effects_only_settings(self, parent_layout):
+        """更多参数页：仅保留阴影与发光（低频视觉效果）。
+        位置与尺寸已迁移至基本参数页的 create_position_dimension_card。"""
+        from app.ui.property_widgets import switch_row
+
+        self.effects_group = CollapsibleGroupBox("文字阴影与发光", collapsed=False)
+        self.effects_group.title_frame.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
+        self.effects_group.container_layout.setContentsMargins(8, 5, 8, 6)
+        self.effects_group.container_layout.setSpacing(5)
+        self.create_effects_content(self.effects_group)
+        parent_layout.addWidget(self.effects_group)
 
     def _checked_segment_value(self, buttons, property_name, default_value):
         for button in buttons:
