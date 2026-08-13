@@ -7880,9 +7880,6 @@ ApplicationWindow {
                                             }
                                         }
                                     }
-                                }
-                                InspectorRow {
-                                    label: "方向"
                                     SegmentedControl {
                                         Layout.preferredWidth: Theme.inspectorWSeg2
                                         accessibleName: "文字排列方向"
@@ -7933,9 +7930,6 @@ ApplicationWindow {
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onActivated: value => workspace.setSelectedTextAutoFitTextBox(value === "auto")
                                     }
-                                }
-                                InspectorRow {
-                                    label: "内边距"
                                     ValueBox {
                                         Layout.preferredWidth: Theme.inspectorWInput
                                         value: workspace.selectedTextBoxPadding.toString()
