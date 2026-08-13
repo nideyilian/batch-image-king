@@ -3634,14 +3634,13 @@ ApplicationWindow {
     component InspectorRow: Item {
         id: rowRoot
         property string label: ""
-        // ⚠️ 关键：把外部声明的子控件自动导入内部 controlArea，而非外层 Item
+        // 把外部子控件定向导入到内部 controlArea RowLayout
         default property alias controls: controlArea.data
         width: parent ? parent.width : 300
         height: Theme.inspectorRowHeight
         readonly property int controlAreaWidth: Math.max(80, width - Theme.inspectorLabelColWidth - Theme.inspectorColSpacing)
 
-        // === 静态设计规范直接引用 Theme 令牌（Theme.inspectorXxx），与 parent 属性链完全解耦 ===
-        // wSliderFill 为动态值，随面板宽度变化（Slider 需要操作长度，其他控件均为固定紧凑值）
+        // 静态规范全部走 Theme.inspectorXxx；wSliderFill 仅用于 Slider（需要操作长度）
         readonly property int wSliderFill: Math.max(60, controlAreaWidth - Theme.inspectorColSpacing - Theme.inspectorWSliderVB)
 
         BodyLabel {
@@ -3653,26 +3652,22 @@ ApplicationWindow {
             color: Theme.textMuted
             elide: Text.ElideRight
             font.pixelSize: 10
+            // ★ Figma/Photoshop 专业 Inspector 风格：Label 右对齐（贴 Label 列的右边界）
+            horizontalAlignment: Text.AlignRight
         }
 
-        // 控件区：Label 右边到行尾的区域。最左放 fill 占位项，外部控件依次在其右侧 → 全部靠右对齐
+        // ★ 控件区：从 Label 右边紧挨着开始，左对齐紧凑排列，不再 fill 中间空白 → 视觉上完全贴合，无大片空洞
+        // 这是 Figma / Sketch / Photoshop 属性面板的经典二列布局：Label 的右边界一条线，控件的左边界一条线
         RowLayout {
             id: controlArea
-            // ★ 双保险：把 InspectorRow 的动态值透传给 controlArea，
-            //   让外部控件即使继续用 parent.wSliderFill 也能查到
+            // wSliderFill 仍透传（Slider 行需要动态长度）
             property alias wSliderFill: rowRoot.wSliderFill
             anchors.left: rowLabel.right
             anchors.leftMargin: Theme.inspectorColSpacing
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.inspectorColSpacing
-
-            // 始终第一个子项：fill 中间空白 → 后续所有子控件被推到最右侧
-            Item {
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                Layout.minimumWidth: 0
-            }
+            // 不再有 fill 占位 Item → RowLayout 天然左对齐紧排所有子控件
         }
     }
 
