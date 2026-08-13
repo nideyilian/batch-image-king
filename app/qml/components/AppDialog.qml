@@ -15,6 +15,6 @@ Dialog {
         color: Theme.bgPanel
         border.width: 1
         border.color: Theme.borderStrong
-        radius: Theme.radius
+        radius: Theme.radiusSmall
     }
 }

@@ -19,17 +19,17 @@ Rectangle {
     implicitHeight: buttonHeight
     radius: Theme.radiusSmall
     color: {
-        if (!enabled) return ghost ? "transparent" : Theme.bgControl
+        if (!enabled) return ghost ? "transparent" : Theme.bgRaised
         if (ghost) return mouseArea.containsMouse ? Theme.bgHover : "transparent"
         if (mouseArea.pressed) return destructive ? Theme.danger : (primary ? Theme.accentPressed : Theme.bgHover)
-        if (mouseArea.containsMouse || activeFocus) return destructive ? Theme.danger : (primary ? Theme.accentHover : Theme.bgHover)
-        if (destructive) return Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.14)
-        return primary ? Theme.accent : Theme.bgRaised
+        if (mouseArea.containsMouse || activeFocus) return destructive ? Theme.errorSurface : (primary ? Theme.accentHover : Theme.bgHover)
+        if (destructive) return Theme.errorSurface
+        return primary ? Theme.accent : Theme.bgControl
     }
     border.width: ghost ? 0 : 1
     border.color: !enabled
                   ? Theme.border
-                  : (activeFocus ? Theme.focusRing : (destructive ? Theme.danger : (primary ? Theme.accent : Theme.borderStrong)))
+                  : (activeFocus ? Theme.focusRing : (destructive ? Theme.errorBorder : Theme.borderStrong))
     opacity: 1
     activeFocusOnTab: enabled
 
@@ -57,7 +57,7 @@ Rectangle {
                    ? Theme.textMuted
                    : (root.primary ? Theme.accentForeground : (root.destructive ? Theme.danger : Theme.textPrimary))
             font.family: Theme.bodyFont
-            font.pixelSize: 11
+            font.pixelSize: 12
             font.weight: Font.DemiBold
             anchors.verticalCenter: parent.verticalCenter
         }

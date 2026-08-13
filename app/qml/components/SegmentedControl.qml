@@ -66,14 +66,14 @@ Rectangle {
                 height: root.height - 4
                 radius: Math.max(2, 3)
                 enabled: root.enabled
-                color: root.value === modelData.value ? Theme.accentSoft : (segmentMouse.containsMouse ? Theme.bgHover : "transparent")
+                color: root.value === modelData.value ? Theme.accent : (segmentMouse.containsMouse ? Theme.bgHover : "transparent")
                 border.width: root.value === modelData.value ? 1 : 0
-                border.color: Theme.accentPressed
+                border.color: Theme.accent
 
                 Text {
                     anchors.fill: parent
                     text: parent.modelData.label
-                    color: root.value === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                    color: root.value === parent.modelData.value ? Theme.accentForeground : Theme.textSecondary
                     font.family: Theme.bodyFont
                     font.pixelSize: fillWidth ? 10 : 9
                     font.weight: root.value === parent.modelData.value ? Font.DemiBold : Font.Normal

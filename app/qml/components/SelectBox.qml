@@ -53,7 +53,7 @@ ComboBox {
 
         contentItem: Text {
             text: modelData.label
-            color: root.currentIndex === index ? Theme.accent : Theme.textSecondary
+            color: root.currentIndex === index ? Theme.textPrimary : Theme.textSecondary
             font.family: Theme.bodyFont
             font.pixelSize: 11
             font.weight: root.currentIndex === index ? Font.DemiBold : Font.Normal
@@ -63,7 +63,7 @@ ComboBox {
 
         background: Rectangle {
             radius: Theme.radiusSmall
-            color: root.currentIndex === parent.index ? Theme.accentSoft : (parent.highlighted ? Theme.bgHover : "transparent")
+            color: root.currentIndex === parent.index ? Theme.bgHover : (parent.highlighted ? Theme.bgHover : "transparent")
         }
     }
 

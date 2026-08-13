@@ -32,8 +32,8 @@ Rectangle {
         return "transparent"
     }
     border.width: activeFocus || (active && !primary) ? 1 : 0
-    border.color: activeFocus ? Theme.focusRing : (destructive ? Theme.danger : Theme.accentPressed)
-    opacity: enabled ? 1 : 0.52
+    border.color: activeFocus ? Theme.focusRing : (destructive ? Theme.errorBorder : Theme.borderStrong)
+    opacity: enabled ? 1 : 0.42
     activeFocusOnTab: enabled
 
     Behavior on color { ColorAnimation { duration: Theme.motionFast } }

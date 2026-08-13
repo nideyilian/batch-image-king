@@ -24,7 +24,7 @@ TextArea {
         radius: Theme.radiusSmall
         color: Theme.bgControl
         border.width: 1
-        border.color: root.invalid ? Theme.danger : (root.activeFocus ? Theme.focusRing : Theme.borderStrong)
+        border.color: root.invalid ? Theme.errorBorder : (root.activeFocus ? Theme.focusRing : Theme.borderStrong)
         Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
     }
 

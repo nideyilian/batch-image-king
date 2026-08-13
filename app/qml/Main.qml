@@ -25,6 +25,8 @@ ApplicationWindow {
 
     property int selectedLayer: workspace.selectedLayerIndex
     property int activeTool: 0
+    // Inspector tab state remains writable for launch probes and deep-link actions.
+    property int inspectorTab: 0
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
@@ -287,6 +289,12 @@ ApplicationWindow {
             if (inspectorScroll.contentItem)
                 inspectorScroll.contentItem.contentY = Math.max(0, textFontSection.y - 8)
         })
+    }
+
+    function selectInspectorTab(index) {
+        inspectorTab = Math.max(0, Math.min(1, Number(index)))
+        if (inspectorScroll && inspectorScroll.contentItem)
+            inspectorScroll.contentItem.contentX = 0
     }
 
     function revealTextContentEditing() {
@@ -4939,29 +4947,19 @@ ApplicationWindow {
         Rectangle {
             id: titleBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 44
+            Layout.preferredHeight: 66
             color: Theme.bgBar
-            border {
-                // —— Atelier Glass：顶部玻璃高光（1px 模拟 Mica Alt 上亮边）
-                width: 0
-                color: "transparent"
-            }
-
-            // 玻璃高光上边框 + 琥珀金下分隔线
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top;     height: 1; color: Theme.glassHighlight }
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.accent; opacity: 0.62 }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
-                spacing: 0
+                anchors.leftMargin: 18
+                anchors.rightMargin: 18
+                spacing: 16
 
                 Row {
-                    Layout.preferredWidth: 204
-                    spacing: 11
+                    Layout.preferredWidth: 250
+                    spacing: 12
 
-                    // —— 琥珀印房 LOGO：双层叠色「金+铜」徽章
                     Item {
                         width: 28
                         height: 28
@@ -4970,245 +4968,173 @@ ApplicationWindow {
                             width: 20; height: 20
                             anchors.left: parent.left
                             anchors.bottom: parent.bottom
-                            color: Theme.accent
-                            rotation: 8
-                            radius: 3
-                            border.width: 1
-                            border.color: Theme.accentPressed
+                            color: Theme.textPrimary
+                            rotation: 6
+                            radius: 1
                         }
                         Rectangle {
                             width: 15; height: 15
                             anchors.right: parent.right
                             anchors.top: parent.top
                             color: Theme.success
-                            rotation: -10
-                            radius: 3
-                            border.width: 1
-                            border.color: "#4aa678"
-                        }
-                        Rectangle {
-                            width: 5; height: 5
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            anchors.rightMargin: 1
-                            anchors.bottomMargin: 1
-                            color: Theme.info
-                            radius: 3
+                            rotation: -7
+                            radius: 1
                         }
                     }
 
-                    Text {
-                        height: 28
-                        text: "批图王"
-                        color: Theme.textPrimary
-                        font.family: Theme.displayFont
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                        verticalAlignment: Text.AlignVCenter
-                        font.letterSpacing: 0.5
-                    }
-                    Text {
-                        height: 28
-                        text: "· Amber"
-                        color: Theme.accent
-                        font.family: Theme.displayFont
-                        font.pixelSize: 12
-                        font.weight: Font.Medium
-                        verticalAlignment: Text.AlignVCenter
-                        opacity: 0.85
+                    Column {
+                        spacing: 2
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Text {
+                            text: "批图王"
+                            color: Theme.textPrimary
+                            font.family: Theme.displayFont
+                            font.pixelSize: 16
+                            font.weight: Font.DemiBold
+                        }
+                        Text {
+                            text: "Hermes-style desktop workspace  ·  batch-image-king"
+                            color: Theme.textMuted
+                            font.family: Theme.dataFont
+                            font.pixelSize: 9
+                            elide: Text.ElideRight
+                        }
                     }
                 }
 
-                // —— 菜单：悬停态改为琥珀金下划线高亮
                 Row {
-                    spacing: 18
-                    Layout.preferredWidth: 360
+                    spacing: 4
+                    Layout.fillWidth: true
 
-                    MenuLabel {
-                        height: 44; text: "文件"; hovered: fileMenuMouse.containsMouse
-                        color: hovered ? Theme.accent : Theme.textSecondary
-                        font.weight: hovered ? Font.DemiBold : Font.Normal
-                        MouseArea { id: fileMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: fileMenu.popup(parent, 0, parent.height) }
-                    }
-                    MenuLabel {
-                        height: 44; text: "编辑"; hovered: editMenuMouse.containsMouse
-                        color: hovered ? Theme.accent : Theme.textSecondary
-                        font.weight: hovered ? Font.DemiBold : Font.Normal
-                        MouseArea { id: editMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: editMenu.popup(parent, 0, parent.height) }
-                    }
-                    MenuLabel {
-                        height: 44; text: "图层"; hovered: layerMenuMouse.containsMouse
-                        color: hovered ? Theme.accent : Theme.textSecondary
-                        font.weight: hovered ? Font.DemiBold : Font.Normal
-                        MouseArea { id: layerMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: layerMenu.popup(parent, 0, parent.height) }
-                    }
-                    MenuLabel {
-                        height: 44; text: "画布"; hovered: canvasMenuMouse.containsMouse
-                        color: hovered ? Theme.accent : Theme.textSecondary
-                        font.weight: hovered ? Font.DemiBold : Font.Normal
-                        MouseArea { id: canvasMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: canvasMenu.popup(parent, 0, parent.height) }
-                    }
-                    MenuLabel {
-                        height: 44; text: "视图"; hovered: viewMenuMouse.containsMouse
-                        color: hovered ? Theme.accent : Theme.textSecondary
-                        font.weight: hovered ? Font.DemiBold : Font.Normal
-                        MouseArea { id: viewMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: viewMenu.popup(parent, 0, parent.height) }
-                    }
-                    MenuLabel {
-                        height: 44; text: "帮助"; hovered: helpMenuMouse.containsMouse
-                        color: hovered ? Theme.accent : Theme.textSecondary
-                        font.weight: hovered ? Font.DemiBold : Font.Normal
-                        MouseArea { id: helpMenuMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: helpMenu.popup(parent, 0, parent.height) }
+                    HermesNavItem { index: "01"; text: "工作台"; active: true; iconName: AppIcons.layers }
+                    HermesNavItem { index: "02"; text: "画布"; iconName: AppIcons.image; onClicked: window.openNewCanvasDialog() }
+                    HermesNavItem { index: "03"; text: "图层"; iconName: AppIcons.layers; onClicked: showToast(window.hasOpenDocument ? "图层面板已就绪" : "请先打开或新建文档") }
+                    HermesNavItem { index: "04"; text: "预设"; iconName: AppIcons.fileText; onClicked: window.openProjectPresetDrawer() }
+                    HermesNavItem { index: "05"; text: "导出"; iconName: AppIcons.exportAction; onClicked: window.openBatchExportDrawer() }
+                    HermesNavItem { index: "06"; text: "命令"; iconName: AppIcons.more; onClicked: commandMenu.popup() }
+                }
+
+                AppTextField {
+                    id: commandSearchField
+                    Layout.preferredWidth: 240
+                    Layout.preferredHeight: 32
+                    placeholderText: "搜索命令 / 文件 / 图层..."
+                    accessibleName: "搜索命令、文件和图层"
+                    Keys.onReturnPressed: {
+                        if (text.trim().length === 0) {
+                            showToast("请输入要查找的命令、文件或图层")
+                        } else {
+                            showToast("搜索：" + text.trim())
+                        }
                     }
                 }
 
-                Item { Layout.fillWidth: true }
+                AppButton {
+                    Layout.preferredWidth: 116
+                    text: "档案  default"
+                    variant: "secondary"
+                    onClicked: showToast("当前档案：default")
+                }
 
-                Row {
-                    spacing: 8
-
-                    // —— 快速预览胶囊：琥珀印房风格
-                    Rectangle {
-                        width: gpuRow.width + 20
-                        height: 28
-                        radius: 14
-                        color: Theme.glassFill
-                        border { width: 1; color: Theme.glassHighlight }
-
-                        // 琥珀柔光内边
-                        Rectangle { anchors.fill: parent; radius: 14; color: "transparent"; border.width: 1; border.color: Theme.amberGlow; opacity: 0.5 }
-
-                        Row {
-                            id: gpuRow
-                            anchors.centerIn: parent
-                            spacing: 8
-                            Rectangle { width: 7; height: 7; radius: 4; color: Theme.accent; anchors.verticalCenter: parent.verticalCenter
-                                Rectangle { width: 3; height: 3; radius: 2; anchors.centerIn: parent; color: Theme.textPrimary }
-                            }
-                            BodyLabel { text: "快速预览 · 就绪"; color: Theme.textSecondary; height: 20; font.pixelSize: 10 }
-                        }
-                    }
-
+                IconButton {
+                    iconName: AppIcons.settings
+                    tooltip: "界面设置"
+                    buttonSize: 32
+                    onClicked: showToast("界面设置已预留")
                 }
             }
+
+            Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
+        }
+
+        AppMenu {
+            id: commandMenu
+            width: 250
+            ShapeMenuItem { text: "打开项目"; onTriggered: openDialog.open() }
+            ShapeMenuItem { text: "保存当前项目"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+            MenuSeparator { }
+            ShapeMenuItem { text: "新建画布"; onTriggered: window.openNewCanvasDialog() }
+            ShapeMenuItem { text: "添加文字图层"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+            ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
+            MenuSeparator { }
+            ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
+            ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
+            ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
         }
 
         Rectangle {
             id: commandBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
+            Layout.preferredHeight: 54
             color: Theme.bgPanel
-            // —— Atelier Glass 玻璃高光层次
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top;     height: 1; color: Theme.glassHighlight }
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.glassShadow }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 14
-                spacing: 8
+                anchors.leftMargin: 10
+                anchors.rightMargin: 12
+                spacing: 6
 
-                // —— 分组 1：文件操作（玻璃胶囊）
-                Rectangle {
-                    Layout.preferredWidth: fileGroupRow.width + 10
-                    Layout.preferredHeight: 38
-                    radius: 10
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight }
+                IconButton {
+                    iconName: AppIcons.folderOpen
+                    tooltip: "打开项目"
+                    visible: window.hasOpenDocument
+                    enabled: !workspace.operationsBlocked
+                    onClicked: openDialog.open()
+                }
+                IconButton {
+                    iconName: AppIcons.save
+                    tooltip: "保存"
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
+                }
+                IconButton {
+                    iconName: AppIcons.fileText
+                    tooltip: "项目预设"
+                    enabled: !workspace.operationsBlocked
+                    onClicked: window.openProjectPresetDrawer()
+                }
+                IconButton {
+                    iconName: AppIcons.link
+                    tooltip: "图层绑定管理"
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: window.openDataRelations(0)
+                }
+                IconButton {
+                    iconName: AppIcons.fitView
+                    tooltip: "图层尺寸匹配"
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: window.openDataRelations(1)
+                }
+                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+                IconButton { iconName: AppIcons.undo; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
+                IconButton { iconName: AppIcons.redo; tooltip: "重做"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
+                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
-                    Row {
-                        id: fileGroupRow
-                        anchors.centerIn: parent
-                        spacing: 0
-                        IconButton {
-                            iconName: AppIcons.folderOpen
-                            tooltip: "打开项目"
-                            visible: window.hasOpenDocument
-                            enabled: !workspace.operationsBlocked
-                            onClicked: openDialog.open()
-                        }
-                        IconButton {
-                            iconName: AppIcons.save
-                            tooltip: "保存"
-                            enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                            onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
-                        }
-                        IconButton {
-                            iconName: AppIcons.fileText
-                            tooltip: "项目预设"
-                            enabled: !workspace.operationsBlocked
-                            onClicked: window.openProjectPresetDrawer()
-                        }
-                        IconButton {
-                            iconName: AppIcons.link
-                            tooltip: "图层绑定管理"
-                            enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                            onClicked: window.openDataRelations(0)
-                        }
-                        IconButton {
-                            iconName: AppIcons.fitView
-                            tooltip: "图层尺寸匹配"
-                            enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                            onClicked: window.openDataRelations(1)
-                        }
-                    }
+                AppButton {
+                    Layout.preferredWidth: 106
+                    text: "新建图层"
+                    iconName: AppIcons.imageAdd
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: workspace.addEmptyImageLayer()
                 }
 
-                // 撤销/重做 小胶囊
-                Rectangle {
-                    Layout.preferredWidth: undoRedoRow.width + 8
-                    Layout.preferredHeight: 38
-                    radius: 10
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight }
-
-                    Row {
-                        id: undoRedoRow
-                        anchors.centerIn: parent
-                        spacing: 0
-                        IconButton { iconName: AppIcons.undo; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
-                        IconButton { iconName: AppIcons.redo; tooltip: "重做"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
-                    }
+                IconButton { iconName: AppIcons.type; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
+                IconButton {
+                    iconName: AppIcons.shapes
+                    tooltip: "添加异形图层"
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: shapedLayerDialog.openFresh()
                 }
+                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
-                // —— 分组 2：图层添加区
                 Rectangle {
-                    Layout.preferredWidth: addLayerRow.width + 10
-                    Layout.preferredHeight: 38
-                    radius: 10
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight }
-
-                    Row {
-                        id: addLayerRow
-                        anchors.centerIn: parent
-                        spacing: 2
-                        AppButton {
-                            Layout.preferredWidth: 106
-                            text: "新建图层"
-                            iconName: AppIcons.imageAdd
-                            enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                            onClicked: workspace.addEmptyImageLayer()
-                        }
-                        IconButton { iconName: AppIcons.type; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
-                        IconButton {
-                            iconName: AppIcons.shapes
-                            tooltip: "添加异形图层"
-                            enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                            onClicked: shapedLayerDialog.openFresh()
-                        }
-                    }
-                }
-
-                // —— 分组 3：对齐工具组（琥珀玻璃强调）
-                Rectangle {
-                    Layout.preferredWidth: alignmentTools.width + 12
-                    Layout.preferredHeight: 38
-                    radius: 11
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.accent; opacity: 0.45 }
-                    // 琥珀柔光边缘
-                    Rectangle { anchors.fill: parent; radius: 11; color: "transparent"; border.width: 1; border.color: Theme.amberGlow; opacity: 0.35 }
+                    Layout.preferredWidth: alignmentTools.width + 8
+                    Layout.preferredHeight: 32
+                    radius: Theme.radiusSmall
+                    color: Theme.bgBar
+                    border.width: 1
+                    border.color: Theme.border
 
                     Row {
                         id: alignmentTools
@@ -5235,7 +5161,6 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true }
 
-                // —— 分组 4：导出区
                 AppButton {
                     Layout.preferredWidth: 92
                     text: "预览"
@@ -5247,7 +5172,7 @@ ApplicationWindow {
                 IconButton {
                     iconName: AppIcons.exportAction
                     tooltip: "导出当前画面"
-                    buttonSize: 34
+                    buttonSize: 32
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: exportDialog.open()
                 }
@@ -5255,58 +5180,22 @@ ApplicationWindow {
                 IconButton {
                     iconName: AppIcons.listChecks
                     tooltip: "多标签批量导出"
-                    buttonSize: 34
+                    buttonSize: 32
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running)
                     onClicked: window.openMultiTabExportDrawer()
                 }
 
-                // —— 主 CTA：琥珀金渐变「批量导出」按钮
-                Rectangle {
-                    Layout.preferredWidth: 120
-                    Layout.preferredHeight: 38
-                    radius: 10
+                AppButton {
+                    Layout.preferredWidth: 112
+                    text: "批量导出"
+                    iconName: AppIcons.exportAction
+                    variant: "primary"
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running)
-                    opacity: enabled ? 1 : 0.48
-
-                    // 琥珀金渐变
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: Theme.accentPressed }
-                        GradientStop { position: 0.5; color: Theme.accent }
-                        GradientStop { position: 1; color: Theme.accentHover }
-                    }
-                    border { width: 1; color: Theme.amberGlow; opacity: 0.65 }
-
-                    // 顶高光
-                    Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1; radius: 10; color: "#ffffff"; opacity: 0.20 }
-
-                    Row {
-                        id: batchRow
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Glyph {
-                            glyph: AppIcons.exportAction
-                            color: "#1c1405"
-                            size: 15
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Text {
-                            text: "批量导出"
-                            color: "#1c1405"
-                            font.family: Theme.interfaceFont
-                            font.pixelSize: 13
-                            font.weight: Font.Bold
-                            verticalAlignment: Text.AlignVCenter
-                            height: 20
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: if (enabled) window.openBatchExportDrawer()
-                    }
+                    onClicked: window.openBatchExportDrawer()
                 }
             }
+
+            Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
         }
 
         Rectangle {
@@ -5314,11 +5203,8 @@ ApplicationWindow {
             enabled: !workspace.operationsBlocked
             opacity: enabled ? 1 : 0.55
             Layout.fillWidth: true
-            Layout.preferredHeight: 40
+            Layout.preferredHeight: 36
             color: Theme.bgBar
-            // 玻璃高光层次
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top;     height: 1; color: Theme.glassHighlight; opacity: 0.6 }
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.glassShadow; opacity: 0.8 }
 
             RowLayout {
                 anchors.fill: parent
@@ -5333,87 +5219,43 @@ ApplicationWindow {
                     orientation: ListView.Horizontal
                     boundsBehavior: Flickable.StopAtBounds
                     clip: true
-                    spacing: 2
+                    spacing: 1
                     model: workspaceSessions
                     currentIndex: workspaceSessions.activeIndex
 
-                    delegate: Item {
+                    delegate: Rectangle {
                         id: documentTab
                         required property int index
                         required property string title
                         required property bool modified
                         required property bool active
 
-                        width: Math.min(244, Math.max(156, tabTitle.implicitWidth + 72))
-                        height: 40
+                        width: Math.min(240, Math.max(150, tabTitle.implicitWidth + 70))
+                        height: 36
+                        color: active ? Theme.bgCanvas : (tabMouse.containsMouse ? Theme.bgRaised : Theme.bgBar)
 
-                        // 标签容器：活动态→玻璃+琥珀发光
                         Rectangle {
-                            anchors.fill: parent
-                            anchors.topMargin: 4
-                            anchors.leftMargin: 2
-                            anchors.rightMargin: 2
-                            anchors.bottomMargin: 0
-                            radius: 9
-                            radius: documentTab.active ? 9 : 8
-                            color: documentTab.active
-                                ? Theme.glassFill
-                                : (tabMouse.containsMouse ? Theme.bgPanel : "transparent")
-                            border {
-                                width: documentTab.active ? 1 : 0
-                                color: Theme.accent
-                                opacity: documentTab.active ? 0.55 : 0
-                            }
-                            // 琥珀柔光
-                            Rectangle {
-                                visible: documentTab.active
-                                anchors.fill: parent
-                                radius: 9
-                                color: "transparent"
-                                border { width: 1; color: Theme.amberGlow; opacity: 0.35 }
-                            }
-                        }
-
-                        // —— 琥珀金活动指示条（发光渐变）
-                        Rectangle {
-                            visible: documentTab.active
-                            anchors.left: parent.left; anchors.leftMargin: 8
-                            anchors.right: parent.right; anchors.rightMargin: 8
-                            anchors.bottom: parent.bottom
-                            height: 3
-                            radius: 1
-                            gradient: Gradient {
-                                GradientStop { position: 0; color: Theme.accentPressed }
-                                GradientStop { position: 0.5; color: Theme.accent }
-                                GradientStop { position: 1; color: Theme.accentHover }
-                            }
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            height: 2
+                            color: documentTab.active ? Theme.accent : "transparent"
                         }
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 14
-                            anchors.rightMargin: 6
-                            anchors.topMargin: 4
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 5
                             spacing: 7
-
-                            // 修改点：琥珀脉冲
-                            Rectangle {
-                                Layout.preferredWidth: 7
-                                Layout.preferredHeight: 7
-                                radius: 4
-                                color: Theme.accent
-                                visible: documentTab.modified
-                                Rectangle { anchors.centerIn: parent; width: 3; height: 3; radius: 2; color: "#fff6d6" }
-                            }
+                            Rectangle { Layout.preferredWidth: 6; Layout.preferredHeight: 6; radius: 3; color: Theme.amber; visible: documentTab.modified }
                             Text {
                                 id: tabTitle
                                 Layout.fillWidth: true
                                 text: documentTab.title
-                                color: documentTab.active ? Theme.textPrimary : (tabMouse.containsMouse ? Theme.textSecondary : Theme.textTertiary)
+                                color: documentTab.active ? Theme.textPrimary : Theme.textSecondary
                                 font.family: Theme.bodyFont
-                                font.pixelSize: 11.5
-                                font.weight: documentTab.active ? Font.DemiBold : Font.Medium
-                                font.letterSpacing: documentTab.active ? 0.1 : 0
+                                font.pixelSize: 11
+                                font.weight: documentTab.active ? Font.DemiBold : Font.Normal
                                 elide: Text.ElideMiddle
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -5447,31 +5289,17 @@ ApplicationWindow {
                     }
                 }
 
-                // 新建文档按钮（胶囊化）
-                Rectangle {
+                IconButton {
+                    iconName: AppIcons.add
+                    tooltip: "新建文档"
+                    buttonSize: 36
+                    Layout.preferredWidth: 40
                     visible: window.hasOpenDocument
-                    Layout.preferredWidth: 36
-                    Layout.preferredHeight: 32
-                    radius: 8
-                    color: newDocMouse.containsMouse ? Theme.bgPanel : Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight }
-
-                    Glyph {
-                        anchors.centerIn: parent
-                        glyph: AppIcons.add
-                        color: Theme.textSecondary
-                        size: 14
-                    }
-                    MouseArea {
-                        id: newDocMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: window.openNewCanvasDialog()
-                    }
+                    onClicked: window.openNewCanvasDialog()
                 }
-                Item { Layout.preferredWidth: 8; visible: window.hasOpenDocument }
             }
+
+            Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
         }
 
         RowLayout {
@@ -5484,179 +5312,64 @@ ApplicationWindow {
 
             Rectangle {
                 id: toolRail
-                Layout.preferredWidth: 52
+                Layout.preferredWidth: 48
                 Layout.fillHeight: true
                 color: Theme.bgBar
-
-                // Atelier Glass 边框层次
-                Rectangle { anchors.top: parent.top;    anchors.bottom: parent.bottom; anchors.left: parent.left;  width: 1; color: Theme.glassHighlight; opacity: 0.5 }
-                Rectangle { anchors.top: parent.top;    anchors.bottom: parent.bottom; anchors.right: parent.right; width: 1; color: Theme.glassShadow; opacity: 0.85 }
 
                 Column {
                     anchors.top: parent.top
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.topMargin: 12
-                    spacing: 6
+                    anchors.topMargin: 10
+                    spacing: 5
 
-                    // 顶部：琥珀金工具激活指示点
                     ToolRailButton { toolIndex: 0; iconName: AppIcons.pointer; label: "选择工具 (V)"; enabled: window.hasOpenDocument }
                     ToolRailButton { toolIndex: 1; iconName: AppIcons.hand; label: "抓手工具 (H)"; enabled: window.hasOpenDocument }
-
-                    // 工具分组分隔
-                    Rectangle { width: 24; height: 1; color: Theme.glassShadow; opacity: 0.7; anchors.horizontalCenter: parent.horizontalCenter }
-
-                    // 视图缩放快速工具（图标形式放中间）
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 9
-                        color: canvasFitMouse.containsMouse ? Theme.bgRaised : "transparent"
-                        border { width: canvasFitMouse.containsMouse ? 1 : 0; color: Theme.glassHighlight }
-                        Glyph {
-                            anchors.centerIn: parent
-                            glyph: AppIcons.fitView
-                            size: 15
-                            color: Theme.textSecondary
-                        }
-                        ToolTip { text: "缩放到画板 (Ctrl+0)"; visible: canvasFitMouse.containsMouse }
-                        MouseArea { id: canvasFitMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: if (window.hasOpenDocument) workspace.zoomToFit()
-                        }
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 9
-                        color: zoomInMouse.containsMouse ? Theme.bgRaised : "transparent"
-                        Glyph {
-                            anchors.centerIn: parent
-                            glyph: AppIcons.plus
-                            size: 15
-                            color: Theme.textSecondary
-                        }
-                        ToolTip { text: "放大 (Ctrl++)"; visible: zoomInMouse.containsMouse }
-                        MouseArea { id: zoomInMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: if (window.hasOpenDocument) workspace.zoomIn()
-                        }
-                    }
-                    Rectangle {
-                        width: 36
-                        height: 36
-                        radius: 9
-                        color: zoomOutMouse.containsMouse ? Theme.bgRaised : "transparent"
-                        Glyph {
-                            anchors.centerIn: parent
-                            glyph: AppIcons.minus
-                            size: 15
-                            color: Theme.textSecondary
-                        }
-                        ToolTip { text: "缩小 (Ctrl+-)"; visible: zoomOutMouse.containsMouse }
-                        MouseArea { id: zoomOutMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: if (window.hasOpenDocument) workspace.zoomOut()
-                        }
-                    }
                 }
 
                 Column {
                     anchors.bottom: parent.bottom
                     anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottomMargin: 12
-                    spacing: 8
+                    anchors.bottomMargin: 10
+                    spacing: 6
 
-                    // 主题色板 + 琥珀发光边
                     Rectangle {
-                        width: 28; height: 28; radius: 7
-                        color: Theme.swatchSurface
-                        border { width: 1; color: Theme.accent; opacity: 0.6 }
-                        // 琥珀柔光层
-                        Rectangle { anchors.fill: parent; radius: 7; color: "transparent"; border.width: 1; border.color: Theme.amberGlow; opacity: 0.4 }
-                        Rectangle { width: 16; height: 16; anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 3; color: Theme.accent; radius: 3; border.width: 1; border.color: Theme.swatchAccentBorder }
-                        Rectangle { width: 16; height: 16; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; color: Theme.swatchPaper; radius: 3; border.width: 1; border.color: Theme.borderStrong }
-                    }
-
-                    // 网格参考线快速切换
-                    Rectangle {
-                        width: 30; height: 30; radius: 8
-                        color: toggleGridMouse.containsMouse ? Theme.bgRaised : "transparent"
-                        Glyph {
-                            anchors.centerIn: parent
-                            glyph: AppIcons.grid2x2
-                            size: 14
-                            color: Theme.textMuted
-                        }
-                        ToolTip { text: "切换网格"; visible: toggleGridMouse.containsMouse }
-                        MouseArea { id: toggleGridMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                            onClicked: if (window.hasOpenDocument) workspace.toggleGrid()
-                        }
+                        width: 26; height: 26; radius: 4; color: Theme.swatchSurface; border.width: 1; border.color: Theme.borderStrong
+                        Rectangle { width: 15; height: 15; anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 3; color: Theme.accent; border.width: 1; border.color: Theme.swatchAccentBorder }
+                        Rectangle { width: 15; height: 15; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 3; color: Theme.swatchPaper; border.width: 1; border.color: Theme.borderStrong }
                     }
                 }
+
+                Divider { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right }
             }
 
             Rectangle {
                 id: layerPanel
-                Layout.preferredWidth: window.width < 1320 ? 256 : 288
+                Layout.preferredWidth: window.width < 1320 ? 246 : 276
                 Layout.fillHeight: true
                 color: Theme.bgPanel
-
-                // —— Atelier Glass 边框层次
-                Rectangle { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right; width: 1; color: Theme.glassShadow }
 
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
 
-                    // 标题栏：琥珀金 + 玻璃态
-                    Rectangle {
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 46
-                        color: Theme.glassFill
-                        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top;     height: 1; color: Theme.glassHighlight; opacity: 0.7 }
-                        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.glassShadow; opacity: 0.8 }
+                        Layout.preferredHeight: 44
+                        Layout.leftMargin: 12
+                        Layout.rightMargin: 10
+                        spacing: 6
 
-                        RowLayout {
-                            anchors.fill: parent
-                            Layout.leftMargin: 14
-                            Layout.rightMargin: 10
-                            spacing: 8
-
-                            // 琥珀金装饰条
-                            Rectangle {
-                                Layout.preferredWidth: 3
-                                Layout.preferredHeight: 16
-                                radius: 2
-                                gradient: Gradient {
-                                    GradientStop { position: 0; color: Theme.accentPressed }
-                                    GradientStop { position: 1; color: Theme.accentHover }
-                                }
-                            }
-                            Text {
-                                text: "图层"
-                                color: Theme.textPrimary
-                                font.family: Theme.displayFont
-                                font.pixelSize: 13
-                                font.weight: Font.DemiBold
-                                font.letterSpacing: 0.4
-                                Layout.fillWidth: true
-                            }
-                            // 图层计数胶囊
-                            Rectangle {
-                                Layout.preferredHeight: 20
-                                Layout.preferredWidth: layerCountText.width + 14
-                                radius: 10
-                                color: Theme.accentSoft
-                                border { width: 1; color: Theme.accent; opacity: 0.35 }
-                                Text {
-                                    id: layerCountText
-                                    anchors.centerIn: parent
-                                    text: workspace.layerCount + " 层"
-                                    color: Theme.amber
-                                    font.family: Theme.interfaceFont
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                }
-                            }
+                        Text {
+                            text: "图层"
+                            color: Theme.textPrimary
+                            font.family: Theme.displayFont
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            Layout.fillWidth: true
                         }
                     }
+
+                    Divider { Layout.fillWidth: true }
 
                     ListView {
                         id: layerList
@@ -5667,7 +5380,7 @@ ApplicationWindow {
                         currentIndex: -1
                         boundsBehavior: Flickable.StopAtBounds
 
-                        delegate: Item {
+                        delegate: Rectangle {
                             id: layerDelegate
                             required property int index
                             required property string name
@@ -5684,55 +5397,16 @@ ApplicationWindow {
                             required property int layerIndex
 
                             width: layerList.width
-                            height: parentExpanded ? 62 : 0
+                            height: parentExpanded ? 58 : 0
                             visible: parentExpanded
+                            color: selected ? Theme.bgSelected : (layerMouse.containsMouse ? Theme.bgRaised : "transparent")
 
-                            // 内层卡片：选中态 → 琥珀玻璃胶囊；悬停态 → 浅色高亮
                             Rectangle {
-                                id: layerCard
-                                anchors.fill: parent
-                                anchors.topMargin: 2
-                                anchors.bottomMargin: 2
-                                anchors.leftMargin: 6
-                                anchors.rightMargin: 6
-                                radius: 10
-
-                                color: layerDelegate.selected
-                                    ? Theme.glassFill
-                                    : (layerMouse.containsMouse ? Theme.bgRaised : "transparent")
-
-                                border {
-                                    width: layerDelegate.selected ? 1 : (layerMouse.containsMouse ? 1 : 0)
-                                    color: layerDelegate.selected ? Theme.accent : Theme.glassHighlight
-                                    opacity: layerDelegate.selected ? 0.55 : (layerMouse.containsMouse ? 0.8 : 0)
-                                }
-
-                                // 选中态的琥珀发光边
-                                Rectangle {
-                                    visible: layerDelegate.selected
-                                    anchors.fill: parent
-                                    radius: 10
-                                    color: "transparent"
-                                    border { width: 1; color: Theme.amberGlow; opacity: 0.3 }
-                                }
-
-                                // 左侧琥珀金渐变指示条（选中态）
-                                Rectangle {
-                                    visible: layerDelegate.selected
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: 5
-                                    anchors.top: parent.top
-                                    anchors.topMargin: 9
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: 9
-                                    width: 3
-                                    radius: 2
-                                    gradient: Gradient {
-                                        GradientStop { position: 0; color: Theme.accentPressed }
-                                        GradientStop { position: 0.5; color: Theme.accent }
-                                        GradientStop { position: 1; color: Theme.accentHover }
-                                    }
-                                }
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 2
+                                color: selected ? Theme.accent : "transparent"
                             }
 
                             IconButton {
@@ -5966,60 +5640,6 @@ ApplicationWindow {
                 Layout.fillHeight: true
                 color: Theme.bgCanvas
                 clip: true
-
-                // —— 画布背景层：1) 点阵网格  2) 琥珀金暗色渐变晕染
-                Item {
-                    anchors.fill: parent
-                    visible: window.hasOpenDocument
-                    z: -1
-
-                    // 点阵网格（12px spacing · workbench 风格）
-                    Repeater {
-                        id: gridDotsX
-                        model: Math.ceil(parent.width / 16) + 2
-                        delegate: Repeater {
-                            property int colIdx: index
-                            model: Math.ceil(canvasWorkspace.height / 16) + 2
-                            delegate: Rectangle {
-                                required property int colIdx
-                                x: colIdx * 16 + 8
-                                y: index * 16 + 8
-                                width: 1; height: 1
-                                radius: 1
-                                color: Theme.glassHighlight
-                                opacity: 0.28
-                            }
-                        }
-                    }
-
-                    // 琥珀金暗色径向晕染（左上角 + 右下角）
-                    Rectangle {
-                        width: 520; height: 520
-                        radius: 260
-                        opacity: 0.18
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.leftMargin: -260
-                        anchors.topMargin: -260
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: Theme.accent }
-                            GradientStop { position: 1; color: "transparent" }
-                        }
-                    }
-                    Rectangle {
-                        width: 620; height: 620
-                        radius: 310
-                        opacity: 0.12
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.rightMargin: -310
-                        anchors.bottomMargin: -310
-                        gradient: Gradient {
-                            GradientStop { position: 0; color: Theme.success }
-                            GradientStop { position: 1; color: "transparent" }
-                        }
-                    }
-                }
 
                 property real safeCanvasWidth: Math.max(1, workspace.canvasWidth)
                 property real safeCanvasHeight: Math.max(1, workspace.canvasHeight)
@@ -6408,31 +6028,6 @@ ApplicationWindow {
                     anchors.horizontalCenterOffset: workspace.viewOffsetX
                     anchors.verticalCenterOffset: workspace.viewOffsetY
 
-                    // —— 琥珀金外发光投影（画板阴影层）
-                    Rectangle {
-                        id: artboardShadow
-                        anchors.fill: parent
-                        anchors.leftMargin: -3
-                        anchors.rightMargin: -3
-                        anchors.topMargin: -3
-                        anchors.bottomMargin: -3
-                        color: "transparent"
-                        border { width: 4; color: Theme.amberGlow; opacity: 0.22 }
-                        radius: 1
-                    }
-                    // 第二层柔和阴影
-                    Rectangle {
-                        id: artboardShadow2
-                        anchors.fill: parent
-                        anchors.leftMargin: -6
-                        anchors.rightMargin: -6
-                        anchors.topMargin: -6
-                        anchors.bottomMargin: -6
-                        color: "transparent"
-                        border { width: 6; color: Theme.glassShadow; opacity: 0.28 }
-                        radius: 1
-                    }
-
                     Rectangle {
                         id: artboard
                         objectName: "artboard"
@@ -6441,31 +6036,8 @@ ApplicationWindow {
                         scale: canvasWorkspace.actualScale
                         transformOrigin: Item.TopLeft
                         color: Theme.canvasPaper
-
-                        // —— 琥珀金画板边框（内 1px 纸边 + 外 1px 琥珀发光）
-                        border { width: 1; color: Theme.accent; opacity: 0.9 }
-
-                        // 外发光层（琥珀柔光）
-                        Rectangle {
-                            anchors.fill: parent
-                            color: "transparent"
-                            border { width: 1; color: Theme.amberGlow; opacity: 0.4 }
-                            z: 30
-                        }
-                        // 画板内部的顶高光（纸张质感）
-                        Rectangle {
-                            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-                            height: 1
-                            color: "#ffffff"
-                            opacity: 0.08
-                        }
-                        // 画板内部的左侧高光
-                        Rectangle {
-                            anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left
-                            width: 1
-                            color: "#ffffff"
-                            opacity: 0.06
-                        }
+                        border.width: 1
+                        border.color: Theme.canvasPaperBorder
 
                         Image {
                             id: documentPreview
@@ -7579,134 +7151,61 @@ ApplicationWindow {
 
             Rectangle {
                 id: inspector
-                Layout.preferredWidth: window.width < 1320 ? 312 : 348
+                Layout.preferredWidth: window.width < 1320 ? 302 : 336
                 Layout.fillHeight: true
                 color: Theme.bgPanel
-
-                // Atelier Glass 边框层次
-                Rectangle { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left; width: 1; color: Theme.glassHighlight; opacity: 0.5 }
 
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
 
-                    // —— Inspector 标题栏：琥珀金 + 玻璃态
-                    Rectangle {
+                    Item {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 58
-                        color: Theme.glassFill
+                        Layout.preferredHeight: 56
 
-                        // 玻璃高光层次
-                        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top;     height: 1; color: Theme.glassHighlight; opacity: 0.7 }
-                        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.glassShadow; opacity: 0.8 }
-
-                        RowLayout {
-                            anchors.fill: parent
+                        Column {
+                            anchors.left: parent.left
                             anchors.leftMargin: 14
-                            anchors.rightMargin: 14
-                            spacing: 10
-
-                            // 琥珀金装饰条
-                            Rectangle {
-                                Layout.preferredWidth: 3
-                                Layout.preferredHeight: 20
-                                radius: 2
-                                gradient: Gradient {
-                                    GradientStop { position: 0; color: Theme.accentPressed }
-                                    GradientStop { position: 1; color: Theme.accentHover }
-                                }
-                            }
-
-                            Column {
-                                Layout.fillWidth: true
-                                spacing: 3
-                                Text {
-                                    text: activeLayerName
-                                    color: Theme.textPrimary
-                                    font.family: Theme.displayFont
-                                    font.pixelSize: 13.5
-                                    font.weight: Font.DemiBold
-                                    font.letterSpacing: 0.2
-                                }
-                                Row { spacing: 6
-                                    TinyLabel {
-                                        text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层" : "图层"
-                                        color: Theme.textMuted
-                                        height: 15
-                                    }
-                                    Rectangle {
-                                        visible: selectedLayer >= 0
-                                        width: 1; height: 10
-                                        color: Theme.border
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        opacity: 0.6
-                                    }
-                                    TinyLabel {
-                                        visible: selectedLayer >= 0
-                                        text: "#" + (selectedLayer + 1)
-                                        color: Theme.amber
-                                        height: 15
-                                        font.weight: Font.DemiBold
-                                    }
-                                }
-                            }
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 3
+                            Text { text: activeLayerName; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 13; font.weight: Font.DemiBold }
+                            TinyLabel { text: selectedLayer >= 0 ? workspace.selectedLayerType + "图层  ·  #" + (selectedLayer + 1) : "图层"; height: 15 }
                         }
+
                     }
 
-                    // —— Inspector Tab 栏：琥珀胶囊样式
-                    Rectangle {
+                    Divider { Layout.fillWidth: true }
+
+                    Row {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 36
-                        color: "transparent"
+                        Layout.preferredHeight: 26
 
-                        Row {
-                            id: inspectorTabsRow
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 10
-                            anchors.topMargin: 5
-                            spacing: 4
-
-                            Repeater {
-                                model: ["基本参数", "更多参数"]
-                                delegate: Rectangle {
-                                    required property int index
-                                    required property string modelData
-                                    width: (inspectorTabsRow.width - 4) / 2
-                                    height: 26
-                                    radius: 9
-
-                                    // 活动 Tab：琥珀玻璃胶囊
-                                    color: inspectorTab === index ? Theme.glassFill : "transparent"
-                                    border {
-                                        width: inspectorTab === index ? 1 : (tabMouse.containsMouse ? 1 : 0)
-                                        color: inspectorTab === index ? Theme.accent : Theme.glassHighlight
-                                        opacity: inspectorTab === index ? 0.55 : 0.75
-                                    }
-                                    // 琥珀发光
-                                    Rectangle {
-                                        visible: inspectorTab === index
-                                        anchors.fill: parent; radius: 9
-                                        color: "transparent"
-                                        border { width: 1; color: Theme.amberGlow; opacity: 0.35 }
-                                    }
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData
-                                        color: inspectorTab === index ? Theme.textPrimary : (tabMouse.containsMouse ? Theme.textSecondary : Theme.textMuted)
-                                        font.family: Theme.bodyFont
-                                        font.pixelSize: 10.5
-                                        font.weight: inspectorTab === index ? Font.DemiBold : Font.Medium
-                                    }
-                                    MouseArea {
-                                        id: tabMouse
-                                        anchors.fill: parent
-                                        enabled: parent.enabled
-                                        hoverEnabled: true
-                                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                        onClicked: window.selectInspectorTab(index)
-                                    }
+                        Repeater {
+                            model: ["基本参数", "更多参数"]
+                            delegate: Rectangle {
+                                required property int index
+                                required property string modelData
+                                width: inspector.width / 2
+                                height: 26
+                                color: "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData
+                                    color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted
+                                    font.family: Theme.bodyFont
+                                    font.pixelSize: 10
+                                    font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal
+                                    opacity: inspectorTab === index ? 1.0 : 0.7
                                 }
+                                Rectangle {
+                                    anchors.left: parent.left; anchors.leftMargin: 12
+                                    anchors.right: parent.right; anchors.rightMargin: 12
+                                    anchors.bottom: parent.bottom
+                                    height: 2
+                                    visible: inspectorTab === index
+                                    color: inspectorTab === index ? Theme.accent : "transparent"
+                                }
+                                MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.selectInspectorTab(index) }
                             }
                         }
                     }
@@ -9809,175 +9308,66 @@ ApplicationWindow {
         Rectangle {
             id: statusBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: 28
             color: Theme.bgBar
-
-            // —— Atelier Glass 层次
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top;     height: 1; color: Theme.glassHighlight; opacity: 0.6 }
-            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 1; color: Theme.glassShadow }
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 14
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 12
 
-                // —— 状态栏指示点（琥珀脉冲）
                 Row {
-                    spacing: 8
-                    Item {
-                        width: 10; height: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        Rectangle {
-                            id: statusPulse
-                            width: 10; height: 10
-                            radius: 5
-                            color: !window.hasOpenDocument ? Theme.textMuted : (workspace.busy ? Theme.accent : Theme.success)
-                            Rectangle { anchors.centerIn: parent; width: 4; height: 4; radius: 2; color: "#ffffff"; opacity: 0.55 }
-                        }
-                    }
-                    BodyLabel { text: window.hasOpenDocument ? workspace.statusMessage : "没有打开的文档"; color: Theme.textSecondary; height: 30; font.pixelSize: 10.5 }
+                    spacing: 6
+                    Rectangle { width: 6; height: 6; radius: 3; color: !window.hasOpenDocument ? Theme.textMuted : (workspace.busy ? Theme.amber : Theme.success); anchors.verticalCenter: parent.verticalCenter }
+                    TinyLabel { text: window.hasOpenDocument ? workspace.statusMessage : "没有打开的文档"; color: Theme.textSecondary; height: 28 }
                 }
-
-                // 分隔：竖线胶囊
-                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: Theme.glassShadow; opacity: 0.7; visible: window.hasOpenDocument }
-
-                // 颜色空间胶囊
-                Rectangle {
-                    Layout.preferredHeight: 20
-                    Layout.preferredWidth: colorSpaceText.width + 16
-                    radius: 10
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight; opacity: 0.6 }
-                    visible: window.hasOpenDocument
-                    Text {
-                        id: colorSpaceText
-                        anchors.centerIn: parent
-                        text: "RGBA · sRGB"
-                        color: Theme.textMuted
-                        font.family: Theme.interfaceFont
-                        font.pixelSize: 9.5
-                    }
-                }
-
-                Rectangle { Layout.preferredWidth: 1; Layout.preferredHeight: 14; color: Theme.glassShadow; opacity: 0.7; visible: window.hasOpenDocument }
-
-                // 坐标胶囊
-                Rectangle {
-                    Layout.preferredHeight: 20
-                    radius: 10
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight; opacity: 0.6 }
-                    visible: window.hasOpenDocument
-                    Row {
-                        anchors.centerIn: parent
-                        anchors.leftMargin: 10; anchors.rightMargin: 10
-                        spacing: 10
-                        Text {
-                            text: "X " + workspace.selectedX
-                            color: Theme.amber
-                            font.family: Theme.interfaceFont
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                        }
-                        Text { text: "·"; color: Theme.textMuted; font.pixelSize: 10 }
-                        Text {
-                            text: "Y " + workspace.selectedY
-                            color: Theme.amber
-                            font.family: Theme.interfaceFont
-                            font.pixelSize: 10
-                            font.weight: Font.Medium
-                        }
-                    }
-                }
+                Divider { Layout.preferredHeight: 14; visible: window.hasOpenDocument }
+                TinyLabel { text: "RGBA / sRGB IEC61966-2.1"; height: 28; visible: window.hasOpenDocument }
+                Divider { Layout.preferredHeight: 14; visible: window.hasOpenDocument }
+                TinyLabel { text: "X " + workspace.selectedX + "  ·  Y " + workspace.selectedY; height: 28; visible: window.hasOpenDocument }
 
                 Item { Layout.fillWidth: true }
 
-                // 缩放组（右对齐）：玻璃胶囊 + 琥珀滑块
-                Rectangle {
-                    Layout.preferredHeight: 26
-                    Layout.preferredWidth: zoomGroupRow.width + 20
-                    radius: 9
-                    color: Theme.glassFill
-                    border { width: 1; color: Theme.glassHighlight; opacity: 0.7 }
+                Row {
+                    spacing: 5
                     enabled: window.hasOpenDocument
                     opacity: enabled ? 1 : 0.32
-
-                    Row {
-                        id: zoomGroupRow
-                        anchors.centerIn: parent
-                        spacing: 8
-
-                        IconButton {
-                            iconName: AppIcons.zoomOut; tooltip: "缩小"; buttonSize: 22
-                            onClicked: workspace.setZoomFactor(workspace.zoomFactor / 1.1)
-                        }
-
-                        // 琥珀金滑块轨道
-                        Rectangle {
-                            width: 100
-                            height: 5
-                            anchors.verticalCenter: parent.verticalCenter
-                            radius: 3
-                            color: Theme.bgBar
-                            border { width: 1; color: Theme.border; opacity: 0.5 }
-                            // 琥珀填充条
-                            Rectangle {
-                                width: Math.max(0, Math.min(parent.width, parent.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100)))
-                                height: 5
-                                radius: 3
-                                gradient: Gradient {
-                                    GradientStop { position: 0; color: Theme.accentPressed }
-                                    GradientStop { position: 1; color: Theme.accentHover }
-                                }
-                            }
-                            // 琥珀滑动球
-                            Rectangle {
-                                property real pos: Math.max(6, Math.min(zoomTrack.width - 6, zoomTrack.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100)))
-                                id: zoomTrack
-                                x: pos - 7
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 14; height: 14
-                                radius: 7
-                                color: Theme.textPrimary
-                                border { width: 2; color: Theme.accent }
-                                // 发光
-                                Rectangle { anchors.fill: parent; radius: 7; color: "transparent"; border.width: 1; border.color: Theme.amberGlow; opacity: 0.5 }
-                            }
-                        }
-
-                        IconButton {
-                            iconName: AppIcons.zoomIn; tooltip: "放大"; buttonSize: 22
-                            onClicked: workspace.setZoomFactor(workspace.zoomFactor * 1.1)
-                        }
-
-                        // 百分比（点击复位 → 琥珀胶囊）
-                        Rectangle {
-                            width: 48
-                            height: 20
-                            radius: 10
-                            color: fitZoomMouse.containsMouse ? Theme.accentSoft : "transparent"
-                            border { width: fitZoomMouse.containsMouse ? 1 : 0; color: Theme.accent; opacity: 0.45 }
-                            Text {
-                                anchors.centerIn: parent
-                                text: Math.round(workspace.zoomFactor * 100) + "%"
-                                color: fitZoomMouse.containsMouse ? Theme.amber : Theme.textSecondary
-                                font.family: Theme.interfaceFont
-                                font.pixelSize: 10.5
-                                font.weight: fitZoomMouse.containsMouse ? Font.DemiBold : Font.Medium
-                            }
-                            MouseArea {
-                                id: fitZoomMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: workspace.resetView()
-                                ToolTip { text: "点击重置为 100%"; visible: fitZoomMouse.containsMouse }
-                            }
-                        }
+                    IconButton {
+                        iconName: AppIcons.zoomOut; tooltip: "缩小"; buttonSize: 24
+                        onClicked: workspace.setZoomFactor(workspace.zoomFactor / 1.1)
                     }
-                }
+                    Rectangle {
+                        width: 92
+                        height: 4
+                        anchors.verticalCenter: parent.verticalCenter
+                        radius: 2
+                        color: Theme.borderStrong
+                        Rectangle { width: parent.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100); height: 4; radius: 2; color: Theme.accent }
+                        Rectangle { x: parent.width * Math.log(workspace.zoomFactor / 0.1) / Math.log(100) - 6; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.textPrimary; border.width: 2; border.color: Theme.accentPressed }
+                    }
+                    IconButton {
+                        iconName: AppIcons.zoomIn; tooltip: "放大"; buttonSize: 24
+                        onClicked: workspace.setZoomFactor(workspace.zoomFactor * 1.1)
+                    }
+                                    TinyLabel {
+                                        width: 42
+                                        text: Math.round(workspace.zoomFactor * 100) + "%"
+                                        color: fitZoomMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                                        height: 28
+                                        horizontalAlignment: Text.AlignRight
+                                        MouseArea {
+                                            id: fitZoomMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: workspace.resetView()
+                                        }
+                                    }
+                                }
             }
+
+            Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top }
         }
     }
 }

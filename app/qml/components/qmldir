@@ -1,6 +1,10 @@
 module BatchImageKing.Prototype.Components
 singleton Theme 1.0 Theme.qml
 singleton AppIcons 1.0 AppIcons.qml
+HermesNavItem 1.0 HermesNavItem.qml
+HermesPanelHeader 1.0 HermesPanelHeader.qml
+HermesSectionLabel 1.0 HermesSectionLabel.qml
+HermesStatusDot 1.0 HermesStatusDot.qml
 AppButton 1.0 AppButton.qml
 AppDialog 1.0 AppDialog.qml
 AppDrawer 1.0 AppDrawer.qml

@@ -3,7 +3,7 @@ import QtQuick.Controls.Basic
 
 Menu {
     width: 250
-    padding: 5
+    padding: 4
 
     background: Rectangle {
         color: Theme.bgRaised

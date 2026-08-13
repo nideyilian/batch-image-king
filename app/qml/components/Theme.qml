@@ -2,121 +2,95 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    // ================================================================
-    // 「琥珀印房 · Amber Atelier」主题色板 v2.0
-    // 核心调性：深靛蓝底色 + 琥珀金点缀 + 玻璃态层次边框
-    // 灵感来源：高端印刷工坊 / 暗房工作室 / 复古装帧
-    // ================================================================
+    // Hermes desktop language: warm white surfaces, near-black actions,
+    // hairline borders, and green reserved for runtime status.
+    readonly property color bgApp: "#f1f1ee"
+    readonly property color bgBar: "#ffffff"
+    readonly property color bgPanel: "#fbfbf9"
+    readonly property color bgRaised: "#f5f5f2"
+    readonly property color bgControl: "#ffffff"
+    readonly property color bgHover: "#eeeeea"
+    readonly property color bgCanvas: "#f7f7f5"
+    readonly property color bgSelected: "#e9e9e5"
 
-    // —— 背景层级（从低到高：画布 → 面板 → 浮层 → 控制）
-    readonly property color bgApp:          "#0b0e14"   // 应用最底层：深夜靛
-    readonly property color bgBar:          "#121822"   // 标题栏/标签栏/工具栏：深靛
-    readonly property color bgPanel:        "#171e2c"   // 面板本体：靛青
-    readonly property color bgRaised:       "#1e2738"   // 凸起卡片/悬浮项：浅靛
-    readonly property color bgControl:      "#252f44"   // 控件底板：控制靛
-    readonly property color bgHover:        "#2e3a52"   // 悬停态：悬停靛
-    readonly property color bgCanvas:       "#090c12"   // 画布工作区：暗靛
-    readonly property color bgSelected:     "#3d2f17"   // 选中行：琥珀软底
+    readonly property color border: "#deded9"
+    readonly property color borderStrong: "#c8c8c1"
+    readonly property color focusRing: "#1b1b1b"
+    readonly property color gridDot: "#d7d7d1"
 
-    // —— 边框与焦点（层次化双层边框：玻璃高光 + 结构阴影）
-    readonly property color border:         "#3a4562"   // 常规边框：结构蓝
-    readonly property color borderStrong:   "#4e5d82"   // 强调边框：显著蓝
-    readonly property color focusRing:      "#f0b849"   // 焦点环：琥珀金亮
-    readonly property color gridDot:        "#1e2738"   // 画布网格点
+    readonly property color textPrimary: "#1b1b1b"
+    readonly property color textSecondary: "#555652"
+    readonly property color textMuted: "#85867f"
+    readonly property color textDisabled: "#b1b1aa"
 
-    // —— 玻璃态层次边框（Atelier Glass）
-    readonly property color glassHighlight: "#2a354d"   // 玻璃顶高光 1px（上边框）
-    readonly property color glassShadow:    "#070a10"   // 玻璃底阴影 1px（下边框）
-    readonly property color glassFill:      "#141b28"   // 玻璃叠层填充（半透明面板用）
-    readonly property color amberGlow:      "#2e220d"   // 琥珀柔光边（强调容器内侧）
+    // Black is the primary action. Accent colors express state, not branding.
+    readonly property color accent: "#171717"
+    readonly property color accentHover: "#2b2b2b"
+    readonly property color accentPressed: "#000000"
+    readonly property color accentSoft: "#ecece8"
+    readonly property color accentForeground: "#ffffff"
+    readonly property color info: "#5c7890"
+    readonly property color warning: "#c58d18"
+    readonly property color danger: "#b42318"
+    readonly property color success: "#18b78b"
 
-    // —— 文字层级
-    readonly property color textPrimary:    "#f4efe4"   // 主文字：暖米白
-    readonly property color textSecondary:  "#b5ad9b"   // 次文字：暖灰
-    readonly property color textMuted:      "#8a8476"   // 柔文字：淡暖灰
-    readonly property color textDisabled:   "#726c61"   // 禁文字：暗暖灰
+    readonly property color overlayModal: "#55000000"
+    readonly property color errorSurface: "#fff1ef"
+    readonly property color errorBorder: "#e0aaa4"
+    readonly property color errorText: "#a33a31"
+    readonly property color successSurface: "#ecf8f3"
+    readonly property color successBorder: "#a7dbc7"
+    readonly property color progressTrack: "#deded9"
 
-    // —— 主题色系（琥珀金核心）
-    readonly property color accent:         "#e5a93c"   // 主色：琥珀金
-    readonly property color accentHover:    "#f0b849"   // 悬停：琥珀亮
-    readonly property color accentPressed:  "#c89030"   // 按压：琥珀深
-    readonly property color accentSoft:     "#3d2f17"   // 软底：琥珀淡底
-    readonly property color accentForeground: "#2a1f0a" // 琥珀底上的文字色：深棕
-    readonly property color info:           "#5ba7ff"   // 信息：保留蓝
-    readonly property color warning:        "#f0b849"   // 警告：琥珀亮（与 accent 呼应）
-    readonly property color danger:         "#ef7d6f"   // 危险：珊瑚橙红
-    readonly property color success:        "#5ec98a"   // 成功：冷调松绿（对比琥珀）
+    readonly property color swatchSurface: "#f1f1ee"
+    readonly property color swatchAccentBorder: "#171717"
+    readonly property color swatchPaper: "#ffffff"
+    readonly property color canvasPaper: "#ffffff"
+    readonly property color canvasPaperBorder: "#9e9e96"
+    readonly property color selectionFill: "#1b1b1b25"
+    readonly property color transformFill: "#5c789025"
+    readonly property color canvasHandle: "#ffffff"
+    readonly property color canvasScrim: "#66000000"
+    readonly property color cropAnchorBorder: "#171717"
+    readonly property color canvasLabelSurface: "#f0f0ed"
+    readonly property color statusPillSurface: "#edf8f4"
+    readonly property color floatingPanelSurface: "#fdfdfb"
+    readonly property color floatingPanelBorder: "#b9b9b1"
 
-    // —— 叠层与状态面
-    readonly property color overlayModal:   "#99070a10" // 模态遮罩：深靛 60%
-    readonly property color errorSurface:   "#3b2320"   // 错误态底
-    readonly property color errorBorder:    "#72413d"   // 错误态边
-    readonly property color errorText:      "#e3a59e"   // 错误态文字
-    readonly property color successSurface: "#1a3225"   // 成功态底
-    readonly property color successBorder:  "#295742"   // 成功态边
-    readonly property color progressTrack:  borderStrong
-
-    // —— 色板与画板
-    readonly property color swatchSurface:  "#1f2819"   // 色板底板（带绿调温暖）
-    readonly property color swatchAccentBorder: "#f0c97d" // 色板琥珀描边
-    readonly property color swatchPaper:    "#efead8"   // 色板纸白（暖调）
-    readonly property color canvasPaper:    "#efead8"   // 画板纸色（暖米纸）
-    readonly property color canvasPaperBorder: "#a58853" // 画板纸边（琥珀铜边）
-    readonly property color selectionFill:  "#2d24108f" // 选区填充（琥珀半透明）
-    readonly property color transformFill:  "#1f1908aa" // 变换中填充
-    readonly property color canvasHandle:   "#f4efe4"   // 变换手柄：暖米白
-    readonly property color canvasScrim:    "#99070a10" // 裁剪遮罩
-    readonly property color cropAnchorBorder: "#3d2a0a" // 裁剪锚点边：深琥珀
-    readonly property color canvasLabelSurface: "#e91b2021" // 画布标签底
-    readonly property color statusPillSurface:  "#d916191b" // 状态胶囊底
-    readonly property color floatingPanelSurface: "#ec1a2029" // 浮动面板
-    readonly property color floatingPanelBorder: "#5a4b3a" // 浮动面板边（暖棕）
-
-    // Compatibility aliases for existing QML call sites.
+    // Compatibility aliases used by the current QML surface.
     readonly property color guide: info
     readonly property color amber: warning
     readonly property color coral: danger
 
-    // —— 字体家族（保持不变，与用户偏好一致）
-    readonly property string bodyFont:       "MiSans"
-    readonly property string displayFont:    "HarmonyOS Sans SC"
-    readonly property string dataFont:       "Cascadia Mono"
-    readonly property string iconFont:       "Segoe Fluent Icons"
+    readonly property string bodyFont: "MiSans"
+    readonly property string displayFont: "HarmonyOS Sans SC"
+    readonly property string dataFont: "Cascadia Mono"
+    readonly property string iconFont: "Segoe Fluent Icons"
 
-    // —— 半径与尺寸（保持紧凑，不做大改动）
-    readonly property int radiusSmall: 4
-    readonly property int radius:      6
-    readonly property int radiusLarge: 8
-    readonly property int controlHeight: 24
-    readonly property int compactControlHeight: 20
-    readonly property int commandHeight: 28
-    readonly property int toolButtonSize: 26
-    readonly property int railButtonSize: 30
-    readonly property int sectionHeaderHeight: 28
+    readonly property int radiusSmall: 3
+    readonly property int radius: 5
+    readonly property int radiusLarge: 7
+    readonly property int controlHeight: 30
+    readonly property int compactControlHeight: 24
+    readonly property int commandHeight: 34
+    readonly property int toolButtonSize: 32
+    readonly property int railButtonSize: 32
+    readonly property int sectionHeaderHeight: 38
     readonly property int motionFast: 120
     readonly property int motionNormal: 180
 
-    // ================================================================
-    // Inspector 设计规范 (Figma-Inspector 紧凑二列风格)
-    // ⚠️ 所有宽度为固定紧凑值 — 保持不变（与 project_memory 契约一致）
-    // ================================================================
-    readonly property int inspectorLabelColWidth: 42           // Label 列固定宽
-    readonly property int inspectorRowHeight: controlHeight    // 24px 标准行高
-    readonly property int inspectorColSpacing: 6               // 控件间横向间距
-
-    // —— 控件标准宽度（统一紧凑）
-    readonly property int inspectorWSelect: 160                // SelectBox / FontSelectBox
-    readonly property int inspectorWInput: 120                 // 单 ValueBox / ColorValueField
-    readonly property int inspectorWPair: 82                   // 双控件并排各占宽
-    readonly property int inspectorWSliderVB: 58               // Slider 配套 ValueBox
-    readonly property int inspectorWSwatch: 186                // ColorValueField + SwatchPanel
-
-    // —— 分段按钮宽度
-    readonly property int inspectorWSeg2: 86                   // 2 段
-    readonly property int inspectorWSeg3: 110                  // 3 段
-    readonly property int inspectorWSeg4: 144                  // 4 段
-
-    // —— 特殊控件宽度
-    readonly property int inspectorWAlign: 108                 // 三按钮对齐容器
-    readonly property int inspectorWBind: 90                   // 绑定按钮
+    // Inspector dimensions stay compact so the canvas keeps priority.
+    readonly property int inspectorLabelColWidth: 42
+    readonly property int inspectorRowHeight: controlHeight
+    readonly property int inspectorColSpacing: 6
+    readonly property int inspectorWSelect: 160
+    readonly property int inspectorWInput: 120
+    readonly property int inspectorWPair: 82
+    readonly property int inspectorWSliderVB: 58
+    readonly property int inspectorWSwatch: 186
+    readonly property int inspectorWSeg2: 86
+    readonly property int inspectorWSeg3: 110
+    readonly property int inspectorWSeg4: 144
+    readonly property int inspectorWAlign: 108
+    readonly property int inspectorWBind: 90
 }
