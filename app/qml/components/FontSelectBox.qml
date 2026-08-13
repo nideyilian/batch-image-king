@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 
 Rectangle {
     id: root
@@ -224,7 +225,8 @@ Rectangle {
         fontInput.focus = false
     }
 
-    implicitWidth: 180
+    Layout.fillWidth: true
+    implicitWidth: 160
     implicitHeight: Theme.controlHeight
     radius: Theme.radiusSmall
     color: Theme.bgControl

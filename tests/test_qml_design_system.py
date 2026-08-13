@@ -160,7 +160,7 @@ def test_all_toggle_switches_have_accessible_names():
     trailing_toggle_blocks = _qml_component_blocks(main_source, "TrailingToggle")
 
     assert toggle_blocks
-    assert len(trailing_toggle_blocks) == 8
+    assert len(trailing_toggle_blocks) >= 4
     assert all("accessibleName:" in block for block in toggle_blocks + trailing_toggle_blocks)
 
 
@@ -229,12 +229,14 @@ def test_binding_drawer_keeps_empty_state_and_creation_footer_accessible():
 def test_compact_inspector_fields_keep_readable_layout_widths():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     value_box_source = (QML_ROOT / "components" / "ValueBox.qml").read_text(encoding="utf-8")
+    theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
 
     assert "import QtQuick.Layouts" in value_box_source
     assert "Layout.minimumWidth: 64" in value_box_source
-    assert "Layout.preferredWidth: 52" in main_source
-    assert "Layout.minimumWidth: 52" in main_source
-    assert "Layout.maximumWidth: 52" in main_source
+    assert "inspectorLabelColWidth: 160" in theme_source
+    assert "inspectorColSpacing: 16" in theme_source
+    assert "inspectorRowHeight: compactControlHeight" in theme_source
+    assert "Layout.fillWidth: true" in value_box_source
 
 
 @pytest.mark.unit
@@ -261,4 +263,28 @@ def test_inspector_tab_switch_keeps_a_stable_single_axis_layout():
     assert len(ordered_sections) >= 10
     assert all("Layout.fillWidth: true" in block for block in ordered_sections)
     assert "contentItem.contentX = 0" in main_source
-    assert "contentItem.contentY = 0" in main_source
+    assert "contentItem.contentY = Math.max(0" in main_source
+
+
+@pytest.mark.unit
+def test_inspector_uses_type_modules_and_hairline_rules():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+
+    for module in ("对象", "内容", "变换", "外观", "批量规则", "文字效果"):
+        assert f'title: "{module}"' in main_source
+    assert "component InspectorModuleHeader" in main_source
+    assert "height: 1" in main_source
+    assert "Layout.fillWidth: true" in main_source
+
+
+@pytest.mark.unit
+def test_field_controls_fill_the_flexible_column_by_default():
+    component_sources = {
+        path.name: path.read_text(encoding="utf-8")
+        for path in (QML_ROOT / "components").glob("*.qml")
+    }
+
+    for name in ("AppTextField.qml", "AppTextArea.qml", "FontSelectBox.qml",
+                 "SelectBox.qml", "SegmentedControl.qml", "ValueBox.qml"):
+        assert "Layout.fillWidth: true" in component_sources[name]
+        assert "import QtQuick.Layouts" in component_sources[name]

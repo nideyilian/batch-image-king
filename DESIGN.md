@@ -20,7 +20,7 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 - 默认浅色，不以深色为主主题。
 - 主操作为黑底白字，状态为绿色点或绿色文字。
 - 页面区段不使用卡片包裹；面板使用平面表面和分隔线。
-- 控件圆角 3 px，浮层圆角 5 px，大型工具面板最多 7 px。
+- 矩形组件圆角统一为 0；状态点、色轮手柄和开关滑块等圆形几何元素在组件内单独定义。
 - 字体使用 HarmonyOS Sans SC、MiSans 和 Cascadia Mono。
 - 编号、英文眉标、状态和文件数据使用等宽字体。
 - 图标统一来自 `AppIcons.qml` 的 Lucide 语义注册表。
@@ -35,7 +35,7 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 左侧工具轨 48 px
 图层面板 246-276 px
 中央画布 弹性区域
-属性检查器 302-336 px
+属性检查器 368-408 px
 底部状态栏 28 px
 ```
 
@@ -51,6 +51,7 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 - 操作：`accent`、`accentHover`、`accentPressed`
 - 状态：`success`、`warning`、`danger`、`info`
 - 尺寸：`controlHeight`、`commandHeight`、`toolButtonSize`、`sectionHeaderHeight`
+- Field：`inspectorLabelColWidth`、`inspectorColSpacing`、`compactControlHeight`、`comfortableControlHeight`
 
 ## Component Library
 

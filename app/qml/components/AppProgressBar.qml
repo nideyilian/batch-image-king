@@ -8,7 +8,7 @@ Rectangle {
     property int thickness: 4
 
     implicitHeight: thickness
-    radius: Math.max(1, thickness / 2)
+    radius: Theme.radiusSmall
     color: Theme.progressTrack
     clip: true
 

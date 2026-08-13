@@ -3632,9 +3632,10 @@ ApplicationWindow {
         property string label: ""
         // 把外部子控件定向导入到内部 controlArea RowLayout
         default property alias controls: controlArea.data
-        width: parent ? parent.width : 300
-        height: Theme.inspectorRowHeight
-        readonly property int controlAreaWidth: Math.max(80, width - Theme.inspectorLabelColWidth - Theme.inspectorColSpacing)
+        width: parent ? parent.width : 392
+        implicitHeight: Math.max(Theme.inspectorRowHeight, controlArea.implicitHeight)
+        height: implicitHeight
+        readonly property int controlAreaWidth: Math.max(0, width - Theme.inspectorLabelColWidth - Theme.inspectorColSpacing)
 
         // 静态规范全部走 Theme.inspectorXxx；wSliderFill 仅用于 Slider（需要操作长度）
         readonly property int wSliderFill: Math.max(60, controlAreaWidth - Theme.inspectorColSpacing - Theme.inspectorWSliderVB)
@@ -3642,28 +3643,61 @@ ApplicationWindow {
         BodyLabel {
             id: rowLabel
             anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.top: parent.top
+            height: parent.height
             width: Theme.inspectorLabelColWidth
             text: rowRoot.label
             color: Theme.textMuted
             elide: Text.ElideRight
+            wrapMode: Text.NoWrap
             font.pixelSize: 10
-            // ★ Figma/Photoshop 专业 Inspector 风格：Label 右对齐（贴 Label 列的右边界）
+            // Hermes Field: labels share a right edge and controls own row height.
             horizontalAlignment: Text.AlignRight
+            verticalAlignment: Text.AlignVCenter
         }
 
-        // ★ 控件区：从 Label 右边紧挨着开始，左对齐紧凑排列，不再 fill 中间空白 → 视觉上完全贴合，无大片空洞
-        // 这是 Figma / Sketch / Photoshop 属性面板的经典二列布局：Label 的右边界一条线，控件的左边界一条线
+        // The flexible control column is the Field height authority. A complex
+        // control may grow vertically without being clipped by a fixed row.
         RowLayout {
             id: controlArea
-            // wSliderFill 仍透传（Slider 行需要动态长度）
             property alias wSliderFill: rowRoot.wSliderFill
             anchors.left: rowLabel.right
             anchors.leftMargin: Theme.inspectorColSpacing
             anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.top: parent.top
+            height: implicitHeight
             spacing: Theme.inspectorColSpacing
-            // 不再有 fill 占位 Item → RowLayout 天然左对齐紧排所有子控件
+        }
+    }
+
+    component InspectorModuleHeader: Item {
+        id: moduleHeader
+        property string title: ""
+
+        Layout.fillWidth: true
+        implicitHeight: 28
+        height: implicitHeight
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
+            spacing: 10
+
+            Text {
+                text: moduleHeader.title
+                color: Theme.textMuted
+                font.family: Theme.dataFont
+                font.pixelSize: 9
+                font.weight: Font.DemiBold
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                height: 1
+                color: Theme.border
+            }
         }
     }
 
@@ -3774,6 +3808,7 @@ ApplicationWindow {
         signal pickRequested()
         signal valueCommitted(string value)
 
+        Layout.fillWidth: true
         spacing: 6
         Rectangle {
             Layout.preferredWidth: Theme.controlHeight
@@ -3795,7 +3830,7 @@ ApplicationWindow {
         ValueBox {
             value: colorField.value
             bindValue: true
-            Layout.fillWidth: false
+            Layout.fillWidth: true
             editable: colorField.enabled
             onValueCommitted: value => colorField.valueCommitted(value)
         }
@@ -3827,7 +3862,7 @@ ApplicationWindow {
         property string placeholder: ""
         signal committed(string value)
 
-        implicitHeight: 36
+        implicitHeight: Theme.comfortableControlHeight
         placeholderText: placeholder
         font.pixelSize: 12
         onEditingFinished: exportField.committed(text)
@@ -7151,7 +7186,7 @@ ApplicationWindow {
 
             Rectangle {
                 id: inspector
-                Layout.preferredWidth: window.width < 1320 ? 302 : 336
+                Layout.preferredWidth: window.width < 1320 ? 368 : 408
                 Layout.fillHeight: true
                 color: Theme.bgPanel
 
@@ -7230,10 +7265,16 @@ ApplicationWindow {
                             columnSpacing: 0
                             rowSpacing: 0
 
+                            InspectorModuleHeader {
+                                Layout.row: 0
+                                title: "对象"
+                                visible: selectedLayer >= 0
+                            }
+
                             PropertySection {
                                 id: imageSourceSection
                                 Layout.fillWidth: true
-                                Layout.row: 10
+                                Layout.row: 3
                                 title: "图像源"
                                 summary: workspace.selectedImageSource
                                          ? (workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片")
@@ -7243,7 +7284,6 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "路径"
                                     ValueBox {
-                                        Layout.fillWidth: false
                                         value: workspace.selectedImageSource
                                         bindValue: true
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
@@ -7261,7 +7301,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.refresh
                                         tooltip: "换一张素材"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: workspace.selectedImageSourceIsFolder && workspace.selectedImageSourceCount > 1 && !workspace.selectedLocked
                                         onClicked: workspace.showNextSelectedImage()
                                     }
@@ -7287,7 +7327,7 @@ ApplicationWindow {
 
                             PropertySection {
                                 Layout.fillWidth: true
-                                Layout.row: 21
+                                Layout.row: 6
                                 title: "矢量路径"
                                 summary: workspace.selectedVectorPathEnabled
                                          ? workspace.selectedVectorNodes.length + " 个节点" : "矩形边界"
@@ -7324,7 +7364,6 @@ ApplicationWindow {
                                     label: "控制柄"
                                     visible: workspace.selectedVectorPathEnabled
                                     SelectBox {
-                                        Layout.fillWidth: false
                                         model: window.vectorHandleLinkOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: {
@@ -7351,21 +7390,21 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.add
                                         tooltip: "在选中节点后插入"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: workspace.selectedVectorNodeIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.insertVectorNodeAfter(workspace.selectedVectorNodeIndex)
                                     }
                                     IconButton {
                                         iconName: AppIcons.refresh
                                         tooltip: "切换角点、平滑点和对称点"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: workspace.selectedVectorNodeIndex >= 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.cycleSelectedVectorNodeType()
                                     }
                                     IconButton {
                                         iconName: AppIcons.trash
                                         tooltip: "删除选中节点"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: workspace.selectedVectorNodeIndex >= 0
                                                  && workspace.selectedVectorNodes.length > (workspace.selectedVectorPathClosed ? 3 : 2)
                                                  && !workspace.selectedLocked
@@ -7378,7 +7417,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: advancedSettingsSection
                                 Layout.fillWidth: true
-                                Layout.row: 20
+                                Layout.row: 4
                                 title: "高级设置"
                                 summary: workspace.selectedFitModeName
                                 visible: workspace.selectedSupportsImageFit
@@ -7386,7 +7425,6 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "适配"
                                     SelectBox {
-                                        Layout.fillWidth: false
                                         model: window.imageFitOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: {
@@ -7422,7 +7460,7 @@ ApplicationWindow {
                                                 required property var modelData
                                                 iconName: modelData.iconName
                                                 tooltip: modelData.label
-                                                buttonSize: 30
+                                                buttonSize: Theme.compactControlHeight
                                                 active: workspace.selectedCropDirectionId === modelData.value
                                                 enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                                 onClicked: workspace.setSelectedCropDirection(modelData.value)
@@ -7443,7 +7481,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.crop
                                         tooltip: workspace.cropEditing ? "确认自由裁剪" : "开始自由裁剪"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         active: workspace.cropEditing
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.cropEditing
@@ -7453,7 +7491,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: workspace.cropEditing ? AppIcons.close : AppIcons.refresh
                                         tooltip: workspace.cropEditing ? "取消自由裁剪" : "重置自由裁剪"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.cropEditing
                                                    ? workspace.cancelCropEdit()
@@ -7466,7 +7504,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: shapeSection
                                 Layout.fillWidth: true
-                                Layout.row: 30
+                                Layout.row: 5
                                 title: "形状"
                                 summary: workspace.selectedShapeTypeName
                                 visible: workspace.selectedIsShapedLayer
@@ -7488,7 +7526,7 @@ ApplicationWindow {
                                         delegate: Rectangle {
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            Layout.preferredHeight: 34
+                                            Layout.preferredHeight: Theme.comfortableControlHeight
                                             radius: Theme.radiusSmall
                                             color: workspace.selectedShapeTypeId === modelData.value ? Theme.accentSoft : Theme.bgControl
                                             border.width: 1
@@ -7550,7 +7588,7 @@ ApplicationWindow {
                                         delegate: Rectangle {
                                             required property var modelData
                                             Layout.fillWidth: true
-                                            Layout.preferredHeight: 30
+                                            Layout.preferredHeight: Theme.compactControlHeight
                                             radius: Theme.radiusSmall
                                             color: workspace.selectedTrapezoidSlopeSide === modelData.value ? Theme.accentSoft : Theme.bgControl
                                             border.width: 1
@@ -7579,7 +7617,6 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedPolygonRotation * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "°"
-                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -7594,7 +7631,6 @@ ApplicationWindow {
                                         value: workspace.selectedPolygonCornerRadius.toString()
                                         bindValue: true
                                         suffix: "px"
-                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -7611,7 +7647,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: textContentSection
                                 Layout.fillWidth: true
-                                Layout.row: 10
+                                Layout.row: 3
                                 title: "文字内容"
                                 summary: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条候选" : "整段排版"
                                 visible: workspace.selectedIsTextLayer
@@ -7723,7 +7759,7 @@ ApplicationWindow {
                                     label: "绑定"
                                     Row {
                                         Layout.preferredWidth: Theme.inspectorWBind
-                                        height: 22
+                                        height: Theme.compactControlHeight
                                         spacing: 2
                                         Repeater {
                                             model: [
@@ -7734,7 +7770,7 @@ ApplicationWindow {
                                                 required property var modelData
                                                 width: (parent.width - 2) / 2
                                                 height: parent.height
-                                                radius: 3
+                                                radius: Theme.radiusSmall
                                                 color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentSoft : (bindMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
                                                 border.width: 1
                                                 border.color: workspace.selectedTextBindingEnabled === modelData.enabled ? Theme.accentPressed : Theme.borderStrong
@@ -7764,8 +7800,8 @@ ApplicationWindow {
                             PropertySection {
                                 id: textFontSection
                                 objectName: "textFontSection"
-                                Layout.fillWidth: false
-                                Layout.row: 20
+                                Layout.fillWidth: true
+                                Layout.row: 4
                                 title: "字体"
                                 summary: workspace.selectedTextFontSize + " px"
                                 visible: workspace.selectedIsTextLayer
@@ -7814,12 +7850,12 @@ ApplicationWindow {
                                 }
                                 Text {
                                     visible: workspace.selectedTextFontWarning.length > 0
+                                    width: parent.width
                                     text: workspace.selectedTextFontWarning
                                     color: Theme.errorText
                                     font.family: Theme.bodyFont
                                     font.pixelSize: 11
-                                    wrapMode: Text.Wrap
-                                    Layout.fillWidth: false
+                                    wrapMode: Text.WordWrap
                                 }
                                 InspectorRow {
                                     label: "字重"
@@ -7836,8 +7872,8 @@ ApplicationWindow {
                             PropertySection {
                                 id: textTypographySection
                                 objectName: "textTypographySection"
-                                Layout.fillWidth: false
-                                Layout.row: 30
+                                Layout.fillWidth: true
+                                Layout.row: 5
                                 title: "排版"
                                 summary: workspace.selectedTextTypographySummary
                                 visible: workspace.selectedIsTextLayer
@@ -7846,7 +7882,7 @@ ApplicationWindow {
                                     label: "对齐"
                                     Row {
                                         Layout.preferredWidth: Theme.inspectorWAlign
-                                        height: 22
+                                        height: Theme.compactControlHeight
                                         spacing: 2
                                         Repeater {
                                             model: [
@@ -7858,7 +7894,7 @@ ApplicationWindow {
                                                 required property var modelData
                                                 width: (parent.width - 4) / 3
                                                 height: parent.height
-                                                radius: 3
+                                                radius: Theme.radiusSmall
                                                 color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : (alignMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
                                                 border.width: 1
                                                 border.color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong
@@ -7949,8 +7985,8 @@ ApplicationWindow {
 
                             PropertySection {
                                 id: groupSection
-                                Layout.fillWidth: false
-                                Layout.row: 0
+                                Layout.fillWidth: true
+                                Layout.row: 1
                                 title: "图层组"
                                 summary: workspace.selectedGroupChildCount + " 个图层"
                                 visible: workspace.selectedIsLayerGroup
@@ -7961,7 +7997,6 @@ ApplicationWindow {
                                         id: groupNameEditor
                                         value: workspace.selectedLayerName
                                         bindValue: true
-                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => workspace.setSelectedName(value)
                                     }
@@ -7980,7 +8015,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: basicPropertiesSection
                                 Layout.fillWidth: true
-                                Layout.row: 0
+                                Layout.row: 1
                                 title: "基本属性"
                                 summary: workspace.selectedWidth + " × " + workspace.selectedHeight
                                 expanded: false
@@ -7990,7 +8025,7 @@ ApplicationWindow {
                                     label: "名称"
                                     ValueBox {
                                         id: layerNameEditor
-                                        value: workspace.selectedLayerName; bindValue: true; Layout.fillWidth: false
+                                        value: workspace.selectedLayerName; bindValue: true
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => workspace.setSelectedName(value)
                                     }
@@ -8023,7 +8058,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: workspace.selectedAspectRatioLocked ? AppIcons.lock : AppIcons.unlock
                                         tooltip: workspace.selectedAspectRatioLocked ? "解除比例锁定" : "锁定宽高比例"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         active: workspace.selectedAspectRatioLocked
                                         enabled: workspace.selectedSupportsAspectRatioLock && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)
@@ -8034,7 +8069,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: appearanceSection
                                 Layout.fillWidth: true
-                                Layout.row: 40
+                                Layout.row: 10
                                 title: "外观"
                                 summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
                                 visible: !workspace.selectedIsLayerGroup
@@ -8117,8 +8152,8 @@ ApplicationWindow {
                             PropertySection {
                                 id: layerTransformSection
                                 objectName: "layerTransformSection"
-                                Layout.fillWidth: false
-                                Layout.row: 20
+                                Layout.fillWidth: true
+                                Layout.row: 8
                                 title: "图层变换"
                                 summary: Math.abs(workspace.selectedRotation) > 0.001
                                          ? Math.round(workspace.selectedRotation * 10) / 10 + "°"
@@ -8141,7 +8176,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.rotateLeft
                                         tooltip: "重置旋转"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
                                         onClicked: workspace.setSelectedRotation(0)
                                     }
@@ -8155,7 +8190,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.horizontal
                                         tooltip: "水平翻转"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         active: workspace.selectedFlipHorizontal
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
@@ -8163,7 +8198,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.vertical
                                         tooltip: "垂直翻转"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         active: workspace.selectedFlipVertical
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)
@@ -8174,7 +8209,7 @@ ApplicationWindow {
                             PropertySection {
                                 id: randomTransformSection
                                 Layout.fillWidth: true
-                                Layout.row: 30
+                                Layout.row: 12
                                 title: "随机变换"
                                 summary: workspace.selectedRandomTransformEnabledCount > 0
                                          ? workspace.selectedRandomTransformEnabledCount + " 项已启用" : "关闭"
@@ -8223,7 +8258,6 @@ ApplicationWindow {
                                         value: workspace.selectedRandomPositionRange.toString()
                                         bindValue: true
                                         suffix: "± px"
-                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseInt(value)
@@ -8264,7 +8298,6 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedRandomRotationRange * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "±°"
-                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -8283,7 +8316,7 @@ ApplicationWindow {
                                     IconButton {
                                         iconName: AppIcons.randomize
                                         tooltip: "换一组随机变换"
-                                        buttonSize: 30
+                                        buttonSize: Theme.compactControlHeight
                                         enabled: workspace.selectedRandomTransformEnabledCount > 0 && !workspace.selectedLocked && !workspace.operationsBlocked
                                         onClicked: workspace.regenerateSelectedRandomTransform()
                                     }
@@ -8294,7 +8327,7 @@ ApplicationWindow {
                                 id: clonePropertiesSection
                                 objectName: "clonePropertiesSection"
                                 Layout.fillWidth: true
-                                Layout.row: 10
+                                Layout.row: 13
                                 title: "图层分身"
                                 summary: workspace.selectedCloneEnabled
                                          ? workspace.selectedCloneRows + " × " + workspace.selectedCloneColumns
@@ -8315,7 +8348,6 @@ ApplicationWindow {
                                     label: "布局"
                                     visible: workspace.selectedCloneEnabled
                                     SegmentedControl {
-                                        Layout.fillWidth: false
                                         accessibleName: "分身布局模式"
                                         options: [
                                             { label: "固定行列", value: "fixed" },
@@ -8385,7 +8417,6 @@ ApplicationWindow {
                                     label: "镜像"
                                     visible: workspace.selectedCloneEnabled
                                     SelectBox {
-                                        Layout.fillWidth: false
                                         model: window.cloneMirrorOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: window.optionIndex(window.cloneMirrorOptions, workspace.selectedCloneMirrorMode)
@@ -8397,7 +8428,6 @@ ApplicationWindow {
                                     label: "尺寸"
                                     visible: workspace.selectedCloneEnabled
                                     SegmentedControl {
-                                        Layout.fillWidth: false
                                         accessibleName: "分身尺寸模式"
                                         options: [
                                             { label: "沿用图层", value: "source" },
@@ -8440,7 +8470,6 @@ ApplicationWindow {
                                     label: "排列"
                                     visible: workspace.selectedCloneEnabled && workspace.selectedCloneLayoutMode === "fill"
                                     SelectBox {
-                                        Layout.fillWidth: false
                                         model: window.cloneFillModeOptions
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         currentIndex: window.optionIndex(window.cloneFillModeOptions, workspace.selectedCloneFillMode)
@@ -8482,7 +8511,6 @@ ApplicationWindow {
                                         value: (Math.round(workspace.selectedCloneFillAngle * 10) / 10).toString()
                                         bindValue: true
                                         suffix: "°"
-                                        Layout.fillWidth: false
                                         editable: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onValueCommitted: value => {
                                             var parsed = parseFloat(value)
@@ -8499,6 +8527,36 @@ ApplicationWindow {
                                 expanded: false
                                 visible: false
                             }
+
+                            InspectorModuleHeader {
+                                Layout.row: 2
+                                title: "内容"
+                                visible: workspace.selectedHasImageSource
+                                         || workspace.selectedIsTextLayer
+                                         || workspace.selectedIsShapedLayer
+                                         || workspace.selectedSupportsVectorPath
+                            }
+
+                            InspectorModuleHeader {
+                                Layout.row: 7
+                                title: "变换"
+                                visible: !workspace.selectedIsLayerGroup
+                                         && (workspace.selectedCanRotate
+                                             || workspace.selectedSupportsAspectRatioLock)
+                            }
+
+                            InspectorModuleHeader {
+                                Layout.row: 9
+                                title: "外观"
+                                visible: !workspace.selectedIsLayerGroup
+                            }
+
+                            InspectorModuleHeader {
+                                Layout.row: 11
+                                title: "批量规则"
+                                visible: workspace.selectedSupportsRandomTransform
+                                         || workspace.selectedSupportsClone
+                            }
                         }
 
                         Column {
@@ -8506,6 +8564,11 @@ ApplicationWindow {
                             width: inspectorScroll.availableWidth
                             y: propertyInspectorColumn.implicitHeight
                             visible: selectedLayer >= 0
+
+                            InspectorModuleHeader {
+                                title: "文字效果"
+                                visible: workspace.selectedIsTextLayer
+                            }
 
                             PropertySection {
                                 id: textFillSection
@@ -8519,7 +8582,7 @@ ApplicationWindow {
                                     label: "模式"
                                     Row {
                                         Layout.preferredWidth: Theme.inspectorWSeg2
-                                        height: 22
+                                        height: Theme.compactControlHeight
                                         spacing: 2
                                         Repeater {
                                             model: [
@@ -8530,7 +8593,7 @@ ApplicationWindow {
                                                 required property var modelData
                                                 width: (parent.width - 2) / 2
                                                 height: parent.height
-                                                radius: 3
+                                                radius: Theme.radiusSmall
                                                 color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : (fillMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
                                                 border.width: 1
                                                 border.color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong
@@ -8935,7 +8998,7 @@ ApplicationWindow {
                                         }
                                     }
                                     ColorValueField {
-                                        Layout.preferredWidth: Theme.inspectorWPair
+                                        Layout.fillWidth: true
                                         value: workspace.selectedStrokeColor
                                         enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                         onPickRequested: effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)
@@ -9115,14 +9178,14 @@ ApplicationWindow {
                                     label: "方向"
                                     visible: workspace.selectedOverlayMode === "gradient"
                                     Row {
-                                        Layout.preferredWidth: 42 * 4 + 4 * 3
+                                        Layout.fillWidth: true
                                         spacing: 4
                                         Repeater {
                                             model: [0, 45, 90, 135]
                                             delegate: Rectangle {
                                                 required property int modelData
-                                                width: 42
-                                                height: 28
+                                                width: (parent.width - 12) / 4
+                                                height: Theme.compactControlHeight
                                                 radius: Theme.radiusSmall
                                                 color: Math.round(workspace.selectedGradientOverlayAngle) === modelData ? Theme.accentSoft : Theme.bgControl
                                                 border.width: 1
@@ -9192,14 +9255,14 @@ ApplicationWindow {
                                     label: "预设"
                                     visible: workspace.selectedCornerMode === "uniform"
                                     Row {
-                                        Layout.preferredWidth: 42 * 4 + 4 * 3
+                                        Layout.fillWidth: true
                                         spacing: 4
                                         Repeater {
                                             model: [0, 12, 24, 48]
                                             delegate: Rectangle {
                                                 required property int modelData
-                                                width: 42
-                                                height: 28
+                                                width: (parent.width - 12) / 4
+                                                height: Theme.compactControlHeight
                                                 radius: Theme.radiusSmall
                                                 enabled: modelData <= workspace.selectedCornerRadiusMax
                                                          && !workspace.selectedLocked

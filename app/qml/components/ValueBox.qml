@@ -21,6 +21,7 @@ Rectangle {
         input.selectAll()
     }
 
+    Layout.fillWidth: true
     implicitWidth: 94
     implicitHeight: Theme.controlHeight
     Layout.minimumWidth: 64

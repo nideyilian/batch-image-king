@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 
 TextField {
     id: root
@@ -7,6 +8,7 @@ TextField {
     property bool invalid: false
     property string accessibleName: ""
 
+    Layout.fillWidth: true
     implicitHeight: Theme.controlHeight
     leftPadding: 9
     rightPadding: 9

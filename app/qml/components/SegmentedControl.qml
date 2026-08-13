@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 
 Rectangle {
     id: root
@@ -34,9 +35,10 @@ Rectangle {
         else if (count === 3) avg = 36
         return avg * count + 4 + (count - 1) * 2
     }
+    Layout.fillWidth: true
     implicitWidth: fillWidth ? 180 : __inlineWidth
-    implicitHeight: fillWidth ? Theme.controlHeight : 22
-    radius: fillWidth ? Theme.radiusSmall : 4
+    implicitHeight: Theme.compactControlHeight
+    radius: Theme.radiusSmall
     color: fillWidth ? Theme.bgControl : Theme.bgControl
     border.width: 1
     border.color: Theme.border
@@ -64,7 +66,7 @@ Rectangle {
                     ? (root.width - 4 - (root.options.length - 1) * 2) / Math.max(1, root.options.length)
                     : Math.max(24, (root.width - 4 - (root.options.length - 1) * 2) / Math.max(1, root.options.length))
                 height: root.height - 4
-                radius: Math.max(2, 3)
+                radius: Theme.radiusSmall
                 enabled: root.enabled
                 color: root.value === modelData.value ? Theme.accent : (segmentMouse.containsMouse ? Theme.bgHover : "transparent")
                 border.width: root.value === modelData.value ? 1 : 0

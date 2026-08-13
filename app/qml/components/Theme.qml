@@ -67,11 +67,14 @@ QtObject {
     readonly property string dataFont: "Cascadia Mono"
     readonly property string iconFont: "Segoe Fluent Icons"
 
-    readonly property int radiusSmall: 3
-    readonly property int radius: 5
-    readonly property int radiusLarge: 7
-    readonly property int controlHeight: 30
+    // Hermes primitives are square. Circular geometry such as knobs and
+    // status dots owns its radius locally instead of borrowing these tokens.
+    readonly property int radiusSmall: 0
+    readonly property int radius: 0
+    readonly property int radiusLarge: 0
     readonly property int compactControlHeight: 24
+    readonly property int comfortableControlHeight: 32
+    readonly property int controlHeight: compactControlHeight
     readonly property int commandHeight: 34
     readonly property int toolButtonSize: 32
     readonly property int railButtonSize: 32
@@ -79,18 +82,19 @@ QtObject {
     readonly property int motionFast: 120
     readonly property int motionNormal: 180
 
-    // Inspector dimensions stay compact so the canvas keeps priority.
-    readonly property int inspectorLabelColWidth: 42
-    readonly property int inspectorRowHeight: controlHeight
-    readonly property int inspectorColSpacing: 6
+    // Hermes Field contract: a 160 px label column, a flexible control
+    // column, and a 16 px gutter. Fields use the compact 24 px density.
+    readonly property int inspectorLabelColWidth: 160
+    readonly property int inspectorRowHeight: compactControlHeight
+    readonly property int inspectorColSpacing: 16
     readonly property int inspectorWSelect: 160
-    readonly property int inspectorWInput: 120
-    readonly property int inspectorWPair: 82
-    readonly property int inspectorWSliderVB: 58
-    readonly property int inspectorWSwatch: 186
-    readonly property int inspectorWSeg2: 86
-    readonly property int inspectorWSeg3: 110
-    readonly property int inspectorWSeg4: 144
-    readonly property int inspectorWAlign: 108
-    readonly property int inspectorWBind: 90
+    readonly property int inspectorWInput: 160
+    readonly property int inspectorWPair: 72
+    readonly property int inspectorWSliderVB: 56
+    readonly property int inspectorWSwatch: 160
+    readonly property int inspectorWSeg2: 160
+    readonly property int inspectorWSeg3: 160
+    readonly property int inspectorWSeg4: 160
+    readonly property int inspectorWAlign: 160
+    readonly property int inspectorWBind: 160
 }

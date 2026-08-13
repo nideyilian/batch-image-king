@@ -10,8 +10,7 @@ Item {
     property bool expanded: true
     default property alias sectionData: contentColumn.data
 
-    // ★ 去除折叠：始终展开高度
-    implicitHeight: header.height + contentColumn.implicitHeight + 9
+    implicitHeight: header.height + (root.expanded ? contentColumn.implicitHeight + 9 : 0) + 1
     height: implicitHeight
 
     Rectangle {

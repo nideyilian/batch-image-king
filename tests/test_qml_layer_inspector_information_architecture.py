@@ -39,14 +39,14 @@ def test_qml_text_background_shadow_and_glow_live_in_more_parameters():
 
     for section_id in ("textBackgroundSection", "textShadowSection", "textGlowSection"):
         match = re.search(
-            rf"id: {section_id}.*?visible: inspectorTab === 1 && workspace\.selectedIsTextLayer",
+            rf"id: {section_id}.*?visible: workspace\.selectedIsTextLayer",
             source,
             re.S,
         )
         assert match is not None, section_id
 
     assert re.search(
-        r"id: textFillSection.*?visible: inspectorTab === 0 && workspace\.selectedIsTextLayer",
+        r"id: textFillSection.*?visible: workspace\.selectedIsTextLayer",
         source,
         re.S,
     )

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 
 TextArea {
     id: root
@@ -7,6 +8,7 @@ TextArea {
     property bool invalid: false
     property string accessibleName: ""
 
+    Layout.fillWidth: true
     leftPadding: 9
     rightPadding: 9
     topPadding: 8

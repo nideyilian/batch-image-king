@@ -8,8 +8,8 @@ Rectangle {
     signal toggled(bool checked)
 
     implicitWidth: 38
-    implicitHeight: 22
-    radius: height / 2
+    implicitHeight: Theme.compactControlHeight
+    radius: Theme.radiusSmall
     color: checked ? Theme.accent : Theme.bgControl
     opacity: enabled ? 1 : 0.56
     activeFocusOnTab: enabled

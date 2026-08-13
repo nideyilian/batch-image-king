@@ -1,10 +1,12 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 
 ComboBox {
     id: root
 
-    implicitWidth: 150
+    Layout.fillWidth: true
+    implicitWidth: 160
     implicitHeight: Theme.controlHeight
     textRole: "label"
     valueRole: "value"
