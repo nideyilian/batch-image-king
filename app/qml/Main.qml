@@ -4324,7 +4324,24 @@ ApplicationWindow {
                             Column {
                                 width: parent.width
                                 spacing: 5
-                                BodyLabel { text: "输出目录"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                RowLayout {
+                                    width: parent.width
+                                    spacing: 6
+                                    BodyLabel { text: "输出目录"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Item { Layout.fillWidth: true }
+                                    TinyLabel {
+                                        text: batchExport.useCurrentTimeForPath
+                                              ? "日期变量  YYYYMMDD"
+                                              : "日期固定"
+                                        color: batchExport.useCurrentTimeForPath ? Theme.textSecondary : Theme.textMuted
+                                    }
+                                    ToggleSwitch {
+                                        objectName: "pathDateVariableToggle"
+                                        accessibleName: "导出时将路径中的 YYYYMMDD 日期替换为当天日期"
+                                        checked: batchExport.useCurrentTimeForPath
+                                        onToggled: checkedValue => batchExport.useCurrentTimeForPath = checkedValue
+                                    }
+                                }
                                 RowLayout {
                                     width: parent.width
                                     spacing: 6
