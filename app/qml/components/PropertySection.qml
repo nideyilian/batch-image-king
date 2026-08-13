@@ -5,82 +5,106 @@ Item {
 
     property string title: ""
     property string summary: ""
-    property bool expanded: true
+    readonly property bool expanded: true
     default property alias sectionData: contentColumn.data
 
-    implicitHeight: header.height + (expanded ? contentColumn.implicitHeight + 6 : 0)
+    implicitHeight: cardContainer.implicitHeight
     height: implicitHeight
 
+    // —— 卡片容器：Atelier Glass 分区卡片
     Rectangle {
-        id: header
+        id: cardContainer
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Theme.sectionHeaderHeight
-        color: mouseArea.containsMouse ? Theme.bgRaised : "transparent"
+        anchors.top: parent.top
+        anchors.topMargin: 5
+        anchors.bottomMargin: 4
+        radius: Theme.radiusCard
+        color: Theme.glassFill
+        border { width: 1; color: Theme.glassHighlight; opacity: 0.7 }
+        implicitHeight: header.height + contentColumn.implicitHeight + 14
 
-        Text {
+        // 玻璃高光顶边
+        Rectangle { anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 1; radius: Theme.radiusCard; color: "#ffffff"; opacity: 0.04 }
+
+        Row {
+            id: header
             anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.title
-            color: Theme.textPrimary
-            font.family: Theme.bodyFont
-            font.pixelSize: 11
-            font.weight: Font.DemiBold
-        }
-
-        Text {
-            anchors.right: chevron.left
-            anchors.rightMargin: 6
-            anchors.verticalCenter: parent.verticalCenter
-            text: root.summary
-            color: Theme.textMuted
-            font.family: Theme.bodyFont
-            font.pixelSize: 10
-        }
-
-        AppIcon {
-            id: chevron
+            anchors.leftMargin: 12
             anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            iconName: AppIcons.chevronDown
-            iconSize: 10
-            iconColor: Theme.textMuted
-            rotation: root.expanded ? 0 : -90
+            anchors.rightMargin: 12
+            anchors.top: parent.top
+            anchors.topMargin: 10
+            height: Theme.sectionHeaderHeight
 
-            Behavior on rotation {
-                NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic }
+            // 琥珀金装饰圆点
+            Rectangle {
+                width: 5
+                height: 5
+                radius: 3
+                color: Theme.accent
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.rightMargin: 8
+                Rectangle { anchors.centerIn: parent; width: 2; height: 2; radius: 1; color: Theme.amberGlow }
+            }
+
+            Text {
+                id: sectionTitle
+                text: root.title
+                color: Theme.textPrimary
+                font.family: Theme.displayFont
+                font.pixelSize: 11.5
+                font.weight: Font.DemiBold
+                font.letterSpacing: 0.15
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 9
+            }
+
+            // 琥珀金线连到 summary
+            Item {
+                width: 1
+                height: parent.height - 4
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: sectionTitle.right
+                anchors.leftMargin: 10
+                Rectangle { anchors.centerIn: parent; width: 1; height: 14; color: Theme.border; opacity: 0.5 }
+            }
+
+            Text {
+                text: root.summary
+                color: Theme.amber
+                font.family: Theme.interfaceFont
+                font.pixelSize: 10
+                font.weight: Font.Medium
+                opacity: 0.88
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 12 + 9 + sectionTitle.implicitWidth + 10 + 1
             }
         }
 
-        MouseArea {
-            id: mouseArea
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.expanded = !root.expanded
+        Column {
+            id: contentColumn
+            anchors.top: header.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            anchors.topMargin: 6
+            spacing: 3
+            visible: true
         }
-    }
 
-    Column {
-        id: contentColumn
-        anchors.top: header.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 8
-        anchors.rightMargin: 8
-        anchors.topMargin: 3
-        spacing: 3
-        visible: root.expanded
-    }
-
-    Rectangle {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        height: 1
-        color: Theme.border
+        // 底边柔和分隔（代替硬 border）
+        Rectangle {
+            anchors.left: parent.left; anchors.leftMargin: 14
+            anchors.right: parent.right; anchors.rightMargin: 14
+            anchors.bottom: parent.bottom
+            height: 1
+            color: Theme.glassShadow
+            opacity: 0.55
+        }
     }
 
     Accessible.name: title
