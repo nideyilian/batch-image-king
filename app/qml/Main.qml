@@ -25,6 +25,8 @@ ApplicationWindow {
 
     property int selectedLayer: workspace.selectedLayerIndex
     property int activeTool: 0
+    // Inspector tab state remains writable for launch probes and deep-link actions.
+    property int inspectorTab: 0
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
@@ -323,6 +325,7 @@ ApplicationWindow {
     }
 
     function revealTextTypography() {
+        inspectorTab = 0
         textFontSection.expanded = true
         textTypographySection.expanded = true
         Qt.callLater(function() {
@@ -331,9 +334,18 @@ ApplicationWindow {
         })
     }
 
+    function selectInspectorTab(index) {
+        inspectorTab = Math.max(0, Math.min(1, Number(index)))
+        if (inspectorScroll && inspectorScroll.contentItem)
+            inspectorScroll.contentItem.contentY = 0
+        if (inspectorScroll && inspectorScroll.contentItem)
+            inspectorScroll.contentItem.contentX = 0
+    }
+
     function revealTextContentEditing() {
         if (workspace.selectedLayerIndex < 0)
             return
+        inspectorTab = 0
         textContentSection.expanded = true
         Qt.callLater(function() {
             if (inspectorScroll.contentItem)
@@ -353,6 +365,7 @@ ApplicationWindow {
     }
 
     function revealTextAppearance() {
+        inspectorTab = 1
         textBackgroundSection.expanded = true
         Qt.callLater(function() {
             if (inspectorScroll.contentItem)
@@ -361,6 +374,7 @@ ApplicationWindow {
     }
 
     function revealTextEffects() {
+        inspectorTab = 1
         textShadowSection.expanded = true
         textGlowSection.expanded = true
         Qt.callLater(function() {
@@ -371,6 +385,7 @@ ApplicationWindow {
 
     function revealAdvancedProperties() {
         if (workspace.selectedLayerIndex < 0) return
+        inspectorTab = 1
         layerTransformSection.expanded = true
         clonePropertiesSection.expanded = true
         Qt.callLater(function() {
@@ -389,6 +404,7 @@ ApplicationWindow {
 
     function revealLayerNameEditor() {
         if (workspace.selectedLayerIndex < 0) return
+        inspectorTab = 0
         var section = workspace.selectedIsLayerGroup ? groupSection : basicPropertiesSection
         var editor = workspace.selectedIsLayerGroup ? groupNameEditor : layerNameEditor
         section.expanded = true
@@ -7278,6 +7294,16 @@ ApplicationWindow {
 
                     Divider { Layout.fillWidth: true }
 
+                    HermesPageTabs {
+                        id: inspectorTabs
+                        Layout.fillWidth: true
+                        items: ["基本参数", "更多参数"]
+                        currentIndex: inspectorTab
+                        fillWidth: true
+                        accessibleName: "属性参数"
+                        onActivated: index => window.selectInspectorTab(index)
+                    }
+
                     ScrollView {
                         id: inspectorScroll
                         objectName: "inspectorScroll"
@@ -7306,7 +7332,7 @@ ApplicationWindow {
                                 summary: workspace.selectedImageSource
                                          ? (workspace.selectedImageSourceIsFolder ? workspace.selectedImageSourceCount + " 张素材" : "单张图片")
                                          : "未设置"
-                                visible: workspace.selectedHasImageSource
+                                visible: inspectorTab === 0 && workspace.selectedHasImageSource
 
                                 InspectorRow {
                                     label: "路径"
@@ -7359,7 +7385,7 @@ ApplicationWindow {
                                 title: "矢量路径"
                                 summary: workspace.selectedVectorPathEnabled
                                          ? workspace.selectedVectorNodes.length + " 个节点" : "矩形边界"
-                                visible: workspace.selectedSupportsVectorPath
+                                visible: inspectorTab === 1 && workspace.selectedSupportsVectorPath
 
                                 InspectorRow {
                                     label: "路径"
@@ -7451,7 +7477,7 @@ ApplicationWindow {
                                 Layout.row: 4
                                 title: "高级设置"
                                 summary: workspace.selectedFitModeName
-                                visible: workspace.selectedSupportsImageFit
+                                visible: inspectorTab === 0 && workspace.selectedSupportsImageFit
 
                                 InspectorRow {
                                     label: "适配"
@@ -7538,7 +7564,7 @@ ApplicationWindow {
                                 Layout.row: 5
                                 title: "形状"
                                 summary: workspace.selectedShapeTypeName
-                                visible: workspace.selectedIsShapedLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsShapedLayer
 
                                 GridLayout {
                                     width: parent.width
@@ -7681,7 +7707,7 @@ ApplicationWindow {
                                 Layout.row: 3
                                 title: "文字内容"
                                 summary: workspace.selectedTextBindingEnabled ? workspace.selectedTextCandidateCount + " 条候选" : "整段排版"
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 ContentTextEditor {
                                     id: selectedTextEditor
@@ -7847,7 +7873,7 @@ ApplicationWindow {
                                 Layout.row: 4
                                 title: "字体"
                                 summary: workspace.selectedTextFontSize + " px"
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "字体"
@@ -7919,7 +7945,7 @@ ApplicationWindow {
                                 Layout.row: 5
                                 title: "排版"
                                 summary: workspace.selectedTextTypographySummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 0 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "对齐"
@@ -8032,7 +8058,7 @@ ApplicationWindow {
                                 Layout.row: 1
                                 title: "图层组"
                                 summary: workspace.selectedGroupChildCount + " 个图层"
-                                visible: workspace.selectedIsLayerGroup
+                                visible: inspectorTab === 0 && workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "名称"
@@ -8061,7 +8087,7 @@ ApplicationWindow {
                                 Layout.row: 1
                                 title: "基本属性"
                                 summary: workspace.selectedWidth + " × " + workspace.selectedHeight
-                                visible: !workspace.selectedIsLayerGroup
+                                visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "名称"
@@ -8114,7 +8140,7 @@ ApplicationWindow {
                                 Layout.row: 10
                                 title: "外观"
                                 summary: workspace.selectedSupportsBlendMode ? workspace.selectedBlendModeName : "标准"
-                                visible: !workspace.selectedIsLayerGroup
+                                visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
                                     label: "不透明度"
@@ -8200,7 +8226,7 @@ ApplicationWindow {
                                 summary: Math.abs(workspace.selectedRotation) > 0.001
                                          ? Math.round(workspace.selectedRotation * 10) / 10 + "°"
                                          : (workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未变换")
-                                visible: !workspace.selectedIsLayerGroup
+                                visible: inspectorTab === 1 && !workspace.selectedIsLayerGroup
 
                                 AdaptiveInspectorGrid {
                                     id: layerTransformCompactGrid
@@ -8257,7 +8283,7 @@ ApplicationWindow {
                                 title: "随机变换"
                                 summary: workspace.selectedRandomTransformEnabledCount > 0
                                          ? workspace.selectedRandomTransformEnabledCount + " 项已启用" : "关闭"
-                                visible: workspace.selectedSupportsRandomTransform
+                                visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform
 
                                 AdaptiveInspectorGrid {
                                     id: randomPositionCompactGrid
@@ -8384,7 +8410,7 @@ ApplicationWindow {
                                 summary: workspace.selectedCloneEnabled
                                          ? workspace.selectedCloneRows + " × " + workspace.selectedCloneColumns
                                          : "关闭"
-                                visible: workspace.selectedSupportsClone
+                                visible: inspectorTab === 1 && workspace.selectedSupportsClone
 
                                 InspectorRow {
                                     label: "启用"
@@ -8593,7 +8619,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字填充"
                                 summary: workspace.selectedTextFillSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "模式"
@@ -8729,7 +8755,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字背景"
                                 summary: workspace.selectedTextBackgroundSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "模式"
@@ -8792,7 +8818,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字阴影"
                                 summary: workspace.selectedTextShadowSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "模式"
@@ -8883,7 +8909,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "文字发光"
                                 summary: workspace.selectedTextGlowSummary
-                                visible: workspace.selectedIsTextLayer
+                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
 
                                 InspectorRow {
                                     label: "模式"
@@ -8957,7 +8983,7 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "描边"
                                 summary: workspace.selectedStrokeEnabled ? workspace.selectedStrokeWidth + " px" : "关闭"
-                                visible: workspace.selectedSupportsStroke
+                                visible: inspectorTab === 1 && workspace.selectedSupportsStroke
 
                                 InspectorRow {
                                     label: "模式"
@@ -9104,7 +9130,8 @@ ApplicationWindow {
                                          : workspace.selectedOverlayMode === "gradient"
                                            ? "渐变 · " + workspace.selectedGradientOverlayOpacity + "% · " + Math.round(workspace.selectedGradientOverlayAngle) + "°"
                                            : "关闭"
-                                visible: workspace.selectedSupportsColorOverlay || workspace.selectedSupportsGradientOverlay
+                                visible: inspectorTab === 1
+                                         && (workspace.selectedSupportsColorOverlay || workspace.selectedSupportsGradientOverlay)
 
                                 InspectorRow {
                                     label: "模式"
@@ -9236,7 +9263,7 @@ ApplicationWindow {
                                 summary: workspace.selectedCornerMode === "independent"
                                          ? "独立四角"
                                          : workspace.selectedCornerRadius + " px"
-                                visible: workspace.selectedSupportsCornerRadius
+                                visible: inspectorTab === 1 && workspace.selectedSupportsCornerRadius
 
                                 InspectorRow {
                                     label: "模式"

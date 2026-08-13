@@ -10,15 +10,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.unit
-def test_qml_inspector_shows_all_parameter_sections_without_tabs():
+def test_qml_inspector_uses_basic_and_more_parameter_tabs():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
-    launcher_source = (REPO_ROOT / "app/qml/qml_main.py").read_text(encoding="utf-8")
 
-    assert 'items: ["基本参数", "更多参数"]' not in source
-    assert "id: inspectorTabs" not in source
-    assert "inspectorTab" not in source
-    assert "cycle-inspector-tabs" not in launcher_source
-    assert "cycle_inspector_tabs" not in launcher_source
+    assert 'items: ["基本参数", "更多参数"]' in source
+    assert "HermesPageTabs {" in source
     for section_id in (
         "basicPropertiesSection",
         "imageSourceSection",
@@ -39,41 +35,63 @@ def test_qml_inspector_shows_all_parameter_sections_without_tabs():
 
 
 @pytest.mark.unit
-def test_qml_text_background_shadow_and_glow_are_always_available_for_text_layers():
+def test_qml_text_background_shadow_and_glow_live_in_more_parameters():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
     for section_id in ("textBackgroundSection", "textShadowSection", "textGlowSection"):
         match = re.search(
-            rf"id: {section_id}.*?visible: workspace\.selectedIsTextLayer",
+            rf"id: {section_id}.*?visible: inspectorTab === 1 && workspace\.selectedIsTextLayer",
             source,
             re.S,
         )
         assert match is not None, section_id
 
     assert re.search(
-        r"id: textFillSection.*?visible: workspace\.selectedIsTextLayer",
+        r"id: textFillSection.*?visible: inspectorTab === 1 && workspace\.selectedIsTextLayer",
         source,
         re.S,
     )
 
 
 @pytest.mark.unit
-def test_qml_parameter_sections_only_follow_layer_capabilities():
+def test_qml_parameter_tabs_isolate_basic_and_more_sections():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
     assert "InspectorModuleHeader" not in source
 
-    for section_id in (
-        "basicPropertiesSection", "imageSourceSection", "advancedSettingsSection",
-        "shapeSection", "textContentSection", "textFontSection",
-        "textTypographySection", "appearanceSection", "vectorPathSection",
-        "layerTransformSection", "randomTransformSection", "clonePropertiesSection",
-        "textFillSection", "textBackgroundSection", "textShadowSection",
-        "textGlowSection", "advancedStrokeSection", "overlaySection", "cornerSection",
-    ):
+    basic_sections = (
+        "basicPropertiesSection",
+        "imageSourceSection",
+        "advancedSettingsSection",
+        "shapeSection",
+        "textContentSection",
+        "textFontSection",
+        "textTypographySection",
+        "appearanceSection",
+    )
+    advanced_sections = (
+        "vectorPathSection",
+        "layerTransformSection",
+        "randomTransformSection",
+        "clonePropertiesSection",
+        "textFillSection",
+        "textBackgroundSection",
+        "textShadowSection",
+        "textGlowSection",
+        "advancedStrokeSection",
+        "overlaySection",
+        "cornerSection",
+    )
+
+    for section_id in basic_sections:
         block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*Column)", source, re.S)
         assert block is not None, section_id
-        assert "inspectorTab" not in block.group(0), section_id
+        assert "inspectorTab === 0" in block.group(0), section_id
+
+    for section_id in advanced_sections:
+        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*Column)", source, re.S)
+        assert block is not None, section_id
+        assert "inspectorTab === 1" in block.group(0), section_id
 
 
 @pytest.mark.unit

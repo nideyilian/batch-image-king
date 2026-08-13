@@ -84,8 +84,8 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'id: shapedLayerDialog' in qml_source
     assert 'workspace.addConfiguredTextLayer(' in qml_source
     assert 'workspace.addConfiguredShapedLayer(' in qml_source
-    assert 'visible: workspace.selectedHasImageSource' in qml_source
-    assert 'visible: workspace.selectedIsShapedLayer' in qml_source
+    assert 'visible: inspectorTab === 0 && workspace.selectedHasImageSource' in qml_source
+    assert 'visible: inspectorTab === 0 && workspace.selectedIsShapedLayer' in qml_source
     assert 'workspace.setSelectedShapeType(modelData.value)' in qml_source
     assert 'workspace.setSelectedTrapezoidSlopeSide(modelData.value)' in qml_source
     assert 'workspace.setSelectedPolygonCornerRadius(parsed)' in qml_source
@@ -113,7 +113,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source
-    assert 'visible: workspace.selectedSupportsRandomTransform' in qml_source
+    assert 'visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform' in qml_source
     assert 'workspace.setSelectedRandomPositionEnabled(!workspace.selectedRandomPositionEnabled)' in qml_source
     assert 'workspace.setSelectedRandomScaleMinPercent(parsed)' in qml_source
     assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source

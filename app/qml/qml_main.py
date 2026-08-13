@@ -35,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--demo-tabs", action="store_true", help="启动后创建多个文档标签用于验收")
     parser.add_argument("--demo-shaped", action="store_true", help="启动后创建真实异形图层用于验收")
     parser.add_argument("--show-advanced-properties", action="store_true", help="展示内嵌高级图层属性")
+    parser.add_argument("--cycle-inspector-tabs", action="store_true", help="切换更多参数后返回基本参数")
     parser.add_argument("--show-random-transform", action="store_true", help="展示图片图层随机变换配置")
     parser.add_argument("--show-text-typography", action="store_true", help="展示文字字体与核心排版配置")
     parser.add_argument("--show-text-appearance", action="store_true", help="展示文字填充、背景与局部颜色")
@@ -148,6 +149,7 @@ def main() -> int:
         or args.demo_tabs
         or args.demo_shaped
         or args.show_advanced_properties
+        or args.cycle_inspector_tabs
         or args.show_random_transform
         or args.show_text_typography
         or args.show_text_appearance
@@ -353,6 +355,12 @@ def main() -> int:
     )
     window.setProperty("width", max(1180, args.width))
     window.setProperty("height", max(720, args.height))
+    if args.show_effects:
+        window.setProperty("inspectorTab", 0)
+
+    if args.show_random_transform:
+        window.setProperty("inspectorTab", 1)
+
     if args.show_advanced_properties:
         def reveal_advanced_properties() -> None:
             if workspace.selectedSupportsClone:
@@ -362,6 +370,20 @@ def main() -> int:
                 debug("advanced properties section could not be revealed")
 
         QTimer.singleShot(120, reveal_advanced_properties)
+
+    if args.cycle_inspector_tabs:
+        def show_more_parameters() -> None:
+            QMetaObject.invokeMethod(
+                window, "selectInspectorTab", Q_ARG("QVariant", 1)
+            )
+
+        def return_to_basic_parameters() -> None:
+            QMetaObject.invokeMethod(
+                window, "selectInspectorTab", Q_ARG("QVariant", 0)
+            )
+
+        QTimer.singleShot(120, show_more_parameters)
+        QTimer.singleShot(420, return_to_basic_parameters)
 
     if args.show_random_transform:
         def reveal_random_transform() -> None:

@@ -329,12 +329,12 @@ def test_inspector_uses_hermes_upstream_component_contracts():
 
     assert "component InspectorRow: HermesField" in main_source
     assert "component CompactInspectorField: HermesField" in main_source
-    assert "HermesPageTabs {" not in main_source
-    assert 'items: ["基本参数", "更多参数"]' not in main_source
+    assert "HermesPageTabs {" in main_source
+    assert 'items: ["基本参数", "更多参数"]' in main_source
 
 
 @pytest.mark.unit
-def test_inspector_keeps_a_stable_single_axis_layout():
+def test_inspector_tab_switch_keeps_a_stable_single_axis_layout():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     scroll_block = next(
         block
@@ -356,7 +356,7 @@ def test_inspector_keeps_a_stable_single_axis_layout():
     assert "width: inspectorScroll.contentWidth" in grid_block
     assert len(ordered_sections) >= 10
     assert all("Layout.fillWidth: true" in block for block in ordered_sections)
-    assert "ScrollBar.horizontal.policy: ScrollBar.AlwaysOff" in scroll_block
+    assert "contentItem.contentX = 0" in main_source
     assert "contentItem.contentY = Math.max(0" in main_source
 
 
