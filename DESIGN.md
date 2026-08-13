@@ -33,9 +33,9 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 命令工具栏 44-54 px
 文档标签栏 36 px
 左侧工具轨 48 px
-图层面板 246-276 px
+图层面板 默认 246-276 px，可调 200-420 px
 中央画布 弹性区域
-属性检查器 368-408 px
+属性检查器 默认 368-408 px，可调 360-560 px
 底部状态栏 28 px
 ```
 

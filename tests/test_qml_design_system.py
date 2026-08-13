@@ -288,3 +288,41 @@ def test_field_controls_fill_the_flexible_column_by_default():
                  "SelectBox.qml", "SegmentedControl.qml", "ValueBox.qml"):
         assert "Layout.fillWidth: true" in component_sources[name]
         assert "import QtQuick.Layouts" in component_sources[name]
+
+
+@pytest.mark.unit
+def test_workspace_sidebars_are_resizable_and_persist_widths():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+    theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
+
+    for token in (
+        "layerPanelMinWidth",
+        "layerPanelMaxWidth",
+        "inspectorPanelMinWidth",
+        "inspectorPanelMaxWidth",
+        "canvasMinWidth",
+        "sidebarResizeHandleWidth",
+        "sidebarResizeStep",
+    ):
+        assert f"property int {token}" in theme_source
+
+    for marker in (
+        'category: "sidebarLayout"',
+        "property real layerPanelWidth: -1",
+        "property real inspectorPanelWidth: -1",
+        "function setLayerPanelWidth(value)",
+        "function setInspectorPanelWidth(value)",
+        "function resetLayerPanelWidth()",
+        "function resetInspectorPanelWidth()",
+        "component SidebarResizeHandle",
+        "id: layerPanelResizeHandle",
+        "id: inspectorResizeHandle",
+        "onDoubleClicked: resizeHandle.resetRequested()",
+        "onPositionChanged: mouse =>",
+        "previousX = mouse.sceneX",
+        "var delta = mouse.sceneX - previousX",
+        "resizeHandle.dragMoved(delta)",
+        "Layout.preferredWidth: window.layerPanelWidth",
+        "Layout.preferredWidth: window.inspectorPanelWidth",
+    ):
+        assert marker in main_source

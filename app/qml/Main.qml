@@ -30,6 +30,9 @@ ApplicationWindow {
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
+    property real layerPanelWidth: 0
+    property real inspectorPanelWidth: 0
+    property bool sidebarWidthsRestored: false
 
     // 统一的快捷键焦点门控：画布文字编辑中 / 阻塞态 / 任意属性面板输入框取得焦点时
     // 都会抑制图层编辑类与单字母工具类快捷键，避免抢输入或误触发。
@@ -132,6 +135,75 @@ ApplicationWindow {
         toastMessage = message
         toast.opacity = 1
         toastTimer.restart()
+    }
+
+    function defaultLayerPanelWidth() {
+        return width < 1320 ? 246 : 276
+    }
+
+    function defaultInspectorPanelWidth() {
+        return width < 1320 ? 368 : 408
+    }
+
+    function availableSidebarWidth() {
+        return width - Theme.toolRailWidth - Theme.canvasMinWidth
+                - Theme.sidebarResizeHandleWidth * 2
+    }
+
+    function clampLayerPanelWidth(value) {
+        var maxWidth = Math.min(
+            Theme.layerPanelMaxWidth,
+            availableSidebarWidth() - inspectorPanelWidth
+        )
+        return Math.round(Math.max(
+            Theme.layerPanelMinWidth,
+            Math.min(Math.max(Theme.layerPanelMinWidth, maxWidth), value)
+        ))
+    }
+
+    function clampInspectorPanelWidth(value) {
+        var maxWidth = Math.min(
+            Theme.inspectorPanelMaxWidth,
+            availableSidebarWidth() - layerPanelWidth
+        )
+        return Math.round(Math.max(
+            Theme.inspectorPanelMinWidth,
+            Math.min(Math.max(Theme.inspectorPanelMinWidth, maxWidth), value)
+        ))
+    }
+
+    function applySidebarBounds() {
+        layerPanelWidth = clampLayerPanelWidth(layerPanelWidth)
+        inspectorPanelWidth = clampInspectorPanelWidth(inspectorPanelWidth)
+    }
+
+    function setLayerPanelWidth(value) {
+        layerPanelWidth = clampLayerPanelWidth(value)
+        sidebarSettings.layerPanelWidth = layerPanelWidth
+    }
+
+    function setInspectorPanelWidth(value) {
+        inspectorPanelWidth = clampInspectorPanelWidth(value)
+        sidebarSettings.inspectorPanelWidth = inspectorPanelWidth
+    }
+
+    function resetLayerPanelWidth() {
+        setLayerPanelWidth(defaultLayerPanelWidth())
+    }
+
+    function resetInspectorPanelWidth() {
+        setInspectorPanelWidth(defaultInspectorPanelWidth())
+    }
+
+    function restoreSidebarWidths() {
+        layerPanelWidth = sidebarSettings.layerPanelWidth > 0
+                ? sidebarSettings.layerPanelWidth
+                : defaultLayerPanelWidth()
+        inspectorPanelWidth = sidebarSettings.inspectorPanelWidth > 0
+                ? sidebarSettings.inspectorPanelWidth
+                : defaultInspectorPanelWidth()
+        applySidebarBounds()
+        sidebarWidthsRestored = true
     }
 
     function openNewCanvasDialog() {
@@ -403,7 +475,23 @@ ApplicationWindow {
         property string quickPresetsJson: ""
     }
 
-    Component.onCompleted: window.loadQuickCanvasPresets()
+    Settings {
+        id: sidebarSettings
+        objectName: "sidebarSettings"
+        category: "sidebarLayout"
+        property real layerPanelWidth: -1
+        property real inspectorPanelWidth: -1
+    }
+
+    Component.onCompleted: {
+        window.loadQuickCanvasPresets()
+        window.restoreSidebarWidths()
+    }
+
+    onWidthChanged: {
+        if (sidebarWidthsRestored)
+            applySidebarBounds()
+    }
 
     Connections {
         target: workspace
@@ -3701,6 +3789,73 @@ ApplicationWindow {
         }
     }
 
+    component SidebarResizeHandle: Rectangle {
+        id: resizeHandle
+
+        property string tooltip: ""
+        property string accessibleName: ""
+        property bool dragging: false
+        signal dragMoved(real horizontalDelta)
+        signal resetRequested()
+
+        Layout.preferredWidth: Theme.sidebarResizeHandleWidth
+        Layout.minimumWidth: Theme.sidebarResizeHandleWidth
+        Layout.maximumWidth: Theme.sidebarResizeHandleWidth
+        Layout.fillHeight: true
+        z: 50
+        color: resizeMouse.containsMouse || dragging ? Theme.bgHover : Theme.bgBar
+        activeFocusOnTab: true
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: 1
+            color: resizeMouse.containsMouse || dragging
+                   ? Theme.borderStrong : Theme.border
+        }
+
+        MouseArea {
+            id: resizeMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.SizeHorCursor
+            preventStealing: true
+            property real previousX: 0
+
+            onPressed: mouse => {
+                resizeHandle.forceActiveFocus(Qt.MouseFocusReason)
+                previousX = mouse.sceneX
+                resizeHandle.dragging = true
+            }
+            onReleased: {
+                resizeHandle.dragging = false
+            }
+            onCanceled: {
+                resizeHandle.dragging = false
+            }
+            onPositionChanged: mouse => {
+                if (!pressed)
+                    return
+                var delta = mouse.sceneX - previousX
+                if (Math.abs(delta) < 0.01)
+                    return
+                resizeHandle.dragMoved(delta)
+                previousX = mouse.sceneX
+            }
+            onDoubleClicked: resizeHandle.resetRequested()
+        }
+
+        Keys.onLeftPressed: dragMoved(-Theme.sidebarResizeStep)
+        Keys.onRightPressed: dragMoved(Theme.sidebarResizeStep)
+
+        ToolTip.visible: resizeMouse.containsMouse
+        ToolTip.text: resizeHandle.tooltip
+        ToolTip.delay: 420
+        Accessible.name: accessibleName
+        Accessible.description: "可拖拽调整宽度，双击恢复默认"
+    }
+
     component TrailingToggle: Item {
         id: trailingToggle
         property bool checked: false
@@ -5347,7 +5502,7 @@ ApplicationWindow {
 
             Rectangle {
                 id: toolRail
-                Layout.preferredWidth: 48
+                Layout.preferredWidth: Theme.toolRailWidth
                 Layout.fillHeight: true
                 color: Theme.bgBar
 
@@ -5379,7 +5534,8 @@ ApplicationWindow {
 
             Rectangle {
                 id: layerPanel
-                Layout.preferredWidth: window.width < 1320 ? 246 : 276
+                objectName: "layerPanel"
+                Layout.preferredWidth: window.layerPanelWidth
                 Layout.fillHeight: true
                 color: Theme.bgPanel
 
@@ -5666,7 +5822,17 @@ ApplicationWindow {
                     }
                 }
 
-                Divider { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.right: parent.right }
+            }
+
+            SidebarResizeHandle {
+                id: layerPanelResizeHandle
+                objectName: "layerPanelResizeHandle"
+                tooltip: "拖拽调整图层栏宽度，双击恢复默认"
+                accessibleName: "调整图层栏宽度"
+                onDragMoved: horizontalDelta => window.setLayerPanelWidth(
+                                   window.layerPanelWidth + horizontalDelta
+                               )
+                onResetRequested: window.resetLayerPanelWidth()
             }
 
             Rectangle {
@@ -7184,9 +7350,21 @@ ApplicationWindow {
                 }
             }
 
+            SidebarResizeHandle {
+                id: inspectorResizeHandle
+                objectName: "inspectorResizeHandle"
+                tooltip: "拖拽调整参数栏宽度，双击恢复默认"
+                accessibleName: "调整参数栏宽度"
+                onDragMoved: horizontalDelta => window.setInspectorPanelWidth(
+                                   window.inspectorPanelWidth - horizontalDelta
+                               )
+                onResetRequested: window.resetInspectorPanelWidth()
+            }
+
             Rectangle {
                 id: inspector
-                Layout.preferredWidth: window.width < 1320 ? 368 : 408
+                objectName: "inspectorPanel"
+                Layout.preferredWidth: window.inspectorPanelWidth
                 Layout.fillHeight: true
                 color: Theme.bgPanel
 
@@ -9364,7 +9542,6 @@ ApplicationWindow {
                     }
                 }
 
-                Divider { anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left }
             }
         }
 

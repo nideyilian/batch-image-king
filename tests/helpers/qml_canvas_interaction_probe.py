@@ -13,7 +13,7 @@ def main() -> int:
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
-    from PySide6.QtCore import QPoint, QPointF, QTimer, Qt, QUrl
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QPoint, QPointF, QTimer, Qt, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuick import QQuickItem
@@ -196,11 +196,97 @@ def main() -> int:
             )
             app.exit(8)
             return
+
+        layer_panel = window.findChild(QQuickItem, "layerPanel")
+        inspector_panel = window.findChild(QQuickItem, "inspectorPanel")
+        layer_handle = window.findChild(QQuickItem, "layerPanelResizeHandle")
+        inspector_handle = window.findChild(QQuickItem, "inspectorResizeHandle")
+        sidebar_settings = window.findChild(QObject, "sidebarSettings")
+        if None in (layer_panel, inspector_panel, layer_handle, inspector_handle, sidebar_settings):
+            print("sidebar resize controls not found", file=sys.stderr)
+            app.exit(9)
+            return
+
+        initial_layer_width = float(layer_panel.property("width"))
+        initial_inspector_width = float(inspector_panel.property("width"))
+
+        if not QMetaObject.invokeMethod(
+            layer_handle,
+            "dragMoved",
+            Q_ARG(float, 64.0),
+        ):
+            print("layer sidebar resize signal could not be invoked", file=sys.stderr)
+            app.exit(10)
+            return
+        QTest.qWait(40)
+        resized_layer_width = float(layer_panel.property("width"))
+        if not resized_layer_width >= initial_layer_width + 60:
+            print(
+                f"layer sidebar resize mismatch: before={initial_layer_width}, after={resized_layer_width}",
+                file=sys.stderr,
+            )
+            app.exit(11)
+            return
+
+        if not QMetaObject.invokeMethod(
+            inspector_handle,
+            "dragMoved",
+            Q_ARG(float, -64.0),
+        ):
+            print("inspector sidebar resize signal could not be invoked", file=sys.stderr)
+            app.exit(12)
+            return
+        QTest.qWait(40)
+        resized_inspector_width = float(inspector_panel.property("width"))
+        if not resized_inspector_width >= initial_inspector_width + 60:
+            print(
+                "inspector sidebar resize mismatch: "
+                f"before={initial_inspector_width}, after={resized_inspector_width}, "
+                f"requested={window.property('inspectorPanelWidth')}, "
+                f"layer={window.property('layerPanelWidth')}",
+                file=sys.stderr,
+            )
+            app.exit(13)
+            return
+
+        if not QMetaObject.invokeMethod(layer_handle, "resetRequested"):
+            print("layer sidebar reset signal could not be invoked", file=sys.stderr)
+            app.exit(14)
+            return
+        if not QMetaObject.invokeMethod(inspector_handle, "resetRequested"):
+            print("inspector sidebar reset signal could not be invoked", file=sys.stderr)
+            app.exit(15)
+            return
+        QTest.qWait(40)
+        if round(float(layer_panel.property("width"))) != 246:
+            print(
+                "layer sidebar reset mismatch: "
+                f"item={layer_panel.property('width')}, "
+                f"window={window.property('layerPanelWidth')}, "
+                f"width={window.property('width')}, "
+                f"saved={sidebar_settings.property('layerPanelWidth')}",
+                file=sys.stderr,
+            )
+            app.exit(16)
+            return
+        if round(float(inspector_panel.property("width"))) != 368:
+            print(f"inspector sidebar reset mismatch: {inspector_panel.property('width')}", file=sys.stderr)
+            app.exit(17)
+            return
+        if (
+            round(float(sidebar_settings.property("layerPanelWidth"))) != 246
+            or round(float(sidebar_settings.property("inspectorPanelWidth"))) != 368
+        ):
+            print("sidebar width settings were not persisted", file=sys.stderr)
+            app.exit(18)
+            return
+
         print(
             f"dragged layer to ({moved_x}, {moved_y}); "
             f"resized to ({resized_width}, {resized_height}); "
             f"locked image ratio {resized_ratio:.4f}; "
-            f"opacity {opacity_percent}%"
+            f"opacity {opacity_percent}%; "
+            f"sidebars resized to ({resized_layer_width:.0f}, {resized_inspector_width:.0f})"
         )
         app.exit(0)
 

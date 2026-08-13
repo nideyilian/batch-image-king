@@ -78,6 +78,14 @@ QtObject {
     readonly property int commandHeight: 34
     readonly property int toolButtonSize: 32
     readonly property int railButtonSize: 32
+    readonly property int toolRailWidth: 48
+    readonly property int layerPanelMinWidth: 200
+    readonly property int layerPanelMaxWidth: 420
+    readonly property int inspectorPanelMinWidth: 360
+    readonly property int inspectorPanelMaxWidth: 560
+    readonly property int canvasMinWidth: 280
+    readonly property int sidebarResizeHandleWidth: 8
+    readonly property int sidebarResizeStep: 16
     readonly property int sectionHeaderHeight: 38
     readonly property int motionFast: 120
     readonly property int motionNormal: 180
