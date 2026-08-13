@@ -1,8 +1,8 @@
 {
-  "version": "1.1.3",
-  "release_notes": "批图王 v1.1.3\n安装版启动加速，并优化首屏预览、字体加载和不透明度拖动流畅度。",
-  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.3/batch-image-king.exe",
-  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.3/batch-image-king-setup.exe",
+  "version": "1.1.4",
+  "release_notes": "批图王 v1.1.4\n优化参数侧栏自然宽度布局，缩窄文字内容框，避免单个组件撑宽整栏；修复侧栏拖拽、重置和历史宽度配置兼容问题。",
+  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.4/batch-image-king.exe",
+  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.4/batch-image-king-setup.exe",
   "required": false,
-  "published_at": "2026-08-12"
+  "published_at": "2026-08-13"
 }
