@@ -3827,7 +3827,7 @@ ApplicationWindow {
 
             onPressed: mouse => {
                 resizeHandle.forceActiveFocus(Qt.MouseFocusReason)
-                previousX = mouse.sceneX
+                previousX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x
                 resizeHandle.dragging = true
             }
             onReleased: {
@@ -3839,11 +3839,12 @@ ApplicationWindow {
             onPositionChanged: mouse => {
                 if (!pressed)
                     return
-                var delta = mouse.sceneX - previousX
+                var sceneX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x
+                var delta = sceneX - previousX
                 if (Math.abs(delta) < 0.01)
                     return
                 resizeHandle.dragMoved(delta)
-                previousX = mouse.sceneX
+                previousX = sceneX
             }
             onDoubleClicked: resizeHandle.resetRequested()
         }
