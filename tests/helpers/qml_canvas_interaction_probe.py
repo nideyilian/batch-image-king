@@ -269,13 +269,13 @@ def main() -> int:
             )
             app.exit(16)
             return
-        if round(float(inspector_panel.property("width"))) != 348:
+        if round(float(inspector_panel.property("width"))) != 368:
             print(f"inspector sidebar reset mismatch: {inspector_panel.property('width')}", file=sys.stderr)
             app.exit(17)
             return
         if (
             round(float(sidebar_settings.property("layerPanelWidth"))) != 246
-            or round(float(sidebar_settings.property("inspectorPanelWidth"))) != 348
+            or round(float(sidebar_settings.property("inspectorPanelWidth"))) != 368
         ):
             print("sidebar width settings were not persisted", file=sys.stderr)
             app.exit(18)

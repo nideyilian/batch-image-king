@@ -142,7 +142,7 @@ ApplicationWindow {
     }
 
     function defaultInspectorPanelWidth() {
-        return 348
+        return width < 1320 ? 368 : 408
     }
 
     function availableSidebarWidth() {
@@ -197,12 +197,11 @@ ApplicationWindow {
 
     function restoreSidebarWidths() {
         var storedInspectorWidth = sidebarSettings.inspectorPanelWidth
-        var usesLegacyInspectorDefault = storedInspectorWidth === 368
-                || storedInspectorWidth === 408
+        var usesPreviousCompactDefault = storedInspectorWidth === 348
         layerPanelWidth = sidebarSettings.layerPanelWidth > 0
                 ? sidebarSettings.layerPanelWidth
                 : defaultLayerPanelWidth()
-        inspectorPanelWidth = storedInspectorWidth > 0 && !usesLegacyInspectorDefault
+        inspectorPanelWidth = storedInspectorWidth > 0 && !usesPreviousCompactDefault
                 ? storedInspectorWidth
                 : defaultInspectorPanelWidth()
         applySidebarBounds()
@@ -7839,10 +7838,19 @@ ApplicationWindow {
 
                                 ContentTextEditor {
                                     id: selectedTextEditor
-                                    Layout.fillWidth: true
+                                    Layout.fillWidth: false
                                     Layout.minimumWidth: 0
+                                    Layout.preferredWidth: Math.min(
+                                        Math.max(0, parent.width),
+                                        Theme.inspectorTextEditorMaxWidth
+                                    )
+                                    Layout.maximumWidth: Theme.inspectorTextEditorMaxWidth
+                                    Layout.alignment: Qt.AlignLeft
                                     implicitWidth: 0
-                                    width: Math.max(0, parent.width)
+                                    width: Math.min(
+                                        Math.max(0, parent.width),
+                                        Theme.inspectorTextEditorMaxWidth
+                                    )
                                     value: workspace.selectedTextContent
                                     placeholder: "输入文字内容"
                                     contextIndex: workspace.selectedLayerIndex
@@ -7946,8 +7954,6 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "绑定"
                                     Row {
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
                                         Layout.preferredWidth: Theme.inspectorWBind
                                         height: Theme.compactControlHeight
                                         spacing: 2
@@ -8071,8 +8077,6 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "对齐"
                                     Row {
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
                                         Layout.preferredWidth: Theme.inspectorWAlign
                                         height: Theme.compactControlHeight
                                         spacing: 2
@@ -8783,8 +8787,6 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     Row {
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
                                         Layout.preferredWidth: Theme.inspectorWSeg2
                                         height: Theme.compactControlHeight
                                         spacing: 2

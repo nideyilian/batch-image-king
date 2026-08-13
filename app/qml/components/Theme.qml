@@ -81,8 +81,8 @@ QtObject {
     readonly property int toolRailWidth: 48
     readonly property int layerPanelMinWidth: 200
     readonly property int layerPanelMaxWidth: 420
-    readonly property int inspectorPanelMinWidth: 332
-    readonly property int inspectorPanelMaxWidth: 480
+    readonly property int inspectorPanelMinWidth: 360
+    readonly property int inspectorPanelMaxWidth: 560
     readonly property int canvasMinWidth: 280
     readonly property int sidebarResizeHandleWidth: 8
     readonly property int sidebarResizeStep: 16
@@ -90,11 +90,11 @@ QtObject {
     readonly property int motionFast: 120
     readonly property int motionNormal: 180
 
-    // Keep the inspector close to the compact reference width: short labels
-    // sit beside a flexible control column instead of forcing a wide panel.
-    readonly property int inspectorLabelColWidth: 72
+    // Labels stay compact; controls keep their own natural widths in the inspector.
+    readonly property int inspectorLabelColWidth: 56
     readonly property int inspectorRowHeight: compactControlHeight
     readonly property int inspectorColSpacing: 8
+    readonly property int inspectorTextEditorMaxWidth: 400
     readonly property int inspectorWSelect: 160
     readonly property int inspectorWInput: 160
     readonly property int inspectorWPair: 72

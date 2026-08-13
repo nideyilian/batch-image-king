@@ -233,8 +233,9 @@ def test_compact_inspector_fields_keep_readable_layout_widths():
 
     assert "import QtQuick.Layouts" in value_box_source
     assert "Layout.minimumWidth: 64" in value_box_source
-    assert "inspectorLabelColWidth: 72" in theme_source
+    assert "inspectorLabelColWidth: 56" in theme_source
     assert "inspectorColSpacing: 8" in theme_source
+    assert "inspectorTextEditorMaxWidth: 400" in theme_source
     assert "inspectorRowHeight: compactControlHeight" in theme_source
     assert "Layout.fillWidth: true" in value_box_source
 
@@ -316,8 +317,8 @@ def test_workspace_sidebars_are_resizable_and_persist_widths():
         "function setInspectorPanelWidth(value)",
         "function resetLayerPanelWidth()",
         "function resetInspectorPanelWidth()",
-        "return 348",
-        "var usesLegacyInspectorDefault = storedInspectorWidth === 368",
+        "return width < 1320 ? 368 : 408",
+        "var usesPreviousCompactDefault = storedInspectorWidth === 348",
         "component SidebarResizeHandle",
         "id: layerPanelResizeHandle",
         "id: inspectorResizeHandle",
@@ -331,5 +332,5 @@ def test_workspace_sidebars_are_resizable_and_persist_widths():
         "Layout.preferredWidth: window.inspectorPanelWidth",
     ):
         assert marker in main_source
-    assert "inspectorPanelMinWidth: 332" in theme_source
-    assert "Layout.fillWidth: true\n                                        Layout.minimumWidth: 0\n                                        Layout.preferredWidth: Theme.inspectorWBind" in main_source
+    assert "inspectorPanelMinWidth: 360" in theme_source
+    assert "Layout.maximumWidth: Theme.inspectorTextEditorMaxWidth" in main_source

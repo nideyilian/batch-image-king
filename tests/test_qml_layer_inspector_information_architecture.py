@@ -105,7 +105,9 @@ def test_qml_random_transform_and_text_editor_adapt_to_inspector_width():
     assert "id: randomTransformOptions" in source
     assert "columns: width >= 460 ? 3 : (width >= 300 ? 2 : 1)" in source
     assert "implicitWidth: 0" in source
-    assert "width: Math.max(0, parent.width)" in source
+    assert "width: Math.min(" in source
+    assert "Theme.inspectorTextEditorMaxWidth" in source
+    assert "Layout.maximumWidth: Theme.inspectorTextEditorMaxWidth" in source
     assert "Layout.minimumWidth: 0" in source
 
 
