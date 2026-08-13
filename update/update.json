@@ -1,8 +1,8 @@
 {
-  "version": "1.1.4",
-  "release_notes": "批图王 v1.1.4\n优化参数侧栏自然宽度布局，缩窄文字内容框，避免单个组件撑宽整栏；修复侧栏拖拽、重置和历史宽度配置兼容问题。",
-  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.4/batch-image-king.exe",
-  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.4/batch-image-king-setup.exe",
+  "version": "1.1.5",
+  "release_notes": "批图王 v1.1.5\n新增 Hermes 暗色主题和明暗主题单按钮切换；图层参数默认完整展示并保留原有 Tab；修复跨主题文字对比度和批量导出路径日期变量入口。",
+  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.5/batch-image-king.exe",
+  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.5/batch-image-king-setup.exe",
   "required": false,
-  "published_at": "2026-08-13"
+  "published_at": "2026-08-14"
 }

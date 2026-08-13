@@ -1,52 +1,114 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Layouts
 
 Rectangle {
     id: root
 
     property string text: ""
     property string iconName: ""
-    property string variant: "secondary"
-    property int buttonHeight: Theme.commandHeight
-    property int horizontalPadding: 12
+    // Hermes Button contract. Legacy values stay supported while callers
+    // migrate from primary/secondary/destructive to variant + tone.
+    property string variant: "outline"
+    property string tone: "neutral"
+    property string size: "md"
+    property bool fullWidth: false
+    property bool iconOnly: false
+    property bool loading: false
+    property int buttonHeight: -1
+    property int horizontalPadding: -1
     signal clicked()
 
     property bool primary: variant === "primary"
     property bool destructive: variant === "destructive"
-    readonly property bool ghost: variant === "ghost"
+    readonly property string effectiveVariant: primary
+                                               ? "solid"
+                                               : (variant === "secondary"
+                                                  ? "outline"
+                                                  : (destructive ? "soft" : variant))
+    readonly property string effectiveTone: primary
+                                            ? "accent"
+                                            : (destructive ? "danger" : tone)
+    readonly property int sizeHeight: size === "xs"
+                                      ? Theme.buttonHeightXs
+                                      : (size === "sm"
+                                         ? Theme.buttonHeightSm
+                                         : (size === "lg"
+                                            ? Theme.buttonHeightLg
+                                            : Theme.buttonHeightMd))
+    readonly property int sizePadding: size === "xs"
+                                       ? Theme.buttonPaddingXs
+                                       : (size === "sm"
+                                          ? Theme.buttonPaddingSm
+                                          : (size === "lg"
+                                             ? Theme.buttonPaddingLg
+                                             : Theme.buttonPaddingMd))
+    readonly property color toneForeground: effectiveTone === "danger"
+                                            ? Theme.danger
+                                            : (effectiveTone === "success"
+                                               ? Theme.success
+                                               : (effectiveTone === "warning"
+                                                  ? Theme.warning
+                                                  : Theme.textPrimary))
+    readonly property color toneSurface: effectiveTone === "danger"
+                                         ? Theme.errorSurface
+                                         : (effectiveTone === "success"
+                                            ? Theme.successSurface
+                                            : Theme.bgRaised)
+    readonly property color toneBorder: effectiveTone === "danger"
+                                        ? Theme.errorBorder
+                                        : (effectiveTone === "accent"
+                                           ? Theme.focusRing
+                                           : Theme.borderStrong)
 
-    implicitWidth: contentRow.implicitWidth + horizontalPadding * 2
-    implicitHeight: buttonHeight
+    Layout.fillWidth: fullWidth
+    implicitWidth: iconOnly
+                   ? implicitHeight
+                   : contentRow.implicitWidth
+                     + (horizontalPadding >= 0 ? horizontalPadding : sizePadding) * 2
+    implicitHeight: effectiveVariant === "plain"
+                    ? contentRow.implicitHeight
+                    : (buttonHeight > 0 ? buttonHeight : sizeHeight)
     radius: Theme.radiusSmall
     color: {
-        if (!enabled) return ghost ? "transparent" : Theme.bgRaised
-        if (ghost) return mouseArea.containsMouse ? Theme.bgHover : "transparent"
-        if (mouseArea.pressed) return destructive ? Theme.danger : (primary ? Theme.accentPressed : Theme.bgHover)
-        if (mouseArea.containsMouse || activeFocus) return destructive ? Theme.errorSurface : (primary ? Theme.accentHover : Theme.bgHover)
-        if (destructive) return Theme.errorSurface
-        return primary ? Theme.accent : Theme.bgControl
+        if (effectiveVariant === "plain") return "transparent"
+        if (!enabled) return effectiveVariant === "ghost" ? "transparent" : Theme.bgRaised
+        if (effectiveVariant === "ghost") return mouseArea.containsMouse ? toneSurface : "transparent"
+        if (effectiveVariant === "solid") {
+            if (effectiveTone === "accent")
+                return mouseArea.pressed ? Theme.accentPressed
+                                         : (mouseArea.containsMouse ? Theme.accentHover : Theme.accent)
+            return toneForeground
+        }
+        if (effectiveVariant === "soft")
+            return mouseArea.containsMouse || mouseArea.pressed ? Theme.bgHover : toneSurface
+        if (mouseArea.containsMouse || mouseArea.pressed || activeFocus)
+            return Theme.bgHover
+        return Theme.bgControl
     }
-    border.width: ghost ? 0 : 1
-    border.color: !enabled
-                  ? Theme.border
-                  : (activeFocus ? Theme.focusRing : (destructive ? Theme.errorBorder : Theme.borderStrong))
-    opacity: 1
-    activeFocusOnTab: enabled
+    border.width: effectiveVariant === "ghost" || effectiveVariant === "plain" ? 0 : 1
+    border.color: !enabled ? Theme.border : (activeFocus ? Theme.focusRing : toneBorder)
+    activeFocusOnTab: enabled && !loading
+
+    transform: Translate {
+        y: mouseArea.pressed && root.effectiveVariant !== "plain" ? 4 : 0
+    }
 
     Behavior on color { ColorAnimation { duration: Theme.motionFast } }
 
     Row {
         id: contentRow
         anchors.centerIn: parent
-        spacing: root.iconName.length > 0 && root.text.length > 0 ? 7 : 0
+        spacing: root.iconName.length > 0 && root.text.length > 0 ? Theme.buttonGap : 0
 
         AppIcon {
             visible: root.iconName.length > 0
             iconName: root.iconName
             iconSize: 15
             iconColor: !root.enabled
-                       ? Theme.textMuted
-                       : (root.primary ? Theme.accentForeground : (root.destructive ? Theme.danger : Theme.textSecondary))
+                       ? Theme.textDisabled
+                       : (root.effectiveVariant === "solid"
+                          ? Theme.accentForeground
+                          : root.toneForeground)
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -54,10 +116,16 @@ Rectangle {
             visible: root.text.length > 0
             text: root.text
             color: !root.enabled
-                   ? Theme.textMuted
-                   : (root.primary ? Theme.accentForeground : (root.destructive ? Theme.danger : Theme.textPrimary))
+                   ? Theme.textDisabled
+                   : (root.effectiveVariant === "solid"
+                      ? Theme.accentForeground
+                      : root.toneForeground)
             font.family: Theme.bodyFont
-            font.pixelSize: 12
+            font.pixelSize: root.size === "xs"
+                            ? 11
+                            : (root.size === "sm"
+                               ? 11.5
+                               : (root.size === "lg" ? 13 : 12))
             font.weight: Font.DemiBold
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -66,14 +134,15 @@ Rectangle {
     MouseArea {
         id: mouseArea
         anchors.fill: parent
+        enabled: root.enabled && !root.loading
         hoverEnabled: true
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onPressed: root.forceActiveFocus(Qt.MouseFocusReason)
         onClicked: root.clicked()
     }
 
-    Keys.onSpacePressed: clicked()
-    Keys.onReturnPressed: clicked()
+    Keys.onSpacePressed: if (!loading) clicked()
+    Keys.onReturnPressed: if (!loading) clicked()
     Accessible.name: text
     Accessible.role: Accessible.Button
 }

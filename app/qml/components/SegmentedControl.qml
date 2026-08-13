@@ -38,13 +38,12 @@ Rectangle {
     Layout.fillWidth: true
     Layout.minimumWidth: 0
     implicitWidth: fillWidth ? 180 : __inlineWidth
-    implicitHeight: Theme.compactControlHeight
+    implicitHeight: Theme.segmentHeight
     radius: Theme.radiusSmall
     color: fillWidth ? Theme.bgControl : Theme.bgControl
     border.width: 1
     border.color: Theme.border
     activeFocusOnTab: enabled
-    opacity: enabled ? 1 : 0.38
 
     Keys.onLeftPressed: activateIndex(currentIndex <= 0 ? options.length - 1 : currentIndex - 1)
     Keys.onRightPressed: activateIndex(currentIndex >= options.length - 1 ? 0 : currentIndex + 1)
@@ -69,14 +68,18 @@ Rectangle {
                 height: root.height - 4
                 radius: Theme.radiusSmall
                 enabled: root.enabled
-                color: root.value === modelData.value ? Theme.accent : (segmentMouse.containsMouse ? Theme.bgHover : "transparent")
-                border.width: root.value === modelData.value ? 1 : 0
-                border.color: Theme.accent
+                color: !root.enabled
+                       ? "transparent"
+                       : (root.value === modelData.value ? Theme.accent : (segmentMouse.containsMouse ? Theme.bgHover : "transparent"))
+                border.width: root.enabled && root.value === modelData.value ? 1 : 0
+                border.color: root.enabled ? Theme.accent : Theme.border
 
                 Text {
                     anchors.fill: parent
                     text: parent.modelData.label
-                    color: root.value === parent.modelData.value ? Theme.accentForeground : Theme.textSecondary
+                    color: !root.enabled
+                           ? Theme.textDisabled
+                           : (root.value === parent.modelData.value ? Theme.accentForeground : Theme.textSecondary)
                     font.family: Theme.bodyFont
                     font.pixelSize: fillWidth ? 10 : 9
                     font.weight: root.value === parent.modelData.value ? Font.DemiBold : Font.Normal

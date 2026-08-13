@@ -33,7 +33,6 @@ Rectangle {
     }
     border.width: activeFocus || (active && !primary) ? 1 : 0
     border.color: activeFocus ? Theme.focusRing : (destructive ? Theme.errorBorder : Theme.borderStrong)
-    opacity: enabled ? 1 : 0.42
     activeFocusOnTab: enabled
 
     Behavior on color { ColorAnimation { duration: Theme.motionFast } }
@@ -45,6 +44,7 @@ Rectangle {
         glyph: root.glyph
         iconSize: root.iconSize
         iconColor: {
+            if (!root.enabled) return Theme.textDisabled
             if (root.destructive) return Theme.danger
             if (root.primary) return Theme.accentForeground
             if (root.active) return Theme.accent

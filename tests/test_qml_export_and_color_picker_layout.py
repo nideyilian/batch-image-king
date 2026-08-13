@@ -63,17 +63,22 @@ def test_batch_export_strategy_choices_use_compact_toggle_bar():
 
 
 @pytest.mark.unit
-def test_related_parameter_groups_use_option_tiles_instead_of_switch_rows():
+def test_related_parameter_groups_use_compact_adaptive_controls():
     qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
     random_start = qml_source.index('title: "随机变换"')
     random_end = qml_source.index('title: "图层分身"', random_start)
     random_block = qml_source[random_start:random_end]
-    assert random_block.count("OptionTile {") == 3
-    assert "ToggleSwitch {" not in random_block
-    assert "workspace.setSelectedRandomPositionEnabled(!workspace.selectedRandomPositionEnabled)" in random_block
-    assert "workspace.setSelectedRandomScaleEnabled(!workspace.selectedRandomScaleEnabled)" in random_block
-    assert "workspace.setSelectedRandomRotationEnabled(!workspace.selectedRandomRotationEnabled)" in random_block
+    for grid_id in (
+        "randomPositionCompactGrid",
+        "randomScaleCompactGrid",
+        "randomRotationCompactGrid",
+    ):
+        assert f"id: {grid_id}" in random_block
+    assert random_block.count("TrailingToggle {") == 3
+    assert "workspace.setSelectedRandomPositionEnabled(checkedValue)" in random_block
+    assert "workspace.setSelectedRandomScaleEnabled(checkedValue)" in random_block
+    assert "workspace.setSelectedRandomRotationEnabled(checkedValue)" in random_block
 
     size_start = qml_source.index('visible: dataRelationsDrawer.activeTab === 1')
     size_end = qml_source.index('label: "添加尺寸匹配关系"', size_start)

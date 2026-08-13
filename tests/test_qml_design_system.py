@@ -83,6 +83,8 @@ def test_qml_component_library_covers_core_controls():
         "AppTextArea",
         "AppTextField",
         "FontSelectBox",
+        "HermesField",
+        "HermesPageTabs",
         "IconButton",
         "OptionTile",
         "AppIcons",
@@ -233,11 +235,112 @@ def test_compact_inspector_fields_keep_readable_layout_widths():
 
     assert "import QtQuick.Layouts" in value_box_source
     assert "Layout.minimumWidth: 64" in value_box_source
-    assert "inspectorLabelColWidth: 56" in theme_source
-    assert "inspectorColSpacing: 8" in theme_source
+    assert "inspectorLabelColWidth: 64" in theme_source
+    assert "inspectorCompactLabelColWidth: 52" in theme_source
+    assert "inspectorColSpacing: 12" in theme_source
+    assert "inspectorPairBreakpoint: 320" in theme_source
     assert "inspectorTextEditorMaxWidth: 400" in theme_source
     assert "inspectorRowHeight: compactControlHeight" in theme_source
     assert "Layout.fillWidth: true" in value_box_source
+    assert "component PairedInspectorValue: ValueBox" in main_source
+    assert "Layout.fillWidth: true" in main_source
+
+
+@pytest.mark.unit
+def test_inspector_field_labels_never_elide_and_follow_the_four_pixel_grid():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+    theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
+    field_source = (QML_ROOT / "components" / "HermesField.qml").read_text(encoding="utf-8")
+    section_source = (QML_ROOT / "components" / "PropertySection.qml").read_text(encoding="utf-8")
+
+    assert "elide: Text.ElideNone" in field_source
+    assert "wrapMode: Text.NoWrap" in field_source
+    assert "elide: Text.ElideRight" not in field_source
+    assert "horizontalAlignment: Text.AlignLeft" in field_source
+    assert "horizontalAlignment: root.compact && root.horizontal" not in field_source
+    assert "GridLayout {" in field_source
+    assert "Layout.preferredWidth: root.horizontal ? root.labelWidth : -1" in field_source
+
+    for declaration in (
+        "inspectorPanelWidth: 320",
+        "sectionHeaderHeight: 40",
+        "inspectorLabelColWidth: 64",
+        "inspectorCompactLabelColWidth: 52",
+        "inspectorColSpacing: 12",
+        "inspectorRowSpacing: 8",
+        "inspectorSectionGutter: 12",
+    ):
+        assert declaration in theme_source
+
+    assert "anchors.leftMargin: Theme.inspectorSectionGutter" in section_source
+    assert "anchors.rightMargin: Theme.inspectorSectionGutter" in section_source
+    assert "anchors.topMargin: Theme.inspectorRowSpacing" in section_source
+    assert "spacing: Theme.inspectorRowSpacing" in section_source
+    assert "color: Theme.bgRaised" in section_source
+    assert "font.pixelSize: Theme.fontSizeSm" in section_source
+    assert "property int minimumControlHeight: 0" in field_source
+    assert "Layout.minimumHeight: root.minimumControlHeight" in field_source
+    assert "minimumControlHeight: Theme.inputHeightMd" in main_source
+    assert "spacing: 3" not in section_source
+
+
+@pytest.mark.unit
+def test_inspector_uses_hermes_upstream_component_contracts():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+    theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
+    field_source = (QML_ROOT / "components" / "HermesField.qml").read_text(encoding="utf-8")
+    tabs_source = (QML_ROOT / "components" / "HermesPageTabs.qml").read_text(encoding="utf-8")
+    button_source = (QML_ROOT / "components" / "AppButton.qml").read_text(encoding="utf-8")
+    switch_source = (QML_ROOT / "components" / "ToggleSwitch.qml").read_text(encoding="utf-8")
+
+    for token in (
+        "space1",
+        "space2",
+        "buttonHeightXs",
+        "buttonHeightSm",
+        "buttonHeightMd",
+        "buttonHeightLg",
+        "inputHeightSm",
+        "inputHeightMd",
+        "inputHeightLg",
+        "inputPaddingX",
+        "tabHeight",
+        "switchWidth",
+        "switchHeight",
+        "switchThumbSize",
+    ):
+        assert f"property int {token}" in theme_source
+
+    for declaration in (
+        'property string orientation: "vertical"',
+        "property string label",
+        "property string hint",
+        "property string error",
+        "property bool required",
+        "default property alias controls",
+    ):
+        assert declaration in field_source
+    assert "font.pixelSize: Theme.fieldLabelFontSize" in field_source
+    assert "font.pixelSize: Theme.fieldHintFontSize" in field_source
+
+    assert "Accessible.role: Accessible.PageTabList" in tabs_source
+    assert "Keys.onLeftPressed" in tabs_source
+    assert "Keys.onRightPressed" in tabs_source
+    assert "height: Theme.tabHeight" in tabs_source
+
+    for variant in ('"solid"', '"soft"', '"outline"', '"ghost"', '"plain"'):
+        assert variant in button_source
+    assert "property string tone" in button_source
+    assert "property string size" in button_source
+
+    assert "implicitWidth: Theme.switchWidth" in switch_source
+    assert "implicitHeight: Theme.switchHeight" in switch_source
+    assert "width: Theme.switchThumbSize" in switch_source
+
+    assert "component InspectorRow: HermesField" in main_source
+    assert "component CompactInspectorField: HermesField" in main_source
+    assert "HermesPageTabs {" in main_source
+    assert 'items: ["基本参数", "更多参数"]' in main_source
 
 
 @pytest.mark.unit
@@ -268,12 +371,11 @@ def test_inspector_tab_switch_keeps_a_stable_single_axis_layout():
 
 
 @pytest.mark.unit
-def test_inspector_uses_type_modules_and_hairline_rules():
+def test_inspector_uses_one_section_title_layer_and_hairline_rules():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
 
-    for module in ("对象", "内容", "变换", "外观", "批量规则", "文字效果"):
-        assert f'title: "{module}"' in main_source
-    assert "component InspectorModuleHeader" in main_source
+    assert "component InspectorModuleHeader" not in main_source
+    assert "InspectorModuleHeader {" not in main_source
     assert "height: 1" in main_source
     assert "Layout.fillWidth: true" in main_source
 
@@ -285,24 +387,27 @@ def test_field_controls_fill_the_flexible_column_by_default():
         for path in (QML_ROOT / "components").glob("*.qml")
     }
 
-    for name in ("AppTextField.qml", "AppTextArea.qml", "FontSelectBox.qml",
-                 "SelectBox.qml", "SegmentedControl.qml", "ValueBox.qml"):
+    for name in ("AppTextArea.qml", "FontSelectBox.qml",
+                 "SegmentedControl.qml", "ValueBox.qml"):
         assert "Layout.fillWidth: true" in component_sources[name]
+        assert "import QtQuick.Layouts" in component_sources[name]
+    for name in ("AppTextField.qml", "SelectBox.qml"):
+        assert "property bool fullWidth: true" in component_sources[name]
+        assert "Layout.fillWidth: fullWidth" in component_sources[name]
         assert "import QtQuick.Layouts" in component_sources[name]
     for name in ("FontSelectBox.qml", "SelectBox.qml", "SegmentedControl.qml"):
         assert "Layout.minimumWidth: 0" in component_sources[name]
 
 
 @pytest.mark.unit
-def test_workspace_sidebars_are_resizable_and_persist_widths():
+def test_layer_sidebar_resizes_while_inspector_uses_a_fixed_compact_width():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
 
     for token in (
         "layerPanelMinWidth",
         "layerPanelMaxWidth",
-        "inspectorPanelMinWidth",
-        "inspectorPanelMaxWidth",
+        "inspectorPanelWidth",
         "canvasMinWidth",
         "sidebarResizeHandleWidth",
         "sidebarResizeStep",
@@ -312,16 +417,10 @@ def test_workspace_sidebars_are_resizable_and_persist_widths():
     for marker in (
         'category: "sidebarLayout"',
         "property real layerPanelWidth: -1",
-        "property real inspectorPanelWidth: -1",
         "function setLayerPanelWidth(value)",
-        "function setInspectorPanelWidth(value)",
         "function resetLayerPanelWidth()",
-        "function resetInspectorPanelWidth()",
-        "return width < 1320 ? 368 : 408",
-        "var usesPreviousCompactDefault = storedInspectorWidth === 348",
         "component SidebarResizeHandle",
         "id: layerPanelResizeHandle",
-        "id: inspectorResizeHandle",
         "onDoubleClicked: resizeHandle.resetRequested()",
         "onPositionChanged: mouse =>",
         "previousX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x",
@@ -329,8 +428,41 @@ def test_workspace_sidebars_are_resizable_and_persist_widths():
         "var delta = sceneX - previousX",
         "resizeHandle.dragMoved(delta)",
         "Layout.preferredWidth: window.layerPanelWidth",
-        "Layout.preferredWidth: window.inspectorPanelWidth",
+        "Layout.minimumWidth: Theme.inspectorPanelWidth",
+        "Layout.preferredWidth: Theme.inspectorPanelWidth",
+        "Layout.maximumWidth: Theme.inspectorPanelWidth",
     ):
         assert marker in main_source
-    assert "inspectorPanelMinWidth: 360" in theme_source
+    for obsolete_marker in (
+        "property real inspectorPanelWidth",
+        "function setInspectorPanelWidth(value)",
+        "function resetInspectorPanelWidth()",
+        "id: inspectorResizeHandle",
+        "objectName: \"inspectorResizeHandle\"",
+        "inspectorPanelMinWidth",
+        "inspectorPanelMaxWidth",
+    ):
+        assert obsolete_marker not in main_source
+        assert obsolete_marker not in theme_source
+    assert "inspectorPanelWidth: 320" in theme_source
     assert "Layout.maximumWidth: Theme.inspectorTextEditorMaxWidth" in main_source
+
+
+@pytest.mark.unit
+def test_inspector_uses_adaptive_semantic_pair_grids_without_collapsed_sections():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
+    grid_source = (QML_ROOT / "components" / "HermesAdaptiveFieldGrid.qml").read_text(encoding="utf-8")
+
+    assert "component AdaptiveInspectorGrid: HermesAdaptiveFieldGrid" in main_source
+    assert "columns: width >= pairBreakpoint ? 2 : 1" in grid_source
+    for grid_id in (
+        "vectorPathCompactGrid",
+        "layerTransformCompactGrid",
+        "randomPositionCompactGrid",
+        "randomScaleCompactGrid",
+        "randomRotationCompactGrid",
+        "overlayCompactGrid",
+    ):
+        assert f"id: {grid_id}" in main_source
+
+    assert "expanded: false" not in main_source

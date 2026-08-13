@@ -21,7 +21,6 @@ Rectangle {
     border.width: active ? 1 : 0
     border.color: Theme.accent
     activeFocusOnTab: enabled
-    opacity: enabled ? 1 : 0.45
 
     RowLayout {
         anchors.fill: parent
@@ -32,7 +31,9 @@ Rectangle {
         Text {
             visible: root.index.length > 0
             text: root.index
-            color: root.active ? Theme.accentForeground : Theme.textMuted
+            color: !root.enabled
+                   ? Theme.textDisabled
+                   : (root.active ? Theme.accentForeground : Theme.textMuted)
             font.family: Theme.dataFont
             font.pixelSize: 10
         }
@@ -41,12 +42,16 @@ Rectangle {
             visible: root.iconName.length > 0
             iconName: root.iconName
             iconSize: 15
-            iconColor: root.active ? Theme.accentForeground : Theme.textSecondary
+            iconColor: !root.enabled
+                       ? Theme.textDisabled
+                       : (root.active ? Theme.accentForeground : Theme.textSecondary)
         }
 
         Text {
             text: root.text
-            color: root.active ? Theme.accentForeground : Theme.textPrimary
+            color: !root.enabled
+                   ? Theme.textDisabled
+                   : (root.active ? Theme.accentForeground : Theme.textPrimary)
             font.family: Theme.bodyFont
             font.pixelSize: 12
             font.weight: root.active ? Font.DemiBold : Font.Normal
@@ -57,7 +62,9 @@ Rectangle {
         Text {
             visible: root.badge.length > 0
             text: root.badge
-            color: root.active ? Theme.accentForeground : Theme.textMuted
+            color: !root.enabled
+                   ? Theme.textDisabled
+                   : (root.active ? Theme.accentForeground : Theme.textMuted)
             font.family: Theme.dataFont
             font.pixelSize: 9
         }

@@ -47,6 +47,7 @@ config.json
 settings.ini
 
 # 临时文件
+.tmp-ui/
 *.tmp
 *.temp
 .DS_Store

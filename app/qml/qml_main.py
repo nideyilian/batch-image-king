@@ -14,6 +14,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--screenshot", type=Path, help="启动后将窗口保存为 PNG 并退出")
     parser.add_argument("--width", type=int, default=1600, help="窗口宽度")
     parser.add_argument("--height", type=int, default=960, help="窗口高度")
+    parser.add_argument("--theme", choices=("light", "dark"), help="覆盖并保存界面主题")
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
     parser.add_argument("--demo", action="store_true", help="启动内置演示文档")
@@ -355,6 +356,11 @@ def main() -> int:
     )
     window.setProperty("width", max(1180, args.width))
     window.setProperty("height", max(720, args.height))
+    if args.theme:
+        if not QMetaObject.invokeMethod(
+            window, "setThemeMode", Q_ARG("QVariant", args.theme)
+        ):
+            debug(f"theme could not be applied: {args.theme}")
     if args.show_effects:
         window.setProperty("inspectorTab", 0)
 

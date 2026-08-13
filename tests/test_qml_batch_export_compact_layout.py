@@ -45,7 +45,9 @@ def test_batch_export_drawer_keeps_only_primary_parameters():
     qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
     drawer_block = _batch_drawer_block(qml_source)
 
-    assert "使用当前日期替换路径" not in drawer_block
+    assert 'text: batchExport.useCurrentTimeForPath' in drawer_block
+    assert 'checked: batchExport.useCurrentTimeForPath' in drawer_block
+    assert 'onToggled: checkedValue => batchExport.useCurrentTimeForPath = checkedValue' in drawer_block
     assert 'text: "使用图层文件名"' not in drawer_block
     assert 'text: "预览  " + batchExport.filenamePreview' not in drawer_block
     assert 'onClicked: batchExportAdvancedDialog.open()' in drawer_block

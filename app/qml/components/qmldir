@@ -5,6 +5,9 @@ HermesNavItem 1.0 HermesNavItem.qml
 HermesPanelHeader 1.0 HermesPanelHeader.qml
 HermesSectionLabel 1.0 HermesSectionLabel.qml
 HermesStatusDot 1.0 HermesStatusDot.qml
+HermesField 1.0 HermesField.qml
+HermesPageTabs 1.0 HermesPageTabs.qml
+HermesAdaptiveFieldGrid 1.0 HermesAdaptiveFieldGrid.qml
 AppButton 1.0 AppButton.qml
 AppDialog 1.0 AppDialog.qml
 AppDrawer 1.0 AppDrawer.qml

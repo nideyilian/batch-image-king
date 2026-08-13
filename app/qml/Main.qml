@@ -15,6 +15,16 @@ ApplicationWindow {
     visible: true
     title: "批图王 · QML 工作台"
     color: Theme.bgApp
+    palette.window: Theme.bgApp
+    palette.windowText: Theme.textPrimary
+    palette.base: Theme.bgControl
+    palette.alternateBase: Theme.bgRaised
+    palette.text: Theme.textPrimary
+    palette.button: Theme.bgControl
+    palette.buttonText: Theme.textPrimary
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentForeground
+    palette.placeholderText: Theme.textMuted
 
     onClosing: function(close) {
         if (!workspaceSessions.applicationCloseApproved) {
@@ -31,7 +41,6 @@ ApplicationWindow {
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
     property real layerPanelWidth: 0
-    property real inspectorPanelWidth: 0
     property bool sidebarWidthsRestored: false
 
     // 统一的快捷键焦点门控：画布文字编辑中 / 阻塞态 / 任意属性面板输入框取得焦点时
@@ -141,19 +150,15 @@ ApplicationWindow {
         return width < 1320 ? 246 : 276
     }
 
-    function defaultInspectorPanelWidth() {
-        return width < 1320 ? 368 : 408
-    }
-
     function availableSidebarWidth() {
         return width - Theme.toolRailWidth - Theme.canvasMinWidth
-                - Theme.sidebarResizeHandleWidth * 2
+                - Theme.sidebarResizeHandleWidth
     }
 
     function clampLayerPanelWidth(value) {
         var maxWidth = Math.min(
             Theme.layerPanelMaxWidth,
-            availableSidebarWidth() - inspectorPanelWidth
+            availableSidebarWidth() - Theme.inspectorPanelWidth
         )
         return Math.round(Math.max(
             Theme.layerPanelMinWidth,
@@ -161,20 +166,8 @@ ApplicationWindow {
         ))
     }
 
-    function clampInspectorPanelWidth(value) {
-        var maxWidth = Math.min(
-            Theme.inspectorPanelMaxWidth,
-            availableSidebarWidth() - layerPanelWidth
-        )
-        return Math.round(Math.max(
-            Theme.inspectorPanelMinWidth,
-            Math.min(Math.max(Theme.inspectorPanelMinWidth, maxWidth), value)
-        ))
-    }
-
     function applySidebarBounds() {
         layerPanelWidth = clampLayerPanelWidth(layerPanelWidth)
-        inspectorPanelWidth = clampInspectorPanelWidth(inspectorPanelWidth)
     }
 
     function setLayerPanelWidth(value) {
@@ -182,28 +175,14 @@ ApplicationWindow {
         sidebarSettings.layerPanelWidth = layerPanelWidth
     }
 
-    function setInspectorPanelWidth(value) {
-        inspectorPanelWidth = clampInspectorPanelWidth(value)
-        sidebarSettings.inspectorPanelWidth = inspectorPanelWidth
-    }
-
     function resetLayerPanelWidth() {
         setLayerPanelWidth(defaultLayerPanelWidth())
     }
 
-    function resetInspectorPanelWidth() {
-        setInspectorPanelWidth(defaultInspectorPanelWidth())
-    }
-
     function restoreSidebarWidths() {
-        var storedInspectorWidth = sidebarSettings.inspectorPanelWidth
-        var usesPreviousCompactDefault = storedInspectorWidth === 348
         layerPanelWidth = sidebarSettings.layerPanelWidth > 0
                 ? sidebarSettings.layerPanelWidth
                 : defaultLayerPanelWidth()
-        inspectorPanelWidth = storedInspectorWidth > 0 && !usesPreviousCompactDefault
-                ? storedInspectorWidth
-                : defaultInspectorPanelWidth()
         applySidebarBounds()
         sidebarWidthsRestored = true
     }
@@ -473,6 +452,13 @@ ApplicationWindow {
         return Qt.rgba(red, green, blue, alpha)
     }
 
+    function setThemeMode(mode) {
+        var normalizedMode = mode === "dark" ? "dark" : "light"
+        Theme.darkMode = normalizedMode === "dark"
+        appearanceSettings.themeMode = normalizedMode
+        appearanceSettings.sync()
+    }
+
     Settings {
         id: newCanvasSettings
         category: "newCanvas"
@@ -484,10 +470,17 @@ ApplicationWindow {
         objectName: "sidebarSettings"
         category: "sidebarLayout"
         property real layerPanelWidth: -1
-        property real inspectorPanelWidth: -1
+    }
+
+    Settings {
+        id: appearanceSettings
+        objectName: "appearanceSettings"
+        category: "uiAppearance"
+        property string themeMode: "light"
     }
 
     Component.onCompleted: {
+        window.setThemeMode(appearanceSettings.themeMode)
         window.loadQuickCanvasPresets()
         window.restoreSidebarWidths()
     }
@@ -1145,8 +1138,8 @@ ApplicationWindow {
                 placeholderText: "输入文字内容"
                 color: Theme.textPrimary
                 placeholderTextColor: Theme.textMuted
-                selectionColor: Theme.accentPressed
-                selectedTextColor: Theme.textPrimary
+                selectionColor: Theme.selectionBackground
+                selectedTextColor: Theme.selectionForeground
                 font.family: Theme.bodyFont
                 font.pixelSize: 12
                 wrapMode: TextEdit.Wrap
@@ -3644,7 +3637,6 @@ ApplicationWindow {
             if (alignmentMouse.pressed) return Theme.bgControl
             return alignmentMouse.containsMouse ? Theme.bgHover : "transparent"
         }
-        opacity: enabled ? 1 : 0.32
         border.width: activeFocus ? 1 : 0
         border.color: Theme.focusRing
         activeFocusOnTab: enabled
@@ -3653,8 +3645,9 @@ ApplicationWindow {
             anchors.centerIn: parent
             iconName: alignmentButton.iconName
             iconSize: 16
-            iconColor: alignmentMouse.containsMouse && alignmentButton.enabled
-                       ? Theme.textPrimary : Theme.textSecondary
+            iconColor: !alignmentButton.enabled
+                       ? Theme.textDisabled
+                       : (alignmentMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary)
         }
 
         MouseArea {
@@ -3689,14 +3682,15 @@ ApplicationWindow {
         color: activeTool === toolIndex ? Theme.accentSoft : (toolMouse.containsMouse ? Theme.bgHover : "transparent")
         border.width: activeTool === toolIndex ? 1 : 0
         border.color: activeFocus ? Theme.focusRing : Theme.accentPressed
-        opacity: enabled ? 1 : 0.34
         activeFocusOnTab: enabled
 
         AppIcon {
             anchors.centerIn: parent
             iconName: toolButton.iconName
             iconSize: 18
-            iconColor: activeTool === toolButton.toolIndex ? Theme.accent : Theme.textSecondary
+            iconColor: !toolButton.enabled
+                       ? Theme.textDisabled
+                       : (activeTool === toolButton.toolIndex ? Theme.accent : Theme.textSecondary)
         }
 
         MouseArea {
@@ -3719,78 +3713,26 @@ ApplicationWindow {
         ToolTip.delay: 420
     }
 
-    component InspectorRow: Item {
-        id: rowRoot
-        property string label: ""
-        // 把外部子控件定向导入到内部 controlArea RowLayout
-        default property alias controls: controlArea.data
+    component InspectorRow: HermesField {
+        orientation: "horizontal"
+        compact: true
+        minimumControlHeight: Theme.inputHeightMd
         width: parent ? parent.width : 392
-        implicitHeight: Math.max(Theme.inspectorRowHeight, controlArea.implicitHeight)
-        height: implicitHeight
-        readonly property int controlAreaWidth: Math.max(0, width - Theme.inspectorLabelColWidth - Theme.inspectorColSpacing)
-
-        // 静态规范全部走 Theme.inspectorXxx；wSliderFill 仅用于 Slider（需要操作长度）
-        readonly property int wSliderFill: Math.max(60, controlAreaWidth - Theme.inspectorColSpacing - Theme.inspectorWSliderVB)
-
-        BodyLabel {
-            id: rowLabel
-            anchors.left: parent.left
-            anchors.top: parent.top
-            height: parent.height
-            width: Theme.inspectorLabelColWidth
-            text: rowRoot.label
-            color: Theme.textMuted
-            elide: Text.ElideRight
-            wrapMode: Text.NoWrap
-            font.pixelSize: 10
-            // Hermes Field: labels share a right edge and controls own row height.
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        // The flexible control column is the Field height authority. A complex
-        // control may grow vertically without being clipped by a fixed row.
-        RowLayout {
-            id: controlArea
-            property alias wSliderFill: rowRoot.wSliderFill
-            anchors.left: rowLabel.right
-            anchors.leftMargin: Theme.inspectorColSpacing
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: implicitHeight
-            spacing: Theme.inspectorColSpacing
-        }
     }
 
-    component InspectorModuleHeader: Item {
-        id: moduleHeader
-        property string title: ""
+    component AdaptiveInspectorGrid: HermesAdaptiveFieldGrid {
+    }
 
+    component CompactInspectorField: HermesField {
+        orientation: "horizontal"
+        compact: true
+        labelWidth: Theme.inspectorCompactLabelColWidth
+        minimumControlHeight: Theme.inputHeightMd
+    }
+
+    component PairedInspectorValue: ValueBox {
         Layout.fillWidth: true
-        implicitHeight: 28
-        height: implicitHeight
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 10
-
-            Text {
-                text: moduleHeader.title
-                color: Theme.textMuted
-                font.family: Theme.dataFont
-                font.pixelSize: 9
-                font.weight: Font.DemiBold
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                height: 1
-                color: Theme.border
-            }
-        }
+        Layout.minimumWidth: 0
     }
 
     component SidebarResizeHandle: Rectangle {
@@ -3898,12 +3840,13 @@ ApplicationWindow {
         }
         border.width: active ? 1 : 0
         border.color: Theme.accentPressed
-        opacity: enabled ? 1 : 0.38
 
         Text {
             anchors.centerIn: parent
             text: formatButton.symbol
-            color: formatButton.active ? Theme.accent : Theme.textSecondary
+            color: !formatButton.enabled
+                   ? Theme.textDisabled
+                   : (formatButton.active ? Theme.accent : Theme.textSecondary)
             font.family: Theme.bodyFont
             font.pixelSize: 14
             font.weight: formatButton.symbol === "B" ? Font.Bold : Font.Normal
@@ -3939,13 +3882,16 @@ ApplicationWindow {
             return active ? Theme.accentSoft : Theme.bgControl
         }
         border.width: 1
-        border.color: active ? Theme.accentPressed : Theme.borderStrong
-        opacity: enabled ? 1 : 0.38
+        border.color: !enabled
+                      ? Theme.border
+                      : (active ? Theme.accentPressed : Theme.borderStrong)
 
         Text {
             anchors.centerIn: parent
             text: compactButton.label
-            color: compactButton.active ? Theme.accent : Theme.textSecondary
+            color: !compactButton.enabled
+                   ? Theme.textDisabled
+                   : (compactButton.active ? Theme.accent : Theme.textSecondary)
             font.family: Theme.bodyFont
             font.pixelSize: 11
             font.weight: Font.DemiBold
@@ -3977,7 +3923,6 @@ ApplicationWindow {
             color: window.hexToColor(colorField.value)
             border.width: 1
             border.color: colorMouse.containsMouse ? Theme.accent : Theme.borderStrong
-            opacity: colorField.enabled ? 1 : 0.38
             MouseArea {
                 id: colorMouse
                 anchors.fill: parent
@@ -4067,7 +4012,6 @@ ApplicationWindow {
         color: Theme.bgControl
         border.width: 1
         border.color: contentEditor.activeFocus ? Theme.accent : Theme.borderStrong
-        opacity: enabled ? 1 : 0.45
 
         Flickable {
             id: editorFlick
@@ -4083,8 +4027,8 @@ ApplicationWindow {
                 width: editorFlick.width
                 height: Math.max(editorFlick.height, paintedHeight)
                 color: Theme.textPrimary
-                selectionColor: Theme.accentPressed
-                selectedTextColor: Theme.textPrimary
+                selectionColor: Theme.selectionBackground
+                selectedTextColor: Theme.selectionForeground
                 font.family: Theme.bodyFont
                 font.pixelSize: 12
                 wrapMode: TextEdit.Wrap
@@ -4380,7 +4324,24 @@ ApplicationWindow {
                             Column {
                                 width: parent.width
                                 spacing: 5
-                                BodyLabel { text: "输出目录"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                RowLayout {
+                                    width: parent.width
+                                    spacing: 6
+                                    BodyLabel { text: "输出目录"; color: Theme.textSecondary; font.pixelSize: 11 }
+                                    Item { Layout.fillWidth: true }
+                                    TinyLabel {
+                                        text: batchExport.useCurrentTimeForPath
+                                              ? "日期变量  YYYYMMDD"
+                                              : "日期固定"
+                                        color: batchExport.useCurrentTimeForPath ? Theme.textSecondary : Theme.textMuted
+                                    }
+                                    ToggleSwitch {
+                                        objectName: "pathDateVariableToggle"
+                                        accessibleName: "导出时将路径中的 YYYYMMDD 日期替换为当天日期"
+                                        checked: batchExport.useCurrentTimeForPath
+                                        onToggled: checkedValue => batchExport.useCurrentTimeForPath = checkedValue
+                                    }
+                                }
                                 RowLayout {
                                     width: parent.width
                                     spacing: 6
@@ -4614,7 +4575,6 @@ ApplicationWindow {
                                 width: parent.width
                                 height: 32
                                 enabled: batchExport.uniqueUseEnabled
-                                opacity: enabled ? 1 : 0.46
                                 radius: Theme.radiusSmall
                                 color: selectorOpen || uniqueLayerMouse.containsMouse
                                        ? Theme.bgHover : Theme.bgControl
@@ -4657,7 +4617,7 @@ ApplicationWindow {
                                     spacing: 8
                                     BodyLabel {
                                         text: "限制图层"
-                                        color: Theme.textSecondary
+                                        color: uniqueLayerPicker.enabled ? Theme.textSecondary : Theme.textDisabled
                                         font.pixelSize: 11
                                     }
                                     TinyLabel {
@@ -4670,9 +4630,11 @@ ApplicationWindow {
                                                  ? "已选 " + uniqueLayerPicker.selectedLayerCount
                                                    + " / " + uniqueLayerPicker.eligibleLayerCount
                                                  : "请选择图片图层"))
-                                        color: uniqueLayerPicker.eligibleLayerCount > 0
+                                        color: !uniqueLayerPicker.enabled
+                                               ? Theme.textDisabled
+                                               : (uniqueLayerPicker.eligibleLayerCount > 0
                                                && uniqueLayerPicker.selectedLayerCount === 0
-                                               ? Theme.coral : Theme.textMuted
+                                               ? Theme.coral : Theme.textMuted)
                                         elide: Text.ElideRight
                                     }
                                     AppIcon {
@@ -5142,7 +5104,7 @@ ApplicationWindow {
         Rectangle {
             id: titleBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 66
+            Layout.preferredHeight: 54
             color: Theme.bgBar
 
             RowLayout {
@@ -5152,7 +5114,7 @@ ApplicationWindow {
                 spacing: 16
 
                 Row {
-                    Layout.preferredWidth: 250
+                    Layout.preferredWidth: 150
                     spacing: 12
 
                     Item {
@@ -5177,24 +5139,13 @@ ApplicationWindow {
                         }
                     }
 
-                    Column {
-                        spacing: 2
+                    Text {
                         anchors.verticalCenter: parent.verticalCenter
-
-                        Text {
-                            text: "批图王"
-                            color: Theme.textPrimary
-                            font.family: Theme.displayFont
-                            font.pixelSize: 16
-                            font.weight: Font.DemiBold
-                        }
-                        Text {
-                            text: "Hermes-style desktop workspace  ·  batch-image-king"
-                            color: Theme.textMuted
-                            font.family: Theme.dataFont
-                            font.pixelSize: 9
-                            elide: Text.ElideRight
-                        }
+                        text: "批图王"
+                        color: Theme.textPrimary
+                        font.family: Theme.displayFont
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
                     }
                 }
 
@@ -5202,41 +5153,19 @@ ApplicationWindow {
                     spacing: 4
                     Layout.fillWidth: true
 
-                    HermesNavItem { index: "01"; text: "工作台"; active: true; iconName: AppIcons.layers }
-                    HermesNavItem { index: "02"; text: "画布"; iconName: AppIcons.image; onClicked: window.openNewCanvasDialog() }
-                    HermesNavItem { index: "03"; text: "图层"; iconName: AppIcons.layers; onClicked: showToast(window.hasOpenDocument ? "图层面板已就绪" : "请先打开或新建文档") }
-                    HermesNavItem { index: "04"; text: "预设"; iconName: AppIcons.fileText; onClicked: window.openProjectPresetDrawer() }
-                    HermesNavItem { index: "05"; text: "导出"; iconName: AppIcons.exportAction; onClicked: window.openBatchExportDrawer() }
-                    HermesNavItem { index: "06"; text: "命令"; iconName: AppIcons.more; onClicked: commandMenu.popup() }
-                }
-
-                AppTextField {
-                    id: commandSearchField
-                    Layout.preferredWidth: 240
-                    Layout.preferredHeight: 32
-                    placeholderText: "搜索命令 / 文件 / 图层..."
-                    accessibleName: "搜索命令、文件和图层"
-                    Keys.onReturnPressed: {
-                        if (text.trim().length === 0) {
-                            showToast("请输入要查找的命令、文件或图层")
-                        } else {
-                            showToast("搜索：" + text.trim())
-                        }
-                    }
-                }
-
-                AppButton {
-                    Layout.preferredWidth: 116
-                    text: "档案  default"
-                    variant: "secondary"
-                    onClicked: showToast("当前档案：default")
+                    HermesNavItem { index: "01"; text: "画布"; iconName: AppIcons.image; onClicked: window.openNewCanvasDialog() }
+                    HermesNavItem { index: "02"; text: "预设"; iconName: AppIcons.fileText; onClicked: window.openProjectPresetDrawer() }
+                    HermesNavItem { index: "03"; text: "导出"; iconName: AppIcons.exportAction; onClicked: window.openBatchExportDrawer() }
+                    HermesNavItem { index: "04"; text: "命令"; iconName: AppIcons.more; onClicked: commandMenu.popup() }
                 }
 
                 IconButton {
-                    iconName: AppIcons.settings
-                    tooltip: "界面设置"
+                    id: interfaceSettingsButton
+                    iconName: Theme.darkMode ? AppIcons.sun : AppIcons.moon
+                    tooltip: Theme.darkMode ? "切换为浅色主题" : "切换为暗色主题"
                     buttonSize: 32
-                    onClicked: showToast("界面设置已预留")
+                    active: Theme.darkMode
+                    onClicked: window.setThemeMode(Theme.darkMode ? "light" : "dark")
                 }
             }
 
@@ -6800,8 +6729,8 @@ ApplicationWindow {
                                     anchors.margins: Math.max(0, workspace.selectedTextBoxPadding)
                                     textFormat: TextEdit.RichText
                                     color: workspace.selectedTextColor
-                                    selectionColor: Theme.accentPressed
-                                    selectedTextColor: Theme.textPrimary
+                                    selectionColor: Theme.selectionBackground
+                                    selectedTextColor: Theme.selectionForeground
                                     font.family: workspace.selectedTextResolvedFontFamily
                                     font.pixelSize: workspace.selectedTextFontSize
                                     font.weight: workspace.selectedTextFontWeight
@@ -7355,21 +7284,12 @@ ApplicationWindow {
                 }
             }
 
-            SidebarResizeHandle {
-                id: inspectorResizeHandle
-                objectName: "inspectorResizeHandle"
-                tooltip: "拖拽调整参数栏宽度，双击恢复默认"
-                accessibleName: "调整参数栏宽度"
-                onDragMoved: horizontalDelta => window.setInspectorPanelWidth(
-                                   window.inspectorPanelWidth - horizontalDelta
-                               )
-                onResetRequested: window.resetInspectorPanelWidth()
-            }
-
             Rectangle {
                 id: inspector
                 objectName: "inspectorPanel"
-                Layout.preferredWidth: window.inspectorPanelWidth
+                Layout.minimumWidth: Theme.inspectorPanelWidth
+                Layout.preferredWidth: Theme.inspectorPanelWidth
+                Layout.maximumWidth: Theme.inspectorPanelWidth
                 Layout.fillHeight: true
                 color: Theme.bgPanel
 
@@ -7394,38 +7314,14 @@ ApplicationWindow {
 
                     Divider { Layout.fillWidth: true }
 
-                    Row {
+                    HermesPageTabs {
+                        id: inspectorTabs
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 26
-
-                        Repeater {
-                            model: ["基本参数", "更多参数"]
-                            delegate: Rectangle {
-                                required property int index
-                                required property string modelData
-                                width: inspector.width / 2
-                                height: 26
-                                color: "transparent"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData
-                                    color: inspectorTab === index ? Theme.textPrimary : Theme.textMuted
-                                    font.family: Theme.bodyFont
-                                    font.pixelSize: 10
-                                    font.weight: inspectorTab === index ? Font.DemiBold : Font.Normal
-                                    opacity: inspectorTab === index ? 1.0 : 0.7
-                                }
-                                Rectangle {
-                                    anchors.left: parent.left; anchors.leftMargin: 12
-                                    anchors.right: parent.right; anchors.rightMargin: 12
-                                    anchors.bottom: parent.bottom
-                                    height: 2
-                                    visible: inspectorTab === index
-                                    color: inspectorTab === index ? Theme.accent : "transparent"
-                                }
-                                MouseArea { anchors.fill: parent; enabled: parent.enabled; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: window.selectInspectorTab(index) }
-                            }
-                        }
+                        items: ["基本参数", "更多参数"]
+                        currentIndex: inspectorTab
+                        fillWidth: true
+                        accessibleName: "属性参数"
+                        onActivated: index => window.selectInspectorTab(index)
                     }
 
                     ScrollView {
@@ -7447,12 +7343,6 @@ ApplicationWindow {
                             columns: 1
                             columnSpacing: 0
                             rowSpacing: 0
-
-                            InspectorModuleHeader {
-                                Layout.row: 0
-                                title: "对象"
-                                visible: inspectorTab === 0 && selectedLayer >= 0
-                            }
 
                             PropertySection {
                                 id: imageSourceSection
@@ -7533,30 +7423,33 @@ ApplicationWindow {
                                     }
                                 }
 
-                                InspectorRow {
-                                    label: "闭合"
+                                AdaptiveInspectorGrid {
+                                    id: vectorPathCompactGrid
                                     visible: workspace.selectedVectorPathEnabled
-                                    TrailingToggle {
-                                        accessibleName: "闭合路径"
-                                        checked: workspace.selectedVectorPathClosed
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onToggled: checkedValue => workspace.setSelectedVectorPathClosed(checkedValue)
-                                    }
-                                }
 
-                                InspectorRow {
-                                    label: "控制柄"
-                                    visible: workspace.selectedVectorPathEnabled
-                                    SelectBox {
-                                        model: window.vectorHandleLinkOptions
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        currentIndex: {
-                                            for (var index = 0; index < window.vectorHandleLinkOptions.length; index++) {
-                                                if (window.vectorHandleLinkOptions[index].value === workspace.selectedVectorHandleLinkMode) return index
-                                            }
-                                            return 0
+                                    CompactInspectorField {
+                                        label: "闭合"
+                                        TrailingToggle {
+                                            accessibleName: "闭合路径"
+                                            checked: workspace.selectedVectorPathClosed
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onToggled: checkedValue => workspace.setSelectedVectorPathClosed(checkedValue)
                                         }
-                                        onActivated: workspace.setSelectedVectorHandleLinkMode(currentValue)
+                                    }
+
+                                    CompactInspectorField {
+                                        label: "控制柄"
+                                        SelectBox {
+                                            model: window.vectorHandleLinkOptions
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            currentIndex: {
+                                                for (var index = 0; index < window.vectorHandleLinkOptions.length; index++) {
+                                                    if (window.vectorHandleLinkOptions[index].value === workspace.selectedVectorHandleLinkMode) return index
+                                                }
+                                                return 0
+                                            }
+                                            onActivated: workspace.setSelectedVectorHandleLinkMode(currentValue)
+                                        }
                                     }
                                 }
 
@@ -7604,7 +7497,7 @@ ApplicationWindow {
                                 Layout.row: 4
                                 title: "高级设置"
                                 summary: workspace.selectedFitModeName
-                                visible: inspectorTab === 1 && workspace.selectedSupportsImageFit
+                                visible: inspectorTab === 0 && workspace.selectedSupportsImageFit
 
                                 InspectorRow {
                                     label: "适配"
@@ -8091,15 +7984,20 @@ ApplicationWindow {
                                                 width: (parent.width - 4) / 3
                                                 height: parent.height
                                                 radius: Theme.radiusSmall
-                                                color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : (alignMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
+                                                color: !enabled
+                                                       ? Theme.bgRaised
+                                                       : (workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : (alignMouse.containsMouse ? Theme.bgHover : Theme.bgControl))
                                                 border.width: 1
-                                                border.color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong
-                                                opacity: enabled ? 1 : 0.38
+                                                border.color: !enabled
+                                                              ? Theme.border
+                                                              : (workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong)
                                                 enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: parent.modelData.label
-                                                    color: workspace.selectedTextAlignmentId === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                                                    color: !parent.enabled
+                                                           ? Theme.textDisabled
+                                                           : (workspace.selectedTextAlignmentId === parent.modelData.value ? Theme.accent : Theme.textSecondary)
                                                     font.family: Theme.bodyFont
                                                     font.pixelSize: 9
                                                     font.weight: Font.DemiBold
@@ -8214,7 +8112,6 @@ ApplicationWindow {
                                 Layout.row: 1
                                 title: "基本属性"
                                 summary: workspace.selectedWidth + " × " + workspace.selectedHeight
-                                expanded: false
                                 visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
 
                                 InspectorRow {
@@ -8228,26 +8125,26 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "位置"
-                                    ValueBox {
-                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedX(parsed) }
                                     }
-                                    ValueBox {
-                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedY(parsed) }
                                     }
                                 }
                                 InspectorRow {
                                     label: "尺寸"
-                                    ValueBox {
-                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedWidth(parsed) }
                                     }
-                                    ValueBox {
-                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
                                     }
@@ -8356,48 +8253,50 @@ ApplicationWindow {
                                          : (workspace.selectedFlipHorizontal || workspace.selectedFlipVertical ? "已翻转" : "未变换")
                                 visible: inspectorTab === 1 && !workspace.selectedIsLayerGroup
 
-                                InspectorRow {
-                                    label: "旋转"
-                                    ValueBox {
-                                        value: (Math.round(workspace.selectedRotation * 10) / 10).toString()
-                                        bindValue: true
-                                        suffix: "°"
-                                        Layout.fillWidth: false
-                                        editable: workspace.selectedCanRotate && !workspace.selectedLocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseFloat(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedRotation(parsed)
+                                AdaptiveInspectorGrid {
+                                    id: layerTransformCompactGrid
+
+                                    CompactInspectorField {
+                                        label: "旋转"
+                                        ValueBox {
+                                            value: (Math.round(workspace.selectedRotation * 10) / 10).toString()
+                                            bindValue: true
+                                            suffix: "°"
+                                            Layout.minimumWidth: 52
+                                            editable: workspace.selectedCanRotate && !workspace.selectedLocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseFloat(value)
+                                                if (!isNaN(parsed)) workspace.setSelectedRotation(parsed)
+                                            }
+                                        }
+                                        IconButton {
+                                            iconName: AppIcons.rotateLeft
+                                            tooltip: "重置旋转"
+                                            buttonSize: Theme.compactControlHeight
+                                            enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
+                                            onClicked: workspace.setSelectedRotation(0)
                                         }
                                     }
-                                    IconButton {
-                                        iconName: AppIcons.rotateLeft
-                                        tooltip: "重置旋转"
-                                        buttonSize: Theme.compactControlHeight
-                                        enabled: workspace.selectedCanRotate && !workspace.selectedLocked && Math.abs(workspace.selectedRotation) > 0.001
-                                        onClicked: workspace.setSelectedRotation(0)
-                                    }
-                                }
 
-                                InspectorRow {
-                                    label: "翻转"
-                                    Item {
-                                        Layout.fillWidth: true
-                                    }
-                                    IconButton {
-                                        iconName: AppIcons.horizontal
-                                        tooltip: "水平翻转"
-                                        buttonSize: Theme.compactControlHeight
-                                        active: workspace.selectedFlipHorizontal
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
-                                    }
-                                    IconButton {
-                                        iconName: AppIcons.vertical
-                                        tooltip: "垂直翻转"
-                                        buttonSize: Theme.compactControlHeight
-                                        active: workspace.selectedFlipVertical
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onClicked: workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)
+                                    CompactInspectorField {
+                                        label: "翻转"
+                                        Item { Layout.fillWidth: true }
+                                        IconButton {
+                                            iconName: AppIcons.horizontal
+                                            tooltip: "水平翻转"
+                                            buttonSize: Theme.compactControlHeight
+                                            active: workspace.selectedFlipHorizontal
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onClicked: workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)
+                                        }
+                                        IconButton {
+                                            iconName: AppIcons.vertical
+                                            tooltip: "垂直翻转"
+                                            buttonSize: Theme.compactControlHeight
+                                            active: workspace.selectedFlipVertical
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onClicked: workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)
+                                        }
                                     }
                                 }
                             }
@@ -8411,102 +8310,101 @@ ApplicationWindow {
                                          ? workspace.selectedRandomTransformEnabledCount + " 项已启用" : "关闭"
                                 visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform
 
-                                GridLayout {
-                                    id: randomTransformOptions
-                                    width: parent.width
-                                    columns: width >= 460 ? 3 : (width >= 300 ? 2 : 1)
-                                    columnSpacing: 6
-                                    rowSpacing: 6
+                                AdaptiveInspectorGrid {
+                                    id: randomPositionCompactGrid
 
-                                    OptionTile {
-                                        compact: true
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                        title: "位置"
-                                        detail: workspace.selectedRandomPositionEnabled
-                                                ? "±" + workspace.selectedRandomPositionRange + " px"
-                                                : "随机偏移"
-                                        selected: workspace.selectedRandomPositionEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onActivated: workspace.setSelectedRandomPositionEnabled(!workspace.selectedRandomPositionEnabled)
+                                    CompactInspectorField {
+                                        label: "位置"
+                                        TrailingToggle {
+                                            accessibleName: "启用随机位置"
+                                            checked: workspace.selectedRandomPositionEnabled
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onToggled: checkedValue => workspace.setSelectedRandomPositionEnabled(checkedValue)
+                                        }
                                     }
-                                    OptionTile {
-                                        compact: true
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                        title: "缩放"
-                                        detail: workspace.selectedRandomScaleEnabled
-                                                ? workspace.selectedRandomScaleMinPercent + "–" + workspace.selectedRandomScaleMaxPercent + "%"
-                                                : "随机比例"
-                                        selected: workspace.selectedRandomScaleEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onActivated: workspace.setSelectedRandomScaleEnabled(!workspace.selectedRandomScaleEnabled)
-                                    }
-                                    OptionTile {
-                                        compact: true
-                                        Layout.fillWidth: true
-                                        Layout.minimumWidth: 0
-                                        title: "旋转"
-                                        detail: workspace.selectedRandomRotationEnabled
-                                                ? "±" + Math.round(workspace.selectedRandomRotationRange * 10) / 10 + "°"
-                                                : "随机角度"
-                                        selected: workspace.selectedRandomRotationEnabled
-                                        enabled: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onActivated: workspace.setSelectedRandomRotationEnabled(!workspace.selectedRandomRotationEnabled)
+                                    CompactInspectorField {
+                                        label: "范围"
+                                        visible: workspace.selectedRandomPositionEnabled
+                                        ValueBox {
+                                            value: workspace.selectedRandomPositionRange.toString()
+                                            bindValue: true
+                                            suffix: "± px"
+                                            editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseInt(value)
+                                                if (!isNaN(parsed)) workspace.setSelectedRandomPositionRange(parsed)
+                                            }
+                                        }
                                     }
                                 }
 
-                                InspectorRow {
-                                    label: "位置范围"
-                                    visible: workspace.selectedRandomPositionEnabled
-                                    ValueBox {
-                                        value: workspace.selectedRandomPositionRange.toString()
-                                        bindValue: true
-                                        suffix: "± px"
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseInt(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedRandomPositionRange(parsed)
+                                AdaptiveInspectorGrid {
+                                    id: randomScaleCompactGrid
+
+                                    CompactInspectorField {
+                                        label: "缩放"
+                                        Layout.columnSpan: randomScaleCompactGrid.columns
+                                        TrailingToggle {
+                                            accessibleName: "启用随机缩放"
+                                            checked: workspace.selectedRandomScaleEnabled
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onToggled: checkedValue => workspace.setSelectedRandomScaleEnabled(checkedValue)
+                                        }
+                                    }
+                                    CompactInspectorField {
+                                        label: "最小"
+                                        visible: workspace.selectedRandomScaleEnabled
+                                        ValueBox {
+                                            value: workspace.selectedRandomScaleMinPercent.toString()
+                                            bindValue: true
+                                            suffix: "%"
+                                            editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseInt(value)
+                                                if (!isNaN(parsed)) workspace.setSelectedRandomScaleMinPercent(parsed)
+                                            }
+                                        }
+                                    }
+                                    CompactInspectorField {
+                                        label: "最大"
+                                        visible: workspace.selectedRandomScaleEnabled
+                                        ValueBox {
+                                            value: workspace.selectedRandomScaleMaxPercent.toString()
+                                            bindValue: true
+                                            suffix: "%"
+                                            editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseInt(value)
+                                                if (!isNaN(parsed)) workspace.setSelectedRandomScaleMaxPercent(parsed)
+                                            }
                                         }
                                     }
                                 }
-                                InspectorRow {
-                                    label: "缩放范围"
-                                    visible: workspace.selectedRandomScaleEnabled
-                                    ValueBox {
-                                        value: workspace.selectedRandomScaleMinPercent.toString()
-                                        bindValue: true
-                                        suffix: "min%"
-                                        Layout.fillWidth: false
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseInt(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedRandomScaleMinPercent(parsed)
+
+                                AdaptiveInspectorGrid {
+                                    id: randomRotationCompactGrid
+
+                                    CompactInspectorField {
+                                        label: "旋转"
+                                        TrailingToggle {
+                                            accessibleName: "启用随机旋转"
+                                            checked: workspace.selectedRandomRotationEnabled
+                                            enabled: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onToggled: checkedValue => workspace.setSelectedRandomRotationEnabled(checkedValue)
                                         }
                                     }
-                                    ValueBox {
-                                        value: workspace.selectedRandomScaleMaxPercent.toString()
-                                        bindValue: true
-                                        suffix: "max%"
-                                        Layout.fillWidth: false
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseInt(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedRandomScaleMaxPercent(parsed)
-                                        }
-                                    }
-                                }
-                                InspectorRow {
-                                    label: "旋转范围"
-                                    visible: workspace.selectedRandomRotationEnabled
-                                    ValueBox {
-                                        value: (Math.round(workspace.selectedRandomRotationRange * 10) / 10).toString()
-                                        bindValue: true
-                                        suffix: "±°"
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseFloat(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedRandomRotationRange(parsed)
+                                    CompactInspectorField {
+                                        label: "范围"
+                                        visible: workspace.selectedRandomRotationEnabled
+                                        ValueBox {
+                                            value: (Math.round(workspace.selectedRandomRotationRange * 10) / 10).toString()
+                                            bindValue: true
+                                            suffix: "±°"
+                                            editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseFloat(value)
+                                                if (!isNaN(parsed)) workspace.setSelectedRandomRotationRange(parsed)
+                                            }
                                         }
                                     }
                                 }
@@ -8729,40 +8627,9 @@ ApplicationWindow {
                                 width: parent.width
                                 title: "图层绑定"
                                 summary: "未绑定"
-                                expanded: false
                                 visible: false
                             }
 
-                            InspectorModuleHeader {
-                                Layout.row: 2
-                                title: "内容"
-                                visible: inspectorTab === 0
-                                         && (workspace.selectedHasImageSource
-                                             || workspace.selectedIsTextLayer
-                                             || workspace.selectedIsShapedLayer)
-                            }
-
-                            InspectorModuleHeader {
-                                Layout.row: 7
-                                title: "变换"
-                                visible: inspectorTab === 1 && !workspace.selectedIsLayerGroup
-                                         && (workspace.selectedCanRotate
-                                             || workspace.selectedSupportsAspectRatioLock)
-                            }
-
-                            InspectorModuleHeader {
-                                Layout.row: 9
-                                title: "外观"
-                                visible: inspectorTab === 0 && !workspace.selectedIsLayerGroup
-                            }
-
-                            InspectorModuleHeader {
-                                Layout.row: 11
-                                title: "批量规则"
-                                visible: inspectorTab === 1
-                                         && (workspace.selectedSupportsRandomTransform
-                                             || workspace.selectedSupportsClone)
-                            }
                         }
 
                         Column {
@@ -8770,11 +8637,6 @@ ApplicationWindow {
                             width: inspectorScroll.availableWidth
                             y: propertyInspectorColumn.implicitHeight
                             visible: selectedLayer >= 0
-
-                            InspectorModuleHeader {
-                                title: "文字效果"
-                                visible: inspectorTab === 1 && workspace.selectedIsTextLayer
-                            }
 
                             PropertySection {
                                 id: textFillSection
@@ -8800,15 +8662,20 @@ ApplicationWindow {
                                                 width: (parent.width - 2) / 2
                                                 height: parent.height
                                                 radius: Theme.radiusSmall
-                                                color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : (fillMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
+                                                color: !enabled
+                                                       ? Theme.bgRaised
+                                                       : (workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : (fillMouse.containsMouse ? Theme.bgHover : Theme.bgControl))
                                                 border.width: 1
-                                                border.color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong
-                                                opacity: enabled ? 1 : 0.38
+                                                border.color: !enabled
+                                                              ? Theme.border
+                                                              : (workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong)
                                                 enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: parent.modelData.label
-                                                    color: workspace.selectedTextFillModeId === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                                                    color: !parent.enabled
+                                                           ? Theme.textDisabled
+                                                           : (workspace.selectedTextFillModeId === parent.modelData.value ? Theme.accent : Theme.textSecondary)
                                                     font.family: Theme.bodyFont
                                                     font.pixelSize: 9
                                                     font.weight: Font.DemiBold
@@ -9344,39 +9211,41 @@ ApplicationWindow {
                                         onValueCommitted: value => workspace.setSelectedGradientOverlayColor(1, value)
                                     }
                                 }
-                                InspectorRow {
-                                    label: "强度"
+                                AdaptiveInspectorGrid {
+                                    id: overlayCompactGrid
                                     visible: workspace.selectedOverlayMode !== "none"
-                                    ValueBox {
-                                        Layout.preferredWidth: Theme.inspectorWInput
-                                        value: (workspace.selectedOverlayMode === "color"
-                                                ? workspace.selectedColorOverlayOpacity
-                                                : workspace.selectedGradientOverlayOpacity).toString()
-                                        bindValue: true
-                                        suffix: "%"
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseInt(value)
-                                            if (isNaN(parsed)) return
-                                            if (workspace.selectedOverlayMode === "color")
-                                                workspace.setSelectedColorOverlayOpacity(parsed)
-                                            else
-                                                workspace.setSelectedGradientOverlayOpacity(parsed)
+
+                                    CompactInspectorField {
+                                        label: "强度"
+                                        ValueBox {
+                                            value: (workspace.selectedOverlayMode === "color"
+                                                    ? workspace.selectedColorOverlayOpacity
+                                                    : workspace.selectedGradientOverlayOpacity).toString()
+                                            bindValue: true
+                                            suffix: "%"
+                                            editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseInt(value)
+                                                if (isNaN(parsed)) return
+                                                if (workspace.selectedOverlayMode === "color")
+                                                    workspace.setSelectedColorOverlayOpacity(parsed)
+                                                else
+                                                    workspace.setSelectedGradientOverlayOpacity(parsed)
+                                            }
                                         }
                                     }
-                                }
-                                InspectorRow {
-                                    label: "角度"
-                                    visible: workspace.selectedOverlayMode === "gradient"
-                                    ValueBox {
-                                        Layout.preferredWidth: Theme.inspectorWInput
-                                        value: (Math.round(workspace.selectedGradientOverlayAngle * 10) / 10).toString()
-                                        bindValue: true
-                                        suffix: "°"
-                                        editable: !workspace.selectedLocked && !workspace.operationsBlocked
-                                        onValueCommitted: value => {
-                                            var parsed = parseFloat(value)
-                                            if (!isNaN(parsed)) workspace.setSelectedGradientOverlayAngle(parsed)
+                                    CompactInspectorField {
+                                        label: "角度"
+                                        visible: workspace.selectedOverlayMode === "gradient"
+                                        ValueBox {
+                                            value: (Math.round(workspace.selectedGradientOverlayAngle * 10) / 10).toString()
+                                            bindValue: true
+                                            suffix: "°"
+                                            editable: !workspace.selectedLocked && !workspace.operationsBlocked
+                                            onValueCommitted: value => {
+                                                var parsed = parseFloat(value)
+                                                if (!isNaN(parsed)) workspace.setSelectedGradientOverlayAngle(parsed)
+                                            }
                                         }
                                     }
                                 }
@@ -9473,14 +9342,19 @@ ApplicationWindow {
                                                 enabled: modelData <= workspace.selectedCornerRadiusMax
                                                          && !workspace.selectedLocked
                                                          && !workspace.operationsBlocked
-                                                opacity: enabled ? 1 : 0.38
-                                                color: workspace.selectedCornerRadius === modelData ? Theme.accentSoft : Theme.bgControl
+                                                color: !enabled
+                                                       ? Theme.bgRaised
+                                                       : (workspace.selectedCornerRadius === modelData ? Theme.accentSoft : Theme.bgControl)
                                                 border.width: 1
-                                                border.color: workspace.selectedCornerRadius === modelData ? Theme.accentPressed : Theme.borderStrong
+                                                border.color: !enabled
+                                                              ? Theme.border
+                                                              : (workspace.selectedCornerRadius === modelData ? Theme.accentPressed : Theme.borderStrong)
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: modelData
-                                                    color: workspace.selectedCornerRadius === modelData ? Theme.accent : Theme.textSecondary
+                                                    color: !parent.enabled
+                                                           ? Theme.textDisabled
+                                                           : (workspace.selectedCornerRadius === modelData ? Theme.accent : Theme.textSecondary)
                                                     font.family: Theme.bodyFont
                                                     font.pixelSize: 10
                                                     font.weight: Font.DemiBold

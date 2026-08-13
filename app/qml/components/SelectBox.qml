@@ -5,13 +5,19 @@ import QtQuick.Layouts
 ComboBox {
     id: root
 
-    Layout.fillWidth: true
+    property string controlSize: "sm"
+    property bool fullWidth: true
+    property bool invalid: false
+
+    Layout.fillWidth: fullWidth
     Layout.minimumWidth: 0
     implicitWidth: 160
-    implicitHeight: Theme.controlHeight
+    implicitHeight: controlSize === "lg"
+                    ? Theme.inputHeightLg
+                    : (controlSize === "md" ? Theme.inputHeightMd : Theme.inputHeightSm)
     textRole: "label"
     valueRole: "value"
-    leftPadding: 10
+    leftPadding: Theme.inputPaddingX
     rightPadding: 30
     focusPolicy: Qt.StrongFocus
 
@@ -21,7 +27,7 @@ ComboBox {
         text: root.displayText
         color: root.enabled ? Theme.textPrimary : Theme.textDisabled
         font.family: Theme.bodyFont
-        font.pixelSize: 11
+        font.pixelSize: root.controlSize === "lg" ? 13 : 12
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
     }
@@ -40,7 +46,9 @@ ComboBox {
         radius: Theme.radiusSmall
         color: root.down || root.popup.visible ? Theme.bgHover : Theme.bgControl
         border.width: 1
-        border.color: root.activeFocus || root.popup.visible ? Theme.focusRing : Theme.borderStrong
+        border.color: root.invalid
+                      ? Theme.danger
+                      : (root.activeFocus || root.popup.visible ? Theme.focusRing : Theme.border)
 
         Behavior on color { ColorAnimation { duration: Theme.motionFast } }
         Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }

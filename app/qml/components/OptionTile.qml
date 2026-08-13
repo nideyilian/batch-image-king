@@ -17,12 +17,15 @@ Rectangle {
     implicitWidth: compact ? 92 : 136
     implicitHeight: compact ? 62 : 84
     radius: Theme.radiusSmall
-    color: selected ? Theme.accentSoft : (tileMouse.containsMouse ? Theme.bgHover : Theme.bgRaised)
+    color: !enabled
+           ? Theme.bgRaised
+           : (selected ? Theme.accentSoft : (tileMouse.containsMouse ? Theme.bgHover : Theme.bgRaised))
     border.width: 1
     border.color: activeFocus
                   ? Theme.focusRing
-                  : (selected ? Theme.accentPressed : Theme.border)
-    opacity: enabled ? 1 : 0.38
+                  : (!enabled
+                     ? Theme.border
+                     : (selected ? Theme.accentPressed : Theme.border))
     activeFocusOnTab: enabled
 
     Behavior on color {
@@ -44,7 +47,9 @@ Rectangle {
             Text {
                 Layout.fillWidth: true
                 text: root.title
-                color: root.selected ? Theme.accentHover : Theme.textPrimary
+                color: !root.enabled
+                       ? Theme.textDisabled
+                       : (root.selected ? Theme.accentHover : Theme.textPrimary)
                 font.family: Theme.bodyFont
                 font.pixelSize: root.compact ? 11 : 12
                 font.weight: Font.DemiBold
@@ -54,7 +59,7 @@ Rectangle {
             AppIcon {
                 iconName: AppIcons.check
                 iconSize: root.compact ? 12 : 14
-                iconColor: Theme.accent
+                iconColor: root.enabled ? Theme.accent : Theme.textDisabled
                 opacity: root.selected ? 1 : 0
             }
         }
@@ -64,7 +69,9 @@ Rectangle {
             Layout.fillHeight: true
             visible: root.detail.length > 0
             text: root.detail
-            color: root.selected ? Theme.textSecondary : Theme.textMuted
+            color: !root.enabled
+                   ? Theme.textDisabled
+                   : (root.selected ? Theme.textSecondary : Theme.textMuted)
             font.family: Theme.bodyFont
             font.pixelSize: 10
             wrapMode: Text.Wrap

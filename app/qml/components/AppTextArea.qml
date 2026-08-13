@@ -15,8 +15,8 @@ TextArea {
     bottomPadding: 8
     color: enabled ? Theme.textPrimary : Theme.textDisabled
     placeholderTextColor: Theme.textMuted
-    selectionColor: Theme.accentPressed
-    selectedTextColor: Theme.textPrimary
+    selectionColor: Theme.selectionBackground
+    selectedTextColor: Theme.selectionForeground
     font.family: Theme.bodyFont
     font.pixelSize: 11
     selectByMouse: true

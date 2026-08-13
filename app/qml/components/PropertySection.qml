@@ -10,7 +10,7 @@ Item {
     property bool expanded: true
     default property alias sectionData: contentColumn.data
 
-    implicitHeight: header.height + (root.expanded ? contentColumn.implicitHeight + 9 : 0) + 1
+    implicitHeight: header.height + (root.expanded ? contentColumn.implicitHeight + Theme.space4 : 0) + 1
     height: implicitHeight
 
     Rectangle {
@@ -18,27 +18,27 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: Theme.sectionHeaderHeight
-        color: "transparent"
+        color: Theme.bgRaised
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 8
+            anchors.leftMargin: Theme.inspectorSectionGutter
             anchors.verticalCenter: parent.verticalCenter
             text: root.title
             color: Theme.textPrimary
             font.family: Theme.bodyFont
-            font.pixelSize: 11
+            font.pixelSize: Theme.fontSizeSm
             font.weight: Font.DemiBold
         }
 
         Text {
             anchors.right: parent.right
-            anchors.rightMargin: 8
+            anchors.rightMargin: Theme.inspectorSectionGutter
             anchors.verticalCenter: parent.verticalCenter
             text: root.summary
             color: Theme.textMuted
             font.family: Theme.bodyFont
-            font.pixelSize: 10
+            font.pixelSize: Theme.fontSizeXs
         }
     }
 
@@ -47,10 +47,10 @@ Item {
         anchors.top: header.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: 8
-        anchors.rightMargin: 8
-        anchors.topMargin: 3
-        spacing: 3
+        anchors.leftMargin: Theme.inspectorSectionGutter
+        anchors.rightMargin: Theme.inspectorSectionGutter
+        anchors.topMargin: Theme.inspectorRowSpacing
+        spacing: Theme.inspectorRowSpacing
         visible: root.expanded
     }
 

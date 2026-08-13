@@ -11,6 +11,8 @@ Rectangle {
     property bool editable: true
     property bool invalid: false
     property string accessibleName: ""
+    property string controlSize: "sm"
+    property bool mono: false
     signal valueCommitted(string value)
 
     function beginEdit() {
@@ -22,14 +24,15 @@ Rectangle {
     }
 
     Layout.fillWidth: true
-    implicitWidth: 94
-    implicitHeight: Theme.controlHeight
+    implicitWidth: 96
+    implicitHeight: controlSize === "lg"
+                    ? Theme.inputHeightLg
+                    : (controlSize === "md" ? Theme.inputHeightMd : Theme.inputHeightSm)
     Layout.minimumWidth: 64
     radius: Theme.radiusSmall
     color: Theme.bgControl
     border.width: 1
-    border.color: root.invalid ? Theme.errorBorder : (input.activeFocus ? Theme.focusRing : Theme.borderStrong)
-    opacity: enabled ? 1 : 0.56
+    border.color: root.invalid ? Theme.danger : (input.activeFocus ? Theme.focusRing : Theme.border)
 
     Behavior on border.color {
         ColorAnimation { duration: Theme.motionFast }
@@ -40,12 +43,12 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: suffixLabel.left
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 9
+        anchors.leftMargin: Theme.inputPaddingX
         anchors.rightMargin: 4
-        color: Theme.textPrimary
-        selectionColor: Theme.accentPressed
-        selectedTextColor: Theme.textPrimary
-        font.family: Theme.bodyFont
+        color: root.enabled ? Theme.textPrimary : Theme.textDisabled
+        selectionColor: Theme.selectionBackground
+        selectedTextColor: Theme.selectionForeground
+        font.family: root.mono ? Theme.dataFont : Theme.bodyFont
         font.pixelSize: 12
         readOnly: !root.editable
         selectByMouse: true
@@ -82,7 +85,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         text: root.suffix
         visible: text.length > 0
-        color: Theme.textMuted
+        color: root.enabled ? Theme.textMuted : Theme.textDisabled
         font.family: Theme.bodyFont
         font.pixelSize: 10
     }

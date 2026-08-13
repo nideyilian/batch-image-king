@@ -84,6 +84,8 @@ QtObject {
     readonly property string tag: "tag"
     readonly property string settings: "settings-2"
     readonly property string sliders: "sliders-horizontal"
+    readonly property string sun: "sun"
+    readonly property string moon: "moon"
 
     readonly property string search: "search"
     readonly property string preview: "scan-eye"

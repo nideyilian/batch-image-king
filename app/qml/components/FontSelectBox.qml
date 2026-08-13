@@ -233,7 +233,6 @@ Rectangle {
     color: Theme.bgControl
     border.width: 1
     border.color: fontInput.activeFocus || fontPopup.visible ? Theme.focusRing : Theme.borderStrong
-    opacity: enabled ? 1 : 0.56
     activeFocusOnTab: enabled
 
     Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
@@ -246,9 +245,9 @@ Rectangle {
         anchors.bottom: parent.bottom
         anchors.leftMargin: 9
         anchors.rightMargin: 6
-        color: Theme.textPrimary
-        selectionColor: Theme.accentPressed
-        selectedTextColor: Theme.textPrimary
+        color: root.enabled ? Theme.textPrimary : Theme.textDisabled
+        selectionColor: Theme.selectionBackground
+        selectedTextColor: Theme.selectionForeground
         font.family: root.value || Theme.bodyFont
         font.styleName: root.face || "Regular"
         font.pixelSize: 11

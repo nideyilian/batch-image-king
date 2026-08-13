@@ -7,25 +7,35 @@ TextField {
 
     property bool invalid: false
     property string accessibleName: ""
+    property string controlSize: "sm"
+    property bool fullWidth: true
+    property bool mono: false
 
-    Layout.fillWidth: true
-    implicitHeight: Theme.controlHeight
-    leftPadding: 9
-    rightPadding: 9
+    Layout.fillWidth: fullWidth
+    implicitHeight: controlSize === "lg"
+                    ? Theme.inputHeightLg
+                    : (controlSize === "md" ? Theme.inputHeightMd : Theme.inputHeightSm)
+    leftPadding: Theme.inputPaddingX
+    rightPadding: Theme.inputPaddingX
     color: enabled ? Theme.textPrimary : Theme.textDisabled
     placeholderTextColor: Theme.textMuted
-    selectionColor: Theme.accentPressed
-    selectedTextColor: Theme.textPrimary
-    font.family: Theme.bodyFont
-    font.pixelSize: 11
+    selectionColor: Theme.selectionBackground
+    selectedTextColor: Theme.selectionForeground
+    font.family: mono ? Theme.dataFont : Theme.bodyFont
+    font.pixelSize: controlSize === "lg" ? 13 : 12
     verticalAlignment: TextInput.AlignVCenter
     selectByMouse: true
+    hoverEnabled: true
 
     background: Rectangle {
         radius: Theme.radiusSmall
         color: Theme.bgControl
         border.width: 1
-        border.color: root.invalid ? Theme.errorBorder : (root.activeFocus ? Theme.focusRing : Theme.borderStrong)
+        border.color: root.invalid
+                      ? Theme.danger
+                      : (root.activeFocus
+                         ? Theme.focusRing
+                         : (root.hovered ? Theme.borderStrong : Theme.border))
         Behavior on border.color { ColorAnimation { duration: Theme.motionFast } }
     }
 

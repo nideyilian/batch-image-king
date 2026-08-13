@@ -35,7 +35,7 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 左侧工具轨 48 px
 图层面板 默认 246-276 px，可调 200-420 px
 中央画布 弹性区域
-属性检查器 默认 368-408 px，可调 360-560 px
+属性检查器 固定 320 px（完整显示参数栅格的最小宽度）
 底部状态栏 28 px
 ```
 
@@ -50,8 +50,8 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 - 文字：`textPrimary`、`textSecondary`、`textMuted`、`textDisabled`
 - 操作：`accent`、`accentHover`、`accentPressed`
 - 状态：`success`、`warning`、`danger`、`info`
-- 尺寸：`controlHeight`、`commandHeight`、`toolButtonSize`、`sectionHeaderHeight`
-- Field：`inspectorLabelColWidth`、`inspectorColSpacing`、`compactControlHeight`、`comfortableControlHeight`
+- 尺寸：`inputHeightSm`、`buttonHeightMd`、`tabHeight`、`switchWidth`、`switchHeight`
+- Field：`fieldHorizontalLabelWidth`、`fieldHorizontalGap`、`inspectorLabelColWidth`、`inspectorCompactLabelColWidth`、`inspectorPairBreakpoint`
 
 ## Component Library
 
@@ -61,7 +61,9 @@ sourceOfTruth: docs/hermes-desktop-design-system.md
 
 Hermes 专用组件：
 
-`HermesNavItem`、`HermesPanelHeader`、`HermesSectionLabel`、`HermesStatusDot`
+`HermesNavItem`、`HermesPanelHeader`、`HermesSectionLabel`、`HermesStatusDot`、`HermesField`、`HermesPageTabs`、`HermesAdaptiveFieldGrid`
+
+其中 `Theme`、`HermesField`、`HermesPageTabs`、`AppButton`、输入控件和开关遵循 Hermes-CN-Desktop `packages/shared-ui` 的令牌与组件契约；QML 适配来源及许可证见 `THIRD_PARTY_NOTICES.md`。
 
 ## Accessibility
 

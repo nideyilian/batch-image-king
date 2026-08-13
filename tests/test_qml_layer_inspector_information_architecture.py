@@ -13,7 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 def test_qml_inspector_uses_basic_and_more_parameter_tabs():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
-    assert 'model: ["基本参数", "更多参数"]' in source
+    assert 'items: ["基本参数", "更多参数"]' in source
+    assert "HermesPageTabs {" in source
     for section_id in (
         "basicPropertiesSection",
         "imageSourceSection",
@@ -56,16 +57,12 @@ def test_qml_text_background_shadow_and_glow_live_in_more_parameters():
 def test_qml_parameter_tabs_isolate_basic_and_more_sections():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
-    object_header = re.search(
-        r'title: "对象".*?visible: inspectorTab === 0 && selectedLayer >= 0',
-        source,
-        re.S,
-    )
-    assert object_header is not None
+    assert "InspectorModuleHeader" not in source
 
     basic_sections = (
         "basicPropertiesSection",
         "imageSourceSection",
+        "advancedSettingsSection",
         "shapeSection",
         "textContentSection",
         "textFontSection",
@@ -73,7 +70,6 @@ def test_qml_parameter_tabs_isolate_basic_and_more_sections():
         "appearanceSection",
     )
     advanced_sections = (
-        "advancedSettingsSection",
         "vectorPathSection",
         "layerTransformSection",
         "randomTransformSection",
@@ -88,12 +84,12 @@ def test_qml_parameter_tabs_isolate_basic_and_more_sections():
     )
 
     for section_id in basic_sections:
-        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*InspectorModuleHeader|\n\s*Column)", source, re.S)
+        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*Column)", source, re.S)
         assert block is not None, section_id
         assert "inspectorTab === 0" in block.group(0), section_id
 
     for section_id in advanced_sections:
-        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*InspectorModuleHeader|\n\s*Column)", source, re.S)
+        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*Column)", source, re.S)
         assert block is not None, section_id
         assert "inspectorTab === 1" in block.group(0), section_id
 
@@ -101,9 +97,16 @@ def test_qml_parameter_tabs_isolate_basic_and_more_sections():
 @pytest.mark.unit
 def test_qml_random_transform_and_text_editor_adapt_to_inspector_width():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+    grid_source = (REPO_ROOT / "app/qml/components/HermesAdaptiveFieldGrid.qml").read_text(encoding="utf-8")
 
-    assert "id: randomTransformOptions" in source
-    assert "columns: width >= 460 ? 3 : (width >= 300 ? 2 : 1)" in source
+    for grid_id in (
+        "randomPositionCompactGrid",
+        "randomScaleCompactGrid",
+        "randomRotationCompactGrid",
+    ):
+        assert f"id: {grid_id}" in source
+    assert "component AdaptiveInspectorGrid: HermesAdaptiveFieldGrid" in source
+    assert "columns: width >= pairBreakpoint ? 2 : 1" in grid_source
     assert "implicitWidth: 0" in source
     assert "width: Math.min(" in source
     assert "Theme.inspectorTextEditorMaxWidth" in source
