@@ -3690,6 +3690,7 @@ ApplicationWindow {
     component InspectorRow: HermesField {
         orientation: "horizontal"
         compact: true
+        minimumControlHeight: Theme.inputHeightMd
         width: parent ? parent.width : 392
     }
 
@@ -3700,6 +3701,12 @@ ApplicationWindow {
         orientation: "horizontal"
         compact: true
         labelWidth: Theme.inspectorCompactLabelColWidth
+        minimumControlHeight: Theme.inputHeightMd
+    }
+
+    component PairedInspectorValue: ValueBox {
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
     }
 
     component SidebarResizeHandle: Rectangle {
@@ -8100,26 +8107,26 @@ ApplicationWindow {
                                 }
                                 InspectorRow {
                                     label: "位置"
-                                    ValueBox {
-                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedX.toString(); bindValue: true; suffix: "X"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedX(parsed) }
                                     }
-                                    ValueBox {
-                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedY.toString(); bindValue: true; suffix: "Y"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedY(parsed) }
                                     }
                                 }
                                 InspectorRow {
                                     label: "尺寸"
-                                    ValueBox {
-                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedWidth.toString(); bindValue: true; suffix: "W"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedWidth(parsed) }
                                     }
-                                    ValueBox {
-                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"; Layout.fillWidth: false
+                                    PairedInspectorValue {
+                                        value: workspace.selectedHeight.toString(); bindValue: true; suffix: "H"
                                         editable: !workspace.selectedLocked
                                         onValueCommitted: value => { var parsed = parseInt(value); if (!isNaN(parsed)) workspace.setSelectedHeight(parsed) }
                                     }

@@ -236,16 +236,19 @@ def test_compact_inspector_fields_keep_readable_layout_widths():
     assert "import QtQuick.Layouts" in value_box_source
     assert "Layout.minimumWidth: 64" in value_box_source
     assert "inspectorLabelColWidth: 64" in theme_source
-    assert "inspectorCompactLabelColWidth: 48" in theme_source
-    assert "inspectorColSpacing: 8" in theme_source
+    assert "inspectorCompactLabelColWidth: 52" in theme_source
+    assert "inspectorColSpacing: 12" in theme_source
     assert "inspectorPairBreakpoint: 320" in theme_source
     assert "inspectorTextEditorMaxWidth: 400" in theme_source
     assert "inspectorRowHeight: compactControlHeight" in theme_source
     assert "Layout.fillWidth: true" in value_box_source
+    assert "component PairedInspectorValue: ValueBox" in main_source
+    assert "Layout.fillWidth: true" in main_source
 
 
 @pytest.mark.unit
 def test_inspector_field_labels_never_elide_and_follow_the_four_pixel_grid():
+    main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
     field_source = (QML_ROOT / "components" / "HermesField.qml").read_text(encoding="utf-8")
     section_source = (QML_ROOT / "components" / "PropertySection.qml").read_text(encoding="utf-8")
@@ -259,11 +262,13 @@ def test_inspector_field_labels_never_elide_and_follow_the_four_pixel_grid():
     assert "Layout.preferredWidth: root.horizontal ? root.labelWidth : -1" in field_source
 
     for declaration in (
+        "inspectorPanelWidth: 320",
+        "sectionHeaderHeight: 40",
         "inspectorLabelColWidth: 64",
-        "inspectorCompactLabelColWidth: 48",
-        "inspectorColSpacing: 8",
-        "inspectorRowSpacing: 4",
-        "inspectorSectionGutter: 8",
+        "inspectorCompactLabelColWidth: 52",
+        "inspectorColSpacing: 12",
+        "inspectorRowSpacing: 8",
+        "inspectorSectionGutter: 12",
     ):
         assert declaration in theme_source
 
@@ -271,6 +276,11 @@ def test_inspector_field_labels_never_elide_and_follow_the_four_pixel_grid():
     assert "anchors.rightMargin: Theme.inspectorSectionGutter" in section_source
     assert "anchors.topMargin: Theme.inspectorRowSpacing" in section_source
     assert "spacing: Theme.inspectorRowSpacing" in section_source
+    assert "color: Theme.bgRaised" in section_source
+    assert "font.pixelSize: Theme.fontSizeSm" in section_source
+    assert "property int minimumControlHeight: 0" in field_source
+    assert "Layout.minimumHeight: root.minimumControlHeight" in field_source
+    assert "minimumControlHeight: Theme.inputHeightMd" in main_source
     assert "spacing: 3" not in section_source
 
 
