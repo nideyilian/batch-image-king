@@ -5083,7 +5083,7 @@ ApplicationWindow {
         Rectangle {
             id: titleBar
             Layout.fillWidth: true
-            Layout.preferredHeight: 66
+            Layout.preferredHeight: 54
             color: Theme.bgBar
 
             RowLayout {
@@ -5093,7 +5093,7 @@ ApplicationWindow {
                 spacing: 16
 
                 Row {
-                    Layout.preferredWidth: 250
+                    Layout.preferredWidth: 150
                     spacing: 12
 
                     Item {
@@ -5118,24 +5118,13 @@ ApplicationWindow {
                         }
                     }
 
-                    Column {
-                        spacing: 2
+                    Text {
                         anchors.verticalCenter: parent.verticalCenter
-
-                        Text {
-                            text: "批图王"
-                            color: Theme.textPrimary
-                            font.family: Theme.displayFont
-                            font.pixelSize: 16
-                            font.weight: Font.DemiBold
-                        }
-                        Text {
-                            text: "Hermes-style desktop workspace  ·  batch-image-king"
-                            color: Theme.textMuted
-                            font.family: Theme.dataFont
-                            font.pixelSize: 9
-                            elide: Text.ElideRight
-                        }
+                        text: "批图王"
+                        color: Theme.textPrimary
+                        font.family: Theme.displayFont
+                        font.pixelSize: 16
+                        font.weight: Font.DemiBold
                     }
                 }
 
@@ -5143,43 +5132,19 @@ ApplicationWindow {
                     spacing: 4
                     Layout.fillWidth: true
 
-                    HermesNavItem { index: "01"; text: "工作台"; active: true; iconName: AppIcons.layers }
-                    HermesNavItem { index: "02"; text: "画布"; iconName: AppIcons.image; onClicked: window.openNewCanvasDialog() }
-                    HermesNavItem { index: "03"; text: "图层"; iconName: AppIcons.layers; onClicked: showToast(window.hasOpenDocument ? "图层面板已就绪" : "请先打开或新建文档") }
-                    HermesNavItem { index: "04"; text: "预设"; iconName: AppIcons.fileText; onClicked: window.openProjectPresetDrawer() }
-                    HermesNavItem { index: "05"; text: "导出"; iconName: AppIcons.exportAction; onClicked: window.openBatchExportDrawer() }
-                    HermesNavItem { index: "06"; text: "命令"; iconName: AppIcons.more; onClicked: commandMenu.popup() }
-                }
-
-                AppTextField {
-                    id: commandSearchField
-                    Layout.preferredWidth: 240
-                    Layout.preferredHeight: 32
-                    placeholderText: "搜索命令 / 文件 / 图层..."
-                    accessibleName: "搜索命令、文件和图层"
-                    Keys.onReturnPressed: {
-                        if (text.trim().length === 0) {
-                            showToast("请输入要查找的命令、文件或图层")
-                        } else {
-                            showToast("搜索：" + text.trim())
-                        }
-                    }
-                }
-
-                AppButton {
-                    Layout.preferredWidth: 116
-                    text: "档案  default"
-                    variant: "secondary"
-                    onClicked: showToast("当前档案：default")
+                    HermesNavItem { index: "01"; text: "画布"; iconName: AppIcons.image; onClicked: window.openNewCanvasDialog() }
+                    HermesNavItem { index: "02"; text: "预设"; iconName: AppIcons.fileText; onClicked: window.openProjectPresetDrawer() }
+                    HermesNavItem { index: "03"; text: "导出"; iconName: AppIcons.exportAction; onClicked: window.openBatchExportDrawer() }
+                    HermesNavItem { index: "04"; text: "命令"; iconName: AppIcons.more; onClicked: commandMenu.popup() }
                 }
 
                 IconButton {
                     id: interfaceSettingsButton
-                    iconName: AppIcons.settings
-                    tooltip: Theme.darkMode ? "界面设置 · 暗色主题" : "界面设置 · 浅色主题"
+                    iconName: Theme.darkMode ? AppIcons.sun : AppIcons.moon
+                    tooltip: Theme.darkMode ? "切换为浅色主题" : "切换为暗色主题"
                     buttonSize: 32
-                    active: appearanceMenu.visible
-                    onClicked: appearanceMenu.popup()
+                    active: Theme.darkMode
+                    onClicked: window.setThemeMode(Theme.darkMode ? "light" : "dark")
                 }
             }
 
@@ -5199,19 +5164,6 @@ ApplicationWindow {
             ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
             ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
             ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
-        }
-
-        AppMenu {
-            id: appearanceMenu
-            width: 180
-            ShapeMenuItem {
-                text: (Theme.darkMode ? "    " : "✓  ") + "浅色主题"
-                onTriggered: window.setThemeMode("light")
-            }
-            ShapeMenuItem {
-                text: (Theme.darkMode ? "✓  " : "    ") + "暗色主题"
-                onTriggered: window.setThemeMode("dark")
-            }
         }
 
         Rectangle {
