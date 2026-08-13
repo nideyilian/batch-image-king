@@ -36,6 +36,7 @@ Rectangle {
         return avg * count + 4 + (count - 1) * 2
     }
     Layout.fillWidth: true
+    Layout.minimumWidth: 0
     implicitWidth: fillWidth ? 180 : __inlineWidth
     implicitHeight: Theme.compactControlHeight
     radius: Theme.radiusSmall

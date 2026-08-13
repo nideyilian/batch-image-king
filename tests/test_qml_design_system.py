@@ -233,8 +233,8 @@ def test_compact_inspector_fields_keep_readable_layout_widths():
 
     assert "import QtQuick.Layouts" in value_box_source
     assert "Layout.minimumWidth: 64" in value_box_source
-    assert "inspectorLabelColWidth: 160" in theme_source
-    assert "inspectorColSpacing: 16" in theme_source
+    assert "inspectorLabelColWidth: 72" in theme_source
+    assert "inspectorColSpacing: 8" in theme_source
     assert "inspectorRowHeight: compactControlHeight" in theme_source
     assert "Layout.fillWidth: true" in value_box_source
 
@@ -288,6 +288,8 @@ def test_field_controls_fill_the_flexible_column_by_default():
                  "SelectBox.qml", "SegmentedControl.qml", "ValueBox.qml"):
         assert "Layout.fillWidth: true" in component_sources[name]
         assert "import QtQuick.Layouts" in component_sources[name]
+    for name in ("FontSelectBox.qml", "SelectBox.qml", "SegmentedControl.qml"):
+        assert "Layout.minimumWidth: 0" in component_sources[name]
 
 
 @pytest.mark.unit
@@ -314,6 +316,8 @@ def test_workspace_sidebars_are_resizable_and_persist_widths():
         "function setInspectorPanelWidth(value)",
         "function resetLayerPanelWidth()",
         "function resetInspectorPanelWidth()",
+        "return 348",
+        "var usesLegacyInspectorDefault = storedInspectorWidth === 368",
         "component SidebarResizeHandle",
         "id: layerPanelResizeHandle",
         "id: inspectorResizeHandle",
@@ -327,3 +331,5 @@ def test_workspace_sidebars_are_resizable_and_persist_widths():
         "Layout.preferredWidth: window.inspectorPanelWidth",
     ):
         assert marker in main_source
+    assert "inspectorPanelMinWidth: 332" in theme_source
+    assert "Layout.fillWidth: true\n                                        Layout.minimumWidth: 0\n                                        Layout.preferredWidth: Theme.inspectorWBind" in main_source

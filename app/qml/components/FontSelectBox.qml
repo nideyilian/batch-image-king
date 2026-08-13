@@ -226,6 +226,7 @@ Rectangle {
     }
 
     Layout.fillWidth: true
+    Layout.minimumWidth: 0
     implicitWidth: 160
     implicitHeight: Theme.controlHeight
     radius: Theme.radiusSmall

@@ -142,7 +142,7 @@ ApplicationWindow {
     }
 
     function defaultInspectorPanelWidth() {
-        return width < 1320 ? 368 : 408
+        return 348
     }
 
     function availableSidebarWidth() {
@@ -196,11 +196,14 @@ ApplicationWindow {
     }
 
     function restoreSidebarWidths() {
+        var storedInspectorWidth = sidebarSettings.inspectorPanelWidth
+        var usesLegacyInspectorDefault = storedInspectorWidth === 368
+                || storedInspectorWidth === 408
         layerPanelWidth = sidebarSettings.layerPanelWidth > 0
                 ? sidebarSettings.layerPanelWidth
                 : defaultLayerPanelWidth()
-        inspectorPanelWidth = sidebarSettings.inspectorPanelWidth > 0
-                ? sidebarSettings.inspectorPanelWidth
+        inspectorPanelWidth = storedInspectorWidth > 0 && !usesLegacyInspectorDefault
+                ? storedInspectorWidth
                 : defaultInspectorPanelWidth()
         applySidebarBounds()
         sidebarWidthsRestored = true
@@ -7943,6 +7946,8 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "绑定"
                                     Row {
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
                                         Layout.preferredWidth: Theme.inspectorWBind
                                         height: Theme.compactControlHeight
                                         spacing: 2
@@ -8066,6 +8071,8 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "对齐"
                                     Row {
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
                                         Layout.preferredWidth: Theme.inspectorWAlign
                                         height: Theme.compactControlHeight
                                         spacing: 2
@@ -8776,6 +8783,8 @@ ApplicationWindow {
                                 InspectorRow {
                                     label: "模式"
                                     Row {
+                                        Layout.fillWidth: true
+                                        Layout.minimumWidth: 0
                                         Layout.preferredWidth: Theme.inspectorWSeg2
                                         height: Theme.compactControlHeight
                                         spacing: 2
