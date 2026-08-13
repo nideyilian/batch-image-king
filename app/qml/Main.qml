@@ -15,6 +15,16 @@ ApplicationWindow {
     visible: true
     title: "批图王 · QML 工作台"
     color: Theme.bgApp
+    palette.window: Theme.bgApp
+    palette.windowText: Theme.textPrimary
+    palette.base: Theme.bgControl
+    palette.alternateBase: Theme.bgRaised
+    palette.text: Theme.textPrimary
+    palette.button: Theme.bgControl
+    palette.buttonText: Theme.textPrimary
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentForeground
+    palette.placeholderText: Theme.textMuted
 
     onClosing: function(close) {
         if (!workspaceSessions.applicationCloseApproved) {
@@ -442,6 +452,13 @@ ApplicationWindow {
         return Qt.rgba(red, green, blue, alpha)
     }
 
+    function setThemeMode(mode) {
+        var normalizedMode = mode === "dark" ? "dark" : "light"
+        Theme.darkMode = normalizedMode === "dark"
+        appearanceSettings.themeMode = normalizedMode
+        appearanceSettings.sync()
+    }
+
     Settings {
         id: newCanvasSettings
         category: "newCanvas"
@@ -455,7 +472,15 @@ ApplicationWindow {
         property real layerPanelWidth: -1
     }
 
+    Settings {
+        id: appearanceSettings
+        objectName: "appearanceSettings"
+        category: "uiAppearance"
+        property string themeMode: "light"
+    }
+
     Component.onCompleted: {
+        window.setThemeMode(appearanceSettings.themeMode)
         window.loadQuickCanvasPresets()
         window.restoreSidebarWidths()
     }
@@ -5149,10 +5174,12 @@ ApplicationWindow {
                 }
 
                 IconButton {
+                    id: interfaceSettingsButton
                     iconName: AppIcons.settings
-                    tooltip: "界面设置"
+                    tooltip: Theme.darkMode ? "界面设置 · 暗色主题" : "界面设置 · 浅色主题"
                     buttonSize: 32
-                    onClicked: showToast("界面设置已预留")
+                    active: appearanceMenu.visible
+                    onClicked: appearanceMenu.popup()
                 }
             }
 
@@ -5172,6 +5199,19 @@ ApplicationWindow {
             ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
             ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
             ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
+        }
+
+        AppMenu {
+            id: appearanceMenu
+            width: 180
+            ShapeMenuItem {
+                text: (Theme.darkMode ? "    " : "✓  ") + "浅色主题"
+                onTriggered: window.setThemeMode("light")
+            }
+            ShapeMenuItem {
+                text: (Theme.darkMode ? "✓  " : "    ") + "暗色主题"
+                onTriggered: window.setThemeMode("dark")
+            }
         }
 
         Rectangle {

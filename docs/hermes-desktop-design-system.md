@@ -2,18 +2,18 @@
 
 > 版本：1.0
 > 适用范围：`app/qml/` 的桌面工作台、编辑器、侧栏、抽屉、对话框和状态反馈
-> 设计基准：Hermes-CN-Desktop `packages/shared-ui` 的浅色桌面应用语言
+> 设计基准：Hermes-CN-Desktop `packages/shared-ui` 的 `light-modern` / `dark-modern` 双主题桌面语言
 > 实现基准：Qt Quick / QML，共享组件位于 `app/qml/components/`
 > 上游适配与许可证：见 `THIRD_PARTY_NOTICES.md`
 
 ## 1. 设计结论
 
-批图王的新界面完全采用 Hermes 桌面端的工作台语言，不再沿用旧的深色、玻璃态、渐变、发光和装饰卡片方向。
+批图王的新界面完全采用 Hermes 桌面端的工作台语言，同时提供中性浅色和碳黑暗色主题；不再沿用旧的蓝绿色深色、玻璃态、渐变、发光和装饰卡片方向。
 
 核心印象是：
 
-- 暖白和浅灰的桌面工作区。
-- 近黑色的主操作和标题文字。
+- 浅色使用纸白与浅灰工作区，暗色使用碳黑分层表面。
+- 浅色以近黑色、暗色以近白色承担主操作和标题文字。
 - 细、平、克制的 1 px 边界。
 - 方正的控件轮廓，像桌面工具而不是营销卡片。
 - 绿色只表示运行状态、健康状态和完成状态。
@@ -27,40 +27,39 @@
 
 ### 2.1 表面
 
-| 令牌 | 值 | 用途 |
-| --- | --- | --- |
-| `Theme.bgApp` | `#f1f1ee` | 应用最底层、窗口背景 |
-| `Theme.bgBar` | `#ffffff` | 顶栏、标签栏、工具轨、状态栏 |
-| `Theme.bgPanel` | `#fbfbf9` | 侧栏、属性面板、抽屉 |
-| `Theme.bgRaised` | `#f5f5f2` | 菜单、浮层、次级表面 |
-| `Theme.bgControl` | `#ffffff` | 输入框、选择框、普通按钮 |
-| `Theme.bgHover` | `#eeeeea` | hover、键盘导航和临时高亮 |
-| `Theme.bgCanvas` | `#f7f7f5` | 画布周边工作区 |
-| `Theme.bgSelected` | `#e9e9e5` | 选中对象和当前项的弱底色 |
+| 令牌 | 浅色 | 暗色 | 用途 |
+| --- | --- | --- | --- |
+| `Theme.bgApp` | `#f4f4f3` | `#111111` | 应用最底层、窗口背景 |
+| `Theme.bgBar` | `#ffffff` | `#181818` | 顶栏、标签栏、工具轨、状态栏 |
+| `Theme.bgPanel` | `#ffffff` | `#181818` | 侧栏、属性面板、抽屉 |
+| `Theme.bgRaised` | `#f7f7f6` | `#202020` | 菜单、浮层、次级表面 |
+| `Theme.bgControl` | `#ffffff` | `#242424` | 输入框、选择框、普通按钮 |
+| `Theme.bgHover` | `#ececeb` | `#2a2a2a` | hover、键盘导航和临时高亮 |
+| `Theme.bgCanvas` | `#f7f7f5` | `#111111` | 画布周边工作区 |
+| `Theme.bgSelected` | `#e9e9e5` | `#2a2a2a` | 选中对象和当前项的弱底色 |
 
 ### 2.2 边界与文字
 
-| 令牌 | 值 | 用途 |
-| --- | --- | --- |
-| `Theme.border` | `#deded9` | 普通分隔线 |
-| `Theme.borderStrong` | `#c8c8c1` | 控件、弹窗和面板边界 |
-| `Theme.focusRing` | `#1b1b1b` | 键盘焦点 |
-| `Theme.textPrimary` | `#1b1b1b` | 标题、主文案、当前对象 |
-| `Theme.textSecondary` | `#555652` | 普通正文、按钮和字段值 |
-| `Theme.textMuted` | `#85867f` | 辅助说明、单位和元数据 |
-| `Theme.textDisabled` | `#b1b1aa` | 禁用态 |
+| 令牌 | 浅色 | 暗色 | 用途 |
+| --- | --- | --- | --- |
+| `Theme.border` | `#e8e8e5` | `#292929` | 普通分隔线 |
+| `Theme.borderStrong` | `#d5d5d2` | `#3a3a3a` | 控件、弹窗和面板边界 |
+| `Theme.focusRing` | `#171716` | `#f1f1ef` | 键盘焦点 |
+| `Theme.textPrimary` | `#171716` | `#f1f1ef` | 标题、主文案、当前对象 |
+| `Theme.textSecondary` | `#3f3f3d` | `#cececa` | 普通正文、按钮和字段值 |
+| `Theme.textMuted` | `#656562` | `#a1a19d` | 辅助说明、单位和元数据 |
+| `Theme.textDisabled` | `#858581` | `#858581` | 禁用态 |
 
 ### 2.3 状态
 
-| 令牌 | 值 | 语义 |
-| --- | --- | --- |
-| `Theme.accent` | `#171717` | 主操作、当前导航和黑色主按钮 |
-| `Theme.accentHover` | `#2b2b2b` | 主按钮 hover |
-| `Theme.accentPressed` | `#000000` | 主按钮 pressed |
-| `Theme.success` | `#18b78b` | 运行健康、完成和在线 |
-| `Theme.warning` | `#c58d18` | 运行中、未保存和注意 |
-| `Theme.danger` | `#b42318` | 失败、删除和校验错误 |
-| `Theme.info` | `#5c7890` | 信息、参考线和说明 |
+| 令牌 | 浅色 | 暗色 | 语义 |
+| --- | --- | --- | --- |
+| `Theme.accent` | `#171716` | `#f1f1ef` | 主操作和当前导航 |
+| `Theme.accentForeground` | `#ffffff` | `#111111` | 主操作上的内容 |
+| `Theme.success` | `#16825d` | `#89d185` | 运行健康、完成和在线 |
+| `Theme.warning` | `#9d6b00` | `#cca700` | 运行中、未保存和注意 |
+| `Theme.danger` | `#d13438` | `#f48771` | 失败、删除和校验错误 |
+| `Theme.info` | `#5c7890` | `#b8b8b4` | 信息、参考线和说明 |
 
 **颜色规则：**
 
@@ -68,6 +67,7 @@
 2. 绿色只能表达状态，不能与主操作竞争。
 3. 错误、警告和成功必须同时有文字或图标，不能只靠颜色。
 4. 不使用大面积渐变、霓虹边缘、玻璃模糊或装饰发光。
+5. 主题由右上角界面设置切换并持久化；两套主题只改变语义令牌，不改变布局、密度和信息结构。
 
 ## 3. 字体与排版
 
