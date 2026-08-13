@@ -39,17 +39,74 @@ def test_qml_text_background_shadow_and_glow_live_in_more_parameters():
 
     for section_id in ("textBackgroundSection", "textShadowSection", "textGlowSection"):
         match = re.search(
-            rf"id: {section_id}.*?visible: workspace\.selectedIsTextLayer",
+            rf"id: {section_id}.*?visible: inspectorTab === 1 && workspace\.selectedIsTextLayer",
             source,
             re.S,
         )
         assert match is not None, section_id
 
     assert re.search(
-        r"id: textFillSection.*?visible: workspace\.selectedIsTextLayer",
+        r"id: textFillSection.*?visible: inspectorTab === 1 && workspace\.selectedIsTextLayer",
         source,
         re.S,
     )
+
+
+@pytest.mark.unit
+def test_qml_parameter_tabs_isolate_basic_and_more_sections():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    object_header = re.search(
+        r'title: "对象".*?visible: inspectorTab === 0 && selectedLayer >= 0',
+        source,
+        re.S,
+    )
+    assert object_header is not None
+
+    basic_sections = (
+        "basicPropertiesSection",
+        "imageSourceSection",
+        "shapeSection",
+        "textContentSection",
+        "textFontSection",
+        "textTypographySection",
+        "appearanceSection",
+    )
+    advanced_sections = (
+        "advancedSettingsSection",
+        "vectorPathSection",
+        "layerTransformSection",
+        "randomTransformSection",
+        "clonePropertiesSection",
+        "textFillSection",
+        "textBackgroundSection",
+        "textShadowSection",
+        "textGlowSection",
+        "advancedStrokeSection",
+        "overlaySection",
+        "cornerSection",
+    )
+
+    for section_id in basic_sections:
+        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*InspectorModuleHeader|\n\s*Column)", source, re.S)
+        assert block is not None, section_id
+        assert "inspectorTab === 0" in block.group(0), section_id
+
+    for section_id in advanced_sections:
+        block = re.search(rf"id: {section_id}.*?(?=\n\s*PropertySection|\n\s*InspectorModuleHeader|\n\s*Column)", source, re.S)
+        assert block is not None, section_id
+        assert "inspectorTab === 1" in block.group(0), section_id
+
+
+@pytest.mark.unit
+def test_qml_random_transform_and_text_editor_adapt_to_inspector_width():
+    source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    assert "id: randomTransformOptions" in source
+    assert "columns: width >= 460 ? 3 : (width >= 300 ? 2 : 1)" in source
+    assert "implicitWidth: 0" in source
+    assert "width: Math.max(0, parent.width)" in source
+    assert "Layout.minimumWidth: 0" in source
 
 
 @pytest.mark.unit
