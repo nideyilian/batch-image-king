@@ -23,7 +23,7 @@ QtObject {
     readonly property color textPrimary: darkMode ? "#f1f1ef" : "#171716"
     readonly property color textSecondary: darkMode ? "#cececa" : "#3f3f3d"
     readonly property color textMuted: darkMode ? "#a1a19d" : "#656562"
-    readonly property color textDisabled: darkMode ? "#858581" : "#858581"
+    readonly property color textDisabled: darkMode ? "#a1a19d" : "#73736f"
 
     // High-contrast neutral is the primary action. Accent colors express state, not branding.
     readonly property color accent: darkMode ? "#f1f1ef" : "#171716"
@@ -31,6 +31,8 @@ QtObject {
     readonly property color accentPressed: darkMode ? "#cececa" : "#000000"
     readonly property color accentSoft: darkMode ? "#2a2a2a" : "#ecece8"
     readonly property color accentForeground: darkMode ? "#111111" : "#ffffff"
+    readonly property color selectionBackground: accent
+    readonly property color selectionForeground: accentForeground
     readonly property color info: darkMode ? "#b8b8b4" : "#5c7890"
     readonly property color warning: darkMode ? "#cca700" : "#9d6b00"
     readonly property color danger: darkMode ? "#f48771" : "#d13438"

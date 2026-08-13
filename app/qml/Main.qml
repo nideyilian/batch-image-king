@@ -1138,8 +1138,8 @@ ApplicationWindow {
                 placeholderText: "输入文字内容"
                 color: Theme.textPrimary
                 placeholderTextColor: Theme.textMuted
-                selectionColor: Theme.accentPressed
-                selectedTextColor: Theme.textPrimary
+                selectionColor: Theme.selectionBackground
+                selectedTextColor: Theme.selectionForeground
                 font.family: Theme.bodyFont
                 font.pixelSize: 12
                 wrapMode: TextEdit.Wrap
@@ -3637,7 +3637,6 @@ ApplicationWindow {
             if (alignmentMouse.pressed) return Theme.bgControl
             return alignmentMouse.containsMouse ? Theme.bgHover : "transparent"
         }
-        opacity: enabled ? 1 : 0.32
         border.width: activeFocus ? 1 : 0
         border.color: Theme.focusRing
         activeFocusOnTab: enabled
@@ -3646,8 +3645,9 @@ ApplicationWindow {
             anchors.centerIn: parent
             iconName: alignmentButton.iconName
             iconSize: 16
-            iconColor: alignmentMouse.containsMouse && alignmentButton.enabled
-                       ? Theme.textPrimary : Theme.textSecondary
+            iconColor: !alignmentButton.enabled
+                       ? Theme.textDisabled
+                       : (alignmentMouse.containsMouse ? Theme.textPrimary : Theme.textSecondary)
         }
 
         MouseArea {
@@ -3682,14 +3682,15 @@ ApplicationWindow {
         color: activeTool === toolIndex ? Theme.accentSoft : (toolMouse.containsMouse ? Theme.bgHover : "transparent")
         border.width: activeTool === toolIndex ? 1 : 0
         border.color: activeFocus ? Theme.focusRing : Theme.accentPressed
-        opacity: enabled ? 1 : 0.34
         activeFocusOnTab: enabled
 
         AppIcon {
             anchors.centerIn: parent
             iconName: toolButton.iconName
             iconSize: 18
-            iconColor: activeTool === toolButton.toolIndex ? Theme.accent : Theme.textSecondary
+            iconColor: !toolButton.enabled
+                       ? Theme.textDisabled
+                       : (activeTool === toolButton.toolIndex ? Theme.accent : Theme.textSecondary)
         }
 
         MouseArea {
@@ -3839,12 +3840,13 @@ ApplicationWindow {
         }
         border.width: active ? 1 : 0
         border.color: Theme.accentPressed
-        opacity: enabled ? 1 : 0.38
 
         Text {
             anchors.centerIn: parent
             text: formatButton.symbol
-            color: formatButton.active ? Theme.accent : Theme.textSecondary
+            color: !formatButton.enabled
+                   ? Theme.textDisabled
+                   : (formatButton.active ? Theme.accent : Theme.textSecondary)
             font.family: Theme.bodyFont
             font.pixelSize: 14
             font.weight: formatButton.symbol === "B" ? Font.Bold : Font.Normal
@@ -3880,13 +3882,16 @@ ApplicationWindow {
             return active ? Theme.accentSoft : Theme.bgControl
         }
         border.width: 1
-        border.color: active ? Theme.accentPressed : Theme.borderStrong
-        opacity: enabled ? 1 : 0.38
+        border.color: !enabled
+                      ? Theme.border
+                      : (active ? Theme.accentPressed : Theme.borderStrong)
 
         Text {
             anchors.centerIn: parent
             text: compactButton.label
-            color: compactButton.active ? Theme.accent : Theme.textSecondary
+            color: !compactButton.enabled
+                   ? Theme.textDisabled
+                   : (compactButton.active ? Theme.accent : Theme.textSecondary)
             font.family: Theme.bodyFont
             font.pixelSize: 11
             font.weight: Font.DemiBold
@@ -3918,7 +3923,6 @@ ApplicationWindow {
             color: window.hexToColor(colorField.value)
             border.width: 1
             border.color: colorMouse.containsMouse ? Theme.accent : Theme.borderStrong
-            opacity: colorField.enabled ? 1 : 0.38
             MouseArea {
                 id: colorMouse
                 anchors.fill: parent
@@ -4008,7 +4012,6 @@ ApplicationWindow {
         color: Theme.bgControl
         border.width: 1
         border.color: contentEditor.activeFocus ? Theme.accent : Theme.borderStrong
-        opacity: enabled ? 1 : 0.45
 
         Flickable {
             id: editorFlick
@@ -4024,8 +4027,8 @@ ApplicationWindow {
                 width: editorFlick.width
                 height: Math.max(editorFlick.height, paintedHeight)
                 color: Theme.textPrimary
-                selectionColor: Theme.accentPressed
-                selectedTextColor: Theme.textPrimary
+                selectionColor: Theme.selectionBackground
+                selectedTextColor: Theme.selectionForeground
                 font.family: Theme.bodyFont
                 font.pixelSize: 12
                 wrapMode: TextEdit.Wrap
@@ -4555,7 +4558,6 @@ ApplicationWindow {
                                 width: parent.width
                                 height: 32
                                 enabled: batchExport.uniqueUseEnabled
-                                opacity: enabled ? 1 : 0.46
                                 radius: Theme.radiusSmall
                                 color: selectorOpen || uniqueLayerMouse.containsMouse
                                        ? Theme.bgHover : Theme.bgControl
@@ -4598,7 +4600,7 @@ ApplicationWindow {
                                     spacing: 8
                                     BodyLabel {
                                         text: "限制图层"
-                                        color: Theme.textSecondary
+                                        color: uniqueLayerPicker.enabled ? Theme.textSecondary : Theme.textDisabled
                                         font.pixelSize: 11
                                     }
                                     TinyLabel {
@@ -4611,9 +4613,11 @@ ApplicationWindow {
                                                  ? "已选 " + uniqueLayerPicker.selectedLayerCount
                                                    + " / " + uniqueLayerPicker.eligibleLayerCount
                                                  : "请选择图片图层"))
-                                        color: uniqueLayerPicker.eligibleLayerCount > 0
+                                        color: !uniqueLayerPicker.enabled
+                                               ? Theme.textDisabled
+                                               : (uniqueLayerPicker.eligibleLayerCount > 0
                                                && uniqueLayerPicker.selectedLayerCount === 0
-                                               ? Theme.coral : Theme.textMuted
+                                               ? Theme.coral : Theme.textMuted)
                                         elide: Text.ElideRight
                                     }
                                     AppIcon {
@@ -6708,8 +6712,8 @@ ApplicationWindow {
                                     anchors.margins: Math.max(0, workspace.selectedTextBoxPadding)
                                     textFormat: TextEdit.RichText
                                     color: workspace.selectedTextColor
-                                    selectionColor: Theme.accentPressed
-                                    selectedTextColor: Theme.textPrimary
+                                    selectionColor: Theme.selectionBackground
+                                    selectedTextColor: Theme.selectionForeground
                                     font.family: workspace.selectedTextResolvedFontFamily
                                     font.pixelSize: workspace.selectedTextFontSize
                                     font.weight: workspace.selectedTextFontWeight
@@ -7963,15 +7967,20 @@ ApplicationWindow {
                                                 width: (parent.width - 4) / 3
                                                 height: parent.height
                                                 radius: Theme.radiusSmall
-                                                color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : (alignMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
+                                                color: !enabled
+                                                       ? Theme.bgRaised
+                                                       : (workspace.selectedTextAlignmentId === modelData.value ? Theme.accentSoft : (alignMouse.containsMouse ? Theme.bgHover : Theme.bgControl))
                                                 border.width: 1
-                                                border.color: workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong
-                                                opacity: enabled ? 1 : 0.38
+                                                border.color: !enabled
+                                                              ? Theme.border
+                                                              : (workspace.selectedTextAlignmentId === modelData.value ? Theme.accentPressed : Theme.borderStrong)
                                                 enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: parent.modelData.label
-                                                    color: workspace.selectedTextAlignmentId === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                                                    color: !parent.enabled
+                                                           ? Theme.textDisabled
+                                                           : (workspace.selectedTextAlignmentId === parent.modelData.value ? Theme.accent : Theme.textSecondary)
                                                     font.family: Theme.bodyFont
                                                     font.pixelSize: 9
                                                     font.weight: Font.DemiBold
@@ -8636,15 +8645,20 @@ ApplicationWindow {
                                                 width: (parent.width - 2) / 2
                                                 height: parent.height
                                                 radius: Theme.radiusSmall
-                                                color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : (fillMouse.containsMouse ? Theme.bgHover : Theme.bgControl)
+                                                color: !enabled
+                                                       ? Theme.bgRaised
+                                                       : (workspace.selectedTextFillModeId === modelData.value ? Theme.accentSoft : (fillMouse.containsMouse ? Theme.bgHover : Theme.bgControl))
                                                 border.width: 1
-                                                border.color: workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong
-                                                opacity: enabled ? 1 : 0.38
+                                                border.color: !enabled
+                                                              ? Theme.border
+                                                              : (workspace.selectedTextFillModeId === modelData.value ? Theme.accentPressed : Theme.borderStrong)
                                                 enabled: !workspace.selectedLocked && !workspace.operationsBlocked
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: parent.modelData.label
-                                                    color: workspace.selectedTextFillModeId === parent.modelData.value ? Theme.accent : Theme.textSecondary
+                                                    color: !parent.enabled
+                                                           ? Theme.textDisabled
+                                                           : (workspace.selectedTextFillModeId === parent.modelData.value ? Theme.accent : Theme.textSecondary)
                                                     font.family: Theme.bodyFont
                                                     font.pixelSize: 9
                                                     font.weight: Font.DemiBold
@@ -9311,14 +9325,19 @@ ApplicationWindow {
                                                 enabled: modelData <= workspace.selectedCornerRadiusMax
                                                          && !workspace.selectedLocked
                                                          && !workspace.operationsBlocked
-                                                opacity: enabled ? 1 : 0.38
-                                                color: workspace.selectedCornerRadius === modelData ? Theme.accentSoft : Theme.bgControl
+                                                color: !enabled
+                                                       ? Theme.bgRaised
+                                                       : (workspace.selectedCornerRadius === modelData ? Theme.accentSoft : Theme.bgControl)
                                                 border.width: 1
-                                                border.color: workspace.selectedCornerRadius === modelData ? Theme.accentPressed : Theme.borderStrong
+                                                border.color: !enabled
+                                                              ? Theme.border
+                                                              : (workspace.selectedCornerRadius === modelData ? Theme.accentPressed : Theme.borderStrong)
                                                 Text {
                                                     anchors.centerIn: parent
                                                     text: modelData
-                                                    color: workspace.selectedCornerRadius === modelData ? Theme.accent : Theme.textSecondary
+                                                    color: !parent.enabled
+                                                           ? Theme.textDisabled
+                                                           : (workspace.selectedCornerRadius === modelData ? Theme.accent : Theme.textSecondary)
                                                     font.family: Theme.bodyFont
                                                     font.pixelSize: 10
                                                     font.weight: Font.DemiBold

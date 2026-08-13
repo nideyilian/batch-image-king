@@ -8,6 +8,23 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _contrast_ratio(foreground: str, background: str) -> float:
+    def luminance(value: str) -> float:
+        channels = [int(value[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [
+            channel / 12.92
+            if channel <= 0.04045
+            else ((channel + 0.055) / 1.055) ** 2.4
+            for channel in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    lighter, darker = sorted(
+        (luminance(foreground), luminance(background)), reverse=True
+    )
+    return (lighter + 0.05) / (darker + 0.05)
+
+
 @pytest.mark.unit
 def test_theme_tokens_define_composed_light_and_dark_palettes():
     source = (REPO_ROOT / "app/qml/components/Theme.qml").read_text(encoding="utf-8")
@@ -109,3 +126,53 @@ def test_theme_toggle_uses_lucide_sun_and_moon_icons():
     assert 'readonly property string moon: "moon"' in icon_registry
     for icon_name in ("sun.svg", "moon.svg"):
         assert (REPO_ROOT / "app/qml/icons" / icon_name).is_file()
+
+
+@pytest.mark.unit
+def test_text_selection_and_disabled_states_stay_readable_in_both_themes():
+    theme_source = (REPO_ROOT / "app/qml/components/Theme.qml").read_text(encoding="utf-8")
+    text_controls = (
+        "AppTextField.qml",
+        "AppTextArea.qml",
+        "ValueBox.qml",
+        "FontSelectBox.qml",
+    )
+
+    assert 'readonly property color selectionBackground: accent' in theme_source
+    assert 'readonly property color selectionForeground: accentForeground' in theme_source
+
+    for filename in text_controls:
+        source = (REPO_ROOT / "app/qml/components" / filename).read_text(encoding="utf-8")
+        assert "selectionColor: Theme.selectionBackground" in source
+        assert "selectedTextColor: Theme.selectionForeground" in source
+
+    for filename in (
+        "AppButton.qml",
+        "AppTextField.qml",
+        "FontSelectBox.qml",
+        "HermesNavItem.qml",
+        "IconButton.qml",
+        "OptionTile.qml",
+        "SegmentedControl.qml",
+        "ToggleSwitch.qml",
+        "ValueBox.qml",
+    ):
+        source = (REPO_ROOT / "app/qml/components" / filename).read_text(encoding="utf-8")
+        assert "opacity: enabled ? 1 :" not in source
+
+    main_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+    assert "selectionColor: Theme.accentPressed" not in main_source
+    assert "selectedTextColor: Theme.textPrimary" not in main_source
+
+
+@pytest.mark.unit
+def test_selection_and_disabled_palette_pairs_meet_text_contrast_floor():
+    palette_pairs = (
+        ("#ffffff", "#171716"),  # light selected text
+        ("#111111", "#f1f1ef"),  # dark selected text
+        ("#73736f", "#ffffff"),  # light disabled text on controls
+        ("#a1a19d", "#242424"),  # dark disabled text on controls
+    )
+
+    for foreground, background in palette_pairs:
+        assert _contrast_ratio(foreground, background) >= 4.5
