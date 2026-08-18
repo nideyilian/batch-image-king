@@ -172,7 +172,7 @@ python -m pytest tests/test_document_core.py -v
 - 随机位置、随机缩放、随机旋转。
 - 缓存与脏状态标记。
 
-`document.py` 中有向后兼容别名：`Layer = NewLayer`。维护时要确认实际被引用的是哪个类。
+`document.py` 不再暴露 `Layer` 别名（R8 收敛），但保留工作名导出 `NewLayer`（即规范来源 `app/models/layer_new.py` 的 `Layer`）。维护图层类时以 `layer_new.Layer` 为准。
 
 ### `app/models/text_layer.py`
 
@@ -205,11 +205,11 @@ python -m pytest tests/test_document_core.py -v
 - 图层尺寸匹配配置。
 - 绑定组数据。
 
-### `app/models/document_renderer.py`
+### `app/services/render_service.py`
 
-较通用的文档渲染器，负责将图层合成到画布。普通模式优先使用 `app.utils.unified_alpha_compositor` 的 sRGB Alpha 合成，其他混合模式回退到专业混合器。
-
-注意：更新日志说明当前预览和导出更偏向统一使用 `FastRenderer` 管线；改渲染行为时要同时核对 `DocumentRenderer` 与 `FastRenderer` 的调用关系。
+渲染的唯一对外边界（旧 `app/models/document_renderer.py` 已删除）。预览与导出一律经
+`RenderService` 分发到 `FastRenderer` / `document_render` 底层实现；`document_render`
+的 `enable_gpu` 参数已保留为 no-op（OpenGL GPU 集成已移除）。
 
 ### `app/utils/fast_renderer.py`
 
@@ -263,7 +263,7 @@ python -m pytest tests/test_document_core.py -v
 MainWindow/UI
   -> Document / Controllers
   -> Layer、TextLayer、ShapedLayer
-  -> FastRenderer 或 DocumentRenderer
+  -> RenderService（FastRenderer / document_render）
   -> UnifiedAlphaCompositor / blend engines
   -> export_image 或 batch_export
   -> 文件写盘
@@ -273,7 +273,8 @@ MainWindow/UI
 
 ## 文件与数据格式
 
-- `.cmp`：项目/预设文件，pickle 二进制格式。
+- `.cmp`：项目/预设文件，pickle 二进制格式。读取一律走 `app/utils/trusted_pickle.py`
+  的可信加载（受限反序列化，阻止经典 RCE gadget），不要直接 `pickle.load`。
 - `presets`：根目录初始预设文件，也是二进制内容。
 - `fonts_cache.json`：字体扫描缓存。
 - `version_info.txt`：PyInstaller 版本信息。
