@@ -10,6 +10,21 @@ from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
 
+@pytest.fixture(autouse=True)
+def _isolate_recent_fonts_file(tmp_path, monkeypatch):
+    """隔离最近字体持久化。
+
+    workspace_view_model 补上缺失的 ``import json`` 后，最近字体会真正落盘到
+    ``~/.config/批图王/recent_fonts.json``；单测必须把存储位置指向临时目录，
+    避免污染真实用户目录并导致跨运行状态泄漏。
+    """
+
+    def _fake_path(self) -> Path:
+        return tmp_path / "recent_fonts.json"
+
+    monkeypatch.setattr(WorkspaceViewModel, "_recent_fonts_file_path", _fake_path)
+
+
 def _workspace() -> tuple[WorkspaceViewModel, TextLayer]:
     document = Document()
     document.create_new(420, 320)
