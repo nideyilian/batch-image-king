@@ -118,6 +118,25 @@ def main() -> int:
             shutdown_task_queue()
         except Exception as error:
             debug(f"task queue cleanup failed: {error}")
+        # 清理全局缓存（图片缓存 / 智能渲染缓存 / 预览渲染缓存）
+        try:
+            from app.utils.memory_manager import cleanup_memory
+
+            cleanup_memory()
+        except Exception as error:
+            debug(f"memory cleanup failed: {error}")
+        try:
+            from app.utils.intelligent_render_cache import clear_global_cache
+
+            clear_global_cache()
+        except Exception as error:
+            debug(f"intelligent render cache cleanup failed: {error}")
+        try:
+            from app.services.preview_render_service import clear_preview_render_cache
+
+            clear_preview_render_cache()
+        except Exception as error:
+            debug(f"preview render cache cleanup failed: {error}")
 
     app.aboutToQuit.connect(cleanup_runtime)
     icon_path = repo_root / "app" / "resources" / "app_icon.ico"

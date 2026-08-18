@@ -9,9 +9,9 @@ DEFAULT_CANVAS_HEIGHT = 600
 # 文字图层默认字体家族。文档保存通用别名，运行时按平台解析。
 DEFAULT_TEXT_FONT_FAMILY = "sans-serif"
 
-# 应用程序名称
-APP_NAME = "模块批量出图工具"
-APP_VERSION = "1.0.0"
+# 应用程序名称与版本号唯一来源：app/version.py（APP_NAME / APP_VERSION）。
+# 此处不再重复定义，避免版本漂移（曾残留 1.0.0 陈旧版本号）。
+# 需要版本信息时请 ``from app.version import APP_NAME, APP_VERSION``。
 
 # 文件类型过滤器
 IMAGE_FILTER = "图像文件 (*.png *.jpg *.jpeg *.bmp *.tif *.tiff);;所有文件 (*.*)"

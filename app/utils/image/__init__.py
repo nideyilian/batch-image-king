@@ -1,13 +1,8 @@
 """
 图像处理相关工具模块
 包含图像质量、优化、渲染等功能
-"""
 
-# 为了保持向后兼容性，重新导出原有模块
-from ..image_quality import *
-from ..image_optimizer import *
-from ..image_quality_fixer import *
-from ..fast_renderer import *
-from ..super_antialiasing import *
-from ..enhanced_corner_renderer import *
-from ..unified_alpha_compositor import *
+注意：不再通配重导出子模块名字。使用方请按完整子模块路径导入，
+例如 ``from app.utils.image.high_quality_resampler import HighQualityResampler``。
+这同时避免了启动时急切加载 cv2 等重型依赖。
+"""

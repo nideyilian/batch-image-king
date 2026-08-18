@@ -9,11 +9,8 @@
 - ui: UI相关工具
 - performance: 性能优化相关
 
-为了保持向后兼容性，所有原有模块仍可直接从app.utils导入
+注意：本包不再通配重导出子模块名字（原先的 ``from .core import *`` 等会把
+``np``、``Image``、``logger`` 等意外名字污染到 ``app.utils`` 命名空间，并
+导致启动时急切加载 cv2 等重型依赖）。使用方请按完整子模块路径导入，
+例如 ``from app.utils.preset_manager import PresetManager``。
 """
-
-# 保持向后兼容性 - 重新导出所有原有模块
-from .core import *
-from .image import *
-from .ui import *
-from .performance import *

@@ -421,6 +421,26 @@ def main() -> int:
             shutdown_task_queue()
             logger.info("高级任务队列已关闭")
             
+            # 清理全局缓存（图片缓存 / 智能渲染缓存 / 预览渲染缓存）
+            try:
+                from app.utils.memory_manager import cleanup_memory
+                cleanup_memory()
+                logger.info("图片缓存已清理")
+            except Exception as cache_error:
+                logger.warning(f"图片缓存清理异常: {cache_error}")
+            try:
+                from app.utils.intelligent_render_cache import clear_global_cache
+                clear_global_cache()
+                logger.info("智能渲染缓存已清理")
+            except Exception as cache_error:
+                logger.warning(f"智能渲染缓存清理异常: {cache_error}")
+            try:
+                from app.services.preview_render_service import clear_preview_render_cache
+                clear_preview_render_cache()
+                logger.info("预览渲染缓存已清理")
+            except Exception as cache_error:
+                logger.warning(f"预览渲染缓存清理异常: {cache_error}")
+            
         except Exception as cleanup_error:
             logger.warning(f"资源清理时出现异常: {cleanup_error}")
         
