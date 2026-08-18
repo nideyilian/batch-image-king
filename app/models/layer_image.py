@@ -170,7 +170,7 @@ class LayerImage(object):
                     print(f"分身已启用，使用预设路径: {self._current_image_path}")
                 return image
             except Exception as e:
-                print(f"无法加载预设图像 {self._current_image_path}: {e}")
+                logger.warning("无法加载预设图像 %s: %s", self._current_image_path, e, exc_info=True)
                 # 在预计算模式下，如果指定图像加载失败，不应该继续随机选择
                 if not force_random:
                     print(f"[图层] 预计算模式下指定图像加载失败，返回错误图像")
@@ -223,7 +223,7 @@ class LayerImage(object):
                     print(f"分身已启用，加载图像: {self._image_source}")
                 return image
             except Exception as e:
-                print(f"无法加载图像 {self._image_source}: {e}")
+                logger.warning("无法加载图像 %s: %s", self._image_source, e, exc_info=True)
                 return self._create_error_image()
                 
         # 如果图像源是文件夹，随机选择图片
@@ -375,7 +375,7 @@ class LayerImage(object):
                     print(f"分身已启用，使用路径: {self._current_image_path}")
                 return image
             except Exception as e:
-                print(f"无法加载指定图像 {self._current_image_path}: {e}")
+                logger.warning("无法加载指定图像 %s: %s", self._current_image_path, e, exc_info=True)
                 # 清除无效的当前路径，继续执行随机选择
                 self._current_image_path = None
                 # 通知文档状态已更改，需要UI更新
@@ -469,7 +469,7 @@ class LayerImage(object):
             return (left, top, right, bottom)
             
         except Exception as e:
-            print(f"计算非空白区域边界时出错: {e}")
+            logger.warning("计算非空白区域边界时出错: %s", e, exc_info=True)
             import traceback
             traceback.print_exc()
             # 出错时返回完整图像
@@ -787,7 +787,7 @@ class LayerImage(object):
             
             return cropped_image
         except Exception as e:
-            print(f"等比缩放裁剪失败: {e}")
+            logger.warning("等比缩放裁剪失败: %s", e, exc_info=True)
             import traceback
             traceback.print_exc()
             return None
@@ -833,7 +833,7 @@ class LayerImage(object):
                 scaled_image = HighQualityResampler.resize(image, (scale_width, scale_height), method=Resampling.LANCZOS, enable_sharpening=True)
                 print(f"等比缩放后尺寸：{scaled_image.width}x{scaled_image.height}")
             except Exception as e:
-                print(f"等比缩放失败：{e}，回退到直接缩放")
+                logger.warning("等比缩放失败：%s，回退到直接缩放", e, exc_info=True)
                 return HighQualityResampler.resize(image, (target_width, target_height), method=Resampling.LANCZOS, enable_sharpening=True)
             
             # 根据裁剪方向确定裁剪区域
@@ -900,10 +900,10 @@ class LayerImage(object):
                 
                 return cropped_image
             except Exception as e:
-                print(f"裁剪失败：{e}，回退到直接缩放")
+                logger.warning("裁剪失败：%s，回退到直接缩放", e, exc_info=True)
                 return HighQualityResampler.resize(image, (target_width, target_height), method=Resampling.LANCZOS, enable_sharpening=True)
         except Exception as e:
-            print(f"等比缩放裁剪内容失败: {e}")
+            logger.warning("等比缩放裁剪内容失败: %s", e, exc_info=True)
             import traceback
             traceback.print_exc()
             # 发生任何错误，尝试直接缩放原图
@@ -976,7 +976,7 @@ class LayerImage(object):
             
             return result_image
         except Exception as e:
-            print(f"等比缩放适配失败: {e}")
+            logger.warning("等比缩放适配失败: %s", e, exc_info=True)
             import traceback
             traceback.print_exc()
             return None
@@ -1038,7 +1038,7 @@ class LayerImage(object):
             return Image.blend(image, overlay, self._color_overlay_opacity)
             
         except Exception as e:
-            print(f"[颜色叠加] 失败: {e}")
+            logger.warning("[颜色叠加] 失败: %s", e, exc_info=True)
             return image
 
     def _apply_gradient_overlay(self, image):
@@ -1113,7 +1113,7 @@ class LayerImage(object):
             return Image.blend(image, gradient_layer, self._gradient_overlay_opacity)
             
         except Exception as e:
-            print(f"[渐变叠加] 失败: {e}")
+            logger.warning("[渐变叠加] 失败: %s", e, exc_info=True)
             import traceback
             traceback.print_exc()
             return image

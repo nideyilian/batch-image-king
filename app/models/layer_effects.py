@@ -15,6 +15,9 @@ from typing import List, Tuple
 import math
 from app.utils.image.high_quality_resampler import HighQualityResampler
 from app.utils.render_diagnostics import log_branch
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 _LAYER_DEBUG = os.environ.get("BTPW_LAYER_DEBUG", "0").strip().lower() in ("1", "true", "yes", "on")
@@ -379,7 +382,7 @@ class LayerEffects(object):
                 print(f"[图层效果] 现代内描边返回None，使用降级方案")
 
         except Exception as modern_e:
-            print(f"[图层效果] 现代内描边失败: {modern_e}")
+            logger.warning("[图层效果] 现代内描边失败: %s", modern_e, exc_info=True)
             # 降级到原有实现
             # 保持原始图层尺寸
             result_width = self._width
@@ -418,7 +421,7 @@ class LayerEffects(object):
             return result
 
         except Exception as e:
-            print(f"应用内向描边效果时出错: {e}")
+            logger.warning("应用内向描边效果时出错: %s", e, exc_info=True)
             return image
 
     def _apply_center_stroke(self, image):
@@ -454,7 +457,7 @@ class LayerEffects(object):
                 print(f"[图层效果] 现代居中描边返回None，使用降级方案")
 
         except Exception as modern_e:
-            print(f"[图层效果] 现代居中描边失败: {modern_e}")
+            logger.warning("[图层效果] 现代居中描边失败: %s", modern_e, exc_info=True)
             # 降级到原有实现
             # 保持原始图层尺寸
             result_width = self._width
@@ -496,7 +499,7 @@ class LayerEffects(object):
             return result
 
         except Exception as e:
-            print(f"应用居中描边效果时出错: {e}")
+            logger.warning("应用居中描边效果时出错: %s", e, exc_info=True)
             return image
 
     def _apply_outer_stroke(self, image):
@@ -532,7 +535,7 @@ class LayerEffects(object):
                 print(f"[图层效果] 现代外描边返回None，使用降级方案")
 
         except Exception as modern_e:
-            print(f"[图层效果] 现代外描边失败: {modern_e}")
+            logger.warning("[图层效果] 现代外描边失败: %s", modern_e, exc_info=True)
             # 降级到原有实现
             # 外描边会增加图层尺寸
             stroke_width = self._stroke_width
@@ -562,7 +565,7 @@ class LayerEffects(object):
             return expanded_image
 
         except Exception as e:
-            print(f"应用外描边效果时出错: {e}")
+            logger.warning("应用外描边效果时出错: %s", e, exc_info=True)
             return image
 
     def _apply_corner_radius_improved(self, image):
@@ -594,7 +597,7 @@ class LayerEffects(object):
                 print(f"[图层效果] 现代圆角渲染返回None，使用降级方案")
 
         except Exception as modern_e:
-            print(f"[图层效果] 现代圆角处理失败: {modern_e}")
+            logger.warning("[图层效果] 现代圆角处理失败: %s", modern_e, exc_info=True)
             # 降级到增强圆角渲染器
             try:
                 from app.utils.enhanced_corner_renderer import get_enhanced_corner_renderer
@@ -603,7 +606,7 @@ class LayerEffects(object):
                 if result is not None:
                     return result
             except Exception as enhanced_e:
-                print(f"[图层效果] 增强圆角处理也失败: {enhanced_e}")
+                logger.warning("[图层效果] 增强圆角处理也失败: %s", enhanced_e, exc_info=True)
             # 继续降级到终极圆角渲染器
             try:
                 from app.utils.enhanced_corner_renderer import get_ultimate_corner_renderer
@@ -620,7 +623,7 @@ class LayerEffects(object):
                     print(f"[图层效果] 终极圆角渲染返回None，使用降级方案")
 
             except Exception as ultimate_e:
-                print(f"[图层效果] 终极圆角处理失败: {ultimate_e}")
+                logger.warning("[图层效果] 终极圆角处理失败: %s", ultimate_e, exc_info=True)
 
 
 
@@ -659,7 +662,7 @@ class LayerEffects(object):
             return result
 
         except Exception as fallback_e:
-            print(f"[图层效果] 所有圆角处理方法都失败: {fallback_e}")
+            logger.warning("[图层效果] 所有圆角处理方法都失败: %s", fallback_e, exc_info=True)
             return image
 
     def _create_optimized_corner_mask(self, width, height, radius):
@@ -707,7 +710,7 @@ class LayerEffects(object):
             return mask
 
         except Exception as e:
-            print(f"[图层效果] 创建优化圆角蒙版失败: {e}")
+            logger.warning("[图层效果] 创建优化圆角蒙版失败: %s", e, exc_info=True)
             # 回退到传统平滑蒙版
             return self._create_smooth_corner_mask(width, height, radius)
 
@@ -737,7 +740,7 @@ class LayerEffects(object):
             return mask
 
         except Exception as e:
-            print(f"[图层效果] 创建平滑圆角蒙版失败: {e}")
+            logger.warning("[图层效果] 创建平滑圆角蒙版失败: %s", e, exc_info=True)
             # 回退到最简单蒙版
             mask = Image.new('L', (width, height), 0)
             draw = ImageDraw.Draw(mask)
@@ -783,7 +786,7 @@ class LayerEffects(object):
             return mask
 
         except Exception as e:
-            print(f"创建描边蒙版时出错: {e}")
+            logger.warning("创建描边蒙版时出错: %s", e, exc_info=True)
             # 回退到简单蒙版
             mask = Image.new('L', (width, height), 0)
             draw = ImageDraw.Draw(mask)
@@ -828,7 +831,7 @@ class LayerEffects(object):
             return mask
 
         except Exception as e:
-            print(f"创建内容蒙版时出错: {e}")
+            logger.warning("创建内容蒙版时出错: %s", e, exc_info=True)
             # 回退到简单蒙版
             mask = Image.new('L', (width, height), 0)
             draw = ImageDraw.Draw(mask)
@@ -877,7 +880,7 @@ class LayerEffects(object):
             return mask
 
         except Exception as e:
-            print(f"创建居中描边蒙版时出错: {e}")
+            logger.warning("创建居中描边蒙版时出错: %s", e, exc_info=True)
             # 回退到简单蒙版
             mask = Image.new('L', (width, height), 0)
             draw = ImageDraw.Draw(mask)
@@ -931,7 +934,7 @@ class LayerEffects(object):
             return mask
 
         except Exception as e:
-            print(f"创建外描边蒙版时出错: {e}")
+            logger.warning("创建外描边蒙版时出错: %s", e, exc_info=True)
             # 回退到简单蒙版
             mask = Image.new('L', (width, height), 0)
             draw = ImageDraw.Draw(mask)
@@ -967,7 +970,7 @@ class LayerEffects(object):
             return result
             
         except Exception as quality_e:
-            print(f"高质量安全合成失败: {quality_e}，使用传统方法")
+            logger.warning("高质量安全合成失败: %s，使用传统方法", quality_e, exc_info=True)
             # 降级到传统方法
             try:
                 # 确保两个图像都是RGBA模式
@@ -983,6 +986,6 @@ class LayerEffects(object):
                 return result
 
             except Exception as e:
-                print(f"安全alpha合成失败，回退到标准方法: {e}")
+                logger.warning("安全alpha合成失败，回退到标准方法: %s", e, exc_info=True)
                 return Image.alpha_composite(base, overlay)
 
