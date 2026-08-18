@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import sys
+import time
 
 
 def main() -> int:
@@ -49,18 +50,55 @@ def main() -> int:
     window.setProperty("width", 1280)
     window.setProperty("height", 760)
 
+    def wait_stable(predicate, timeout_ms=4000) -> bool:
+        """轮询等待场景稳定：连续 3 次采样值不变即视为稳定。
+
+        软件渲染（offscreen）下 Main.qml 的缩放/布局可能在加载后异步重算，
+        固定延时后直接交互会偶发命中偏差（表现为拖拽/缩放超调）。
+        """
+        deadline = time.time() + timeout_ms / 1000.0
+        last = None
+        stable_count = 0
+        while time.time() < deadline:
+            app.processEvents()
+            current = predicate()
+            if current == last:
+                stable_count += 1
+                if stable_count >= 3:
+                    return True
+            else:
+                stable_count = 0
+            last = current
+            QTest.qWait(30)
+        return False
+
+    def drag_seq(start_point, end_point) -> None:
+        """一次完整的鼠标拖拽序列，阶段间留出事件处理时间。"""
+        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start_point)
+        QTest.qWait(50)
+        QTest.mouseMove(window, end_point, 30)
+        QTest.qWait(50)
+        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, end_point)
+        QTest.qWait(50)
+
     def run_drag() -> None:
         artboard = window.findChild(QQuickItem, "artboard")
         if artboard is None:
             app.exit(3)
             return
+
+        # 等待画布与图层布局稳定（缩放/位置重算完成）后再交互
+        layer1 = workspace.document.layers[1]
+        if not wait_stable(lambda: (int(layer1.x), int(layer1.y))):
+            print("layer 1 position never stabilized before drag", file=sys.stderr)
+            app.exit(20)
+            return
+
         start = artboard.mapToScene(QPointF(120, 1100))
         end = artboard.mapToScene(QPointF(160, 1130))
         start_point = QPoint(round(start.x()), round(start.y()))
         end_point = QPoint(round(end.x()), round(end.y()))
-        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, start_point)
-        QTest.mouseMove(window, end_point, 30)
-        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, end_point)
+        drag_seq(start_point, end_point)
 
         layer = workspace.document.layers[1]
         moved_x = int(layer.x)
@@ -74,6 +112,12 @@ def main() -> int:
             app.exit(4)
             return
 
+        # 拖拽后等待图层位置稳定，再计算缩放手柄坐标
+        if not wait_stable(lambda: (int(layer.x), int(layer.y))):
+            print("layer 1 position never stabilized after drag", file=sys.stderr)
+            app.exit(21)
+            return
+
         original_width = int(layer.width)
         original_height = int(layer.height)
         resize_start = artboard.mapToScene(
@@ -84,9 +128,7 @@ def main() -> int:
         )
         resize_start_point = QPoint(round(resize_start.x()), round(resize_start.y()))
         resize_end_point = QPoint(round(resize_end.x()), round(resize_end.y()))
-        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, resize_start_point)
-        QTest.mouseMove(window, resize_end_point, 30)
-        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, resize_end_point)
+        drag_seq(resize_start_point, resize_end_point)
 
         resized_width = int(layer.width)
         resized_height = int(layer.height)
@@ -110,6 +152,7 @@ def main() -> int:
         image_layer.aspect_ratio_locked = True
         workspace.selectLayer(0)
         workspace.selectionChanged.emit()
+        app.processEvents()
 
         locked_ratio = image_layer.width / image_layer.height
         locked_start = artboard.mapToScene(
@@ -120,9 +163,7 @@ def main() -> int:
         )
         locked_start_point = QPoint(round(locked_start.x()), round(locked_start.y()))
         locked_end_point = QPoint(round(locked_end.x()), round(locked_end.y()))
-        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, locked_start_point)
-        QTest.mouseMove(window, locked_end_point, 30)
-        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, locked_end_point)
+        drag_seq(locked_start_point, locked_end_point)
 
         resized_ratio = image_layer.width / image_layer.height
         if image_layer.width <= 400 or abs(resized_ratio - locked_ratio) > 0.01:
@@ -179,9 +220,7 @@ def main() -> int:
         )
         opacity_start_point = QPoint(round(opacity_start.x()), round(opacity_start.y()))
         opacity_end_point = QPoint(round(opacity_end.x()), round(opacity_end.y()))
-        QTest.mousePress(window, Qt.LeftButton, Qt.NoModifier, opacity_start_point)
-        QTest.mouseMove(window, opacity_end_point, 30)
-        QTest.mouseRelease(window, Qt.LeftButton, Qt.NoModifier, opacity_end_point)
+        drag_seq(opacity_start_point, opacity_end_point)
 
         opacity_percent = round(float(image_layer.opacity) * 100)
         if not 32 <= opacity_percent <= 38:
@@ -281,7 +320,7 @@ def main() -> int:
         )
         app.exit(0)
 
-    QTimer.singleShot(250, run_drag)
+    QTimer.singleShot(400, run_drag)
     return app.exec()
 
 
