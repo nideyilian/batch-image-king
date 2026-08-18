@@ -586,12 +586,14 @@ class DocumentRender:
 
             
             
-            # 判断混合模式是否为正常模式
+            # 判断混合模式是否为正常模式（blend_mode 为 int 0-15，
+            # 统一经 blend_modes 归一比较，避免与中文常量直接比较恒为 False）
+            from app.utils.blend_modes import blend_mode_to_name
+
             is_normal_blend = (
                 not hasattr(layer, 'blend_mode') or
                 layer.blend_mode is None or
-                layer.blend_mode == BlendMode.NORMAL or
-                layer.blend_mode == "正常"
+                blend_mode_to_name(layer.blend_mode) == "normal"
             )
             
             positions_info = [(x, y, False) for (x, y) in clone_positions]
@@ -907,38 +909,11 @@ class DocumentRender:
 
 
     def _get_layer_blend_mode_string(self, layer):
-        """获取图层的混合模式字符串"""
+        """获取图层的混合模式字符串（P1-8：收敛到 blend_modes 单一来源）"""
         try:
-            blend_mode = getattr(layer, 'blend_mode', 0)
+            from app.utils.blend_modes import blend_mode_to_name
 
-            # 如果是None或无效值，返回normal
-            if blend_mode is None:
-                return 'normal'
-
-            # 如果是数字，转换为字符串
-            if isinstance(blend_mode, int):
-                blend_mode_map = {
-                    0: 'normal',
-                    1: 'multiply',
-                    2: 'screen',
-                    3: 'overlay',
-                    4: 'soft_light',
-                    5: 'hard_light',
-                    6: 'color_dodge',
-                    7: 'color_burn',
-                    8: 'darken',
-                    9: 'lighten',
-                    10: 'difference',
-                    11: 'exclusion',
-                    12: 'hue',
-                    13: 'saturation',
-                    14: 'color',
-                    15: 'luminosity'
-                }
-                return blend_mode_map.get(blend_mode, 'normal')
-
-            # 如果已经是字符串，直接返回
-            return str(blend_mode)
+            return blend_mode_to_name(getattr(layer, 'blend_mode', 0))
 
         except Exception as e:
             print(f"获取混合模式失败: {e}")

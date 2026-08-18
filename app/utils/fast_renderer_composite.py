@@ -155,49 +155,11 @@ class FastRendererComposite(object):
             return None
 
     def _get_layer_blend_mode(self, layer):
-        """获取图层的混合模式字符串"""
+        """获取图层的混合模式字符串（P1-8：收敛到 blend_modes 单一来源）"""
         try:
-            blend_mode = getattr(layer, 'blend_mode', 0)
+            from app.utils.blend_modes import blend_mode_to_name
 
-            # 枚举值兼容（如 BlendMode.NORMAL / enum.IntEnum）
-            if hasattr(blend_mode, 'value'):
-                blend_mode = blend_mode.value
-
-            # 如果是数字，转换为字符串
-            if isinstance(blend_mode, int):
-                blend_mode_map = {
-                    0: 'normal',
-                    1: 'multiply',
-                    2: 'screen',
-                    3: 'overlay',
-                    4: 'soft_light',
-                    5: 'hard_light',
-                    6: 'color_dodge',
-                    7: 'color_burn',
-                    8: 'darken',
-                    9: 'lighten',
-                    10: 'difference',
-                    11: 'exclusion',
-                    12: 'hue',
-                    13: 'saturation',
-                    14: 'color',
-                    15: 'luminosity'
-                }
-                return blend_mode_map.get(blend_mode, 'normal')
-
-            # 如果是字符串，直接返回
-            if isinstance(blend_mode, str):
-                normalized = blend_mode.strip().lower()
-                # 兼容 "BlendMode.NORMAL" 这类字符串
-                if normalized.startswith('blendmode.'):
-                    normalized = normalized.split('.', 1)[1]
-                return normalized
-
-            # 如果是枚举或其他类型，转换为字符串
-            normalized = str(blend_mode).strip().lower()
-            if normalized.startswith('blendmode.'):
-                normalized = normalized.split('.', 1)[1]
-            return normalized
+            return blend_mode_to_name(getattr(layer, 'blend_mode', 0))
 
         except Exception as e:
             print(f"[快速渲染] 获取混合模式失败: {e}")

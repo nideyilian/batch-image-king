@@ -303,54 +303,10 @@ class UnifiedAlphaCompositor:
 
     @staticmethod
     def _normalize_blend_mode_name(blend_mode: Union[str, int, None]) -> str:
-        """标准化混合模式名称，统一为英文小写。"""
-        if blend_mode is None:
-            return 'normal'
+        """标准化混合模式名称，统一为英文小写（P1-8：收敛到 blend_modes 单一来源）。"""
+        from app.utils.blend_modes import blend_mode_to_name
 
-        if isinstance(blend_mode, int):
-            mode_map = {
-                0: 'normal',
-                1: 'multiply',
-                2: 'screen',
-                3: 'overlay',
-                4: 'soft_light',
-                5: 'hard_light',
-                6: 'color_dodge',
-                7: 'color_burn',
-                8: 'darken',
-                9: 'lighten',
-                10: 'difference',
-                11: 'exclusion',
-                12: 'hue',
-                13: 'saturation',
-                14: 'color',
-                15: 'luminosity'
-            }
-            return mode_map.get(blend_mode, 'normal')
-
-        mode = str(blend_mode).strip().lower()
-        if not mode:
-            return 'normal'
-
-        zh_map = {
-            '正常': 'normal',
-            '正片叠底': 'multiply',
-            '滤色': 'screen',
-            '叠加': 'overlay',
-            '柔光': 'soft_light',
-            '强光': 'hard_light',
-            '颜色减淡': 'color_dodge',
-            '颜色加深': 'color_burn',
-            '变暗': 'darken',
-            '变亮': 'lighten',
-            '差值': 'difference',
-            '排除': 'exclusion',
-            '色相': 'hue',
-            '饱和度': 'saturation',
-            '颜色': 'color',
-            '明度': 'luminosity'
-        }
-        return zh_map.get(mode, mode)
+        return blend_mode_to_name(blend_mode)
 
     @staticmethod
     def _separable_blend_rgb(bottom_rgb: np.ndarray, top_rgb: np.ndarray, mode: str) -> np.ndarray:
