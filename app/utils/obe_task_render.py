@@ -514,81 +514,6 @@ class OptimizedBatchExecutorTaskRender(object):
                 logger.warning("静默异常已忽略: except Exception: in obe_task_render.py", exc_info=True)
                 pass
 
-    def _apply_layer_combination(self, combination):
-        """"""
-        visible_doc_indices = self._build_visible_doc_indices(self.document)
-        use_visible_index_mode = self._should_use_visible_index_mode(self.document, combination, visible_doc_indices)
-        for combo_layer_idx, image_path in combination.layer_states.items():
-            doc_layer_idx = self._resolve_combination_layer_index(
-                document=self.document,
-                combo_layer_idx=combo_layer_idx,
-                visible_doc_indices=visible_doc_indices,
-                use_visible_index_mode=use_visible_index_mode
-            )
-            if doc_layer_idx is not None:
-                layer = self.document.layers[doc_layer_idx]
-
-                #  
-                if not getattr(layer, 'visible', True):
-                    continue
-
-                # 🔧 关键修复：处理文字图层的虚拟路径
-                from app.models.text_layer import TextLayer
-            
-                if isinstance(layer, TextLayer):
-                    # 文字图层：解析虚拟路径并设置文本内容
-                    if is_text_layer_virtual_path(image_path):
-                        try:
-                            _, text_content = parse_text_layer_virtual_path(image_path)
-                            if text_content.strip():
-                                # 批量导出时通过统一入口静默更新文字，避免污染 UI 信号流
-                                if hasattr(self.document, '_is_batch_export_running') and self.document._is_batch_export_running:
-                                    if hasattr(layer, 'set_current_text_silent'):
-                                        layer.set_current_text_silent(text_content)
-                                    else:
-                                        layer._current_text = text_content
-                                        layer._cached_image = None
-                                else:
-                                    if hasattr(layer, 'set_current_text'):
-                                        layer.set_current_text(text_content)
-                                    else:
-                                        layer.current_text = text_content
-                            else:
-                                if self._verbose_logs:
-                                    print(f"[应用组合] ⚠️ 无法解析虚拟路径: {image_path}")
-                        except Exception as e:
-                            print(f"[应用组合] ❌ 解析文字图层虚拟路径失败: {e}")
-                    else:
-                        if self._verbose_logs:
-                            print(f"[应用组合] ⚠️ 文字图层路径格式错误: {image_path}")
-                else:
-                    # 普通图层：设置图像路径
-                    if hasattr(layer, 'current_image_path'):
-                        # 🔧 关键修复：使用公共属性setter，正确处理Layer和LegacyLayer
-                        layer.current_image_path = image_path
-
-                        # 清理缓存
-                        if hasattr(layer, '_cached_image'):
-                            layer._cached_image = None
-                        if hasattr(layer, '_cached_image_path'):
-                            layer._cached_image_path = None
-                        if hasattr(layer, '_cache_valid'):
-                            layer._cache_valid = False
-
-                    elif hasattr(layer, 'current_image_path'):
-                        # LegacyLayer
-                        # 🔧 批量导出优化：直接设置内部属性，避免触发信号
-                        layer.current_image_path = image_path
-
-                        # 
-                        if hasattr(layer, 'cached_image'):
-                            layer.cached_image = None
-
-                # 
-                if hasattr(combination, 'layer_clone_settings') and combo_layer_idx in combination.layer_clone_settings:
-                    clone_settings = combination.layer_clone_settings[combo_layer_idx]
-                    self._apply_clone_settings(layer, clone_settings)
-
     def _render_with_combination(
         self,
         combination,
@@ -596,15 +521,6 @@ class OptimizedBatchExecutorTaskRender(object):
         cancel_callback: Optional[Callable[[], bool]] = None,
     ) -> Optional[Image.Image]:
         """ - """
-        cache_key = combination.combination_hash
-
-        #  
-        # 
-        # if cache_key in self._render_cache:
-        #     with self._lock:
-        #         self.stats['cache_hits'] += 1
-        #     return self._render_cache[cache_key].copy()
-
         target_document, use_shared_lock = self._get_target_document_for_render()
         lock_context = self._lock if use_shared_lock else nullcontext()
         with lock_context:
@@ -893,13 +809,6 @@ class OptimizedBatchExecutorTaskRender(object):
                         self._emit_export_trace(self.last_error_message)
                     return None
 
-                # 仅在非批处理模式下启用渲染缓存，批处理模式下禁用缓存以减少内存占用
-                if not self.is_batch_mode and canvas and self._should_cache_render(combination):
-                    cache_key = self._generate_smart_cache_key(combination)
-                    if len(self._render_cache) < self.max_cache_size:
-                        self._render_cache[cache_key] = canvas.copy()
-                        self.stats['cache_hits'] += 1
-
                 self._emit_runtime_snapshot_for_indices(
                     document=target_document,
                     doc_indices=resolved_doc_indices_in_combo,
@@ -1005,60 +914,9 @@ class OptimizedBatchExecutorTaskRender(object):
         except (ImportError, Exception):
             return False
 
-    def _should_cache_render(self, combination) -> bool:
-        """"""
-        #  
-        # 
-        cache_key = self._generate_smart_cache_key(combination)
-        return cache_key not in self._render_cache
-
-    def _generate_smart_cache_key(self, combination) -> str:
-        """"""
-        # 
-        layer_states = []
-        for layer_idx, image_path in combination.layer_states.items():
-            layer_states.append(f"{layer_idx}:{os_module.path.basename(image_path) if image_path else 'none'}")
-
-        return f"render:{'|'.join(sorted(layer_states))}"
-
-    def _render_with_cache(self, combination) -> Optional[Image.Image]:
-        """"""
-        cache_key = combination.combination_hash
-    
-        #  
-        # 
-        # if cache_key in self._render_cache:
-        #     with self._lock:
-        #         self.stats['cache_hits'] += 1
-        #     return self._render_cache[cache_key].copy()
-    
-        # 
-        try:
-            from app.services.render_service import RenderRequest, get_render_service
-
-            result = get_render_service().render(RenderRequest(
-                document=self.document,
-                mode="export",
-                batch_mode=True,
-            ))
-            canvas = result.image
-        
-            #  
-            # 
-            # if len(self._render_cache) < 10:  # 10
-            #     self._render_cache[cache_key] = canvas.copy()
-        
-            return canvas
-        
-        except Exception as e:
-            print(f"[] : {e}")
-            return None
-
     def _cleanup_resources(self):
         """"""
         try:
-            # 
-            self._render_cache.clear()
             self._release_registered_worker_renderers()
         
             # 

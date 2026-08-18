@@ -2,10 +2,17 @@
 
 ## 当前策略
 
-`.cmp` 项目和预设文件当前仍使用 pickle，以保持历史项目兼容。代码读取入口统一经过
-`app.utils.trusted_pickle.load_trusted_pickle()`，并记录可信来源警告。
+`.cmp` 项目和预设文件当前仍使用 pickle，以保持历史项目兼容。所有读取入口统一经过
+`app.utils.trusted_pickle.load_trusted_pickle()`，内部使用受限 Unpickler：
 
-用户只应打开来自本人或可信来源的 `.cmp` 文件。pickle 不是安全的外部交换格式。
+- 只允许纯数据/容器类型的 `builtins`（`dict`/`list`/`tuple`/`str`/`int`/`float`/`bool` 等）。
+- 允许少量安全标准库模块（`enum`、`collections`、`datetime`、`copyreg`）。
+- 允许应用自身命名空间 `app.*`（图层/文档数据如 `ShapeType` 枚举）。
+- `os`、`subprocess`、`posix`、`builtins.eval`/`exec`/`__import__`/`getattr`/`open` 等
+  经典 RCE 载荷一律抛 `pickle.UnpicklingError` 并拒绝加载（2026-08 落地）。
+
+用户仍只应打开来自本人或可信来源的 `.cmp` 文件；受限反序列化大幅收窄了攻击面，
+但 pickle 本身仍不是安全的外部交换格式。
 
 ## 中期路线
 
