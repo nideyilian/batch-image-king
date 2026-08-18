@@ -12,6 +12,7 @@ from app.models.document import Document
 from app.models.text_layer import TextLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels import workspace_view_model as workspace_module
+from app.qml.viewmodels import workspace_vm_preview as preview_module
 from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 from app.services.preview_render_service import PreviewRenderRequest, PreviewRenderService
 from app.utils.fast_renderer_preview import FastRendererPreview
@@ -123,7 +124,7 @@ def test_preview_task_avoids_ui_lock_and_receives_cancel_token(monkeypatch):
         def globalInstance():
             return _Pool()
 
-    monkeypatch.setattr(workspace_module, "QThreadPool", _ThreadPoolFacade)
+    monkeypatch.setattr(preview_module, "QThreadPool", _ThreadPoolFacade)
     workspace._auto_render = True
     workspace.requestPreview(force=True)
     workspace._preview_timer.stop()
@@ -152,7 +153,7 @@ def test_text_edit_preview_task_omits_active_text_layer(monkeypatch):
         def globalInstance():
             return _Pool()
 
-    monkeypatch.setattr(workspace_module, "QThreadPool", _ThreadPoolFacade)
+    monkeypatch.setattr(preview_module, "QThreadPool", _ThreadPoolFacade)
     workspace._auto_render = True
     assert workspace.startTextEditOverlay() is True
     workspace._preview_timer.stop()
