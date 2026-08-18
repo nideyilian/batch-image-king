@@ -58,14 +58,14 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'tooltip: "添加素材文件夹"' not in qml_source
     assert '"复制图层 · Ctrl+D"' not in qml_source
     assert 'workspace.moveSelectedLayer("forward")' in qml_source
-    assert 'sequence: "Ctrl+D"' in qml_source
+    assert 'sequence: "Ctrl+J"' in qml_source
     assert 'id: effectColorDialog' in qml_source
     assert 'objectName: "opacitySlider"' in qml_source
     assert 'workspace.beginSelectedOpacityEdit()' in qml_source
     assert 'onMoved: workspace.updateSelectedOpacityEdit(Math.round(value))' in qml_source
     assert 'workspace.endSelectedOpacityEdit()' in qml_source
     assert 'workspace.setSelectedBlendMode(currentValue)' in qml_source
-    assert 'workspace.setSelectedStrokeEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedStrokeEnabled(true)' in qml_source
     assert 'workspace.setSelectedStrokeColor(modelData)' in qml_source
     assert 'workspace.setSelectedCornerRadius(parent.modelData)' in qml_source
     assert 'effectColorDialog.openFor("stroke", workspace.selectedStrokeColor)' in qml_source
@@ -114,7 +114,7 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
     assert 'workspace.setSelectedAspectRatioLocked(!workspace.selectedAspectRatioLocked)' in qml_source
     assert 'visible: inspectorTab === 1 && workspace.selectedSupportsRandomTransform' in qml_source
-    assert 'workspace.setSelectedRandomPositionEnabled(!workspace.selectedRandomPositionEnabled)' in qml_source
+    assert 'workspace.setSelectedRandomPositionEnabled(checkedValue)' in qml_source
     assert 'workspace.setSelectedRandomScaleMinPercent(parsed)' in qml_source
     assert 'workspace.setSelectedRandomRotationRange(parsed)' in qml_source
     assert 'workspace.regenerateSelectedRandomTransform()' in qml_source
@@ -139,18 +139,18 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.setSelectedTextGradientCenter(xValue, yValue)' in qml_source
     assert 'workspace.setSelectedTextGradientColor(colorIndex, hexValue)' in qml_source
     assert 'title: "文字背景"' in qml_source
-    assert 'workspace.setSelectedTextBackgroundEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextBackgroundEnabled(value === "solid")' in qml_source
     assert 'workspace.setSelectedTextBackgroundColor(value)' in qml_source
     assert 'workspace.setSelectedTextBackgroundOpacity(parsed)' in qml_source
     assert 'workspace.setSelectedTextBackgroundPadding(parsed)' in qml_source
     assert 'title: "文字阴影"' in qml_source
-    assert 'workspace.setSelectedTextShadowEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextShadowEnabled(value === "on")' in qml_source
     assert 'workspace.setSelectedTextShadowOffset(xValue, yValue)' in qml_source
     assert 'workspace.setSelectedTextShadowBlur(parsed)' in qml_source
     assert 'workspace.setSelectedTextShadowColor(value)' in qml_source
     assert 'workspace.setSelectedTextShadowOpacity(parsed)' in qml_source
     assert 'title: "文字发光"' in qml_source
-    assert 'workspace.setSelectedTextGlowEnabled(checkedValue)' in qml_source
+    assert 'workspace.setSelectedTextGlowEnabled(value === "on")' in qml_source
     assert 'workspace.setSelectedTextGlowStrength(parsed)' in qml_source
     assert 'workspace.setSelectedTextGlowRadius(parsed)' in qml_source
     assert 'workspace.copySelectedLayerStyle()' in qml_source

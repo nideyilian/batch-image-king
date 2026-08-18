@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    # 批量更新只针对 major 版本
+    groups:
+      major:
+        update-types: ["major"]
+        patterns: ["*"]
+    # 不自动合入大批次更新
+    labels:
+      - "dependencies"
+    # 主分支名（GitHub 默认 main，也兼容 master）
+    target-branch: "main"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "ci"
+    target-branch: "main"

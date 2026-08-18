@@ -1,0 +1,40 @@
+name: Feature Request / 新功能建议
+description: 为批图王提出新功能想法
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解决的痛点
+      description: 这个功能要解决什么具体问题？没有它时你是怎么工作的？
+      placeholder: |
+        现在批量导出 1000+ 张图时，每次都要手动调整排版...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望的解决方案
+      description: 描述你希望的功能形态；如有现成工具可类比，列出名字
+    validations:
+      required: true
+
+  - type: textarea
+    id: alt
+    attributes:
+      label: 备选方案
+      description: 你考虑过的其他实现路径
+    validations:
+      required: false
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: 适用范围
+      description: 哪些用户 / 哪些工作流会用到？影响哪个模块（渲染/UI/导出/序列化）？
+    validations:
+      required: false

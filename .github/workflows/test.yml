@@ -1,0 +1,125 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master, codex/**]
+  pull_request:
+    branches: [main, master, codex/**]
+
+# 取消同一分支的前一个运行（PR 上常见的"快速反馈"行为）
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest (Windows · Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Display Python info
+        shell: pwsh
+        run: |
+          python --version
+          python -c "import sys; print(sys.executable)"
+          pip --version
+
+      - name: Install dev dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          # 静默安装，让日志更聚焦
+          python -m pip install -q -r requirements-dev.txt
+
+      - name: Compile all sources
+        shell: pwsh
+        # 早期发现问题：任何 SyntaxError / IndentationError 在测试前就暴露
+        run: python -m compileall -q app/
+
+      - name: Run pytest
+        shell: pwsh
+        # BTPW_FAST_RENDERER_DEBUG=1 让 FastRenderer 调试输出可见，
+        # 方便定位真实错误而非神秘的 NameError/AttributeError。
+        env:
+          BTPW_FAST_RENDERER_DEBUG: "0"
+          BTPW_BATCH_RENDER_VERBOSE: "0"
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m pytest -v --color=yes --junitxml=test-results/junit.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-results-${{ matrix.python-version }}
+          path: test-results/
+          if-no-files-found: ignore
+
+  smoke:
+    name: main.py smoke (headless)
+    # 烟囱测试在 windows-latest 上启动 QApplication 然后立即退出，
+    # 用于验证：依赖能装、main.py 能 import、暗色主题能加载。
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -q -r requirements-dev.txt
+
+      - name: Smoke import main entry
+        shell: pwsh
+        # 直接 import main 模块而不真的进入事件循环。
+        # main.py 顶层只调用 setup_streams / setup_logging，不创建 QApplication，
+        # 验证：所有顶层 import + 日志初始化可成功。
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -c "import main; print('main.py import OK')"
+
+      - name: Smoke import all app submodules
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        # 走完所有子模块的 import 路径，
+        # 提前发现循环导入 / 缺失 import / 资源缺失。
+        run: |
+          python -c "
+          import importlib
+          import pkgutil
+          import app
+          for mod in pkgutil.walk_packages(app.__path__, prefix='app.'):
+              try:
+                  importlib.import_module(mod.name)
+              except Exception as e:
+                  print(f'FAIL {mod.name}: {e!r}')
+                  raise
+          print('all app.* modules import OK')
+          "

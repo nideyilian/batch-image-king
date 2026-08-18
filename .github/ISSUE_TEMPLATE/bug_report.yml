@@ -1,0 +1,82 @@
+name: Bug Report / 缺陷报告
+description: 报告批图王的 Bug
+title: "[Bug]: "
+labels: ["bug"]
+assignees: []
+
+body:
+  - type: dropdown
+    id: severity
+    attributes:
+      label: 严重程度
+      description: 这个问题对正常使用的破坏程度
+      options:
+        - P0（崩溃 / 数据丢失 / 完全无法使用）
+        - P1（核心功能异常，例如批量导出、撤销、序列化）
+        - P2（边缘场景 / 性能问题 / UI 显示问题）
+        - P3（小问题 / 文字 / 排版）
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 10
+        - Windows 11
+        - 其他（请在描述中说明）
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本号
+      description: 菜单 帮助 → 关于 中查看
+      placeholder: v1.2.3 / 内部构建 2026-05-20
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 列出能让维护者 100% 复现的步骤，越具体越好
+      placeholder: |
+        1. 打开批图王
+        2. 新建画布 800x600
+        3. 添加文件夹图层，路径 = ...
+        4. 触发批量导出
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / 截图
+      description: 粘贴 批图王/logs 下最新的 .log，或描述 UI 截图
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 其他信息
+      description: 字体、文件数量、是否安装 pyvips 等
+    validations:
+      required: false
