@@ -73,12 +73,14 @@ class DocumentRender:
             except Exception as e:
                 print(f"[渲染] GPU渲染异常，回退到CPU渲染: {e}")
 
-        # 如果启用随机模式，先进行随机化
+        # 🔧 修复：严格按照绑定组设置执行随机化，不重新分析分类
+        # （历史版本会执行两次 randomize_all_layers，导致随机化两次；
+        #   现统一只执行这一次。）
         if random_mode:
-            print("[渲染] 启用随机模式，正在随机化所有图层...")
+            print("[渲染] 启用随机模式，严格按照绑定组设置执行...")
             self.randomize_all_layers()
 
-        # 再次检查是否取消（随机化后）
+        # 随机化后再次检查是否取消
         if hasattr(self, '_export_canceled') and self._export_canceled:
             print("[渲染] 随机化后检测到取消操作")
             return None
@@ -117,11 +119,6 @@ class DocumentRender:
                 use_advanced_quality = False
                 advanced_compositor = None
         
-        # 🔧 修复：严格按照绑定组设置执行随机化，不重新分析分类
-        if random_mode:
-            print("[渲染] 启用随机模式，严格按照绑定组设置执行...")
-            self.randomize_all_layers()
-
         # 如果使用高级合成引擎
         if advanced_compositor:
             try:
@@ -865,7 +862,7 @@ class DocumentRender:
             # 后备方案：使用四舍五入
             result_8bit = np.round(result_array * 255.0).astype(np.uint8)
         
-        composited = Image.fromarray(result_8bit, 'RGBA')
+        composited = Image.fromarray(result_8bit)
 
         # 将合成结果粘贴回原图
         result = background.copy()

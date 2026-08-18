@@ -121,7 +121,7 @@ class AdvancedAntialiasing:
         
         # 转换回图像
         result_8bit = (np.clip(result, 0, 1) * 255).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def _ssaa_antialiasing(self, image: Image.Image, scale: int, strength: float) -> Image.Image:
         """超级采样抗锯齿 (SSAA)"""
@@ -159,7 +159,7 @@ class AdvancedAntialiasing:
         result_array = np.concatenate([rgb, filtered_alpha[:, :, np.newaxis]], axis=2)
         result_8bit = (np.clip(result_array, 0, 1) * 255).astype(np.uint8)
         
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def _smaa_antialiasing(self, image: Image.Image, strength: float) -> Image.Image:
         """子像素形态学抗锯齿 (SMAA)"""
@@ -181,7 +181,7 @@ class AdvancedAntialiasing:
         result_array[:, :, 3] = filtered_alpha
         result_8bit = (np.clip(result_array, 0, 1) * 255).astype(np.uint8)
         
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def _adaptive_antialiasing(self, image: Image.Image, strength: float, 
                               preserve_details: bool) -> Image.Image:

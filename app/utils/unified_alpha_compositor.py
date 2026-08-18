@@ -287,7 +287,7 @@ class UnifiedAlphaCompositor:
             
             # 🔧 修复：使用抖动转换以消除色阶分层
             result_8bit = _float_to_uint8_with_dithering(result, use_dithering=True)
-            return Image.fromarray(result_8bit, 'RGBA')
+            return Image.fromarray(result_8bit)
 
         except Exception as e:
             safe_print(f"[错误] blend_normal失败: {e}")
@@ -440,7 +440,7 @@ class UnifiedAlphaCompositor:
 
         result = np.concatenate([np.clip(out_rgb, 0.0, 1.0), np.clip(out_alpha, 0.0, 1.0)], axis=2)
         result_8bit = _float_to_uint8_with_dithering(result, use_dithering=True)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
 
     @staticmethod
     def blend_with_mode(bottom: Image.Image, top: Image.Image, blend_mode: Union[str, int], opacity: float = 1.0) -> Image.Image:
@@ -721,7 +721,7 @@ class UnifiedAlphaCompositor:
         result = np.concatenate([unpremult_rgb, alpha], axis=2)
         result = np.clip(result * 255, 0, 255).astype(np.uint8)
         
-        return Image.fromarray(result, 'RGBA')
+        return Image.fromarray(result)
 
     @staticmethod
     def _enhance_edges(image: Image.Image) -> Image.Image:
@@ -782,7 +782,7 @@ class UnifiedAlphaCompositor:
 
             # 转换回图像
             result_array = (img_array * 255).clip(0, 255).astype(np.uint8)
-            return Image.fromarray(result_array, 'RGBA')
+            return Image.fromarray(result_array)
 
         except Exception as e:
             safe_print(f"[Alpha合成器] 边缘增强失败: {e}")
@@ -811,7 +811,7 @@ class UnifiedAlphaCompositor:
 
         # 🔧 修复：使用抖动转换以消除色阶分层
         result_8bit = _float_to_uint8_with_dithering(result, use_dithering=True)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
 
     @staticmethod
     def _standard_composite(background: Image.Image, foreground: Image.Image,
@@ -1099,7 +1099,7 @@ def safe_print(message: str):
             result_array = np.clip(result_array, 0, 1)
             result_8bit = (result_array * 255).astype(np.uint8)
 
-            return Image.fromarray(result_8bit, 'RGBA')
+            return Image.fromarray(result_8bit)
 
         return Image.merge('RGBA', (r, g, b, a_smooth))
 

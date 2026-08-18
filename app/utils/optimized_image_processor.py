@@ -248,7 +248,7 @@ class OptimizedImageProcessor:
             except ImportError:
                 # 后备方案：使用四舍五入
                 result_8bit = np.round(np.clip(result_array, 0.0, 1.0) * 255.0).astype(np.uint8)
-            return Image.fromarray(result_8bit, 'RGBA')
+            return Image.fromarray(result_8bit)
             
         except Exception as e:
             safe_print(f"[图像处理] NumPy合成失败，回退到PIL: {e}")
@@ -284,7 +284,7 @@ class OptimizedImageProcessor:
             except ImportError:
                 # 后备方案：使用四舍五入
                 result_8bit = np.round(np.clip(result_array, 0.0, 1.0) * 255.0).astype(np.uint8)
-            return Image.fromarray(result_8bit, 'RGBA')
+            return Image.fromarray(result_8bit)
             
         except Exception as e:
             safe_print(f"[图像处理] Numba合成失败，回退到NumPy: {e}")

@@ -207,7 +207,7 @@ class PremultipliedAlphaHandler:
         
         # 转换回图像
         result_8bit = (result_array * 255.0).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def premultiply_alpha(self, image: Image.Image) -> Image.Image:
         """
@@ -236,7 +236,7 @@ class PremultipliedAlphaHandler:
         
         # 转换回图像
         result_8bit = (result_array * 255.0).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def _enhanced_unpremultiply_rgb(self, rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
         """增强的取消预乘处理 - 修复PNG边缘问题"""

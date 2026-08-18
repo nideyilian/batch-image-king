@@ -158,7 +158,7 @@ class ImageQualityFixer:
             except ImportError:
                 # 后备方案：使用四舍五入
                 result_8bit = np.round(result_array * 255.0).astype(np.uint8)
-            return Image.fromarray(result_8bit, 'RGBA')
+            return Image.fromarray(result_8bit)
             
         except Exception as e:
             safe_print(f"[质量修复器] 安全合成失败: {e}")

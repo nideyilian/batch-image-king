@@ -557,7 +557,7 @@ class FastRendererComposite(object):
                 # 快速不透明度调整
                 fg_array = np.array(foreground, dtype=np.float32)
                 fg_array[:,:,3] *= opacity
-                foreground = Image.fromarray(fg_array.astype(np.uint8), 'RGBA')
+                foreground = Image.fromarray(fg_array.astype(np.uint8))
             
             # 计算有效区域
             bg_width, bg_height = background.size
@@ -758,7 +758,7 @@ class FastRendererComposite(object):
             except ImportError:
                 # 后备方案：使用四舍五入
                 result_8bit = np.round(np.clip(result_array, 0.0, 1.0) * 255.0).astype(np.uint8)
-            return Image.fromarray(result_8bit, 'RGBA')
+            return Image.fromarray(result_8bit)
 
         except Exception as e:
             print(f"[快速渲染] 高精度alpha合成失败: {e}")

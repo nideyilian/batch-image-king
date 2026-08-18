@@ -239,7 +239,7 @@ class AlphaCompositor:
                                   alpha)
         
         result_array = (rgba * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)
     
     def _supersampling_alpha_enhancement(self, image: Image.Image) -> Image.Image:
         """超采样抗锯齿"""
@@ -271,7 +271,7 @@ class AlphaCompositor:
             rgba[:,:,3] = np.where(smooth_mask, alpha_smooth, alpha)
         
         result_array = (rgba * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)
     
     def control_color_bleeding(self, image: Image.Image, strength: float = 0.5) -> Image.Image:
         """
@@ -306,7 +306,7 @@ class AlphaCompositor:
         array[:,:,:3] = np.where(semi_transparent[:,:,np.newaxis], weighted_rgb, rgb)
         
         result_array = (array * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)
     
     def optimize_alpha_channel(self, image: Image.Image, 
                              remove_fringe: bool = True,
@@ -360,7 +360,7 @@ class AlphaCompositor:
         
         array[:,:,:3] = rgb
         result_array = (array * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)
     
     def create_soft_mask(self, image: Image.Image, feather_radius: float = 2.0) -> Image.Image:
         """
@@ -385,4 +385,4 @@ class AlphaCompositor:
             array[:,:,3] = alpha_feathered
         
         result_array = (array * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)

@@ -1551,7 +1551,7 @@ class FastRendererSurface(object):
             new_alpha = alpha.astype(np.float32) * (1.0 - soft)
             out = arr.copy()
             out[..., 3] = np.clip(new_alpha, 0, 255).astype(np.uint8)
-            return Image.fromarray(out, 'RGBA')
+            return Image.fromarray(out)
         except Exception:
             logger.warning("静默异常已忽略: 自动遮罩失败，降级为不遮罩", exc_info=True)
             return image

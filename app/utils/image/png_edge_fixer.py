@@ -70,7 +70,7 @@ class PNGEdgeFixer:
         result_array = np.clip(img_array, 0, 1)
         result_8bit = (result_array * 255).astype(np.uint8)
         
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def _analyze_edge_problems(self, img_array: np.ndarray) -> Dict[str, Any]:
         """分析边缘问题类型"""

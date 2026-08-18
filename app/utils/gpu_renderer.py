@@ -660,7 +660,7 @@ class GPURenderer:
         image_array = np.flipud(image_array)
         
         # 转换为PIL图像
-        return Image.fromarray(image_array, 'RGBA')
+        return Image.fromarray(image_array)
     
     def get_performance_stats(self) -> Dict[str, Any]:
         """获取性能统计"""

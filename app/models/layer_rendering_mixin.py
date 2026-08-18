@@ -915,7 +915,7 @@ class LayerRenderingMixin:
                 res = c_start * (1 - local_t_exp) + c_end * local_t_exp
                 rgba = res.astype(np.uint8)
 
-            return Image.fromarray(rgba, 'RGBA')
+            return Image.fromarray(rgba)
 
         except Exception as e:
             print(f"创建渐变出错: {e}")
@@ -956,7 +956,7 @@ class LayerRenderingMixin:
         rgb_out[alpha_mask] = rgb_bleed[alpha_mask]
 
         out = np.concatenate([np.clip(rgb_out, 0.0, 1.0), a], axis=2)
-        result = Image.fromarray((out * 255.0).astype(np.uint8), 'RGBA')
+        result = Image.fromarray((out * 255.0).astype(np.uint8))
         if original_info:
             result.info.update(original_info)
         return result

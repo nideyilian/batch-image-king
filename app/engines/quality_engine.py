@@ -294,7 +294,7 @@ class QualityEngine:
         
         # 转换回PIL
         result_array = cv2.cvtColor(resized, cv2.COLOR_BGRA2RGBA)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)
     
     def _content_aware_resize(self, image: Image.Image, target_size: Tuple[int, int],
                             analysis: Dict[str, Any]) -> Image.Image:

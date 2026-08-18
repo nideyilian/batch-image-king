@@ -87,7 +87,7 @@ class PNGRenderOptimizer:
         
         # 转换回图像
         result_8bit = (result_array * 255.0).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     def _detect_premultiplied_alpha(self, rgb: np.ndarray, alpha: np.ndarray) -> bool:
         """检测是否为预乘Alpha"""
@@ -254,7 +254,7 @@ class PNGRenderOptimizer:
         img_array[:, :, 3] = alpha_filtered
 
         # 转换回图像
-        filtered_img = Image.fromarray((img_array * 255).astype(np.uint8), 'RGBA')
+        filtered_img = Image.fromarray((img_array * 255).astype(np.uint8))
 
         # 缩放回原始大小
         return filtered_img.resize(original_size, Image.LANCZOS)
@@ -310,7 +310,7 @@ class PNGRenderOptimizer:
         result_array = np.concatenate([rgb, alpha_final[:, :, np.newaxis]], axis=2)
         result_array = np.clip(result_array, 0, 1)
 
-        return Image.fromarray((result_array * 255).astype(np.uint8), 'RGBA')
+        return Image.fromarray((result_array * 255).astype(np.uint8))
 
     def _edge_preserving_filter(self, data: np.ndarray) -> np.ndarray:
         """边缘保持滤波"""
@@ -370,7 +370,7 @@ class PNGRenderOptimizer:
         result_array = np.concatenate([rgb, enhanced_alpha[:, :, np.newaxis]], axis=2)
         result_array = np.clip(result_array, 0, 1)
 
-        return Image.fromarray((result_array * 255).astype(np.uint8), 'RGBA')
+        return Image.fromarray((result_array * 255).astype(np.uint8))
 
     def _enhance_edge_alpha(self, alpha: np.ndarray, edge_mask: np.ndarray) -> np.ndarray:
         """增强边缘Alpha值"""

@@ -226,7 +226,7 @@ class PhotoshopCompositor:
         else:
             array = array.astype(np.uint8)
         
-        return Image.fromarray(array, 'RGBA')
+        return Image.fromarray(array)
     
     def _srgb_to_linear(self, rgb: np.ndarray) -> np.ndarray:
         """sRGB到线性RGB转换"""
@@ -515,7 +515,7 @@ class PhotoshopCompositor:
 
         # 转换回PIL
         result_array = cv2.cvtColor(enhanced_cv, cv2.COLOR_BGRA2RGBA)
-        return Image.fromarray(result_array, 'RGBA')
+        return Image.fromarray(result_array)
 
     def _apply_unsharp_mask(self, image: Image.Image, radius: float = 1.0,
                            amount: float = 0.5, threshold: int = 3) -> Image.Image:

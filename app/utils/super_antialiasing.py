@@ -216,7 +216,7 @@ class SuperAntialiasing:
         result_array = np.clip(result_array, 0, 1)
         
         result_8bit = (result_array * 255).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     @staticmethod
     def _smaa(image: Image.Image, strength: float) -> Image.Image:
@@ -266,7 +266,7 @@ class SuperAntialiasing:
         
         # 转换回图像
         result_8bit = (img_array * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     @staticmethod
     def _distance_field_aa(image: Image.Image, strength: float) -> Image.Image:
@@ -299,7 +299,7 @@ class SuperAntialiasing:
         
         # 转换回图像
         result_8bit = (img_array * 255).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     @staticmethod
     def _enhance_alpha_edges(image: Image.Image, strength: float) -> Image.Image:
@@ -353,7 +353,7 @@ class SuperAntialiasing:
         
         # 转换回图像
         result_8bit = (img_array * 255).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     @staticmethod
     def _multi_layer_edge_enhancement(image: Image.Image, strength: float) -> Image.Image:
@@ -378,7 +378,7 @@ class SuperAntialiasing:
         # 混合形态学结果
         img_array[:,:,3] = alpha * 0.7 + alpha_closed * 0.3 * strength
         
-        result = Image.fromarray((img_array * 255).astype(np.uint8), 'RGBA')
+        result = Image.fromarray((img_array * 255).astype(np.uint8))
         
         # 3. 双边滤波
         result = SuperAntialiasing._bilateral_filter_alpha(result, strength)
@@ -407,7 +407,7 @@ class SuperAntialiasing:
         
         # 转换回图像
         result_8bit = (img_array * 255).astype(np.uint8)
-        return Image.fromarray(result_8bit, 'RGBA')
+        return Image.fromarray(result_8bit)
     
     @staticmethod
     def _high_quality_downscale(image: Image.Image, target_size: Tuple[int, int]) -> Image.Image:

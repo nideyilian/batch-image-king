@@ -156,7 +156,7 @@ class ProfessionalBlender:
         
         # 转换为8位
         array = (array * 255.0).clip(0, 255).astype(np.uint8)
-        return Image.fromarray(array, 'RGBA')
+        return Image.fromarray(array)
     
     def _srgb_to_linear(self, rgb: np.ndarray) -> np.ndarray:
         """sRGB到线性RGB转换"""
