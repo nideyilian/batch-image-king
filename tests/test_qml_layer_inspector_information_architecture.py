@@ -105,7 +105,9 @@ def test_qml_random_transform_and_text_editor_adapt_to_inspector_width():
         "randomRotationCompactGrid",
     ):
         assert f"id: {grid_id}" in source
-    assert "component AdaptiveInspectorGrid: HermesAdaptiveFieldGrid" in source
+    # P1-5 拆分：AdaptiveInspectorGrid 内联 component 迁入 components/
+    adaptive_grid_source = (REPO_ROOT / "app/qml/components/AdaptiveInspectorGrid.qml").read_text(encoding="utf-8")
+    assert "HermesAdaptiveFieldGrid {" in adaptive_grid_source
     assert "columns: width >= pairBreakpoint ? 2 : 1" in grid_source
     assert "implicitWidth: 0" in source
     assert "width: Math.min(" in source

@@ -31,19 +31,22 @@ def _workspace() -> WorkspaceViewModel:
 def test_focus_sensitive_qml_editors_preserve_the_current_value():
     value_box = (REPO_ROOT / "app/qml/components/ValueBox.qml").read_text(encoding="utf-8")
     font_box = (REPO_ROOT / "app/qml/components/FontSelectBox.qml").read_text(encoding="utf-8")
+    content_editor = (REPO_ROOT / "app/qml/components/ContentTextEditor.qml").read_text(encoding="utf-8")
     main_qml = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
     for source in (value_box, font_box):
         assert "restoreMode: Binding.RestoreNone" in source
         assert "selectAll()" in source
         assert "function beginEdit()" in source
+    # P1-5 拆分：ContentTextEditor 内联 component 迁入 components/（无 selectAll 语义）
+    assert "restoreMode: Binding.RestoreNone" in content_editor
+    assert "function beginEdit()" in content_editor
 
     assert "if (root.bindValue)" in value_box
     assert "input.text = String(root.value)" in value_box
     assert value_box.count("if (root.bindValue)") >= 3
 
-    assert "contentEditor.text = textEditorRoot.value" in main_qml
-    assert "restoreMode: Binding.RestoreNone" in main_qml
+    assert "contentEditor.text = textEditorRoot.value" in content_editor
 
 
 @pytest.mark.unit

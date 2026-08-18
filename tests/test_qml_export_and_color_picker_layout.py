@@ -22,8 +22,9 @@ def test_qml_export_sections_and_color_picker_debug_entry_exist():
     assert 'text: "颜色区域"' in qml_source
     assert 'text: "HSV"' in qml_source
     assert 'text: "RGB"' in qml_source
-    assert "component ExportSettingsSection" in qml_source
-    assert "component CompactExportSection" in qml_source
+    # P1-5 拆分：ExportSettingsSection/CompactExportSection 内联 component 迁入 components/
+    assert (REPO_ROOT / "app/qml/components/ExportSettingsSection.qml").exists()
+    assert (REPO_ROOT / "app/qml/components/CompactExportSection.qml").exists()
     for title in ("导出任务", "文件命名", "输出格式", "组合策略"):
         assert f'title: "{title}"' in qml_source
     assert 'objectName: "batchExportAdvancedDialog"' in qml_source

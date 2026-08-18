@@ -231,6 +231,7 @@ def test_binding_drawer_keeps_empty_state_and_creation_footer_accessible():
 def test_compact_inspector_fields_keep_readable_layout_widths():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     value_box_source = (QML_ROOT / "components" / "ValueBox.qml").read_text(encoding="utf-8")
+    paired_source = (QML_ROOT / "components" / "PairedInspectorValue.qml").read_text(encoding="utf-8")
     theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
 
     assert "import QtQuick.Layouts" in value_box_source
@@ -242,7 +243,8 @@ def test_compact_inspector_fields_keep_readable_layout_widths():
     assert "inspectorTextEditorMaxWidth: 400" in theme_source
     assert "inspectorRowHeight: compactControlHeight" in theme_source
     assert "Layout.fillWidth: true" in value_box_source
-    assert "component PairedInspectorValue: ValueBox" in main_source
+    # P1-5 拆分：内联 component 迁入 components/（独立 .qml 根类型）
+    assert "ValueBox {" in paired_source
     assert "Layout.fillWidth: true" in main_source
 
 
@@ -252,6 +254,8 @@ def test_inspector_field_labels_never_elide_and_follow_the_four_pixel_grid():
     theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
     field_source = (QML_ROOT / "components" / "HermesField.qml").read_text(encoding="utf-8")
     section_source = (QML_ROOT / "components" / "PropertySection.qml").read_text(encoding="utf-8")
+    inspector_row_source = (QML_ROOT / "components" / "InspectorRow.qml").read_text(encoding="utf-8")
+    compact_field_source = (QML_ROOT / "components" / "CompactInspectorField.qml").read_text(encoding="utf-8")
 
     assert "elide: Text.ElideNone" in field_source
     assert "wrapMode: Text.NoWrap" in field_source
@@ -280,7 +284,8 @@ def test_inspector_field_labels_never_elide_and_follow_the_four_pixel_grid():
     assert "font.pixelSize: Theme.fontSizeSm" in section_source
     assert "property int minimumControlHeight: 0" in field_source
     assert "Layout.minimumHeight: root.minimumControlHeight" in field_source
-    assert "minimumControlHeight: Theme.inputHeightMd" in main_source
+    assert "minimumControlHeight: Theme.inputHeightMd" in inspector_row_source
+    assert "minimumControlHeight: Theme.inputHeightMd" in compact_field_source
     assert "spacing: 3" not in section_source
 
 
@@ -292,6 +297,8 @@ def test_inspector_uses_hermes_upstream_component_contracts():
     tabs_source = (QML_ROOT / "components" / "HermesPageTabs.qml").read_text(encoding="utf-8")
     button_source = (QML_ROOT / "components" / "AppButton.qml").read_text(encoding="utf-8")
     switch_source = (QML_ROOT / "components" / "ToggleSwitch.qml").read_text(encoding="utf-8")
+    inspector_row_source = (QML_ROOT / "components" / "InspectorRow.qml").read_text(encoding="utf-8")
+    compact_field_source = (QML_ROOT / "components" / "CompactInspectorField.qml").read_text(encoding="utf-8")
 
     for token in (
         "space1",
@@ -337,8 +344,9 @@ def test_inspector_uses_hermes_upstream_component_contracts():
     assert "implicitHeight: Theme.switchHeight" in switch_source
     assert "width: Theme.switchThumbSize" in switch_source
 
-    assert "component InspectorRow: HermesField" in main_source
-    assert "component CompactInspectorField: HermesField" in main_source
+    # P1-5 拆分：内联 component 迁入 components/（独立 .qml 根类型为 HermesField）
+    assert "HermesField {" in inspector_row_source
+    assert "HermesField {" in compact_field_source
     assert "HermesPageTabs {" in main_source
     assert 'items: ["基本参数", "更多参数"]' in main_source
 
@@ -403,6 +411,7 @@ def test_field_controls_fill_the_flexible_column_by_default():
 def test_layer_sidebar_resizes_while_inspector_uses_a_fixed_compact_width():
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     theme_source = (QML_ROOT / "components" / "Theme.qml").read_text(encoding="utf-8")
+    resize_handle_source = (QML_ROOT / "components" / "SidebarResizeHandle.qml").read_text(encoding="utf-8")
 
     for token in (
         "layerPanelMinWidth",
@@ -419,20 +428,23 @@ def test_layer_sidebar_resizes_while_inspector_uses_a_fixed_compact_width():
         "property real layerPanelWidth: -1",
         "function setLayerPanelWidth(value)",
         "function resetLayerPanelWidth()",
-        "component SidebarResizeHandle",
         "id: layerPanelResizeHandle",
-        "onDoubleClicked: resizeHandle.resetRequested()",
-        "onPositionChanged: mouse =>",
-        "previousX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x",
-        "var sceneX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x",
-        "var delta = sceneX - previousX",
-        "resizeHandle.dragMoved(delta)",
         "Layout.preferredWidth: window.layerPanelWidth",
         "Layout.minimumWidth: Theme.inspectorPanelWidth",
         "Layout.preferredWidth: Theme.inspectorPanelWidth",
         "Layout.maximumWidth: Theme.inspectorPanelWidth",
     ):
         assert marker in main_source
+    # P1-5 拆分：SidebarResizeHandle 组件体内标记迁入 components/SidebarResizeHandle.qml
+    for marker in (
+        "onDoubleClicked: resizeHandle.resetRequested()",
+        "onPositionChanged: mouse =>",
+        "previousX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x",
+        "var sceneX = resizeMouse.mapToItem(null, mouse.x, mouse.y).x",
+        "var delta = sceneX - previousX",
+        "resizeHandle.dragMoved(delta)",
+    ):
+        assert marker in resize_handle_source
     for obsolete_marker in (
         "property real inspectorPanelWidth",
         "function setInspectorPanelWidth(value)",
@@ -453,7 +465,9 @@ def test_inspector_uses_adaptive_semantic_pair_grids_without_collapsed_sections(
     main_source = (QML_ROOT / "Main.qml").read_text(encoding="utf-8")
     grid_source = (QML_ROOT / "components" / "HermesAdaptiveFieldGrid.qml").read_text(encoding="utf-8")
 
-    assert "component AdaptiveInspectorGrid: HermesAdaptiveFieldGrid" in main_source
+    assert "component AdaptiveInspectorGrid: HermesAdaptiveFieldGrid" not in main_source
+    adaptive_grid_source = (QML_ROOT / "components" / "AdaptiveInspectorGrid.qml").read_text(encoding="utf-8")
+    assert "HermesAdaptiveFieldGrid {" in adaptive_grid_source
     assert "columns: width >= pairBreakpoint ? 2 : 1" in grid_source
     for grid_id in (
         "vectorPathCompactGrid",
