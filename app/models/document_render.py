@@ -29,15 +29,15 @@ print = _safe_print
 class DocumentRender:
     """Document 方法拆分 mixin，保持与 Document 完全兼容（通过多重继承组合）。"""
 
-    def render_composition(self, random_mode=False, optimize_memory=False, use_advanced_quality=False, is_batch_mode=False, enable_gpu=True):
-        """渲染当前图层组合 - 改进版本，支持GPU加速和高质量合成
+    def render_composition(self, random_mode=False, optimize_memory=False, use_advanced_quality=False, is_batch_mode=False, enable_gpu=False):
+        """渲染当前图层组合 - 改进版本，支持高质量合成
 
         参数:
             random_mode: 是否使用随机图像
             optimize_memory: 是否在渲染后优化内存使用
             use_advanced_quality: 是否使用高级质量算法
             is_batch_mode: 是否批量模式（影响性能优化策略）
-            enable_gpu: 是否启用GPU加速渲染
+            enable_gpu: 保留参数（P1-9 已移除 OpenGL GPU 渲染路径，本参数不再生效）
 
         返回:
             PIL.Image: 渲染后的图像
@@ -46,32 +46,6 @@ class DocumentRender:
         if hasattr(self, '_export_canceled') and self._export_canceled:
             print("[渲染] 渲染开始前检测到取消操作")
             return None
-
-        # 🚀 GPU加速渲染尝试
-        if enable_gpu and not is_batch_mode:  # 批量模式暂时不使用GPU以保证稳定性
-            try:
-                from app.utils.gpu_render_integration import get_gpu_integrator
-                gpu_integrator = get_gpu_integrator()
-
-                # 尝试GPU渲染
-                gpu_result = gpu_integrator.render_composition_integrated(
-                    self,
-                    random_mode=random_mode,
-                    optimize_memory=optimize_memory,
-                    use_advanced_quality=use_advanced_quality,
-                    is_batch_mode=is_batch_mode
-                )
-
-                if gpu_result is not None:
-                    print("[渲染] GPU加速渲染成功")
-                    if optimize_memory:
-                        self.optimize_memory_usage()
-                    return gpu_result
-                else:
-                    print("[渲染] GPU渲染失败，继续使用CPU渲染")
-
-            except Exception as e:
-                print(f"[渲染] GPU渲染异常，回退到CPU渲染: {e}")
 
         # 🔧 修复：严格按照绑定组设置执行随机化，不重新分析分类
         # （历史版本会执行两次 randomize_all_layers，导致随机化两次；

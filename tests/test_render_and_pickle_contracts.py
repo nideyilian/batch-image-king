@@ -10,7 +10,6 @@ def test_render_composition_direct_calls_are_whitelisted():
     allowed = {
         "app/services/render_service.py",
         "app/models/document_render.py",
-        "app/utils/gpu_render_integration.py",
     }
     offenders = []
     for path in (root / "app").rglob("*.py"):
