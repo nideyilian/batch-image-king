@@ -2,41 +2,22 @@
 
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 from app.models.document import Document
+from app.models.document_serializer import DocumentSerializer
 
 
 def create_document_from_preset_data(doc_data, parent=None):
-    """Create a Document from serialized preset document data."""
+    """Create a Document from serialized preset document data.
+
+    复用 ``DocumentSerializer.restore_document_data``（与打开 .cmp 完全相同的
+    恢复路径）：图层树（含分组 children 递归结构）、导出/视图设置、绑定组、
+    尺寸匹配配置都按同一套规范恢复，避免预设路径与文档打开路径字段漂移。
+    预设特有的标签页元数据在恢复后补齐。
+    """
     document = Document(parent=parent)
-    document.canvas_width = int(doc_data.get('canvas_width', 800) or 800)
-    document.canvas_height = int(doc_data.get('canvas_height', 600) or 600)
+    DocumentSerializer.restore_document_data(document, doc_data)
 
-    for layer_data in doc_data.get('layers', []) or []:
-        layer = document.create_layer_from_data(layer_data)
-        if layer is not None:
-            document.layers.append(layer)
-
-    document.selected_layer_index = int(doc_data.get('selected_layer_index', -1) or -1)
-    document.selected_layer_indices = [document.selected_layer_index] if document.selected_layer_index >= 0 else []
-
-    if 'export_settings' in doc_data and isinstance(doc_data.get('export_settings'), dict):
-        settings = document._build_default_export_settings()
-        settings.update(doc_data.get('export_settings') or {})
-        document.export_settings = settings
-
-    if hasattr(document, 'set_view_settings'):
-        document.set_view_settings(doc_data.get('view_settings', {}) or {})
-
-    if 'binding_groups' in doc_data and hasattr(document, 'binding_manager'):
-        try:
-            document.binding_manager.deserialize(doc_data.get('binding_groups', {}) or {}, document.layers)
-        except Exception as exc:
-            print(f"加载预设绑定组失败: {exc}")
-
-    if hasattr(document, 'layer_size_match_manager') and document.layer_size_match_manager is not None:
-        try:
-            document.layer_size_match_manager.deserialize(doc_data.get('layer_size_matches', {}) or {})
-        except Exception as exc:
-            print(f"加载预设尺寸匹配配置失败: {exc}")
+    if document.selected_layer_index >= 0:
+        document.selected_layer_indices = [document.selected_layer_index]
 
     document.tab_name = doc_data.get('tab_name') or doc_data.get('original_tab_name') or doc_data.get('name', '预设标签页')
     document.original_tab_name = doc_data.get('original_tab_name') or document.tab_name
