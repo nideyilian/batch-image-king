@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import copy
-import json
 import logging
-import math
 import os
-from pathlib import Path
-import re
 import threading
 from typing import Optional
-import uuid
 
-from PySide6.QtCore import QObject, QPointF, Property, QRunnable, QThreadPool, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QFontDatabase, QGuiApplication, QImage, QPainterPath
+from PySide6.QtCore import QObject, Property, QTimer, Signal
 
 from app.models.document import Document
 from app.constants import DEFAULT_TEXT_FONT_FAMILY
@@ -23,23 +17,11 @@ from app.models.shaped_layer_new import ShapedLayer
 from app.qml.preview_image_provider import PreviewImageProvider
 from app.qml.viewmodels.layer_list_model import LayerListModel
 from app.utils.preview_render_token import PreviewRenderTokenSource
-from app.utils.text_rich_format import (
-    apply_editor_style,
-    build_editor_html,
-    inspect_editor_selection,
-    parse_editor_html,
-    qt_index_to_python,
-)
-from app.utils.text_style_ranges import remap_text_style_ranges
 from app.utils.layer_tree import (
     child_indices_for_group,
-    expand_group_indices,
     get_parent_group_id,
-    group_bounds,
     is_effectively_locked,
-    is_effectively_visible,
     is_layer_group,
-    set_parent_group_id,
 )
 
 
@@ -57,11 +39,6 @@ from .workspace_vm_shared import (
     _TEXT_GRADIENT_TYPE_IDS,
     _TEXT_GRADIENT_DIRECTIONS,
     _TEXT_GRADIENT_DIRECTION_IDS,
-    _COMMON_STYLE_ATTRIBUTES,
-    _TEXT_STYLE_ATTRIBUTES,
-    _pil_to_qimage,
-    _PreviewTaskSignals,
-    _PreviewTask,
 )
 
 logger = logging.getLogger(__name__)
