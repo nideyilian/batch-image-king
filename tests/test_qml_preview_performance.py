@@ -19,6 +19,33 @@ from app.utils.fast_renderer_preview import FastRendererPreview
 from app.utils.preview_render_token import PreviewRenderToken
 
 
+@pytest.fixture(autouse=True)
+def _no_leaked_preview_tasks():
+    """排空全局线程池，防止预览渲染任务泄漏到后续测试。
+
+    部分预览测试把真实渲染任务提交到 QThreadPool.globalInstance() 且不等待；
+    若任务在测试结束后才完成，会在后续 QML 绑定测试（processEvents 重求值）期间
+    回调已销毁的 workspace，触发 Windows access violation（既有顺序敏感段错误）。
+    """
+    yield
+    QThreadPool.globalInstance().clear()
+    QThreadPool.globalInstance().waitForDone(3000)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_font_catalog_scan(monkeypatch):
+    """禁止测试启动真实字体扫描线程。
+
+    ``startFontCatalogPreload`` 会起一个 daemon 线程扫描系统字体，结束时经
+    ``_fontCatalogLoaded`` 信号投递结果；若测试结束后 workspace 已销毁而投递
+    才发生（在后续测试的 processEvents 期间），会触发 Windows access violation。
+    本文件测试均注入确定性字体数据，无需真实扫描。
+    """
+    monkeypatch.setattr(
+        WorkspaceViewModel, "startFontCatalogPreload", lambda self: None
+    )
+
+
 def _text_workspace(*, auto_render: bool = False) -> WorkspaceViewModel:
     document = Document()
     document.create_new(640, 480)
