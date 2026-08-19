@@ -165,21 +165,24 @@ Rectangle {
                     })
             }
         }
-        // visibleRows 变更时，如果当前 fontList.currentIndex 越界则重置
+        return rows
+    }
+    // visibleRows 变更时，如果当前 fontList.currentIndex 越界则重置
+    // （副作用必须放在 changed 处理器里；readonly 求值体内写属性会触发 QML binding loop 警告）
+    onVisibleRowsChanged: {
         if (fontList) {
-            var max = Math.max(0, rows.length - 1)
+            var max = Math.max(0, visibleRows.length - 1)
             if (fontList.currentIndex > max) fontList.currentIndex = -1
-            if (fontList.currentIndex < 0 && rows.length > 0) {
+            if (fontList.currentIndex < 0 && visibleRows.length > 0) {
                 // 初始自动选中第一个 face（跳过最近使用 / family 标题）
-                for (var i = 0; i < rows.length; i++) {
-                    if (rows[i].kind === "face") {
+                for (var i = 0; i < visibleRows.length; i++) {
+                    if (visibleRows[i].kind === "face") {
                         fontList.currentIndex = i
                         break
                     }
                 }
             }
         }
-        return rows
     }
     signal activated(string value, string face)
 
