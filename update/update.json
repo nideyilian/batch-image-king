@@ -5,6 +5,6 @@
   "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.2.0/batch-image-king-setup.exe",
   "required": false,
   "published_at": "2026-08-19",
-  "sha256": "0665cd636ff6260da363fee1a8f51801fcd2fb0e874d0eab8f8e8870b9c1be9e",
-  "installer_sha256": "534e0deeb46cd4f227c5fe5734141987ef25b396dba588faaa67087da857b9c7"
+  "sha256": "157cbc77bdf694d0722c89e07e7344917a7a2f81e41286e989729595b98d3c32",
+  "installer_sha256": "1a1ab4c997602bd8e09cdee58b9cfd79f1f2471e0e63251d38c7fdf1701f8b88"
 }
