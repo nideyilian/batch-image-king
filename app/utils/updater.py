@@ -1,9 +1,11 @@
 """批图王自动更新核心逻辑（纯 Python，不依赖 Qt，便于单元测试）。
 
 工作流程：
-1. 通过 update/update.json 清单（默认从 GitHub 原始文件拉取）获取最新版本。
+1. 通过 update/update.json 清单获取最新版本。清单源按顺序回退：
+   显式指定 > 环境变量覆盖 > GitHub 官方 raw > jsDelivr CDN 备用镜像。
 2. 与本地 app/version.py 中的版本比较，判断是否有新版本。
-3. 下载新版可执行文件到当前程序同目录的 `批图王_new.exe`。
+3. 下载新版可执行文件到当前程序同目录的 `批图王_new.exe`。下载地址按顺序回退：
+   官方 GitHub Release > 多个国内 GitHub 加速代理；清单带 sha256 时逐源校验完整性。
 4. 以 `--apply-update` 方式启动一个临时实例等待主进程退出后完成替换并重启。
 
 环境变量：
@@ -31,6 +33,24 @@ DEFAULT_MANIFEST_URL = (
     "https://raw.githubusercontent.com/nideyilian/batch-image-king/main/update/update.json"
 )
 
+# 更新清单备用源：官方 raw 源不可达时依次尝试。
+# jsDelivr CDN 在国内可达性较好，但对 GitHub 文件缓存最长约 12 小时，
+# 新版本发布后可能稍晚才可见（作为兜底可接受）。
+MANIFEST_MIRRORS = [
+    "https://cdn.jsdelivr.net/gh/nideyilian/batch-image-king@main/update/update.json",
+]
+
+# GitHub Release 下载加速代理前缀：逐个拼在官方下载地址前面作为备用源。
+# 这些公益代理可能随时失效，可按需增删；客户端始终先尝试官方地址，
+# 只有官方源失败（超时/被墙/限流）时才回退到代理。
+GITHUB_PROXY_PREFIXES = [
+    "https://gh-proxy.com/",
+    "https://ghfast.top/",
+    "https://ghproxy.net/",
+    "https://gh.ddlc.top/",
+    "https://github.moeyy.xyz/",
+]
+
 # 下载到程序目录时的新版本临时文件名
 NEW_EXE_NAME = f"{APP_NAME}_new.exe"
 
@@ -46,6 +66,7 @@ class UpdateInfo:
     required: bool = False
     published_at: str = ""
     manifest_url: str = ""
+    sha256: str = ""
 
 
 def get_current_version() -> str:
@@ -89,18 +110,56 @@ def fetch_update_info(manifest_url: str = "") -> UpdateInfo:
         required=bool(payload.get("required", False)),
         published_at=str(payload.get("published_at", "") or ""),
         manifest_url=url,
+        sha256=str(payload.get("sha256", "") or "").strip(),
     )
+
+
+def _manifest_url_candidates(manifest_url: str = "") -> list[str]:
+    """构造清单候选源列表（去重保序）：
+
+    显式指定 > BTPW_UPDATE_URL 环境变量覆盖 > GitHub 官方 raw > 备用镜像。
+    """
+    candidates: list[str] = []
+
+    def add(url: str) -> None:
+        url = (url or "").strip()
+        if url and url not in candidates:
+            candidates.append(url)
+
+    add(manifest_url)
+    add(os.environ.get("BTPW_UPDATE_URL", ""))
+    add(DEFAULT_MANIFEST_URL)
+    for mirror in MANIFEST_MIRRORS:
+        add(mirror)
+    return candidates
 
 
 def check_for_update(
     manifest_url: str = "",
     current_version: str = "",
 ) -> Optional[UpdateInfo]:
-    """检查是否有新版本；有则返回 UpdateInfo，无则返回 None。"""
-    info = fetch_update_info(manifest_url)
-    current = current_version or get_current_version()
-    if current and is_newer(info.version, current):
-        return info
+    """检查是否有新版本；有则返回 UpdateInfo，无则返回 None。
+
+    按候选源顺序依次尝试（官方 > 备用镜像），任一源成功即返回结果；
+    全部失败时抛出 RuntimeError，错误信息提示可手动下载。
+    """
+    candidates = _manifest_url_candidates(manifest_url)
+    last_error: Optional[Exception] = None
+    for url in candidates:
+        try:
+            info = fetch_update_info(url)
+        except Exception as error:  # noqa: BLE001 - 单源失败继续尝试下一个
+            last_error = error
+            continue
+        current = current_version or get_current_version()
+        if current and is_newer(info.version, current):
+            return info
+        return None
+    if last_error is not None:
+        raise RuntimeError(
+            f"检查更新失败：已尝试 {len(candidates)} 个更新源均不可达"
+            f"（{last_error}）。请检查网络后重试，或打开“下载页”手动获取最新版。"
+        ) from last_error
     return None
 
 
@@ -131,6 +190,65 @@ def download_file(
     if progress_cb:
         progress_cb(received, total)
     return dest
+
+
+class UpdateIntegrityError(RuntimeError):
+    """下载文件完整性校验失败（SHA-256 不匹配）。"""
+
+
+def expand_download_urls(url: str) -> list[str]:
+    """把官方下载地址扩展为「官方 + 加速代理」候选列表。非 GitHub 地址原样返回。"""
+    candidates = [url]
+    if url and url.startswith("https://github.com/"):
+        for prefix in GITHUB_PROXY_PREFIXES:
+            candidates.append(prefix + url)
+    return candidates
+
+
+def _sha256_hex(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def download_update(
+    urls,
+    dest: Path,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+    sha256: str = "",
+) -> Path:
+    """按候选顺序下载，首个成功的地址即返回；全部失败抛出最后一次异常。
+
+    若提供了 sha256，下载完成后逐源校验哈希，不匹配则清理文件并尝试下一个
+    地址（防止代理源返回损坏或被篡改的文件）。
+    """
+    dest = Path(dest)
+    last_error: Optional[Exception] = None
+    for url in urls:
+        try:
+            download_file(url, dest, progress_cb)
+            if sha256:
+                actual = _sha256_hex(dest)
+                if actual.lower() != sha256.lower():
+                    raise UpdateIntegrityError(
+                        f"文件校验失败：SHA-256 不匹配（来源：{url}）"
+                    )
+            return dest
+        except Exception as error:  # noqa: BLE001 - 单源失败继续尝试下一个
+            last_error = error
+            for leftover in (dest, dest.with_name(dest.name + ".download")):
+                try:
+                    if leftover.exists():
+                        leftover.unlink()
+                except OSError:
+                    pass
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("没有可用的下载地址")
 
 
 def is_frozen() -> bool:

@@ -87,6 +87,17 @@ def release_asset_url(version: str, filename: str) -> str:
     )
 
 
+def _sha256_hex(path: Path) -> str:
+    """计算文件 SHA-256（分块读取，避免大文件占用过多内存）。"""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def write_update_manifest(version: str) -> Path:
     """刷新 update/update.json，供客户端通过 raw.githubusercontent 检测更新。"""
     manifest_path = REPO_ROOT / "update" / "update.json"
@@ -98,6 +109,11 @@ def write_update_manifest(version: str) -> Path:
         "required": False,
         "published_at": str(date.today()),
     }
+    # 便携版存在时写入 SHA-256，客户端下载后逐源校验，防止代理源返回损坏文件
+    portable_exe = REPO_ROOT / "dist" / f"{APP_NAME}.exe"
+    if portable_exe.exists():
+        payload["sha256"] = _sha256_hex(portable_exe)
+        print(f"已写入便携版 SHA-256: {payload['sha256']}")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",

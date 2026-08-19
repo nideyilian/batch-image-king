@@ -255,3 +255,99 @@ def test_nsis_installer_script_has_utf8_bom():
     script = REPO_ROOT / "installer" / "批图王.nsi"
     assert script.exists()
     assert script.read_bytes()[:3] == b"\xef\xbb\xbf"
+
+
+@pytest.mark.unit
+def test_manifest_candidates_include_default_and_mirrors(monkeypatch):
+    monkeypatch.delenv("BTPW_UPDATE_URL", raising=False)
+    urls = updater._manifest_url_candidates()
+    assert urls[0] == updater.DEFAULT_MANIFEST_URL
+    assert updater.MANIFEST_MIRRORS[0] in urls
+
+
+@pytest.mark.unit
+def test_manifest_candidates_prefers_explicit_and_env(monkeypatch):
+    monkeypatch.setenv("BTPW_UPDATE_URL", "https://mirror.example/update.json")
+    urls = updater._manifest_url_candidates("https://explicit.example/update.json")
+    assert urls[0] == "https://explicit.example/update.json"
+    assert urls[1] == "https://mirror.example/update.json"
+    assert updater.DEFAULT_MANIFEST_URL in urls
+
+
+@pytest.mark.unit
+def test_expand_download_urls_adds_proxies():
+    official = (
+        "https://github.com/nideyilian/batch-image-king/releases/download/"
+        "v1.2.0/batch-image-king.exe"
+    )
+    urls = updater.expand_download_urls(official)
+    assert urls[0] == official
+    assert len(urls) == 1 + len(updater.GITHUB_PROXY_PREFIXES)
+    for prefix in updater.GITHUB_PROXY_PREFIXES:
+        assert prefix + official in urls
+
+
+@pytest.mark.unit
+def test_expand_download_urls_keeps_non_github():
+    url = "https://example.com/app.exe"
+    assert updater.expand_download_urls(url) == [url]
+
+
+@pytest.mark.unit
+def test_download_update_falls_back_to_next_url(tmp_path):
+    good = tmp_path / "good.bin"
+    payload = b"hello" * 100
+    good.write_bytes(payload)
+    missing = (tmp_path / "missing.bin").as_uri()
+    dest = tmp_path / "out" / "app.bin"
+    result = updater.download_update([missing, good.as_uri()], dest)
+    assert result == dest
+    assert dest.read_bytes() == payload
+
+
+@pytest.mark.unit
+def test_download_update_all_fail_raises(tmp_path):
+    missing1 = (tmp_path / "m1.bin").as_uri()
+    missing2 = (tmp_path / "m2.bin").as_uri()
+    dest = tmp_path / "out" / "app.bin"
+    with pytest.raises(Exception):
+        updater.download_update([missing1, missing2], dest)
+
+
+@pytest.mark.unit
+def test_download_update_verifies_sha256(tmp_path):
+    import hashlib
+
+    good = tmp_path / "good.bin"
+    payload = b"payload" * 50
+    good.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
+    dest = tmp_path / "out" / "app.bin"
+    assert updater.download_update([good.as_uri()], dest, sha256=digest) == dest
+    assert dest.read_bytes() == payload
+
+
+@pytest.mark.unit
+def test_download_update_rejects_wrong_sha256(tmp_path):
+    good = tmp_path / "good.bin"
+    good.write_bytes(b"payload" * 50)
+    dest = tmp_path / "out" / "app.bin"
+    with pytest.raises(updater.UpdateIntegrityError):
+        updater.download_update([good.as_uri()], dest, sha256="0" * 64)
+    assert not dest.exists()
+
+
+@pytest.mark.unit
+def test_check_for_update_falls_back_to_mirror(tmp_path, monkeypatch):
+    manifest = tmp_path / "update.json"
+    manifest.write_text(
+        json.dumps({"version": "2.0.0", "download_url": "https://example.com/u"}),
+        encoding="utf-8",
+    )
+    missing = (tmp_path / "missing.json").as_uri()
+    monkeypatch.setattr(updater, "DEFAULT_MANIFEST_URL", missing)
+    monkeypatch.setattr(updater, "MANIFEST_MIRRORS", [manifest.as_uri()])
+    monkeypatch.delenv("BTPW_UPDATE_URL", raising=False)
+    info = updater.check_for_update(missing, current_version="1.0.0")
+    assert info is not None
+    assert info.version == "2.0.0"

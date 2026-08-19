@@ -47,19 +47,26 @@ class _UpdateCheckTask(QRunnable):
 class _UpdateDownloadTask(QRunnable):
     def __init__(
         self,
-        url: str,
+        urls,
         dest: Path,
         progress_cb,
+        sha256: str = "",
     ) -> None:
         super().__init__()
-        self.url = url
+        self.urls = urls
         self.dest = dest
         self.progress_cb = progress_cb
+        self.sha256 = sha256
         self.signals = _UpdateTaskSignals()
 
     def run(self) -> None:
         try:
-            updater.download_file(self.url, self.dest, self.progress_cb)
+            updater.download_update(
+                self.urls,
+                self.dest,
+                self.progress_cb,
+                sha256=self.sha256,
+            )
             self.signals.downloaded.emit(True, "")
         except Exception as error:
             try:
@@ -191,7 +198,13 @@ class UpdateViewModel(QObject):
         self.stateChanged.emit()
         self.progressChanged.emit()
         dest = updater.new_exe_path()
-        task = _UpdateDownloadTask(self._info.download_url, dest, self._on_download_progress)
+        urls = updater.expand_download_urls(self._info.download_url)
+        task = _UpdateDownloadTask(
+            urls,
+            dest,
+            self._on_download_progress,
+            sha256=self._info.sha256,
+        )
         task.signals.downloaded.connect(self._on_download_done)
         task.signals.failed.connect(self._on_download_failed)
         self._active_task = task
@@ -233,7 +246,8 @@ class UpdateViewModel(QObject):
         self._ready_to_install = False
         self._error_message = message
         self.stateChanged.emit()
-        self.updateFinished.emit(False, message)
+        hint = "自动下载失败，可点击“打开下载页”手动下载最新版。"
+        self.updateFinished.emit(False, f"{message}\n{hint}" if message else hint)
 
     @Slot(result=bool)
     def installDownloadedUpdate(self) -> bool:
