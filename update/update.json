@@ -1,8 +1,10 @@
 {
-  "version": "1.1.5",
-  "release_notes": "批图王 v1.1.5\n新增 Hermes 暗色主题和明暗主题单按钮切换；图层参数默认完整展示并保留原有 Tab；修复跨主题文字对比度和批量导出路径日期变量入口。",
-  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.5/batch-image-king.exe",
-  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.1.5/batch-image-king-setup.exe",
+  "version": "1.2.0",
+  "release_notes": "批图王 v1.2.0\n请查看仓库更新日志了解本次更新内容。",
+  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.2.0/batch-image-king.exe",
+  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.2.0/batch-image-king-setup.exe",
   "required": false,
-  "published_at": "2026-08-14"
+  "published_at": "2026-08-19",
+  "sha256": "8b1bb60a40fff586072bbc0637b5c511174babf30116c789ffb92314b6c8cf0d",
+  "installer_sha256": "038c8bf18002ef2a2bc7cce02e0e9248c68f9ab1798c67dba385d4cc4ac62dc7"
 }
