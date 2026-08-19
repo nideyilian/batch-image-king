@@ -35,10 +35,11 @@ UninstPage instfiles
 
 Section "MainSection" SEC01
     ; 已安装版本比较：本机版本高于安装包版本时中止，防止误装旧版导致降级
+    ; VersionCompare 返回值：0=相等，1=第一个(本机)更高，2=第二个(安装包)更高
     ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "DisplayVersion"
     ${If} $0 != ""
         ${VersionCompare} "$0" "${APP_VERSION}" $1
-        ${If} $1 > 0
+        ${If} $1 == 1
             MessageBox MB_OK|MB_ICONINFORMATION "本机已安装 v$0，高于安装包版本 v${APP_VERSION}，已取消安装以防降级。"
             Abort
         ${EndIf}

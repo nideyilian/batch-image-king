@@ -2685,11 +2685,21 @@ ApplicationWindow {
 
             Item { Layout.fillHeight: true }
 
-            ExportButton {
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 36
-                label: "确定"
-                onClicked: aboutDialog.close()
+                spacing: 8
+                ExportButton {
+                    Layout.fillWidth: true
+                    label: "检查更新"
+                    onClicked: { aboutDialog.close(); window.openUpdateDialog() }
+                }
+                ExportButton {
+                    Layout.fillWidth: true
+                    label: "确定"
+                    variant: "primary"
+                    onClicked: aboutDialog.close()
+                }
             }
         }
     }
@@ -4550,6 +4560,8 @@ ApplicationWindow {
             MenuSeparator { }
             ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
             ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
+            MenuSeparator { }
+            ShapeMenuItem { text: "检查更新\tCtrl+Shift+U"; onTriggered: window.openUpdateDialog() }
             ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
         }
 

@@ -262,6 +262,20 @@ def test_nsis_installer_script_has_utf8_bom():
 
 
 @pytest.mark.unit
+def test_nsis_downgrade_guard_aborts_only_when_installed_is_higher():
+    """降级保护必须仅在「本机版本高于安装包」时中止。
+
+    VersionCompare 返回：0=相等，1=第一个参数(本机)更高，2=第二个参数(安装包)更高。
+    因此中止条件必须是 $1 == 1；写成 $1 > 0 会把「安装包更高」(2) 也误判为降级。
+    """
+    script = REPO_ROOT / "installer" / "批图王.nsi"
+    text = script.read_text(encoding="utf-8-sig")
+    assert '${VersionCompare} "$0" "${APP_VERSION}" $1' in text
+    assert "${If} $1 == 1" in text
+    assert "${If} $1 > 0" not in text
+
+
+@pytest.mark.unit
 def test_manifest_candidates_include_default_and_mirrors(monkeypatch):
     monkeypatch.delenv("BTPW_UPDATE_URL", raising=False)
     urls = updater._manifest_url_candidates()
