@@ -3,9 +3,10 @@
 向 QML 暴露：
 - 属性：checking / downloading / readyToInstall / updateAvailable / currentVersion /
          latestVersion / releaseNotes / required / errorMessage / downloadProgress /
-         progressText
+         progressText / localUpdateAvailable
 - 槽：checkForUpdates() / checkForUpdatesSilent() / downloadAndInstall() /
-      installDownloadedUpdate() / openReleasePage()
+      installDownloadedUpdate() / openReleasePage() / detectLocalUpdate() /
+      prepareLocalInstall()
 - 信号：stateChanged() / progressChanged() / updateFinished(bool, str) /
         autoUpdateDetected(str) / restartRequested()
 """
@@ -98,6 +99,9 @@ class UpdateViewModel(QObject):
         self._download_progress = 0
         self._progress_text = ""
         self._info: Optional[UpdateInfo] = None
+        self._target: Optional[updater.DownloadTarget] = None
+        self._local_update_path: Optional[Path] = None
+        self._local_install_path: Optional[Path] = None
         self._pending_silent_found = False
         self._lock = threading.RLock()
         self._active_task = None
@@ -133,6 +137,11 @@ class UpdateViewModel(QObject):
     @Property(bool, notify=stateChanged)
     def updateAvailable(self) -> bool:
         return self._update_available
+
+    @Property(bool, notify=stateChanged)
+    def localUpdateAvailable(self) -> bool:
+        """程序目录中已存在更新版 exe（手动导入兜底）。"""
+        return self._local_update_path is not None
 
     @Property(str, notify=stateChanged)
     def errorMessage(self) -> str:
@@ -170,6 +179,7 @@ class UpdateViewModel(QObject):
     def _on_checked(self, info, error: str) -> None:
         self._active_task = None
         self._checking = False
+        self._detect_local_update()
         if error or info is None:
             self._update_available = False
             self._error_message = str(error or "未发现新版本")
@@ -188,8 +198,13 @@ class UpdateViewModel(QObject):
 
     @Slot()
     def downloadAndInstall(self) -> None:
-        if self._downloading or self._info is None or not self._info.download_url:
+        if self._downloading or self._info is None:
             return
+        # 按安装形态选择下载目标：安装版下载安装包，便携版下载 exe
+        target = updater.update_download_target(self._info)
+        if not target.url:
+            return
+        self._target = target
         self._downloading = True
         self._ready_to_install = False
         self._error_message = ""
@@ -197,13 +212,12 @@ class UpdateViewModel(QObject):
         self._progress_text = "准备下载…"
         self.stateChanged.emit()
         self.progressChanged.emit()
-        dest = updater.new_exe_path()
-        urls = updater.expand_download_urls(self._info.download_url)
+        urls = updater.expand_download_urls(target.url)
         task = _UpdateDownloadTask(
             urls,
-            dest,
+            target.dest,
             self._on_download_progress,
-            sha256=self._info.sha256,
+            sha256=target.sha256,
         )
         task.signals.downloaded.connect(self._on_download_done)
         task.signals.failed.connect(self._on_download_failed)
@@ -251,19 +265,36 @@ class UpdateViewModel(QObject):
 
     @Slot(result=bool)
     def installDownloadedUpdate(self) -> bool:
-        if not self._ready_to_install:
+        if not self._ready_to_install and self._local_install_path is None:
             self._error_message = "尚未下载可安装的新版"
             self.stateChanged.emit()
             self.updateFinished.emit(False, self._error_message)
             return False
-        return self._launch_apply_update()
+        new_exe = self._local_install_path if self._local_install_path is not None else None
+        self._local_install_path = None
+        return self._launch_apply_update(new_exe=new_exe)
 
-    def _launch_apply_update(self) -> bool:
+    def _launch_apply_update(self, new_exe: Optional[Path] = None) -> bool:
         try:
-            spawned = updater.spawn_apply_update(
-                wait_pid=os.getpid(),
-                new_exe=updater.new_exe_path(),
-            )
+            if new_exe is not None:
+                # 手动导入的本地新版文件：走便携版替换流程
+                spawned = updater.spawn_apply_update(
+                    wait_pid=os.getpid(),
+                    new_exe=new_exe,
+                )
+            elif self._target is not None and self._target.kind == "installer":
+                # 安装版：由独立 updater_tool 在主程序退出后静默执行安装包，
+                # 保持 onedir 布局与快捷方式/注册表一致
+                spawned = updater.spawn_installer_update(
+                    setup_exe=self._target.dest,
+                    install_dir=updater.installed_dir(),
+                    wait_pid=os.getpid(),
+                )
+            else:
+                spawned = updater.spawn_apply_update(
+                    wait_pid=os.getpid(),
+                    new_exe=updater.new_exe_path(),
+                )
         except Exception:
             spawned = False
         if spawned:
@@ -272,11 +303,32 @@ class UpdateViewModel(QObject):
             self.restartRequested.emit()
             return True
         self._error_message = (
-            "无法启动自动安装程序。新版已保留在程序目录，请重试或手动运行批图王_new.exe。"
+            "无法启动自动安装程序。新版已保留在程序目录，"
+            "请稍后重试，或手动运行程序目录中的新版文件。"
         )
         self.stateChanged.emit()
         self.updateFinished.emit(False, self._error_message)
         return False
+
+    @Slot()
+    def detectLocalUpdate(self) -> None:
+        """检测程序目录中是否已存在更新版 exe（手动导入兜底）。"""
+        self._detect_local_update()
+
+    def _detect_local_update(self) -> None:
+        path = None
+        try:
+            path = updater.find_local_update(self._current_version)
+        except Exception:
+            path = None
+        if path != self._local_update_path:
+            self._local_update_path = path
+            self.stateChanged.emit()
+
+    @Slot()
+    def prepareLocalInstall(self) -> None:
+        """用户确认安装本地新版文件：记录路径，待应用关闭时执行替换。"""
+        self._local_install_path = self._local_update_path
 
     @Slot(result=bool)
     def openReleasePage(self) -> bool:

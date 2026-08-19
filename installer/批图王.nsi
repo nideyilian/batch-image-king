@@ -4,6 +4,9 @@
 
 Unicode true
 
+!include "LogicLib.nsh"
+!include "WordFunc.nsh"
+
 !ifndef APP_VERSION
   !define APP_VERSION "1.0.0"
 !endif
@@ -14,6 +17,7 @@ Unicode true
 !define APP_EXE "批图王.exe"
 !define INSTALLER_NAME "批图王-Setup.exe"
 !define UNINSTALL_EXE "uninstall.exe"
+!define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 
 Name "${APP_NAME} v${APP_VERSION}"
 OutFile "..\dist\${INSTALLER_NAME}"
@@ -30,8 +34,28 @@ UninstPage uninstConfirm
 UninstPage instfiles
 
 Section "MainSection" SEC01
+    ; 已安装版本比较：本机版本高于安装包版本时中止，防止误装旧版导致降级
+    ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "DisplayVersion"
+    ${If} $0 != ""
+        ${VersionCompare} "$0" "${APP_VERSION}" $1
+        ${If} $1 > 0
+            MessageBox MB_OK|MB_ICONINFORMATION "本机已安装 v$0，高于安装包版本 v${APP_VERSION}，已取消安装以防降级。"
+            Abort
+        ${EndIf}
+    ${EndIf}
+
     SetOutPath "$INSTDIR"
     ; 安装版使用 PyInstaller onedir，直接部署所有运行时文件，避免每次启动解压。
+    ; 先清理旧版本残留与更新过程留下的临时/备份文件，避免死文件堆积：
+    ; - _internal：新版已移除的运行时文件
+    ; - *.bak / *_new.exe / *_new.exe.download / *-Setup_new.exe：更新残留
+    RMDir /r "$INSTDIR\_internal"
+    Delete "$INSTDIR\${APP_EXE}.bak"
+    Delete "$INSTDIR\${APP_NAME}_new.exe"
+    Delete "$INSTDIR\${APP_NAME}_new.exe.download"
+    Delete "$INSTDIR\${APP_NAME}-Setup_new.exe"
+    Delete "$INSTDIR\${APP_NAME}-Setup_new.exe.download"
+
     File /r "..\dist\${APP_NAME}\*"
     File "..\app\resources\app_icon.ico"
 
@@ -41,14 +65,14 @@ Section "MainSection" SEC01
     CreateShortcut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
     CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}"
 
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayIcon" "$INSTDIR\app_icon.ico"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher" "${APP_NAME}"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "InstallLocation" "$INSTDIR"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" '"$INSTDIR\${UNINSTALL_EXE}"'
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoModify" "1"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" "1"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "${APP_NAME}"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${APP_VERSION}"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\app_icon.ico"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "${APP_NAME}"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\${UNINSTALL_EXE}"'
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "NoModify" "1"
+    WriteRegStr HKCU "${UNINSTALL_KEY}" "NoRepair" "1"
 SectionEnd
 
 Section "Uninstall"
@@ -59,7 +83,7 @@ Section "Uninstall"
     RMDir "$SMPROGRAMS\${APP_NAME}"
     Delete "$DESKTOP\${APP_NAME}.lnk"
 
-    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+    DeleteRegKey HKCU "${UNINSTALL_KEY}"
     ; onedir 安装目录包含大量运行时文件，最后统一递归清理。
     RMDir /r "$INSTDIR"
 SectionEnd

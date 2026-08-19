@@ -98,6 +98,35 @@ def _sha256_hex(path: Path) -> str:
     return digest.hexdigest()
 
 
+def build_updater_tool(workpath: Path) -> Path:
+    """构建安装版专用的独立更新工具（updater_tool.exe，onefile）。
+
+    该工具运行时自解压到系统临时目录，不占用安装目录文件锁，因此可以安全地
+    在主程序退出后静默执行安装包替换。输出到 dist/批图王/，随 NSIS 一起分发。
+    """
+    dist = REPO_ROOT / "dist" / APP_NAME
+    workpath.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--windowed",
+        "--onefile",
+        f"--distpath={dist}",
+        f"--workpath={workpath}",
+        f"--specpath={workpath / 'spec'}",
+        "--name=updater_tool",
+        str(REPO_ROOT / "updater_tool.py"),
+    ]
+    print("Executing updater tool build command:", " ".join(cmd))
+    subprocess.check_call(cmd)
+    tool = dist / "updater_tool.exe"
+    print(f"更新工具生成: {tool}")
+    return tool
+
+
 def write_update_manifest(version: str) -> Path:
     """刷新 update/update.json，供客户端通过 raw.githubusercontent 检测更新。"""
     manifest_path = REPO_ROOT / "update" / "update.json"
@@ -114,6 +143,11 @@ def write_update_manifest(version: str) -> Path:
     if portable_exe.exists():
         payload["sha256"] = _sha256_hex(portable_exe)
         print(f"已写入便携版 SHA-256: {payload['sha256']}")
+    # 安装包存在时写入 SHA-256，安装版用户走静默安装包更新时同样逐源校验
+    setup_exe = REPO_ROOT / "dist" / f"{APP_NAME}-Setup.exe"
+    if setup_exe.exists():
+        payload["installer_sha256"] = _sha256_hex(setup_exe)
+        print(f"已写入安装包 SHA-256: {payload['installer_sha256']}")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -259,11 +293,18 @@ def build():
         print(f"\n打包失败: {e}")
         sys.exit(1)
 
-    # 生成自动更新清单（提交到仓库，供客户端检测）
-    write_update_manifest(version)
+    # 构建安装版专用的独立更新工具（放进 dist/批图王/，随 NSIS 一起分发）
+    try:
+        build_updater_tool(REPO_ROOT / "build" / "updater_tool")
+    except subprocess.CalledProcessError as e:
+        print(f"\n更新工具打包失败: {e}")
+        sys.exit(1)
 
-    # 构建安装版
+    # 构建安装版（NSIS 会连同 updater_tool.exe 一起打包）
     build_installer(version)
+
+    # 生成自动更新清单（含便携版与安装包 SHA-256），提交到仓库供客户端检测
+    write_update_manifest(version)
 
 
 if __name__ == "__main__":

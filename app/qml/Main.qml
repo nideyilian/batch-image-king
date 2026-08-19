@@ -2455,6 +2455,7 @@ ApplicationWindow {
         onOpened: {
             if (!updateManager.downloading && !updateManager.checking && !updateManager.updateAvailable && updateManager.errorMessage.length === 0)
                 updateManager.checkForUpdates()
+            updateManager.detectLocalUpdate()
         }
 
         contentItem: ColumnLayout {
@@ -2586,6 +2587,20 @@ ApplicationWindow {
                     label: "打开下载页"
                     visible: updateManager.updateAvailable && !updateManager.downloading && !updateManager.readyToInstall
                     onClicked: updateManager.openReleasePage()
+                }
+                ExportButton {
+                    label: "安装本地新版"
+                    visible: updateManager.localUpdateAvailable && !updateManager.downloading && !updateManager.readyToInstall
+                    onClicked: {
+                        updateManager.prepareLocalInstall()
+                        pendingUpdateInstall = true
+                        updateDialog.close()
+                        var closeStarted = workspaceSessions.requestApplicationClose()
+                        if (!closeStarted && !workspaceSessions.applicationClosePending) {
+                            pendingUpdateInstall = false
+                            updateDialog.open()
+                        }
+                    }
                 }
                 ExportButton {
                     label: updateManager.downloading

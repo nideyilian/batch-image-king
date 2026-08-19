@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import http.server
 import json
+import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -351,3 +355,291 @@ def test_check_for_update_falls_back_to_mirror(tmp_path, monkeypatch):
     info = updater.check_for_update(missing, current_version="1.0.0")
     assert info is not None
     assert info.version == "2.0.0"
+
+
+# ---------------------------------------------------------------- 安装形态与分流
+
+
+class _RangeHandler(http.server.BaseHTTPRequestHandler):
+    payload = b""
+    support_range = True
+    requested_ranges = []
+
+    def do_GET(self):  # noqa: N802
+        type(self).requested_ranges.append(self.headers.get("Range", ""))
+        if not self.support_range:
+            body = self.payload
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        rng = self.headers.get("Range")
+        if rng:
+            start = int(rng.split("=")[1].split("-")[0])
+            body = self.payload[start:]
+            self.send_response(206)
+            self.send_header(
+                "Content-Range",
+                f"bytes {start}-{len(self.payload) - 1}/{len(self.payload)}",
+            )
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            body = self.payload
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def log_message(self, *args):  # noqa: A002
+        pass
+
+
+@pytest.fixture
+def range_server():
+    _RangeHandler.payload = os.urandom(200 * 1024)
+    _RangeHandler.support_range = True
+    _RangeHandler.requested_ranges = []
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _RangeHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/file.bin"
+    try:
+        yield url
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@pytest.mark.unit
+def test_download_file_resumes_from_partial(tmp_path, range_server):
+    url = range_server
+    payload = _RangeHandler.payload
+    dest = tmp_path / "app.bin"
+    tmp = dest.with_name(dest.name + ".download")
+    tmp.write_bytes(payload[:1000])  # 模拟已有部分下载
+    assert updater.download_file(url, dest) == dest
+    assert dest.read_bytes() == payload
+    assert _RangeHandler.requested_ranges[-1] == "bytes=1000-"
+
+
+@pytest.mark.unit
+def test_download_file_restarts_when_server_no_range(tmp_path, range_server):
+    url = range_server
+    payload = _RangeHandler.payload
+    _RangeHandler.support_range = False
+    dest = tmp_path / "app.bin"
+    tmp = dest.with_name(dest.name + ".download")
+    tmp.write_bytes(b"garbage-partial")
+    assert updater.download_file(url, dest) == dest
+    assert dest.read_bytes() == payload
+
+
+@pytest.mark.unit
+def test_download_file_resume_progress_starts_at_offset(tmp_path, range_server):
+    url = range_server
+    payload = _RangeHandler.payload
+    dest = tmp_path / "app.bin"
+    tmp = dest.with_name(dest.name + ".download")
+    tmp.write_bytes(payload[:1000])
+    progress = []
+    updater.download_file(url, dest, progress_cb=lambda r, t: progress.append((r, t)))
+    # 进度从已有偏移之后开始累计，最终等于完整大小
+    assert progress[0][0] > 1000
+    assert progress[-1][0] == len(payload)
+
+
+@pytest.mark.unit
+def test_download_update_keeps_partial_for_resume(tmp_path, monkeypatch):
+    good = tmp_path / "good.bin"
+    good.write_bytes(b"x" * 100)
+    dest = tmp_path / "out" / "app.bin"
+    tmp = dest.with_name(dest.name + ".download")
+
+    def fake_download(url, dest, progress_cb=None):
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_bytes(b"partial")
+        raise ConnectionError("broken")
+
+    monkeypatch.setattr(updater, "download_file", fake_download)
+    with pytest.raises(Exception):
+        updater.download_update([good.as_uri()], dest)
+    assert tmp.exists()  # 部分下载保留，供续传
+    assert not dest.exists()
+
+
+@pytest.mark.unit
+def test_fetch_update_info_parses_installer_sha256(tmp_path):
+    manifest = tmp_path / "update.json"
+    manifest.write_text(
+        json.dumps({"version": "2.0.0", "installer_sha256": "abc123"}),
+        encoding="utf-8",
+    )
+    info = updater.fetch_update_info(manifest.as_uri())
+    assert info.installer_sha256 == "abc123"
+    assert info.sha256 == ""
+
+
+@pytest.mark.unit
+def test_is_onedir_install(tmp_path):
+    onedir_exe = tmp_path / "app" / "批图王.exe"
+    onedir_exe.parent.mkdir(parents=True)
+    (onedir_exe.parent / "_internal").mkdir()
+    assert updater.is_onedir_install(onedir_exe) is True
+    assert updater.is_onedir_install(tmp_path / "portable.exe") is False
+
+
+@pytest.mark.unit
+def test_update_download_target_installer(tmp_path, monkeypatch):
+    info = updater.UpdateInfo(
+        version="2.0.0",
+        download_url="https://example.com/a.exe",
+        installer_url="https://example.com/setup.exe",
+        sha256="aa",
+        installer_sha256="bb",
+    )
+    exe = tmp_path / "批图王.exe"
+    (tmp_path / "_internal").mkdir()
+    (tmp_path / "updater_tool.exe").write_bytes(b"MZ")
+    monkeypatch.setattr(updater, "exe_path", lambda: exe)
+    target = updater.update_download_target(info)
+    assert target.kind == "installer"
+    assert target.url == info.installer_url
+    assert target.sha256 == "bb"
+    assert target.dest.name == "批图王-Setup_new.exe"
+
+
+@pytest.mark.unit
+def test_update_download_target_portable(tmp_path, monkeypatch):
+    info = updater.UpdateInfo(
+        version="2.0.0",
+        download_url="https://example.com/a.exe",
+        installer_url="https://example.com/setup.exe",
+        sha256="aa",
+    )
+    exe = tmp_path / "批图王.exe"
+    monkeypatch.setattr(updater, "exe_path", lambda: exe)  # 无 _internal → 便携版
+    target = updater.update_download_target(info)
+    assert target.kind == "portable"
+    assert target.url == info.download_url
+    assert target.sha256 == "aa"
+    assert target.dest.name == "批图王_new.exe"
+
+
+@pytest.mark.unit
+def test_find_local_update_returns_newer(tmp_path, monkeypatch):
+    local = tmp_path / "批图王_new.exe"
+    local.write_bytes(b"MZ")
+    monkeypatch.setattr(updater, "new_exe_path", lambda: local)
+    monkeypatch.setattr(updater, "get_current_version", lambda: "1.0.0")
+    monkeypatch.setattr(updater, "read_exe_version", lambda path: "1.2.0")
+    assert updater.find_local_update() == local
+
+
+@pytest.mark.unit
+def test_find_local_update_ignores_older(tmp_path, monkeypatch):
+    local = tmp_path / "批图王_new.exe"
+    local.write_bytes(b"MZ")
+    monkeypatch.setattr(updater, "new_exe_path", lambda: local)
+    monkeypatch.setattr(updater, "get_current_version", lambda: "2.0.0")
+    monkeypatch.setattr(updater, "read_exe_version", lambda path: "1.2.0")
+    assert updater.find_local_update() is None
+
+
+@pytest.mark.unit
+def test_spawn_installer_update_command(monkeypatch, tmp_path):
+    tool = tmp_path / "updater_tool.exe"
+    tool.write_bytes(b"MZ")
+    setup = tmp_path / "setup_new.exe"
+    setup.write_bytes(b"MZ")
+    monkeypatch.setattr(updater, "updater_tool_path", lambda: tool)
+    spawns = []
+
+    def fake_popen(cmd, **kwargs):
+        spawns.append(cmd)
+        return None
+
+    monkeypatch.setattr(updater.subprocess, "Popen", fake_popen)
+    assert updater.spawn_installer_update(setup, install_dir=r"C:\Apps", wait_pid=42) is True
+    assert spawns[0][0] == str(tool)
+    assert "--apply-installer" in spawns[0]
+    assert str(setup) in spawns[0]
+    assert "--install-dir" in spawns[0]
+    assert r"C:\Apps" in spawns[0]
+
+
+# ---------------------------------------------------------------- ViewModel 分流
+
+
+@pytest.mark.unit
+def test_launch_installer_update_uses_tool(tmp_path, monkeypatch):
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
+
+    setup = tmp_path / "setup_new.exe"
+    setup.write_bytes(b"MZ")
+    target = updater.DownloadTarget(kind="installer", url="", sha256="", dest=setup)
+    calls = []
+    monkeypatch.setattr(
+        updater,
+        "installed_dir",
+        lambda: r"C:\Apps\批图王",
+    )
+    monkeypatch.setattr(
+        updater,
+        "spawn_installer_update",
+        lambda setup_exe, install_dir="", wait_pid=0, relaunch=True: calls.append(
+            (str(setup_exe), install_dir, wait_pid)
+        )
+        or True,
+    )
+    vm = UpdateViewModel()
+    vm._target = target
+    restarts = []
+    vm.restartRequested.connect(lambda: restarts.append(True))
+    assert vm._launch_apply_update() is True
+    assert calls and calls[0][0] == str(setup)
+    assert calls[0][1] == r"C:\Apps\批图王"
+    assert restarts == [True]
+
+
+@pytest.mark.unit
+def test_install_local_update_spawns_apply(tmp_path, monkeypatch):
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
+
+    local = tmp_path / "批图王_new.exe"
+    local.write_bytes(b"MZ")
+    calls = []
+    monkeypatch.setattr(
+        updater,
+        "spawn_apply_update",
+        lambda wait_pid, new_exe, current_exe=None: calls.append(str(new_exe)) or True,
+    )
+    vm = UpdateViewModel()
+    vm._local_update_path = local
+    vm.prepareLocalInstall()
+    assert vm.installDownloadedUpdate() is True
+    assert calls == [str(local)]
+
+
+# ---------------------------------------------------------------- build.py 清单
+
+
+@pytest.mark.unit
+def test_build_manifest_includes_installer_sha256(tmp_path, monkeypatch):
+    import build as build_module
+
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "批图王.exe").write_bytes(b"portable")
+    (dist / "批图王-Setup.exe").write_bytes(b"setup")
+    monkeypatch.setattr(build_module, "REPO_ROOT", tmp_path)
+    manifest = build_module.write_update_manifest("9.9.9")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    assert payload["version"] == "9.9.9"
+    assert payload["sha256"] == build_module._sha256_hex(dist / "批图王.exe")
+    assert payload["installer_sha256"] == build_module._sha256_hex(
+        dist / "批图王-Setup.exe"
+    )
