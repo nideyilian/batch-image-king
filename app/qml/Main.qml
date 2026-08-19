@@ -603,6 +603,7 @@ ApplicationWindow {
     Shortcut { sequence: "Shift+Ctrl+N";        enabled: window.layerShortcutsEnabled;                                                         onActivated: workspace.addEmptyImageLayer() } // 原 Ctrl+L：新建空图片图层（对齐 PS 新建图层习惯）
     Shortcut { sequence: "Ctrl+Shift+P";        enabled: !workspace.operationsBlocked;                                                        onActivated: window.openProjectPresetDrawer() } // 原 Ctrl+P：预设中心
     Shortcut { sequence: "Alt+Ctrl+C";          enabled: window.hasOpenDocument && !workspace.operationsBlocked;                             onActivated: window.openResizeCanvasDialog() } // 原 Ctrl+R：修改画布尺寸（对齐 PS Alt+Ctrl+C=Canvas Size）
+    Shortcut { sequence: "Ctrl+Shift+U";        onActivated: window.openUpdateDialog() }                                                      // 检查更新
 
     FileDialog {
         id: openDialog
@@ -4681,6 +4682,13 @@ ApplicationWindow {
                     variant: "primary"
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running)
                     onClicked: window.openBatchExportDrawer()
+                }
+
+                IconButton {
+                    iconName: AppIcons.refresh
+                    tooltip: "检查更新"
+                    buttonSize: 32
+                    onClicked: window.openUpdateDialog()
                 }
             }
 
