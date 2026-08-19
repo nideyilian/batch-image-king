@@ -153,10 +153,10 @@ def render_layer_with_auto_mask(document: object, layer: object, relation: objec
         renderer = get_global_fast_renderer()
     if renderer is None:
         return None
-    surface = renderer._get_layer_surface_cached(layer, document, False)
+    surface = renderer.get_layer_surface_cached(layer, document, False)
     if surface is None:
         return None
-    return renderer._apply_auto_mask(surface, relation)
+    return renderer.apply_auto_mask(surface, relation)
 
 
 def render_document_to_image(

@@ -209,7 +209,7 @@ class FastRendererPreview(object):
                     was_just_loaded=False
                 )
             else:
-                layer_image = self._get_layer_surface_cached(active_layer, document, was_just_loaded=False)
+                layer_image = self.get_layer_surface_cached(active_layer, document, was_just_loaded=False)
             if layer_image is None:
                 return composition
             if cancel_token is not None and getattr(cancel_token, "cancelled", False):
@@ -469,7 +469,7 @@ class FastRendererPreview(object):
                 positions_info = [(target_x, target_y, False)]
                 mirror_mode = 'none'
             else:
-                layer_image = self._get_layer_surface_cached(layer, document, was_just_loaded)
+                layer_image = self.get_layer_surface_cached(layer, document, was_just_loaded)
                 if layer_image is None:
                     continue
                 positions_info, mirror_mode = self._get_layer_positions_info_cached(layer, document)

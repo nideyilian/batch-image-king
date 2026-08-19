@@ -76,3 +76,27 @@ def test_r8_ui_consumers_redirected_to_layer_new():
     """R8：两个 UI 消费者已重定向到 layer_new.Layer，导入不报错。"""
     import app.ui.add_layer_dialog  # noqa: F401
     import app.ui.layer_properties_attr  # noqa: F401
+
+
+@pytest.mark.unit
+def test_render_service_uses_public_surface_api():
+    """渲染唯一边界只调用 FastRenderer 公开 surface API，不再触碰私有方法。
+
+    ``render_layer_with_auto_mask`` 曾直接调用 ``_get_layer_surface_cached`` /
+    ``_apply_auto_mask``；已提升为公开方法并更新全部调用点，此处防回归。
+    """
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[1]
+    render_service = (repo_root / "app" / "services" / "render_service.py").read_text(
+        encoding="utf-8"
+    )
+    assert "_get_layer_surface_cached" not in render_service
+    assert "_apply_auto_mask" not in render_service
+    assert "get_layer_surface_cached" in render_service
+    assert "apply_auto_mask" in render_service
+
+    from app.utils.fast_renderer_surface import FastRendererSurface
+
+    assert hasattr(FastRendererSurface, "get_layer_surface_cached")
+    assert hasattr(FastRendererSurface, "apply_auto_mask")

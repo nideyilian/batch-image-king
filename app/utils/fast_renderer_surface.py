@@ -140,7 +140,7 @@ class FastRendererSurface(object):
 
         # 文字图层不走此路径
         if hasattr(layer, 'get_text_lines'):
-            return self._get_layer_surface_cached(layer, document, was_just_loaded)
+            return self.get_layer_surface_cached(layer, document, was_just_loaded)
 
         # 优先从当前文件路径直接加载并按目标尺寸处理
         current_image_path = None
@@ -154,7 +154,7 @@ class FastRendererSurface(object):
 
         if not current_image_path or (not os.path.isfile(current_image_path)):
             # 无有效路径时回退旧逻辑
-            fallback = self._get_layer_surface_cached(layer, document, was_just_loaded)
+            fallback = self.get_layer_surface_cached(layer, document, was_just_loaded)
             if fallback is not None:
                 # 导出与预览统一：回退分支也必须先裁透明边再覆盖缩放，避免留白
                 if int(getattr(layer, 'fit_mode', 0)) == 1:
@@ -1419,7 +1419,7 @@ class FastRendererSurface(object):
                 self._size_match_holes_cache.move_to_end(cache_key)
                 return [dict(h) for h in cached]
 
-        source_image = self._get_layer_surface_cached(source_layer, document, was_just_loaded)
+        source_image = self.get_layer_surface_cached(source_layer, document, was_just_loaded)
         if source_image is None:
             return []
         if auto_mask_part:
@@ -1456,7 +1456,7 @@ class FastRendererSurface(object):
             if cached is not None:
                 self._size_match_auto_mask_cache.move_to_end(mask_key)
                 return cached.copy()
-        masked = self._apply_auto_mask(source_image, relation)
+        masked = self.apply_auto_mask(source_image, relation)
         with self._size_match_auto_mask_lock:
             self._size_match_auto_mask_cache[mask_key] = masked.copy()
             self._size_match_auto_mask_cache.move_to_end(mask_key)
@@ -1464,7 +1464,7 @@ class FastRendererSurface(object):
                 self._size_match_auto_mask_cache.popitem(last=False)
         return masked
 
-    def _apply_auto_mask(self, image: Image.Image, relation) -> Image.Image:
+    def apply_auto_mask(self, image: Image.Image, relation) -> Image.Image:
         """自动遮罩：在源图 surface 上把“近黑色占位块”临时挖成透明孔。
 
         默认不修改原图层、不覆盖原文件；性能由 `_get_auto_masked_surface_cached` 缓存解决。
@@ -1816,7 +1816,7 @@ class FastRendererSurface(object):
             f"glow:{int(bool(getattr(layer, 'glow_enabled', False)))}:{getattr(layer, 'glow_strength', '')}:{getattr(layer, 'glow_radius', '')}:{getattr(layer, 'glow_color', '')}",
         ])
 
-    def _get_layer_surface_cached(self, layer, document, was_just_loaded: bool = False) -> Optional[Image.Image]:
+    def get_layer_surface_cached(self, layer, document, was_just_loaded: bool = False) -> Optional[Image.Image]:
         """获取图层surface缓存；未命中时重新生成并缓存"""
         cache_key = self._build_layer_surface_key(layer, document, was_just_loaded)
         is_batch_session = bool(getattr(document, '_is_batch_export_running', False))

@@ -24,7 +24,7 @@
 | `render_preview_live(...)` | 实时交互预览 |
 | `render_batch(document)` | 导出/批量模式渲染入口 |
 | `_fast_render(...)` | 核心渲染流程 |
-| `_get_layer_surface_cached(...)` | 获取图层 surface 缓存 |
+| `get_layer_surface_cached(...)` | 获取图层 surface 缓存 |
 | `_get_layer_image(layer, document, was_just_loaded=False)` | 获取图层图像 |
 | `_build_size_match_overrides(...)` | 构造尺寸匹配临时覆盖 |
 | `_fast_composite(...)` | 快速合成 |

@@ -70,7 +70,7 @@ class CanvasWidgetCanvasEvents(object):
         self._interaction_overlay.kind = kind
         self._interaction_overlay.started_at_ms = time.time() * 1000.0
 
-        # 预取活动图层的 surface：使用 FastRenderer._get_layer_surface_cached
+        # 预取活动图层的 surface：使用 FastRenderer.get_layer_surface_cached
         # 注意：仅在白名单文件内允许直接 import；这里我们通过 service
         # 提供的轻量入口获取 surface。
         if base_image is not None:

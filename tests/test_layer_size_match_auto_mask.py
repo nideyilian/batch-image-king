@@ -90,7 +90,7 @@ class TestAutoMaskBigBlackRect:
         fr = FastRendererSurface()
         img = _build_color_canvas(blocks=[(100, 100, 120, 80)])
         rel = _enabled_relation(edge_refine=False, keep_border=False)
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         arr = np.array(masked)
         # 黑色块内部 alpha 应为 0（透明）
         assert int(arr[140, 140, 3]) == 0
@@ -101,7 +101,7 @@ class TestAutoMaskBigBlackRect:
         fr = FastRendererSurface()
         img = _build_color_canvas(blocks=[(100, 100, 120, 80)])
         rel = _enabled_relation(edge_refine=False, keep_border=False)
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         holes = fr._detect_inner_holes(masked)
         assert len(holes) == 1
         assert holes[0]["bbox"] == (100, 100, 220, 180)
@@ -115,7 +115,7 @@ class TestAutoMaskWhiteBorder:
             blocks=[(100, 100, 120, 80)], border_color=(0, 200, 0), border=4
         )
         rel = _enabled_relation(keep_border=True, edge_refine=False)
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         arr = np.array(masked)
         # 绿色边框像素（位于黑色块左侧外 2px 处）保持绿色不透明
         assert tuple(int(v) for v in arr[140, 98]) == (0, 200, 0, 255)
@@ -125,8 +125,8 @@ class TestAutoMaskWhiteBorder:
         img = _build_color_canvas(blocks=[(100, 100, 120, 80)])
         rel_no = _enabled_relation(keep_border=False, edge_refine=False)
         rel_yes = _enabled_relation(keep_border=True, edge_refine=False)
-        masked_no = fr._apply_auto_mask(img, rel_no)
-        masked_yes = fr._apply_auto_mask(img, rel_yes)
+        masked_no = fr.apply_auto_mask(img, rel_no)
+        masked_yes = fr.apply_auto_mask(img, rel_yes)
         h_no = fr._detect_inner_holes(masked_no)[0]["bbox"]
         h_yes = fr._detect_inner_holes(masked_yes)[0]["bbox"]
         # 保留边框使孔每侧缩小 1px（整体 2px）
@@ -141,7 +141,7 @@ class TestAutoMaskSmallRegionsFiltered:
         fr = FastRendererSurface()
         img = _build_color_canvas(blocks=[(170, 140, 2, 60)])  # 细黑线
         rel = _enabled_relation(edge_refine=False)
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         arr = np.array(masked)
         # 细线区域 alpha 仍不透明（未被挖）
         assert int(arr[170, 171, 3]) == 255
@@ -150,7 +150,7 @@ class TestAutoMaskSmallRegionsFiltered:
         fr = FastRendererSurface()
         img = _build_color_canvas(blocks=[(196, 140, 8, 8)])  # 小黑点
         rel = _enabled_relation(edge_refine=False)
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         arr = np.array(masked)
         assert int(arr[144, 200, 3]) == 255
 
@@ -161,7 +161,7 @@ class TestAutoMaskTooLarge:
         # 覆盖约 90% 的黑色区域，超过 max_area_ratio(0.75)
         img = _build_color_canvas(blocks=[(10, 10, 380, 270)])
         rel = _enabled_relation(edge_refine=False)
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         # 过大 -> mask 为空 -> 原图不变
         assert np.array_equal(np.array(masked), np.array(img))
 
@@ -172,14 +172,14 @@ class TestAutoMaskDisabled:
         img = _build_color_canvas(blocks=[(100, 100, 120, 80)])
         rel = dict(AUTO_MASK_DEFAULTS)  # auto_mask_enabled=False
         rel["auto_mask_enabled"] = False
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         assert np.array_equal(np.array(masked), np.array(img))
 
     def test_unsupported_mode_unchanged(self):
         fr = FastRendererSurface()
         img = _build_color_canvas(blocks=[(100, 100, 120, 80)])
         rel = _enabled_relation(auto_mask_mode="unknown_mode")
-        masked = fr._apply_auto_mask(img, rel)
+        masked = fr.apply_auto_mask(img, rel)
         assert np.array_equal(np.array(masked), np.array(img))
 
 

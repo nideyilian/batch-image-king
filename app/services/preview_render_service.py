@@ -168,7 +168,7 @@ def get_layer_surface_for_overlay(document, layer) -> Optional[Image.Image]:
         from app.utils.fast_renderer import get_global_fast_renderer
 
         renderer = get_global_fast_renderer()
-        surface = renderer._get_layer_surface_cached(layer, document, was_just_loaded=False)
+        surface = renderer.get_layer_surface_cached(layer, document, was_just_loaded=False)
         if surface is not None:
             return surface
     except Exception:
