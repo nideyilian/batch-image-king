@@ -19,7 +19,7 @@ opencv-python>=4.12.0
 psutil>=7.0.0
 
 # 打包工具
-PyInstaller>=6.14.1
+PyInstaller>=6.22.2
 
 # === 可选依赖（不影响安装与运行，缺失时自动回退）===
 # pyvips：加速大图编码/写盘，需系统已安装 libvips。
