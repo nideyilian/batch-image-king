@@ -22,8 +22,12 @@ QML 工作台已经按旧版行为契约完成非 AI 主流程修复。完成标
 > 6. 图层右键菜单少 9 项（复制/粘贴样式、编辑文案、重命名、路径编辑）
 > 7. 画布空白处右键无任何反应（旧版有 15 项菜单）
 >
-> 另外发现第 8 处**尚未修复**：QML 导出没有降级提示（旧版会在导出完成时说明
-> 「结果可能不符合预期」）。对应测试已改为 skip 并标注，避免缺口从账面消失。
+> 另外发现第 8 处缺口：QML 导出没有降级提示（旧版会在导出完成时说明
+> 「结果可能不符合预期」）。**已于 2026-10-28 补齐** —— `batch_export_view_model`
+> 新增 `degradationSummary` / `adjustmentSummary`，界面由 `ExportWarningBanner.qml`
+> 呈现；`tests/test_degradation_visibility.py` 里那条 `pytest.skip` 已换成 5 条真实断言
+> （该文件现共 17 条，全绿）。
+> 多标签导出不加此项：旧版 `multi_tab_export_progress_dialog` 本身就没有这层提示。
 >
 > 教训：这份文档是**声明式**的，写「已完成」不会有任何机制阻止它变成谎话。
 > 真正的对齐证据只能是可执行的断言（见 `tests/test_qml_legacy_parity.py`）。
