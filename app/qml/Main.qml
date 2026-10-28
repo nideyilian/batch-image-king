@@ -4412,6 +4412,13 @@ ApplicationWindow {
                         }
                     }
 
+                    // 降级 / 数量调整告警：图出来了但可能不对，必须当场说清楚，
+                    // 不能只写日志。经典版在完成提示里带这段文案，QML 版对齐。
+                    ExportWarningBanner {
+                        degradationText: batchExport.degradationSummary
+                        adjustmentText: batchExport.adjustmentSummary
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8

@@ -36,6 +36,7 @@ Divider 1.0 Divider.qml
 ExportButton 1.0 ExportButton.qml
 ExportField 1.0 ExportField.qml
 ExportSettingsSection 1.0 ExportSettingsSection.qml
+ExportWarningBanner 1.0 ExportWarningBanner.qml
 FormatToggleButton 1.0 FormatToggleButton.qml
 InspectorRow 1.0 InspectorRow.qml
 MenuLabel 1.0 MenuLabel.qml

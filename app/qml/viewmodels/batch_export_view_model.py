@@ -112,6 +112,8 @@ class BatchExportViewModel(QObject):
         self._last_file = ""
         self._error_message = ""
         self._failure_summary = ""
+        self._degradation_summary = ""
+        self._adjustment_summary = ""
         self._cancel_event = threading.Event()
         self._active_task = None
         self._document_states = WeakKeyDictionary()
@@ -584,6 +586,21 @@ class BatchExportViewModel(QObject):
     def failureSummary(self) -> str:
         return self._failure_summary
 
+    @Property(str, notify=stateChanged)
+    def degradationSummary(self) -> str:
+        """导出过程中的降级告警（空串表示无）。
+
+        降级不等于失败：素材目录丢失、分类筛选为空、去重失效这类问题
+        照样能出图，但出来的图「不对」。经典版在完成提示里会带一句
+        「结果可能不符合预期」，QML 版必须同样让用户看见，而不是去翻日志。
+        """
+        return self._degradation_summary
+
+    @Property(str, notify=stateChanged)
+    def adjustmentSummary(self) -> str:
+        """实际导出数量少于请求数量时的说明（空串表示无调整）。"""
+        return self._adjustment_summary
+
     @Property(bool, notify=stateChanged)
     def canRetry(self) -> bool:
         return not self._running and (self._canceled or bool(self._error_message))
@@ -844,6 +861,57 @@ class BatchExportViewModel(QObject):
         self._stage = "配置有误"
         self.stateChanged.emit()
 
+    @staticmethod
+    def _format_degradation_summary(diagnostics) -> str:
+        """把预计算诊断里的降级信息转成一句人话，无降级返回空串。
+
+        数据来源是 ``document._last_precompute_diagnostics``，
+        由 ``optimized_batch_executor`` 在预计算阶段写入。
+        """
+        if not isinstance(diagnostics, dict):
+            return ""
+        degradations = diagnostics.get("degradations")
+        if not degradations:
+            return ""
+        try:
+            total = int(diagnostics.get("degradation_total", 0) or 0)
+        except (TypeError, ValueError):
+            total = 0
+        kinds = len(degradations)
+        if total <= 0:
+            total = kinds
+        return f"有 {kinds} 类降级（共 {total} 次），结果可能不符合预期"
+
+    @staticmethod
+    def _format_adjustment_summary(adjustment) -> str:
+        """把「实际导出数 < 请求数」的调整信息转成一句人话。
+
+        用户填的是 500 张、实际只出了 300 张时，必须当场说明差额和原因，
+        否则只会觉得「怎么少了一半」。
+        """
+        if not isinstance(adjustment, dict):
+            return ""
+        requested = adjustment.get("requested")
+        planned = adjustment.get("planned")
+        if not requested or planned is None:
+            return ""
+        try:
+            requested_int = int(requested)
+            planned_int = int(planned)
+        except (TypeError, ValueError):
+            return ""
+        if planned_int >= requested_int:
+            return ""
+        message = f"实际导出 {planned_int} 张（请求 {requested_int} 张）"
+        reasons = [
+            str(reason).strip()
+            for reason in (adjustment.get("reasons") or [])
+            if str(reason).strip()
+        ]
+        if reasons:
+            message += f"；原因：{'；'.join(reasons[:2])}"
+        return message
+
     def _collect_export_settings(self) -> dict:
         format_index = self._INDEX_BY_FORMAT.get(self._file_format, 0)
         number_index = max(0, min(self._number_format_index, len(self._NUMBER_FORMATS) - 1))
@@ -1000,6 +1068,8 @@ class BatchExportViewModel(QObject):
         self._last_file = ""
         self._error_message = ""
         self._failure_summary = ""
+        self._degradation_summary = ""
+        self._adjustment_summary = ""
         self._document._export_canceled = False
         self._workspace.setExportRunning(True)
         self.stateChanged.emit()
@@ -1083,6 +1153,16 @@ class BatchExportViewModel(QObject):
             self._succeeded = False
             self._stage = "导出失败"
             self._error_message = str(error or "未知错误")
+        # 降级 / 数量调整提示：取消不算，用户主动停的没有「结果不符合预期」问题。
+        self._degradation_summary = ""
+        self._adjustment_summary = ""
+        if not canceled and self._document is not None:
+            self._degradation_summary = self._format_degradation_summary(
+                getattr(self._document, "_last_precompute_diagnostics", None)
+            )
+            self._adjustment_summary = self._format_adjustment_summary(
+                getattr(self._document, "_last_export_adjustment", None)
+            )
         report = getattr(self._document, "_last_export_report", None)
         if isinstance(report, dict):
             failed = int(report.get("failed_count", report.get("failed", 0)) or 0)

@@ -215,18 +215,92 @@ def test_healthy_directory_produces_no_degradation(tmp_path):
 # --- 界面提示：降级必须能被用户看到 ---------------------------------------
 
 
-def test_export_dialog_reads_degradation_from_diagnostics():
-    """导出完成提示要读降级信息（**当前欠账，已知缺口**）。
+def test_export_view_model_formats_degradation_diagnostics():
+    """诊断字典里的降级信息要变成一句用户能看懂的话。
 
-    原实现检查经典版 `app/ui/batch_export_dialog_progress.py` 里的
-    `_last_precompute_diagnostics` 文案。该文件已随经典界面下线删除。
-
-    ⚠ QML 版 `batch_export_view_model` 目前**没有**面向用户的降级提示
-    （全局搜 `degradations` / 「降级」在 app/qml 下零命中）。也就是说：
-    导出发生性能降级时，用户拿到的结果可能不符合预期，但界面上不会说。
-    这是经典版有、QML 没有的真实差异，属于待补功能，不是"已对齐"。
-
-    这里保留测试名并 skip，而不是直接删除：删掉的话这个缺口就彻底
-    从账面上消失了，和之前那张「已完成 20 项」的审计文档同一个毛病。
+    经典版原文：「⚠ 有 {kinds} 类降级（共 {total} 次），结果可能不符合预期」。
+    QML 版必须保住「结果可能不符合预期」这层意思，不能只报数字。
     """
-    pytest.skip("QML 导出尚无降级提示（已知缺口），补齐后改为真实断言")
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+
+    summary = BatchExportViewModel._format_degradation_summary(
+        {
+            "degradations": ["素材目录.目录不存在 × 3", "素材目录.分类筛选后为空 × 1"],
+            "degradation_total": 4,
+        }
+    )
+
+    assert "2 类降级" in summary
+    assert "4 次" in summary
+    assert "结果可能不符合预期" in summary
+
+
+def test_export_view_model_degradation_empty_when_healthy():
+    """没有降级时不能给提示 —— 否则正常导出也挂个警告，用户会忽略真告警。"""
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+
+    assert BatchExportViewModel._format_degradation_summary(None) == ""
+    assert BatchExportViewModel._format_degradation_summary({}) == ""
+    assert BatchExportViewModel._format_degradation_summary({"degradations": []}) == ""
+
+
+def test_export_view_model_reports_export_adjustment():
+    """请求 500 张实际只排了 300 张时，差额与原因要当面说。"""
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+
+    summary = BatchExportViewModel._format_adjustment_summary(
+        {
+            "requested": 500,
+            "planned": 300,
+            "reasons": ["可用素材不足", "分类筛选后数量不足", "第三条不该出现"],
+        }
+    )
+
+    assert "300" in summary and "500" in summary
+    assert "可用素材不足" in summary
+    # 原因最多两条，避免日志式堆砌
+    assert "第三条不该出现" not in summary
+
+
+def test_export_view_model_adjustment_empty_when_not_reduced():
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+
+    assert BatchExportViewModel._format_adjustment_summary(None) == ""
+    assert BatchExportViewModel._format_adjustment_summary({"requested": 100, "planned": 100}) == ""
+    # planned 缺失（旧数据结构）不能瞎报
+    assert BatchExportViewModel._format_adjustment_summary({"requested": 100}) == ""
+
+
+def test_export_view_model_surfaces_degradation_on_finish(qapp):
+    """接线上：导出结束（成功）后，VM 属性必须带上降级提示。"""
+    from app.models.document import Document
+    from app.qml.preview_image_provider import PreviewImageProvider
+    from app.qml.viewmodels.batch_export_view_model import BatchExportViewModel
+    from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
+
+    document = Document()
+    document.create_new(120, 90)
+    workspace = WorkspaceViewModel(
+        document=document,
+        preview_provider=PreviewImageProvider(),
+        auto_render=False,
+    )
+    view_model = BatchExportViewModel(workspace=workspace)
+
+    document._last_precompute_diagnostics = {
+        "degradations": ["素材目录.目录不存在 × 2"],
+        "degradation_total": 2,
+    }
+    document._last_export_adjustment = {"requested": 50, "planned": 40, "reasons": ["可用素材不足"]}
+
+    view_model._on_finished(True, "", False)
+
+    assert "1 类降级" in view_model.degradationSummary
+    assert "结果可能不符合预期" in view_model.degradationSummary
+    assert "40" in view_model.adjustmentSummary
+    assert "可用素材不足" in view_model.adjustmentSummary
+
+    # 取消不该挂降级提示：用户主动停的，没有「结果不符合预期」这回事
+    view_model._on_finished(True, "", True)
+    assert view_model.degradationSummary == ""
+    assert view_model.adjustmentSummary == ""
