@@ -196,8 +196,24 @@ class MainWindowActions(object):
         return self.layer_controller.add_layer()
 
     def add_text_layer(self):
-        """添加新文字图层 - 委托给LayerController"""
+        """添加新文字图层（弹配置对话框） - 委托给LayerController"""
         return self.layer_controller.add_text_layer()
+
+    def add_quick_text_layer(self):
+        """快速添加文字图层（不弹窗，默认样式） - 委托给LayerController。
+
+        对应快捷键 T / 图层菜单「快速文字图层」。
+        建好后把焦点交给图层面板，方便用户接着改内容或直接拖位置。
+        """
+        layer = self.layer_controller.add_quick_text_layer()
+        if layer is not None:
+            try:
+                panel = getattr(self, "layer_panel", None)
+                if panel is not None and hasattr(panel, "setFocus"):
+                    panel.setFocus()
+            except Exception:
+                pass
+        return layer is not None
 
     def open_ai_asset_studio(self):
         """Open the AI asset generation dialog."""
@@ -234,43 +250,92 @@ class MainWindowActions(object):
         return self.layer_controller.paste_layer()
 
     def closeEvent(self, event: QCloseEvent):
-        """关闭窗口前检查是否有未保存的文档并保存窗口状态"""
+        """关闭窗口前的未保存确认。
+
+        ## 修复记录（2026-10-27）
+
+        **前置 bug（更严重）**：`MainWindow` 的继承顺序把 `QMainWindow` 排在
+        mixin 前面，导致本方法被 `QWidget.closeEvent()` 完全遮蔽 ——
+        **从来没执行过**。用户点 X 直接退出，未保存内容静默丢失。
+        已通过调整 `MainWindow` 基类顺序修复（见 main_window.py 的说明）。
+
+        本方法自身的三个逻辑缺陷（本次一并修掉）：
+        1. 提示写"有未保存的文档"（单数），实际可能多个 → 改为列出数量与名称
+        2. 点「保存」时对**所有**文档逐个保存，包括没改动、没文件路径的文档，
+           会为每个都弹出「另存为」对话框（实测 3 个文档要弹 3 次）
+           → 只保存真正有改动的文档
+        3. 循环里逐个文档弹框，但点任何按钮后都 `return`，
+           剩下的文档根本没机会被询问 → 改为一次性汇总询问
+        """
+        dirty = []
         for i in range(self.document_manager.get_document_count()):
             document = self.document_manager.get_document(i)
-            if hasattr(document, 'is_modified') and document.is_modified:
-                # 有未保存的文档，弹出确认对话框
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("退出")
-                msg_box.setText("有未保存的文档，是否在退出前保存？")
-                msg_box.setIcon(QMessageBox.Question)
-            
-                save_btn = msg_box.addButton("保存", QMessageBox.AcceptRole)
-                discard_btn = msg_box.addButton("不保存", QMessageBox.DestructiveRole)
-                cancel_btn = msg_box.addButton("取消", QMessageBox.RejectRole)
-            
-                reply = msg_box.exec()
-                clicked_button = msg_box.clickedButton()
-            
-                if clicked_button == save_btn:
-                    # 保存所有文档
-                    for j in range(self.document_manager.get_document_count()):
-                        self.tab_widget.setCurrentIndex(j)
-                        if not self.save_document():
-                            # 如果有任何文档保存失败，取消关闭
-                            event.ignore()
-                            return
-                    # 所有文档已保存，保存窗口状态并接受关闭事件
-                    self.save_window_state()
-                    event.accept()
-                elif clicked_button == discard_btn:
-                    # 不保存文档，但保存窗口状态，接受关闭事件
-                    self.save_window_state()
-                    event.accept()
-                else:
-                    # 取消关闭
-                    event.ignore()
+            if document is not None and getattr(document, "is_modified", False):
+                dirty.append((i, self.document_manager.get_document_name(i)))
+
+        if not dirty:
+            self.save_window_state()
+            event.accept()
+            return
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("退出")
+        msg_box.setIcon(QMessageBox.Question)
+
+        if len(dirty) == 1:
+            msg_box.setText(
+                f"文档「{dirty[0][1]}」有未保存的更改，是否在退出前保存？"
+            )
+        else:
+            names = "、".join(f"「{name}」" for _, name in dirty[:5])
+            if len(dirty) > 5:
+                names += f" 等 {len(dirty)} 个文档"
+            msg_box.setText(f"有 {len(dirty)} 个文档未保存：{names}\n\n是否在退出前保存？")
+
+        save_btn = msg_box.addButton("全部保存", QMessageBox.AcceptRole)
+        discard_btn = msg_box.addButton("不保存", QMessageBox.DestructiveRole)
+        cancel_btn = msg_box.addButton("取消", QMessageBox.RejectRole)
+        msg_box.setDefaultButton(save_btn)
+
+        msg_box.exec()
+        clicked = msg_box.clickedButton()
+
+        if clicked is save_btn:
+            if not self._save_dirty_documents(dirty):
+                # 任一文档保存失败或用户取消了另存为 → 放弃退出，避免丢数据
+                event.ignore()
                 return
-    
-        # 没有未保存的文档，保存窗口状态并直接关闭
-        self.save_window_state()
-        event.accept()
+            self.save_window_state()
+            event.accept()
+        elif clicked is discard_btn:
+            self.save_window_state()
+            event.accept()
+        else:
+            # 包括取消以及直接关掉对话框（点右上角 X）都视为取消退出
+            event.ignore()
+
+    def _save_dirty_documents(self, dirty) -> bool:
+        """保存指定的脏文档列表。任一失败则返回 False（调用方应放弃退出）。
+
+        只处理 dirty 里的文档，不碰其它 —— 无改动的文档不需要保存，
+        更不该为它们弹「另存为」。
+        """
+        for index, name in dirty:
+            document = self.document_manager.get_document(index)
+            if document is None:
+                continue
+            # 切到该文档再保存：save_document 依赖当前活动文档
+            self.tab_widget.setCurrentIndex(index)
+            try:
+                if not self.save_document():
+                    # 用户可能点了「另存为」的取消，或写入失败
+                    return False
+            except Exception as exc:
+                try:
+                    self.statusbar.showMessage(
+                        f"保存文档「{name}」失败：{exc}", 5000
+                    )
+                except Exception:
+                    pass
+                return False
+        return True

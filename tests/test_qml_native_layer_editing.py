@@ -127,7 +127,18 @@ def test_configured_text_layer_matches_the_classic_creation_contract():
     layer = workspace.document.layers[0]
     assert isinstance(layer, TextLayer)
     assert layer.name == "促销标题"
-    assert (layer.x, layer.y, layer.width, layer.height) == (50, 50, 300, 100)
+    # 位置固定 50,50；尺寸**由 auto_fit_text_box 按内容撑开**。
+    #
+    # 2026-10-28：原来这里断言 (300, 100)。那个值只有关掉自动适配时才成立，
+    # 而关掉自动适配会把大字号文字直接裁掉（旧版 layer_controller 对此有专门注释：
+    # 72px 的「限时特惠 5折」只渲染出「限时特惠」）。旧版契约是 auto_fit=True，
+    # 所以正确断言是「位置不变 + 自动适配开启 + 尺寸按内容算出来」，不是写死 300x100。
+    assert (layer.x, layer.y) == (50, 50)
+    assert layer.auto_fit_text_box is True
+    assert layer.width > 0 and layer.height > 0
+    assert (layer.width, layer.height) != (300, 100), (
+        "尺寸仍是未自适应的 300x100，说明 auto_fit_text_box 没生效"
+    )
     assert layer.get_text_lines() == ["新品上市", "限时特惠"]
     assert layer.current_text == "新品上市"
     assert layer.text_binding_enabled is True

@@ -1,5 +1,37 @@
 """
-组件库可视化画廊（Component Showcase）
+组件库可视化画廊（Component Showcase）—— **已弃用（2026-10-28）**
+
+═══════════════════════════════════════════════════════════════════════════
+状态：DEPRECATED，保留仅供查阅，不要在新代码里引用
+═══════════════════════════════════════════════════════════════════════════
+
+产品方向已于 2026-10-28 确定：**不再使用 `app/ui/components/` 这套 shadcn
+组件**。原因：
+
+- 该组件库 16 个文件、约 70 个导出名，但全项目只有 3 个业务文件引用过；
+- 同时业务代码里还有 116 处 `setStyleSheet` 手写样式 ——
+  「组件库 + 手写样式」双轨，导致同一个产品出现多套视觉规则；
+- 经典界面的真实控件全部是原生 QWidget + 全局 QSS，这套组件库从未真正
+  接管界面，等于持续的维护成本而没有收益。
+
+在该决定落地前，本目录的业务依赖已全部解除：
+- `new_canvas_dialog.py`：Button/Input → 原生 QPushButton/QLineEdit
+- `layer_panel_base.py`：FlowLayout → 迁到 `app/ui/flow_layout.py`
+
+现在只剩本文件自我引用，因此标记弃用。
+
+═══════════════════════════════════════════════════════════════════════════
+要查设计规范请去这两处
+═══════════════════════════════════════════════════════════════════════════
+
+- 设计令牌（颜色/字号/圆角/间距）：`app/ui/tokens_v2.py`
+- 尺寸档位（高度/间距/图标/透明度/动效）：`app/ui/design_spec.py`
+- 图标：`app/ui/icon_library.py`（Lucide SVG 单一真源）
+- 组件与图标的可视化总览：仓库根目录 `组件库与图标库.html`
+
+═══════════════════════════════════════════════════════════════════════════
+原始说明（仅供理解历史代码）
+═══════════════════════════════════════════════════════════════════════════
 
 集中展示 app/ui/components 下全部 shadcn/ui 风格组件，以及 Theme 令牌的实际取值，
 用于设计评审、组件验收与开发参考。运行时固定使用深色工作台，皮肤通过
@@ -23,6 +55,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from app.ui.design_spec import Space as _Space
 from app.ui.theme import Theme
 from app.ui.theme.provider import get_palette
 from app.ui.dark_theme import CursorDarkTheme
@@ -478,7 +511,7 @@ class ComponentShowcase(QMainWindow):
         for i, name in enumerate(names):
             r, c = divmod(i, cols)
             cell = QVBoxLayout()
-            cell.setSpacing(2)
+            cell.setSpacing(_Space.NONE)
             cell.setAlignment(Qt.AlignCenter)
             cell.addWidget(IconLabel(name, 20, "foreground"))
             cell.addWidget(Small(name))

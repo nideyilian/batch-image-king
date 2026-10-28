@@ -12,6 +12,9 @@ import os
 from typing import Dict, List, Optional
 from pathlib import Path
 
+from app.ui.design_spec import IconSize as _IconSize
+from app.ui.tokens_v2 import Color
+
 
 class EnhancedFontSelector(QWidget):
     """增强字体选择器组件：中文 / 英文 两个分类 Tab"""
@@ -47,44 +50,44 @@ class EnhancedFontSelector(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #2F2F2F;
-                color: #F4F4F5;
-            }
-            QLineEdit, QSpinBox, QListWidget, QTabWidget::pane {
-                background-color: #1F1F1F;
-                color: #F4F4F5;
-                border: 1px solid #303033;
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {Color.surface_1};
+                color: {Color.text_primary};
+            }}
+            QLineEdit, QSpinBox, QListWidget, QTabWidget::pane {{
+                background-color: {Color.surface_3};
+                color: {Color.text_primary};
+                border: 1px solid {Color.border_strong};
                 border-radius: 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #2F9CF4;
-                color: #FFFFFF;
-            }
-            QPushButton {
-                background-color: #2F2F2F;
-                color: #F4F4F5;
-                border: 1px solid #5A5A5A;
+            }}
+            QListWidget::item:selected {{
+                background-color: {Color.surface_selected};
+                color: {Color.text_on_selected};
+            }}
+            QPushButton {{
+                background-color: {Color.surface_3};
+                color: {Color.text_primary};
+                border: 1px solid {Color.border_strong};
                 border-radius: 4px;
                 padding: 4px 8px;
-            }
-            QPushButton:hover {
-                background-color: #4A4A4A;
-            }
-            QTabBar::tab {
-                background-color: #1F1F1F;
-                color: #F4F4F5;
-                border: 1px solid #303033;
+            }}
+            QPushButton:hover {{
+                background-color: {Color.surface_hover};
+            }}
+            QTabBar::tab {{
+                background-color: {Color.surface_3};
+                color: {Color.text_primary};
+                border: 1px solid {Color.border_strong};
                 padding: 6px 12px;
                 margin-right: 4px;
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
-            }
-            QTabBar::tab:selected {
-                background-color: #2F9CF4;
-                color: #FFFFFF;
-            }
+            }}
+            QTabBar::tab:selected {{
+                background-color: {Color.accent};
+                color: {Color.text_on_accent};
+            }}
         """)
 
         # 顶部搜索区域
@@ -98,7 +101,7 @@ class EnhancedFontSelector(QWidget):
 
         # 收藏按钮
         self.favorite_btn = QPushButton("★")
-        self.favorite_btn.setFixedSize(30, 30)
+        self.favorite_btn.setFixedSize(_IconSize.MD, _IconSize.MD)
         self.favorite_btn.setCheckable(True)
         self.favorite_btn.setToolTip("收藏/取消收藏当前字体")
         self.favorite_btn.clicked.connect(self.toggle_favorite)
@@ -135,15 +138,15 @@ class EnhancedFontSelector(QWidget):
         self.preview_label = QLabel("字体预览")
         self.preview_label.setMinimumHeight(80)
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("""
-            QLabel {
-                border: 1px solid #303033;
+        self.preview_label.setStyleSheet(f"""
+            QLabel {{
+                border: 1px solid {Color.border_strong};
                 border-radius: 5px;
-                background-color: #1E1E1E;
-                color: #F2F2F2;
+                background-color: {Color.surface_base};
+                color: {Color.text_primary};
                 padding: 10px;
                 font-size: 24px;
-            }
+            }}
         """)
         preview_layout.addWidget(self.preview_label)
 

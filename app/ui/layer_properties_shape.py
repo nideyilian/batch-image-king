@@ -11,7 +11,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QProgressBar)
 from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings, QObject, QRunnable, QThreadPool
 from PySide6.QtGui import QColor
+from app.ui.design_spec import Radius, Scale as _Scale
 from app.ui.design_tokens import Tokens
+from app.ui.tokens_v2 import Color
 import os
 import time
 from PIL import Image
@@ -520,8 +522,11 @@ class LayerPropertiesShape(object):
         btn.setStyleSheet(
             f"background-color: rgba({r}, {g}, {b}, {a});"
             f"color: {text_color};"
-            "border: 1px solid #34363A; border-radius: 5px;"
-            f"min-height: 27px; padding: 3px 8px; font-weight: {Tokens.FONT_WEIGHT_MEDIUM};"
+            f"border: 1px solid {Color.border_strong};"
+            f"border-radius: {Radius.SM}px;"
+            f"min-height: {_Scale.PX[_Scale.MD] - 3 * 2 - 1 * 2}px;"
+            f"padding: 3px 8px 3px 8px;"
+            f"font-weight: {Tokens.FONT_WEIGHT_MEDIUM};"
         )
         btn.setText(str(label))
 

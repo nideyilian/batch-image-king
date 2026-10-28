@@ -14,16 +14,16 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
     QComboBox, QCheckBox, QDialogButtonBox, QFrame, QSizePolicy,
-    QInputDialog, QWidget, QSpacerItem,
+    QInputDialog, QWidget, QSpacerItem, QLineEdit, QPushButton,
 )
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QPainter, QColor, QBrush, QPen, QPaintEvent, QFontMetrics
 
+from app.ui.design_spec import Space as _Space, Width as _Width, IconSize as _IconSize
 from app.ui.canvas_preset_dialog import CanvasPresetManagerDialog
 from app.ui.design_tokens import Tokens
 from app.ui.icon_manager import IconManager
 from app.ui.ui_primitives import InlineAlert
-from app.ui.components import Button, Input
 from app.utils.canvas_preset_manager import CanvasPresetManager
 
 
@@ -121,18 +121,18 @@ class NewCanvasDialog(QDialog):
     def _build_header(self):
         bar = QWidget()
         bar.setObjectName("HeaderBar")
-        bar.setFixedHeight(64)
+        bar.setFixedHeight(_Width.LABEL)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(20, 12, 20, 12)
         layout.setSpacing(12)
 
         icon = QLabel()
         icon.setPixmap(IconManager.get_icon("image", 22, Tokens.ACCENT).pixmap(22, 22))
-        icon.setFixedSize(22, 22)
+        icon.setFixedSize(_IconSize.MD, _IconSize.MD)
         layout.addWidget(icon)
 
         texts = QVBoxLayout()
-        texts.setSpacing(2)
+        texts.setSpacing(_Space.NONE)
         title = QLabel(self.windowTitle())
         title.setObjectName("DialogTitle")
         title.setProperty("role", "dialog-title")
@@ -149,7 +149,7 @@ class NewCanvasDialog(QDialog):
         body = QWidget()
         layout = QHBoxLayout(body)
         layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(20)
+        layout.setSpacing(_Space.XL)
 
         # 左侧：表单
         left = QVBoxLayout()
@@ -157,7 +157,8 @@ class NewCanvasDialog(QDialog):
 
         name_label = QLabel("文档名称")
         name_label.setProperty("role", "fieldLabel")
-        self.name_edit = Input(placeholder="未命名文档")
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("未命名文档")
         self.name_edit.setMinimumHeight(32)
         default_name = (default_settings or {}).get("document_name", "未命名文档")
         self.name_edit.setText(default_name)
@@ -193,7 +194,7 @@ class NewCanvasDialog(QDialog):
         swap_btn = IconManager.create_icon_button("swap")
         swap_btn.setToolTip("交换宽高")
         swap_btn.setAccessibleName("交换宽高")
-        swap_btn.setFixedSize(32, 32)
+        swap_btn.setFixedSize(_IconSize.MD, _IconSize.MD)
         swap_btn.clicked.connect(self._swap_dimensions)
         size_row.addWidget(w_label)
         size_row.addWidget(self.width_spin)
@@ -207,7 +208,7 @@ class NewCanvasDialog(QDialog):
         ratio_row = QHBoxLayout()
         ratio_row.setSpacing(8)
         for label, (w, h) in (("16:9", (1920, 1080)), ("4:3", (1600, 1200)), ("1:1", (1080, 1080))):
-            btn = Button(label, variant="ghost", size="sm")
+            btn = QPushButton(label)
             btn.setToolTip(f"应用 {label} 比例（{w}×{h}）")
             btn.setAccessibleName(f"应用 {label} 比例")
             btn.clicked.connect(lambda _checked, w=w, h=h: self._apply_ratio(w, h))
@@ -222,13 +223,13 @@ class NewCanvasDialog(QDialog):
         # 预设操作
         preset_ops = QHBoxLayout()
         preset_ops.setSpacing(8)
-        manage_btn = Button("管理预设", variant="ghost", size="sm")
+        manage_btn = QPushButton("管理预设")
         manage_btn.setIcon(IconManager.get_icon("settings", 16, "secondary"))
         manage_btn.setIconSize(QSize(16, 16))
         manage_btn.setToolTip("管理画布预设")
         manage_btn.setAccessibleName("管理画布预设")
         manage_btn.clicked.connect(self._manage_presets)
-        save_btn = Button("保存为预设…", variant="ghost", size="sm")
+        save_btn = QPushButton("保存为预设…")
         save_btn.setIcon(IconManager.get_icon("plus", 16, "secondary"))
         save_btn.setIconSize(QSize(16, 16))
         save_btn.setToolTip("保存当前尺寸为预设")

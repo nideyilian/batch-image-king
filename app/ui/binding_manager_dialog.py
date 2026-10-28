@@ -14,8 +14,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 import os
 
+from app.ui.design_spec import Space as _Space, IconSize as _IconSize
 from app.ui.dialog_a2 import DialogA2
 from app.ui.icon_manager import IconManager
+from app.ui.icon_library import icon_pixmap
+from app.ui.tokens_v2 import Color
 
 
 class BindingGroupWidget(QFrame):
@@ -32,16 +35,28 @@ class BindingGroupWidget(QFrame):
         self.setProperty("role", "dialogSubPanel")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(6)
+        layout.setSpacing(_Space.XS)
 
-        # 组名标题
-        # 使用图标管理器创建绑定图标
-        icon_text = IconManager.get_icon_text('link')
-        title_label = QLabel(f"{icon_text} {self.group_info['name']}")
+        # 组名标题（图标为真实 Lucide SVG 位图，不再拼字符）
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(_Space.XS)
+
+        # 图标尺寸取 design_spec 档位（16px），不写死像素
+        icon_px = _IconSize.SM
+        title_icon = QLabel()
+        title_icon.setFixedSize(icon_px, icon_px)
+        title_icon.setPixmap(icon_pixmap('link', icon_px, Color.accent))
+        title_icon.setStyleSheet("background: transparent; border: none;")
+        title_row.addWidget(title_icon, 0, Qt.AlignVCenter)
+
+        title_label = QLabel(self.group_info['name'])
         title_font = QFont()
         title_font.setBold(True)
         title_label.setFont(title_font)
-        layout.addWidget(title_label)
+        title_row.addWidget(title_label, 1, Qt.AlignVCenter)
+
+        layout.addLayout(title_row)
 
         # 组信息
         info_text = f"图层数量: {self.group_info['layer_count']}\n"
@@ -252,7 +267,7 @@ class LayerBindingManagerDialog(QDialog):
             if binding_info:
                 group_id, group_name = binding_info
                 item.setText(f"{layer.name} [已绑定到: {group_name}]")
-                item.setBackground(QColor("#26384A"))
+                item.setBackground(QColor(Color.surface_selected))
             else:
                 item.setBackground(QColor(DialogA2.CONTROL_BG))
 
@@ -405,7 +420,7 @@ class LayerBindingManagerDialog(QDialog):
             if binding_info:
                 group_id, group_name = binding_info
                 item.setText(f"{layer.name} [已绑定到: {group_name}]")
-                item.setBackground(QColor("#26384A"))
+                item.setBackground(QColor(Color.surface_selected))
             else:
                 item.setText(f"{layer.name} ({layer.width}x{layer.height})")
                 item.setBackground(QColor(DialogA2.CONTROL_BG))
@@ -438,7 +453,7 @@ class LayerBindingManagerDialog(QDialog):
                 is_text_layer = True
 
             if (not layer.image_source or not os.path.isdir(layer.image_source)) and not is_text_layer:
-                analysis_result.append(f"  {IconManager.get_icon_text('remove')} 无效的文件夹路径\n")
+                analysis_result.append("  [无效] 文件夹路径不可用\n")
                 continue
 
             # 分析文件或文字
@@ -452,9 +467,9 @@ class LayerBindingManagerDialog(QDialog):
 
             if categories:
                 if is_text_layer:
-                    analysis_result.append(f"  {IconManager.get_icon_text('edit')} 发现 {len(categories)} 个文字分类:")
+                    analysis_result.append(f"  [文字] 发现 {len(categories)} 个文字分类:")
                 else:
-                    analysis_result.append(f"  {IconManager.get_icon_text('folder')} 发现 {len(categories)} 个文件分类:")
+                    analysis_result.append(f"  [文件] 发现 {len(categories)} 个文件分类:")
 
                 for category, files in categories.items():
                     if is_text_layer:
@@ -463,9 +478,9 @@ class LayerBindingManagerDialog(QDialog):
                         analysis_result.append(f"    - {category}: {len(files)} 个文件")
             else:
                 if is_text_layer:
-                     analysis_result.append(f"  {IconManager.get_icon_text('remove')} 未识别到有效的文字分类")
+                     analysis_result.append("  [无效] 未识别到有效的文字分类")
                 else:
-                     analysis_result.append(f"  {IconManager.get_icon_text('remove')} 未发现有效的图像文件")
+                     analysis_result.append("  [无效] 未发现有效的图像文件")
 
             analysis_result.append("")
 
@@ -477,12 +492,12 @@ class LayerBindingManagerDialog(QDialog):
                 common_categories &= set(categories.keys())
 
             if common_categories:
-                analysis_result.append(f"{IconManager.get_icon_text('success')} 发现 {len(common_categories)} 个公共分类:")
+                analysis_result.append(f"[完成] 发现 {len(common_categories)} 个公共分类:")
                 for category in sorted(common_categories):
                     analysis_result.append(f"  - {category}")
                 analysis_result.append("\n这些分类可以用于绑定匹配！")
             else:
-                analysis_result.append(f"{IconManager.get_icon_text('remove')} 没有发现公共分类")
+                analysis_result.append("[无效] 没有发现公共分类")
                 analysis_result.append("建议检查文件命名规则是否一致")
 
         self.analysis_text.setText("\n".join(analysis_result))

@@ -247,6 +247,10 @@ class OptimizedBatchExecutorIoExport(object):
                 return False
             except Exception:
                 # 服务层异常时回落到旧保存路径，保持可用性。
+                # 但这条路本身失败的话文件就没了，必须留下 traceback。
+                logger.warning(
+                    "导出服务保存失败，回落到旧保存路径: %s", file_path, exc_info=True
+                )
                 pass
         
             # JPEG
@@ -386,7 +390,11 @@ class OptimizedBatchExecutorIoExport(object):
                             f.write(buf.getvalue())
                     # 其他格式按默认保存即可
             except Exception:
-                # 大小控制失败时，保留已有文件
+                # 大小控制失败时，保留已有文件。
+                # 文件体积可能超出用户设定，属于需要知道的结果偏差。
+                logger.warning(
+                    "导出文件大小控制失败，保留已有文件: %s", file_path, exc_info=True
+                )
                 pass
 
             try:

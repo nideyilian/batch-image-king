@@ -14,25 +14,48 @@ from PySide6.QtWidgets import QApplication
 
 from app.ui.theme.tokens import Theme
 
+# P2 收敛（2026-10-27）：字族/字号/控件高/圆角直接取 tokens_v2，
+# 避免 QSS 里再散落一套写死的取值。方向 01「墨黑极简」的核心特征
+# （中文优先字体栈、13px 正文、30px 控件高、6px 圆角）由这里统一注入。
+from app.ui.tokens_v2 import (
+    Color as _C2,
+    Radius as _R2,
+    Size as _SZ2,
+    Space as _S2,
+    Typography as _TY2,
+)
+
+# 2026-10-28：控件高度改由 design_spec 统一供给（3 档 24/28/36）。
+# tokens_v2.Size 保留了 26/30/34/38 四档，档位过多且不在 4px 栅格上，
+# 是「37 种高度」的来源之一。这里只用 design_spec，旧档位不再参与 QSS。
+from app.ui.design_spec import Scale as _SPEC
+
 
 def _rep(qss: str) -> str:
-    """把 %%token%% 占位符替换为当前主题下的实际取值。"""
+    """把 %%token%% 占位符替换为当前主题下的实际取值。
+
+    尺寸/字族类一律取 tokens_v2（方向 01 的硬指标）；颜色类仍走 Theme，
+    因为 Theme 内部已指向 tokens_v2，保持单一事实来源。
+    """
     C = {
-        "font": Theme.font("family"),
-        "fs-base": Theme.font_size("base"),
-        "fs-sm": Theme.font_size("sm"),
-        "fs-xs": Theme.font_size("xs"),
-        "fs-lg": Theme.font_size("lg"),
-        "fs-xl": Theme.font_size("xl"),
-        "fs-2xl": Theme.font_size("2xl"),
-        "fs-title": Theme.font_size("title"),
-        "fw-regular": Theme.font_weight("regular"),
-        "fw-medium": Theme.font_weight("medium"),
-        "fw-bold": Theme.font_weight("bold"),
-        "radius": Theme.radius("md"),
-        "radius-sm": Theme.radius("sm"),
-        "radius-lg": Theme.radius("lg"),
-        "radius-xl": Theme.radius("xl"),
+        # —— 字体：中文优先栈（旧版把 Segoe UI 排前面会导致逐字回退）——
+        "font": _TY2.family,
+        "fs-base": _TY2.size_base,
+        "fs-sm": _TY2.size_sm,
+        "fs-xs": _TY2.size_caption,
+        "fs-lg": _TY2.size_md,
+        "fs-xl": _TY2.size_lg,
+        "fs-2xl": _TY2.size_xl,
+        "fs-title": _TY2.size_lg,
+        "fw-regular": _TY2.weight_regular,
+        "fw-medium": _TY2.weight_semibold,
+        "fw-bold": _TY2.weight_bold,
+        # —— 圆角 ——
+        "radius": _R2.md,
+        "radius-sm": _R2.sm,
+        "radius-lg": _R2.lg,
+        "radius-xl": _R2.xl,
+        # —— 颜色（Theme 已指向 tokens_v2）——
         "background": Theme.color("background"),
         "foreground": Theme.color("foreground"),
         "card": Theme.color("card"),
@@ -70,13 +93,36 @@ def _rep(qss: str) -> str:
         "info": Theme.color("info"),
         "success": Theme.color("success"),
         "warning": Theme.color("warning"),
-        "control-h": Theme.layout("control_height"),
-        "motion": Theme.layout("motion_ms"),
-        "label-w": Theme.layout("label_width"),
-        "indicator": Theme.layout("indicator"),
-        "switch-w": Theme.layout("switch_w"),
-        "switch-h": Theme.layout("switch_h"),
-        "icon-btn": Theme.layout("icon_button"),
+        # —— 尺寸 ——
+        #
+        # ⚠ 这里的高度全部来自 `app/ui/design_spec.py`，**不准写别的数**。
+        #
+        # 2026-10-28 实测：改造前主窗口 170 个可见控件有 37 种不同高度，
+        # 根因就是尺寸从多处各自取值（tokens_v2 的 30/34/38 + 各处 setFixedSize
+        # 字面量 + 内联 QSS）。现在收敛到 3 档：24 / 28 / 36。
+        "control-h": _SPEC.PX[_SPEC.MD],
+        # 单行输入控件的 CSS 内高 = control_h - padding(2×2) - border(1×2)
+        # QSS 的 height 不含 padding/border，三者相加才是实际像素高。
+        # 写死 min-height:control-h 再叠 padding，实测会撑到 38px。
+        "control-inner-h": _SPEC.PX[_SPEC.MD] - 2 * 2 - 2 * 1,
+        "control-h-sm": _SPEC.PX[_SPEC.SM],
+        "control-h-lg": _SPEC.PX[_SPEC.LG],
+        # 工具栏按钮内高 = MD(28) - padding(1×2) - border(1×2)
+        "toolbtn-inner-h": _SPEC.PX[_SPEC.MD] - 1 * 2 - 1 * 2,
+        # shadcn 词汇层的 uiSize 档位（原本硬编码 30/40，第四套真源）
+        "ui-sm": _SPEC.PX[_SPEC.SM],
+        "ui-lg": _SPEC.PX[_SPEC.LG],
+        "motion": 160,
+        "label-w": 58,
+        "indicator": 16,
+        "switch-w": 52,
+        "switch-h": _SPEC.PX[_SPEC.MD],
+        "icon-btn": _SPEC.PX[_SPEC.MD],
+        "icon-btn-sm": _SPEC.PX[_SPEC.SM],
+        # 图标按钮的内高（扣掉 1px 边框 ×2）：控件内联 QSS 带了 border，
+        # QSS 的 height 不含 border，两者相加才是最终高度。
+        "icon-btn-inner": _SPEC.PX[_SPEC.MD] - 1 * 2,
+        "icon-btn-sm-inner": _SPEC.PX[_SPEC.SM] - 1 * 2,
     }
     for k, v in C.items():
         qss = qss.replace("%%" + k + "%%", str(v))
@@ -88,17 +134,75 @@ def build_global_stylesheet() -> str:
     qss = r"""
 /* ===================== shadcn/ui 规范层（叠加，opt-in） ===================== */
 
-/* ---------- Button：仅作用于设置了 variant 的 QPushButton / QToolButton ---------- */
-QPushButton[variant], QToolButton[variant] {
+/* ---------- Button：仅作用于设置了 variant 的 QPushButton / QToolButton ----------
+   注意：QPushButton 与 QToolButton 的尺寸必须分开写。
+   工具栏用 QToolButton（TextBesideIcon，图标 + 文字并排），高度只有 ~25px；
+   表单用 QPushButton，高度 36px。早前两者共用一条规则，导致工具栏按钮被撑到
+   36px 后图标与文字重叠 —— 这是实际发生的显示缺陷，不要合并回去。 */
+/* 未设置 variant 的普通按钮：01 方向下显式给无边框外观。
+   不能依赖 QPalette 的 3D 角色 —— Qt 默认 Light/Mid/Dark 是一组偏亮灰，
+   会在近黑底上画出一圈明显描边（实测比按钮底亮 10.8），与零边框方向冲突。
+
+   ⚠ 刻意**不在这里写 min-height**。
+   加过 `min-height: 28px` 后，所有固定尺寸的 QPushButton 全被撑大：
+   - 图层面板 24x24 图标按钮 → 24x38（按钮栏凭空高 14px）
+   - 属性面板 30x30 颜色块 → 30x38（破坏 COLOR_SWATCH_SIZE 尺寸契约）
+   Qt 的 QSS min-height 优先级高于 setFixedSize()，一旦存在就全局生效。
+   需要常规高度的地方请用 `uiSize` 属性档位（见下方 QPushButton[uiSize=...]）。 */
+QPushButton {
+    font-family: %%font%%;
+    font-size: %%fs-base%%px;
+    padding: 0 14px;
+    border-radius: %%radius%%px;
+    border: none;
+    /* 用 input(surface_3) 而不是 secondary(surface_2)：
+       零边框下按钮只能靠底色被识别，surface_2 与对话框底亮度差仅 12，
+       视觉上会「陷进背景」；surface_3 差 19.7，边界清晰又不抢主按钮。 */
+    background: %%input%%;
+    color: %%foreground%%;
+}
+QPushButton:hover { background: %%hover%%; }
+QPushButton:pressed { background: %%muted%%; }
+QPushButton:disabled { color: %%muted-foreground%%; background: %%secondary%%; }
+QPushButton:focus { border: 1px solid %%ring%%; }
+
+QPushButton[variant] {
     font-family: %%font%%;
     font-size: %%fs-base%%px;
     font-weight: %%fw-medium%%;
-    height: 36px;
-    padding: 0 16px;
+    /* 默认尺寸 = LG 档（36）。原来是写死 36，与 design_spec 脱钩。
+       注意：这条是 `[variant]` 属性选择器，特异性高于控件内联的
+       `min-height`，所以它写的 height 会盖掉内联值 —— 这是
+       「图层面板图标按钮内联写了 22 却渲染成 26」的直接原因之一。
+       需要别的档位时，用 `uiSize` 属性显式声明，不要把 height 写进内联 QSS。 */
+    height: %%ui-lg%%px;
+    padding: 0 16px 0 16px;
+    border-radius: %%radius%%px;
+    border: 1px solid transparent;
+}
+QToolButton[variant] {
+    font-family: %%font%%;
+    font-size: %%fs-base%%px;
+    font-weight: %%fw-medium%%;
+    /* 工具栏按钮：高度锁定 MD 档（28）。
+       ⚠ 三个要点，都是实测踩出来的：
+       1. 必须写 `height` + `max-height`，只写 `min-height` 不够 ——
+          实测 minH=28 时按钮仍渲染 31：因为 sizeHint/minimumSizeHint
+          被「图标 18px + 文字行高 + padding」算成 31，
+          Qt 取 max(minH, minSizeHint) = 31。加 max-height 才能压住。
+       2. height 不含 padding/border，内高 = 28 - 1×2 - 1×2 = 24。
+       3. padding 写全四边：写 `1px 7px` 时 Qt 与全局
+          `padding: 0 14px` 合并会把左右值串到上下。 */
+    height: %%toolbtn-inner-h%%px;
+    min-height: %%toolbtn-inner-h%%px;
+    max-height: %%toolbtn-inner-h%%px;
+    padding: 1px 7px 1px 7px;
     border-radius: %%radius%%px;
     border: 1px solid transparent;
 }
 QPushButton[variant]:hover, QToolButton[variant]:hover { background: %%hover%%; }
+/* 工具栏图标与文字之间留 4px，避免视觉粘连 */
+QToolButton[variant]::menu-indicator { image: none; }
 QPushButton[variant]:pressed, QToolButton[variant]:pressed { background: %%muted%%; }
 QPushButton[variant]:disabled, QToolButton[variant]:disabled {
     opacity: 0.5;
@@ -155,11 +259,41 @@ QPushButton[variant="link"], QToolButton[variant="link"] {
 }
 QPushButton[variant="link"]:hover, QToolButton[variant="link"]:hover { color: %%primary-hover%%; }
 
-/* 尺寸 */
-QPushButton[uiSize="sm"], QToolButton[uiSize="sm"] { height: 30px; padding: 0 12px; font-size: %%fs-sm%%px; }
-QPushButton[uiSize="lg"], QToolButton[uiSize="lg"] { height: 40px; padding: 0 22px; font-size: %%fs-lg%%px; }
+/* 尺寸
+   ⚠ 三档必须与 design_spec.Scale 一致（SM=24 / MD=28 / LG=36）。
+   历史上这里是 30/40，跟 Tokens.CONTROL_HEIGHT=30 一起构成了第二、三套真源，
+   导致「改了一处没效果」。现在统一由 %%ui-sm%% / %%ui-lg%% 注入。
+   注意：height 不含 padding/border。这些档位用 padding:0 所以直接等于目标值。 */
+QPushButton[uiSize="sm"], QToolButton[uiSize="sm"] { height: %%ui-sm%%px; min-height: %%ui-sm%%px; max-height: %%ui-sm%%px; padding: 0 12px; font-size: %%fs-sm%%px; }
+QPushButton[uiSize="lg"], QToolButton[uiSize="lg"] { height: %%ui-lg%%px; min-height: %%ui-lg%%px; max-height: %%ui-lg%%px; padding: 0 22px; font-size: %%fs-lg%%px; }
+/* 图标按钮：必须显式压掉上面 QPushButton 基础规则里的 min-height 与 padding。
+   QSS 的 min-height 优先级高于代码里的 setFixedSize() —— 只写 height/width
+   不够，实测 24x24 的图标按钮会被撑成 24x38，按钮栏凭空高出一截。
+
+   ⚠ height 要扣掉 border：这类按钮通常在控件内联 QSS 里写了
+   `border: 1px solid ...`（它们需要边框表达选中态）。而 QSS 的 height
+   不含 border，两者相加才是最终像素。实测写 28 且带 1px 边框 → 渲染 30，
+   写 24 带 1px 边框 → 渲染 26。都不在 24/28/36 三档内。
+   扣掉 1×2 后：内高 26 + 边框 2 = 28 ✓ */
 QPushButton[uiSize="icon"], QToolButton[uiSize="icon"] {
-    height: %%icon-btn%%px; width: %%icon-btn%%px; padding: 0;
+    height: %%icon-btn-inner%%px;
+    width: %%icon-btn-inner%%px;
+    min-height: %%icon-btn-inner%%px;
+    max-height: %%icon-btn-inner%%px;
+    min-width: %%icon-btn-inner%%px;
+    max-width: %%icon-btn-inner%%px;
+    padding: 0;
+}
+/* 紧凑图标按钮：目标 SM 档 24。同样扣掉 border → 内高 22 + 边框 2 = 24。
+   24px 是 WCAG 2.5.8 Target Size(Minimum) 的下限，再小就点不准了。 */
+QPushButton[uiSize="iconSm"], QToolButton[uiSize="iconSm"] {
+    height: %%icon-btn-sm-inner%%px;
+    width: %%icon-btn-sm-inner%%px;
+    min-height: %%icon-btn-sm-inner%%px;
+    max-height: %%icon-btn-sm-inner%%px;
+    min-width: %%icon-btn-sm-inner%%px;
+    max-width: %%icon-btn-sm-inner%%px;
+    padding: 0;
 }
 
 /* ---------- Card / Section ---------- */
@@ -178,12 +312,48 @@ QLabel[role="card-desc"] {
     color: %%muted-foreground%%; font-size: %%fs-sm%%px;
 }
 
-/* ---------- Input / Label（统一输入控件外观） ---------- */
+/* ---------- Input / Label（统一输入控件外观） ----------
+
+## 高度必须显式算清，不能只写 min-height
+
+QSS 的 height / min-height **不含 padding 与 border**，三者是相加的。
+原来只写 `min-height: control-h(30px)` + `padding: 4px 10px`，实测：
+    QSpinBox  → 38px     (30 + 4×2 padding)
+    QLineEdit → 30px
+    QComboBox → 30px
+同一行里 spinbox 比 input 高 8px，面板看起来"歪"，是视觉廉价感的主要来源之一。
+
+现在把 padding 与 1px 边框算进 min-height，并把 max-height 锁死：
+    min-height 24 + padding 2×2 + border 1×2 = 30px = control-h ✔
+    QSpinBox 额外设 max-height（它有上下按钮，sizeHint 天生比另外两个高 4px）
+
+实测三类控件均精确落在 30px（见 tests/test_control_metrics.py）。
+
+## 边框只在必要时出现
+
+深色界面里 `1px solid surface_4(#23252A)` 与底色的亮度差极小，
+既看不清又添一层噪点。改为默认无边框、用底色区分；聚焦时给可见的 focus ring。
+*/
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QPlainTextEdit {
-    background: %%popover%%; border: 1px solid %%input%%;
-    border-radius: %%radius%%px; padding: 4px 10px;
-    color: %%foreground%%; selection-background-color: %%primary%%;
-    min-height: %%control-h%%px;
+    background: %%popover%%;
+    border: 1px solid %%popover%%;
+    border-radius: %%radius%%px;
+    padding: 2px 10px;
+    color: %%foreground%%;
+    selection-background-color: %%primary%%;
+    min-height: %%control-inner-h%%px;
+}
+/* 需要固定高度的单行控件：把 max 也锁死，避免 spinbox 被 sizeHint 顶高 */
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+    max-height: %%control-inner-h%%px;
+}
+/* 多行控件不锁高度，由使用方决定 */
+QTextEdit, QPlainTextEdit {
+    padding: 6px 10px;
+}
+QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover,
+QTextEdit:hover, QPlainTextEdit:hover {
+    border-color: %%border%%;
 }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus,
 QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
@@ -191,6 +361,22 @@ QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
 }
 QLineEdit:disabled, QSpinBox:disabled, QTextEdit:disabled {
     color: %%muted-foreground%%; background: %%muted%%;
+}
+/* 状态栏内的紧凑输入控件。
+   状态栏实际可用高度只有 ~21px（QMainWindow 的状态栏区不做拉伸，
+   即便给它 max-height 也不会变高）。通用规则给 QSpinBox 的是
+   control-h(30px) + padding，实测撑到 32px 塞进 21px 容器 →
+   文字下半截被裁掉（「100%」显示成「1000%」）。
+   这里压到 16px 并去掉上下 padding，让数值完整可见。 */
+QStatusBar QSpinBox, QStatusBar QLineEdit, QStatusBar QComboBox {
+    min-height: 16px;
+    max-height: 16px;
+    padding: 0px 2px;
+    border-radius: 3px;
+}
+QStatusBar QSpinBox::up-button, QStatusBar QSpinBox::down-button {
+    width: 12px;
+    height: 8px;
 }
 QLabel[role="label"] {
     color: %%foreground%%; font-weight: %%fw-medium%%; font-size: %%fs-sm%%px;
@@ -234,7 +420,7 @@ QListWidget, QTreeWidget {
     border: 1px solid %%border%%; border-radius: %%radius%%px;
     selection-background-color: %%accent%%;
 }
-QListWidget::item, QTreeWidget::item { min-height: 30px; padding: 2px 7px; }
+QListWidget::item, QTreeWidget::item { min-height: %%control-h%%px; padding: 2px 7px; }
 
 /* ---------- Badge ---------- */
 QLabel[role="badge"] {
@@ -303,12 +489,14 @@ QDialog[dialogA2="true"] QLabel {
 }
 QDialog[dialogA2="true"] QFrame[role="dialogCard"] {
     background-color: %%card%%;
-    border: 1px solid %%border%%;
+    /* 01 方向：零边框。层次由 card(surface_1) 与 background(surface_base)
+       的亮度差承担；加 1px 描边会在近黑底上形成一条明显亮线。 */
+    border: none;
     border-radius: 6px;
 }
 QDialog[dialogA2="true"] QFrame[role="dialogSubPanel"] {
     background-color: %%background%%;
-    border: 1px solid %%border%%;
+    border: none;
     border-radius: 6px;
 }
 QDialog[dialogA2="true"] QFrame[role="dialogFooter"] {
@@ -332,8 +520,8 @@ QDialog[dialogA2="true"] QFrame[role="dialogDivider"] {
 QDialog[dialogA2="true"] QToolButton[role="dialogCloseButton"] {
     min-width: 30px;
     max-width: 30px;
-    min-height: 30px;
-    max-height: 30px;
+    min-height: %%icon-btn-sm%%px;
+    max-height: %%icon-btn-sm%%px;
     padding: 0;
     background-color: transparent;
     border-color: transparent;
@@ -357,7 +545,7 @@ QDialog[dialogA2="true"] QSpinBox,
 QDialog[dialogA2="true"] QComboBox,
 QDialog[dialogA2="true"] QListWidget,
 QDialog[dialogA2="true"] QTextEdit {
-    min-height: 32px;
+    min-height: %%control-h%%px;
     background-color: %%background%%;
     color: %%foreground%%;
     border: 1px solid %%input%%;
@@ -366,7 +554,7 @@ QDialog[dialogA2="true"] QTextEdit {
     padding: 3px 6px;
 }
 QDialog[dialogA2="true"] QListWidget::item {
-    min-height: 26px;
+    min-height: %%control-h-sm%%px;
     padding: 4px 6px;
     border-radius: 3px;
 }
@@ -386,7 +574,7 @@ QDialog[dialogA2="true"] QTextEdit:focus {
 }
 QDialog[dialogA2="true"] QPushButton,
 QDialog[dialogA2="true"] QToolButton {
-    min-height: 32px;
+    min-height: %%control-h%%px;
     border: 1px solid %%input%%;
     border-radius: 4px;
     background-color: %%secondary%%;
@@ -413,7 +601,7 @@ QDialog[dialogA2="true"] QToolButton:disabled {
 }
 QDialog[dialogA2="true"] QPushButton[primaryButton="true"] {
     min-width: 80px;
-    min-height: 34px;
+    min-height: %%control-h-lg%%px;
     background-color: %%primary%%;
     border-color: %%primary-hover%%;
     color: %%primary-foreground%%;
@@ -425,7 +613,7 @@ QDialog[dialogA2="true"] QPushButton[primaryButton="true"]:hover {
 }
 QDialog[dialogA2="true"] QPushButton[secondaryButton="true"] {
     min-width: 80px;
-    min-height: 34px;
+    min-height: %%control-h-lg%%px;
     background-color: %%secondary%%;
     border-color: %%input%%;
 }
@@ -534,7 +722,7 @@ QLabel[role="small"] { color: %%muted-foreground%%; font-size: %%fs-xs%%px; }
 QLabel[role="code"] {
     background: %%muted%%; color: %%foreground%%;
     border-radius: 4px; padding: 2px 6px;
-    font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+    font-family: "Cascadia Code";
     font-size: %%fs-sm%%px;
 }
 QLabel[role="blockquote"] {
@@ -544,7 +732,7 @@ QLabel[role="blockquote"] {
 QLabel[role="kbd"] {
     background: %%secondary%%; color: %%foreground%%;
     border: 1px solid %%border%%; border-radius: 4px; padding: 1px 7px;
-    font-family: "Cascadia Code", "Consolas", "Courier New", monospace;
+    font-family: "Cascadia Code";
     font-size: %%fs-xs%%px;
 }
 
@@ -589,9 +777,17 @@ QFrame[role="input-group"] QSpinBox,
 QFrame[role="input-group"] QDoubleSpinBox {
     background: transparent; border: none; padding-left: 2px; padding-right: 2px;
 }
-QPushButton[role="color-swatch"] {
-    border: 1px solid %%border%%; border-radius: %%radius%%px; padding: 0;
+/* 颜色块外观：**只写边框/圆角，不写任何尺寸属性**。
+   尺寸链路由控件自己的内联 QSS 负责（ColorIndicator.update_color_display
+   里写 min/max = size-2 以抵消 1px 边框）。见 app/ui/text_panel_widgets.py 的说明。
+   这里若再写 min-height，会与内联值叠加成 32~38px，破坏 COLOR_SWATCH_SIZE 契约。 */
+QPushButton[role="color-swatch"],
+QDialog[dialogA2="true"] QPushButton[role="color-swatch"] {
+    border: 1px solid %%border%%;
+    border-radius: %%radius%%px;
+    padding: 0;
 }
+QPushButton[role="color-swatch"]:focus { border-color: %%ring%%; }
 QPushButton[role="color-swatch"]:focus { border-color: %%ring%%; }
 
 /* ---------- Legacy semantic containers ---------- */
@@ -638,7 +834,7 @@ QListWidget[role="command-list"] {
     background: %%background%%; border: none; padding: 4px;
 }
 QListWidget[role="command-list"]::item {
-    min-height: 34px; padding: 0 10px; border-radius: %%radius%%px;
+    min-height: %%control-h-lg%%px; padding: 0 10px; border-radius: %%radius%%px;
 }
 QListWidget[role="command-list"]::item:selected { background: %%accent%%; }
 
@@ -702,6 +898,14 @@ def get_palette() -> QPalette:
     p.setColor(QPalette.ToolTipBase, surface)
     p.setColor(QPalette.ToolTipText, fg)
     p.setColor(QPalette.Link, QColor(Theme.color("primary")))
+    # 3D 边框角色：Qt 默认会给 Light / Midlight / Mid / Dark / Shadow 一组偏亮的灰，
+    # 未显式设置 variant 的按钮就会用它们画出一圈明显描边 ——
+    # 这与 01 方向「零边框、靠底色差分层次」冲突（实测边框比按钮底亮 10.8）。
+    # 这里全部压到接近背景的值，让默认按钮也呈无边框观感。
+    _edge = QColor(Theme.color("secondary"))
+    for _role in (QPalette.Light, QPalette.Midlight, QPalette.Mid,
+                  QPalette.Dark, QPalette.Shadow):
+        p.setColor(_role, _edge)
     return p
 
 

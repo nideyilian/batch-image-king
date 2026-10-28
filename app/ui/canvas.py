@@ -38,8 +38,26 @@ class _CanvasPreviewRenderTask(QRunnable):
     def run(self):
         self._callback()
 
-class CanvasWidget(QWidget, CanvasWidgetCanvasView, CanvasWidgetCanvasRender, CanvasWidgetCanvasDraw, CanvasWidgetCanvasHit, CanvasWidgetCanvasEvents):
-    """画布控件，用于显示和编辑图像"""
+class CanvasWidget(
+    CanvasWidgetCanvasView,
+    CanvasWidgetCanvasRender,
+    CanvasWidgetCanvasDraw,
+    CanvasWidgetCanvasHit,
+    CanvasWidgetCanvasEvents,
+    QWidget,
+):
+    """画布控件，用于显示和编辑图像。
+
+    ⚠ 基类顺序：各 CanvasWidget* 能力类必须排在 QWidget 之前。
+
+    原写法 `class CanvasWidget(QWidget, ...各能力类)` 让 QWidget 占据 MRO
+    首位，它自带的同名方法会抢在能力类之前解析。实测确认：
+
+        CanvasWidget.sizeHint → QWidget.sizeHint   ❌（能力类里返回 QSize(800,600)）
+
+    后果是画布首次布局拿不到 800×600 的建议尺寸，被压成 QWidget 默认值。
+    调整顺序后 `super()` 依然能走到 QWidget（它在 MRO 末尾）。
+    """
     position_changed = Signal(int, int)  # 鼠标位置变化
     def __init__(self, document):
         super().__init__()

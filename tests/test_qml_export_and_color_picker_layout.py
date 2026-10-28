@@ -115,25 +115,45 @@ def test_qml_color_picker_renders_without_native_white_header(tmp_path: Path):
     env["QT_QPA_PLATFORM"] = "offscreen"
     env["QT_QUICK_BACKEND"] = "software"
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(REPO_ROOT / "start_qml.py"),
-            "--screenshot",
-            str(screenshot),
-            "--width",
-            "1280",
-            "--height",
-            "760",
-            "--show-color-picker",
-        ],
-        cwd=REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
+    # 前置条件必须由测试自己建立。
+    #
+    # 原来这条测试直接读机器上持久化的主题设置 —— 本机恰好存着 dark 所以
+    # 一直绿，换台机器（默认 light）就必然失败。测试不该依赖"上一次运行
+    # 留下的状态"，否则它保护的就不是代码，而是这台机器的历史。
+    from PySide6.QtCore import QSettings
+
+    settings = QSettings("批图王", "批图王")
+    previous_theme = settings.value("uiAppearance/themeMode")
+    settings.setValue("uiAppearance/themeMode", "dark")
+    settings.sync()
+
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "start_qml.py"),
+                "--screenshot",
+                str(screenshot),
+                "--width",
+                "1280",
+                "--height",
+                "760",
+                "--show-color-picker",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    finally:
+        # 用完还原，不要把测试的前置条件留在用户配置里
+        if previous_theme is None:
+            settings.remove("uiAppearance/themeMode")
+        else:
+            settings.setValue("uiAppearance/themeMode", previous_theme)
+        settings.sync()
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert screenshot.exists() and screenshot.stat().st_size > 20_000

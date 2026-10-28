@@ -889,31 +889,6 @@ class OptimizedBatchExecutorTaskRender(object):
                     stage='after_restore'
                 )
 
-    def _should_use_gpu_for_task(self) -> bool:
-        """GPU"""
-        try:
-            # GPU
-            try:
-                import torch
-                if not torch.cuda.is_available():
-                    return False
-            except ImportError:
-                # torchFalse
-                return False
-
-            # 
-            canvas_size = self.document.canvas_width * self.document.canvas_height
-            layer_count = len([layer for layer in self.document.layers if layer.visible])
-
-            # GPU
-            if canvas_size > 2000000 or layer_count > 5:  # 2MP+  5+ 
-                print(f"[] GPU: {canvas_size}, {layer_count}")
-                return True
-
-            return False
-        except (ImportError, Exception):
-            return False
-
     def _cleanup_resources(self):
         """"""
         try:

@@ -21,6 +21,8 @@ from PIL import Image, ImageFilter, ImageEnhance
 from typing import Tuple, Optional, Dict, Any
 import warnings
 
+from app.utils.image import ndops
+
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
@@ -167,30 +169,14 @@ class PNGEdgeFixer:
     
     def _detect_problem_edges(self, alpha: np.ndarray) -> np.ndarray:
         """检测有问题的边缘像素"""
-        # 使用梯度检测边缘
-        try:
-            from scipy import ndimage
-            grad_x = ndimage.sobel(alpha, axis=1)
-            grad_y = ndimage.sobel(alpha, axis=0)
-            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            
-            # 边缘阈值
-            edge_threshold = 0.1
-            return gradient_magnitude > edge_threshold
-            
-        except ImportError:
-            # 简单的边缘检测
-            h, w = alpha.shape
-            edges = np.zeros_like(alpha, dtype=bool)
-            
-            for i in range(1, h-1):
-                for j in range(1, w-1):
-                    center = alpha[i, j]
-                    neighbors = alpha[i-1:i+2, j-1:j+2]
-                    max_diff = np.max(np.abs(neighbors - center))
-                    edges[i, j] = max_diff > 0.1
-            
-            return edges
+        # 使用梯度检测边缘（ndops.sobel 与 scipy.ndimage.sobel 逐位等价）
+        grad_x = ndops.sobel(alpha, axis=1)
+        grad_y = ndops.sobel(alpha, axis=0)
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+
+        # 边缘阈值
+        edge_threshold = 0.1
+        return gradient_magnitude > edge_threshold
     
     def _correct_edge_colors(self, rgb: np.ndarray, alpha: np.ndarray, 
                            edge_mask: np.ndarray, bg_color: np.ndarray) -> np.ndarray:

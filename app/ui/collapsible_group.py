@@ -158,7 +158,10 @@ class CollapsibleGroupBox(QFrame):
                 background: transparent;
                 border: none;
                 color: {Tokens.TEXT_PRIMARY};
-                font-size: {Tokens.FONT_SIZE_BASE + 1}px;
+                /* 折叠组标题。原来写 `FONT_SIZE_BASE + 1` = 14px，
+                   算术偏移出来的值不在档位上（等于绕过规范）。
+                   语义上它就是区块标题，直接用 SIDEBAR_TITLE_FONT_SIZE(14)。 */
+                font-size: {Tokens.SIDEBAR_TITLE_FONT_SIZE}px;
                 font-weight: {Tokens.FONT_WEIGHT_BOLD};
                 text-align: center;
                 padding: 0px;

@@ -55,37 +55,17 @@ def _draw_fill_mask_hi(
 
 
 def _binary_morph(mask_bool, radius: int, mode: str):
-    """对布尔蒙版做半径为 radius 的形态学运算（3x3 结构，含回退）。"""
+    """对布尔蒙版做半径为 radius 的形态学运算（3x3 结构）。"""
     r = max(0, int(radius))
     if r <= 0:
         return mask_bool.copy()
-    try:
-        from scipy import ndimage
-        import numpy as np
+    import numpy as np
 
-        structure = np.ones((3, 3), dtype=bool)
-        if mode == "dilate":
-            return ndimage.binary_dilation(mask_bool, structure=structure, iterations=r, border_value=0)
-        return ndimage.binary_erosion(mask_bool, structure=structure, iterations=r, border_value=0)
-    except Exception:
-        # PIL 回退（按 1 像素迭代）
-        import numpy as np
-        from PIL import ImageFilter
+    from app.utils.image import ndops
 
-        img = Image.fromarray((mask_bool.astype(np.uint8) * 255), mode="L")
-        if mode == "dilate":
-            for _ in range(r):
-                img = img.filter(ImageFilter.MaxFilter(3))
-        else:
-            pad = max(2, r + 2)
-            arr = np.array(img, dtype=np.uint8)
-            arr = np.pad(arr, pad, mode="constant", constant_values=0)
-            img = Image.fromarray(arr, mode="L")
-            for _ in range(r):
-                img = img.filter(ImageFilter.MinFilter(3))
-            w, h = mask_bool.shape[1], mask_bool.shape[0]
-            img = img.crop((pad, pad, pad + w, pad + h))
-        return (np.array(img, dtype=np.uint8) > 127)
+    structure = np.ones((3, 3), dtype=bool)
+    operation = "dilation" if mode == "dilate" else "erosion"
+    return ndops.binary_morphology(mask_bool, structure, iterations=r, operation=operation)
 
 
 def _build_closed_stroke_mask_by_morph(base_hi: Image.Image, stroke_px_hi: int, stroke_type: int) -> Image.Image:
@@ -122,31 +102,18 @@ def _interior_core_mask(base_mask: Image.Image, shrink_px: int) -> Image.Image:
     """
     if shrink_px <= 0:
         return base_mask.copy()
-    try:
-        import numpy as np
-        from scipy import ndimage
+    import numpy as np
 
-        filled = np.array(base_mask, dtype=np.uint8) > 127
-        core = ndimage.binary_erosion(
-            filled,
-            structure=np.ones((3, 3), dtype=bool),
-            iterations=int(shrink_px),
-            border_value=0,
-        )
-        return Image.fromarray((core.astype(np.uint8) * 255))
-    except Exception:
-        import numpy as np
-        from PIL import ImageFilter
+    from app.utils.image import ndops
 
-        pad = max(8, int(shrink_px) * 2)
-        arr = np.array(base_mask, dtype=np.uint8)
-        padded = np.pad(arr, pad, mode="constant", constant_values=0)
-        im = Image.fromarray(padded, mode="L")
-        iters = max(1, min(int(shrink_px) * 2 + 2, 60))
-        for _ in range(iters):
-            im = im.filter(ImageFilter.MinFilter(3))
-        w, h = base_mask.size
-        return im.crop((pad, pad, pad + w, pad + h))
+    filled = np.array(base_mask, dtype=np.uint8) > 127
+    core = ndops.binary_morphology(
+        filled,
+        np.ones((3, 3), dtype=bool),
+        iterations=int(shrink_px),
+        operation="erosion",
+    )
+    return Image.fromarray((core.astype(np.uint8) * 255))
 
 
 def alpha_composite_layers(base: Image.Image, overlay: Image.Image) -> Image.Image:

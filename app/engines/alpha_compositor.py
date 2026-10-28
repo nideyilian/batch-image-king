@@ -20,11 +20,6 @@ from PIL import Image, ImageFilter
 import cv2
 from typing import Tuple, Optional, Union
 from enum import Enum
-try:
-    import scipy.ndimage as ndimage
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
 
 
 def safe_print(message: str):
@@ -351,11 +346,13 @@ class AlphaCompositor:
             # 使用中值滤波减少颜色异常
             for channel in range(3):
                 rgb_channel = rgb[:,:,channel]
-                if SCIPY_AVAILABLE:
-                    filtered_channel = ndimage.median_filter(rgb_channel, size=3)
-                else:
-                    # 使用OpenCV作为后备
-                    filtered_channel = cv2.medianBlur((rgb_channel * 255).astype(np.uint8), 3).astype(np.float32) / 255.0
+                # Pillow MedianFilter 已实测与 scipy.ndimage.median_filter(size=3) 逐像素等价
+                filtered_channel = np.asarray(
+                    Image.fromarray((rgb_channel * 255).astype(np.uint8), "L").filter(
+                        ImageFilter.MedianFilter(3)
+                    ),
+                    dtype=np.float32,
+                ) / 255.0
                 rgb[:,:,channel] = np.where(edge_mask, filtered_channel, rgb_channel)
         
         array[:,:,:3] = rgb

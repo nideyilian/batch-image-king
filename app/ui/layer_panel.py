@@ -57,7 +57,7 @@ from app.ui.layer_panel_selection import LayerPanelSelection
 from app.ui.layer_panel_ops import LayerPanelOps
 from app.ui.layer_panel_align import LayerPanelAlign
 
-class LayerPanel(QWidget, LayerPanelBase, LayerPanelSelection, LayerPanelOps, LayerPanelAlign):
+class LayerPanel(LayerPanelBase, LayerPanelSelection, LayerPanelOps, LayerPanelAlign, QWidget):
     """图层面板组件"""
 
 

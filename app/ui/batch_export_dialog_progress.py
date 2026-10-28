@@ -762,6 +762,19 @@ class BatchExportDialogProgressMixin:
                 logger.warning("静默异常已忽略: except in ui/batch_export_dialog_progress.py", exc_info=True)
                 pass
 
+            # 降级提示：导出成功不代表结果完全符合预期。
+            # 素材目录丢失、分类筛选为空、去重失效等都会让图「出了但不对」，
+            # 必须让用户在完成提示里直接看到，而不是去翻日志。
+            try:
+                diag = getattr(self.document, '_last_precompute_diagnostics', None) or {}
+                degradations = diag.get('degradations') if isinstance(diag, dict) else None
+                if degradations:
+                    total = int(diag.get('degradation_total', 0) or 0)
+                    kinds = len(degradations)
+                    message += f"；⚠ 有 {kinds} 类降级（共 {total} 次），结果可能不符合预期"
+            except Exception:
+                logger.warning("静默异常已忽略: 读取降级诊断失败", exc_info=True)
+
             self._notify_non_blocking(message, 8000)
         else:
             self._progress_phase_hint = "导出失败"

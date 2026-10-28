@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
+from app.ui.design_spec import Space as _Space, Width as _Width
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """BatchExportDialog 方法 mixin：由拆分脚本生成，方法原属于 BatchExportDialog。"""
 import logging
 
 logger = logging.getLogger(__name__)
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSizePolicy,
                            QPushButton, QSpinBox, QLineEdit, QFormLayout,
                            QFileDialog, QDialogButtonBox, QComboBox, QCheckBox, QGroupBox, QMessageBox,
                            QInputDialog, QListWidget, QProgressBar, QListWidgetItem, QAbstractItemView, QWidget, QGridLayout,
@@ -24,6 +25,37 @@ def _set_semantic_status(widget, status=None):
     widget.style().polish(widget)
 
 
+class ElidedLabel(QLabel):
+    """按可用宽度自动省略的 QLabel。
+
+    为什么需要：QLabel 不会裁剪超长文本，长文件名会画到父容器边界之外。
+    而 ElideMiddle 需要**真实宽度**，构造期 width() 尚未确定，
+    因此在 resizeEvent 里重算，保证裁断始终生效。
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._full_text = ""
+
+    def setText(self, text):
+        self._full_text = text or ""
+        self._apply_elide()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_elide()
+
+    def _apply_elide(self):
+        if not self._full_text:
+            super().setText("")
+            return
+        avail = max(40, self.width() - 2)
+        super().setText(self.fontMetrics().elidedText(self._full_text, Qt.ElideMiddle, avail))
+
+    def fullText(self):
+        return self._full_text
+
+
 class BatchExportDialogUiMixin:
 
 
@@ -36,7 +68,12 @@ class BatchExportDialogUiMixin:
         form_layout = QFormLayout()
         form_layout.setVerticalSpacing(8)
 
-        # 基础导出参数（单行）：导出数量 + 导出格式 + 最大文件大小
+        # 基础导出参数：拆成两行。
+        #
+        # 历史问题：5 个标签 + 5 个控件挤在一行，实测最低需求约 743px，
+        # 而对话框内部可用宽度只有 ~730px —— 结果「导出数量」被切成「数量」、
+        # 「最大文件大小(KB)」被切成「最大文件」、数字输入框窄到只显示一位数。
+        # 这是功能性缺陷（用户看不到要导出多少张），不是审美问题。
         basic_export_layout = QHBoxLayout()
         basic_export_layout.setContentsMargins(0, 0, 0, 0)
         basic_export_layout.setSpacing(12)
@@ -45,6 +82,7 @@ class BatchExportDialogUiMixin:
         self.count_spin = QSpinBox()
         self.count_spin.setRange(1, 100000)
         self.count_spin.setValue(10)
+        self.count_spin.setMinimumWidth(88)   # 容得下 5 位数
         self.count_spin.setToolTip("要导出的图像数量")
         basic_export_layout.addWidget(self.count_spin)
 
@@ -67,30 +105,40 @@ class BatchExportDialogUiMixin:
         self.max_file_size_spin = QSpinBox()
         self.max_file_size_spin.setRange(0, 102400)
         self.max_file_size_spin.setValue(299)
+        self.max_file_size_spin.setMinimumWidth(80)  # 容得下 6 位数
         self.max_file_size_spin.setToolTip("导出图片的最大文件大小（单位KB，0表示不限制）")
         basic_export_layout.addWidget(self.max_file_size_spin)
-        hint = QLabel("0 表示不限制")
-        hint.setProperty("role", "muted")
-        basic_export_layout.addWidget(hint)
+        basic_export_layout.addStretch()
 
-        basic_export_layout.addSpacing(8)
-        basic_export_layout.addWidget(QLabel("质量策略:"))
+        form_layout.addRow(basic_export_layout)
+
+        # 质量策略单独一行：这个下拉的选项文字较长（「压缩体积」「质量优先」），
+        # 与上面挤在一行时会被压到只剩一个汉字。
+        quality_layout = QHBoxLayout()
+        quality_layout.setContentsMargins(0, 0, 0, 0)
+        quality_layout.setSpacing(8)
+        quality_layout.addWidget(QLabel("质量策略:"))
         self.quality_profile_combo = QComboBox()
         self.quality_profile_combo.addItem("质量优先", "quality")
         self.quality_profile_combo.addItem("均衡", "balanced")
         self.quality_profile_combo.addItem("极速", "speed")
         self.quality_profile_combo.addItem("压缩体积", "size")
         self.quality_profile_combo.setCurrentIndex(0)
+        self.quality_profile_combo.setMinimumWidth(120)
         self.quality_profile_combo.setToolTip("默认质量优先；只要设置了最大文件大小，所有质量策略都会优先遵循该上限。")
-        basic_export_layout.addWidget(self.quality_profile_combo)
-        basic_export_layout.addStretch()
+        quality_layout.addWidget(self.quality_profile_combo)
 
-        form_layout.addRow(basic_export_layout)
+        size_hint = QLabel("0 = 不限制体积")
+        size_hint.setProperty("role", "muted")
+        quality_layout.addWidget(size_hint)
+        quality_layout.addStretch()
+
+        form_layout.addRow(quality_layout)
 
         memory_group = QGroupBox("内存保护")
         memory_layout = QHBoxLayout(memory_group)
         memory_layout.setContentsMargins(8, 8, 8, 8)
-        memory_layout.setSpacing(10)
+        memory_layout.setSpacing(_Space.SM)
         memory_layout.addWidget(QLabel("模式:"))
         self.memory_guard_combo = QComboBox()
         self.memory_guard_combo.addItem("自动", "auto")
@@ -123,14 +171,14 @@ class BatchExportDialogUiMixin:
         self.dynamic_budget_group = QGroupBox("动态尝试预算（迭代3）")
         dynamic_layout = QVBoxLayout(self.dynamic_budget_group)
         dynamic_layout.setContentsMargins(8, 8, 8, 8)
-        dynamic_layout.setSpacing(6)
+        dynamic_layout.setSpacing(_Space.XS)
 
         self.dynamic_budget_enabled_check = QCheckBox("启用动态预算（按实时成功率/重复率自动扩缩尝试上限）")
         dynamic_layout.addWidget(self.dynamic_budget_enabled_check)
 
         mode_row = QHBoxLayout()
         mode_row.setContentsMargins(12, 0, 0, 0)
-        mode_row.setSpacing(10)
+        mode_row.setSpacing(_Space.SM)
         self.dynamic_budget_binding_check = QCheckBox("绑定模式")
         self.dynamic_budget_standard_check = QCheckBox("标准模式")
         self.dynamic_budget_binding_check.setChecked(True)
@@ -328,10 +376,18 @@ class BatchExportDialogUiMixin:
 
         # 预览
         preview_layout = QHBoxLayout()
-        preview_layout.addWidget(QLabel("文件名预览:"))
-        self.filename_preview = QLabel()
+        preview_layout.setSpacing(_Space.XS)
+        preview_label = QLabel("文件名预览:")
+        preview_label.setFixedWidth(_Width.COMBO)   # 固定标签宽度，避免被长文件名挤走
+        preview_layout.addWidget(preview_label)
+        # QLabel 默认不会裁剪超长文本，会画到父容器外面（实测文件名直接溢出面板边界）。
+        # 用 ElidedLabel：在 resizeEvent 里按**真实宽度**重算省略，
+        # 避免构造期 width() 还是旧值导致裁断失效。
+        self.filename_preview = ElidedLabel()
         self.filename_preview.setProperty("role", "status-value")
-        preview_layout.addWidget(self.filename_preview)
+        self.filename_preview.setMinimumWidth(0)
+        self.filename_preview.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        preview_layout.addWidget(self.filename_preview, 1)
         name_layout.addLayout(preview_layout)
 
         # 添加更新预览的连接
@@ -354,7 +410,7 @@ class BatchExportDialogUiMixin:
         mode_group = QGroupBox("导出模式")
         mode_layout = QVBoxLayout()
         mode_layout.setContentsMargins(8, 8, 8, 8)
-        mode_layout.setSpacing(6)
+        mode_layout.setSpacing(_Space.XS)
 
         self.traverse_export_check = QCheckBox("遍历导出（导出所有可能组合）")
         self.traverse_export_check.setToolTip("启用后将导出所有可能的组合，而不是随机生成组合")
@@ -365,12 +421,13 @@ class BatchExportDialogUiMixin:
         self.smart_sampling_check.setToolTip("启用后将确保每个图层的图片使用次数尽可能均匀，避免某些图片被过度使用")
         self.smart_sampling_check.setChecked(True)  # 默认启用
 
-        mode_options_layout = QHBoxLayout()
+        # 竖排：右侧「导出模式」面板宽度有限，两个长文案复选框横排会被截断
+        # （实测「遍历导出（导出所有可能组合）」只剩「遍历导出（导出所有可」）。
+        mode_options_layout = QVBoxLayout()
         mode_options_layout.setContentsMargins(0, 0, 0, 0)
-        mode_options_layout.setSpacing(10)
+        mode_options_layout.setSpacing(4)
         mode_options_layout.addWidget(self.traverse_export_check)
         mode_options_layout.addWidget(self.smart_sampling_check)
-        mode_options_layout.addStretch()
         mode_layout.addLayout(mode_options_layout)
 
         # 添加说明文字
@@ -422,7 +479,7 @@ class BatchExportDialogUiMixin:
         modules_container = QWidget()
         modules_layout = QHBoxLayout(modules_container)
         modules_layout.setContentsMargins(0, 0, 0, 0)
-        modules_layout.setSpacing(10)
+        modules_layout.setSpacing(_Space.SM)
 
         left_modules_layout = QVBoxLayout()
         left_modules_layout.setContentsMargins(0, 0, 0, 0)
@@ -858,7 +915,9 @@ class BatchExportDialogUiMixin:
         ext_map = {0: ".png", 1: ".jpg", 2: ".bmp"}
         ext = ext_map.get(self.format_combo.currentIndex(), ".png")
         preview = "-".join(parts) + ext
+        # ElidedLabel 内部按当前宽度做 ElideMiddle，完整值放 tooltip
         self.filename_preview.setText(preview)
+        self.filename_preview.setToolTip(preview)
 
     def update_directory(self):
         """当用户直接编辑路径输入框时更新目录"""

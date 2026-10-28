@@ -132,7 +132,18 @@ def logger_file_path(logger: logging.Logger) -> str:
 
 
 def show_previous_crash_notice(parent, notice) -> None:
-    dialog = QMessageBox(parent)
+    """显示上次异常退出的提示。
+
+    `parent` 可能是 QQuickWindow（QML 工作台）或 QWidget（旧经典版），
+    但 QMessageBox 只接受 QWidget 父窗口。直接传 QQuickWindow 会抛
+    TypeError → 崩溃恢复提示**永远弹不出来**，用户只会在日志里看到一条
+    「未捕获的异常」，等于崩溃恢复对用户隐形。
+    这里统一降级为无父窗口的独立对话框：提示仍然显示，模态行为一致。
+    """
+    from PySide6.QtWidgets import QWidget
+
+    widget_parent = parent if isinstance(parent, QWidget) else None
+    dialog = QMessageBox(widget_parent)
     dialog.setIcon(QMessageBox.Warning)
     dialog.setWindowTitle("检测到上次异常退出")
     dialog.setText(str(notice.message))
@@ -168,13 +179,6 @@ def show_dependency_status():
     try:
         import cv2
         dependencies.append("高级图像处理")
-    except ImportError:
-        pass
-
-    # 检查SciPy
-    try:
-        import scipy
-        dependencies.append("科学计算")
     except ImportError:
         pass
 
@@ -214,22 +218,14 @@ def handle_exception(exc_type: type, exc_value: BaseException, exc_traceback: Op
         print(f"原始错误: {error_msg}")
         print(tb_msg)
 
-def setup_fixed_theme(app: QApplication) -> None:
-    """设置固定的暗色主题，不跟随系统主题变化"""
-    from app.ui.dark_theme import CursorDarkTheme
-    # 强制设置样式为Fusion，但使用自定义调色板覆盖
-    app.setStyle('Fusion')
-    
-    # 禁用原生菜单栏，确保一致的样式
-    app.setAttribute(Qt.AA_DontUseNativeMenuBar, True)
-    
-    # 应用固定的暗色主题（包含完整的调色板和样式表）
-    CursorDarkTheme.apply_to_application(app)
-
 def main() -> int:
-    """程序主函数（优化版本）"""
-    # 经典界面专用依赖全部延迟到真正进入 classic 模式后导入。
-    from app.main_window import MainWindow
+    """程序入口：应用级基础设施 + QML 工作台。
+
+    2026-10-28 经典 Qt Widgets 界面下线，这里不再创建 MainWindow。
+    但日志、崩溃会话、依赖检查、PIL 大图限制、退出清理**必须留在这里** ——
+    它们与用哪套 UI 无关。上一轮把默认入口直接指向 qml_main 时，
+    这整块基础设施被绕过了（没有日志、没有崩溃报告），属于隐藏退化。
+    """
     from PIL import Image
 
     # 启动优化器自身依赖 Qt，但不应拖慢默认 QML 入口的模块导入。
@@ -298,8 +294,13 @@ def main() -> int:
                              lambda: check_system_dependencies_full(),
                              priority=2, can_defer=True)
 
-            # 执行优化启动（传入app实例）
-            startup_stats = optimizer.execute_startup(show_splash=True, app=app)
+            # 执行优化启动。
+            #
+            # show_splash=False：旧 StartupOptimizer 自带的启动画面会被
+            # execute_startup() 在返回前就 finish() 掉 —— 也就是主窗口构造
+            # （真正耗时 3.5~5 秒的那段）开始之前它就消失了，等于没显示。
+            # 启动画面统一由下方 SplashScreen 负责，避免两个画面互相抢。
+            startup_stats = optimizer.execute_startup(show_splash=False, app=app)
             logger.info(f"启动优化完成: {startup_stats}")
         else:
             # 回退到原有启动流程
@@ -316,7 +317,12 @@ def main() -> int:
             # 创建应用
             app = QApplication(sys.argv)
 
-        # 应用固定的暗色主题（不跟随系统主题）
+        # 应用固定主题。
+        #
+        # 名字带「经典」，但**不能省**：QML 里嵌了一批 QWidget 弹窗
+        # （颜色选择器、新建画布对话框等），它们靠这套 palette/QSS 上色。
+        # 跳过之后实测颜色选择器标题栏变成纯白（255,255,255），
+        # 与 QML 暗色界面割裂。QSS 只作用于 QWidget，不影响 QML 主界面。
         setup_fixed_theme(app)
 
         # 设置应用信息
@@ -330,84 +336,62 @@ def main() -> int:
         app.setApplicationVersion(app_version)
         app.setOrganizationName("批图王")
 
-        # 创建并显示主窗口
-        window = MainWindow()
-        window.show()
-        if previous_crash_notice is not None:
-            QTimer.singleShot(
-                300,
-                lambda notice=previous_crash_notice: show_previous_crash_notice(window, notice),
-            )
-        
+        # 启动画面：QML 加载期间同样有可感知的等待，保留。
+        splash = None
+        try:
+            from app.ui.splash_screen import SplashScreen
+
+            splash = SplashScreen()
+            splash.begin()
+            splash.advance(0.06, "正在加载界面…")
+        except Exception as splash_error:
+            # 启动画面是锦上添花，失败绝不能挡住启动
+            splash = None
+            logger.warning(f"启动画面不可用，继续正常启动: {splash_error}")
+
+        def _finish_splash(qml_window) -> None:
+            """首屏对象树就绪后收掉启动画面。"""
+            if splash is not None:
+                splash.advance(1.0, "准备就绪")
+                splash.finish_with(qml_window)
+
+            if previous_crash_notice is not None:
+                QTimer.singleShot(
+                    300,
+                    lambda notice=previous_crash_notice: show_previous_crash_notice(
+                        qml_window, notice
+                    ),
+                )
+
+            # 完整依赖检查必须挂在**事件循环内**的定时器上。
+            # 原来它写在 app.exec() 之后 —— 那时循环已经结束，定时器永不触发，
+            # 等于这段检查从来没跑过（只是看起来有）。
+            if not startup_optimizer_available:
+
+                def delayed_full_check() -> None:
+                    logger.info("执行完整系统依赖检查...")
+                    check_system_dependencies_full()
+
+                QTimer.singleShot(1000, delayed_full_check)
+
+        # QML 工作台接管窗口创建与事件循环，复用上面已建好的 QApplication
+        from app.qml.qml_main import main as qml_main
+
+        exit_code = qml_main(app=app, on_ready=_finish_splash)
+
         # 恢复程序退出策略（当最后一个窗口关闭时退出）
         app.setQuitOnLastWindowClosed(True)
-        
+
         # 计算并打印实际启动时间
         startup_duration = time.time() - start_time
-        logger.info(f"启动完成，UI已显示，总耗时: {startup_duration:.2f} 秒")
+        logger.info(f"启动完成，总耗时: {startup_duration:.2f} 秒")
         print(f"启动完成，总耗时: {startup_duration:.2f} 秒")
 
-        if os.environ.get('TEST_SHAPED_LAYER') == '1':
-            # 🔧 注意：不要在此处再次 `from PySide6.QtCore import QTimer`，
-            # 否则 Python 会把 QTimer 视作 main() 的局部变量，导致函数顶部
-            # `QTimer.singleShot(300, ...)`（异常提示）因未绑定而抛 UnboundLocalError。
-            def run_shape_layer_tests():
-                try:
-                    from app.models.document import Document
-                    from app.models.layer_properties import ShapeType
-                    doc = Document(parent=window)
-                    doc.create_new(800, 600)
-                    window.create_new_tab(doc)
-                    layer = doc.add_layer("异形图层测试", 100, 100, 200, 160)
-                    layer.shape_type = ShapeType.RIGHT_TRAPEZOID
-                    print("[测试] 已创建异形图层: 直角梯形")
-                    layer.trapezoid_top_width = 140
-                    layer.trapezoid_bottom_width = 200
-                    layer.trapezoid_slope_side = "right"
-                    active_tab = window.tab_widget.currentWidget()
-                    if active_tab and hasattr(active_tab, 'canvas'):
-                        active_tab.canvas.update()
-                    print("[测试] 已编辑梯形参数: top=140, bottom=200, side=right")
-                    for st in [ShapeType.CIRCLE, ShapeType.PENTAGON, ShapeType.HEXAGON, ShapeType.RECTANGLE]:
-                        layer.shape_type = st
-                        active_tab = window.tab_widget.currentWidget()
-                        if active_tab and hasattr(active_tab, 'canvas'):
-                            active_tab.canvas.update()
-                        print(f"[测试] 切换形状: {st.value}")
-                        if st in [ShapeType.PENTAGON, ShapeType.HEXAGON]:
-                            layer.polygon_rotation = 15
-                            layer.polygon_corner_radius = 4
-                            active_tab = window.tab_widget.currentWidget()
-                            if active_tab and hasattr(active_tab, 'canvas'):
-                                active_tab.canvas.update()
-                            print("[测试] 已编辑多边形参数: rotation=15, corner_radius=4")
-                    layer.shape_type = ShapeType.CIRCLE
-                    layer.rotation = 45  # 使用正确的属性名
-                    layer.x += 50
-                    layer.y += 30
-                    layer.width += 40
-                    layer.height += 20
-                    active_tab = window.tab_widget.currentWidget()
-                    if active_tab and hasattr(active_tab, 'canvas'):
-                        active_tab.canvas.update()
-                    print("[测试] 已应用变换: 旋转=45°, 位移=(50,30), 尺寸增加=(40,20)")
-                    print("[测试] 异形图层功能测试完成")
-                except Exception as e:
-                    print(f"[测试] 异形图层测试发生错误: {e}")
-            QTimer.singleShot(500, run_shape_layer_tests)
-
         # 延迟执行完整的系统检查（仅在非优化模式下）
-        if not startup_optimizer_available:
-            # QTimer 已在模块顶部导入，避免在此处再次 import 把 QTimer 变成 main() 的局部变量
-            def delayed_full_check():
-                logger.info("执行完整系统依赖检查...")
-                check_system_dependencies_full()
+        # 事件循环已经由 qml_main 跑完并返回，这里**不能**再 exec 一次
+        # （第二次 exec 会让进程永远不退出：实测 --screenshot 截图完成后
+        # 进程挂住，靠 timeout 才被杀掉）。
 
-            QTimer.singleShot(1000, delayed_full_check)
-        
-        # 运行应用
-        exit_code = app.exec()
-        
         # 🔧 关键修复：程序退出时优雅关闭所有线程池
         logger.info("程序退出，开始清理资源...")
         try:
@@ -469,10 +453,21 @@ def main() -> int:
         return finish_crash_session(crash_session_id, 1, logger)
 
 if __name__ == "__main__":
+    # 唯一界面：QML 工作台。
+    #
+    # 2026-10-28 决定下线经典 Qt Widgets 界面。理由不是"新的一定更好"，
+    # 而是旧界面的属性面板在架构上允许每个面板文件自己造标签/定列宽
+    # （同一块面板里标签列宽实测出现 58/84/640 三种，右边缘落在 70/84/96），
+    # 靠契约测试兜底属于次优解；QML 用统一布局组件，列宽由布局系统管。
+    #
+    # --classic 不再提供界面，但保留参数识别：老快捷方式/脚本传进来时
+    # 给一行明确提示，而不是静默行为不符或直接崩。
     if "--classic" in sys.argv:
         sys.argv.remove("--classic")
-        sys.exit(main())
+        _safe_print("提示：经典界面已下线，将以 QML 工作台启动。")
 
-    from app.qml.qml_main import main as qml_main
+    # --qml 保留为兼容开关（与默认行为一致）
+    if "--qml" in sys.argv:
+        sys.argv.remove("--qml")
 
-    sys.exit(qml_main())
+    sys.exit(main())

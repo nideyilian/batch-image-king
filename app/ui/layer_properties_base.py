@@ -17,12 +17,21 @@ try:
 except ImportError:
     HAS_BLEND_MODE = False
 
+from app.ui.design_spec import Space as _Space
 from app.ui.layer_transform_widget import LayerTransformWidget
 from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.color_picker_dialog_a2 import get_color_a2
 from app.ui.shaped_layer_panel import ShapePreviewWidget, ShapeType as PreviewShapeType
 from app.ui.dark_theme import CursorDarkTheme
 from app.ui.design_tokens import Tokens
+from app.ui.property_widgets import (
+    PropertySection,
+    PropertySwitch,
+    blank_field_label,
+    field_label,
+    property_form,
+    switch_row,
+)
 from app.utils.layer_tree import is_layer_group
 from app.services.ai_asset_service import (
     AIAssetRequest,
@@ -98,13 +107,43 @@ class LayerPropertiesBase(object):
                 background: transparent;
                 padding: 0;
             }}
+            /* ── 字号层级（2026-10-28 统一）────────────────────────────
+               修之前实测这个面板里同时存在 12 / 13 / 14 / 15 四个字号：
+                 QLabel(标签)  12px      ← 比它右侧的输入框还小
+                 QLineEdit     13px
+                 QSpinBox      13px
+                 QPushButton   12px      ← 分段按钮比正文还小
+                 QLabel(区块)  14px
+                 QLabel(启用描边) 15px   ← 全panel最大，因为它是个裸 QLabel
+               结果就是"标签比内容小、按钮比标签还小、某一项突然巨大"，
+               整片看起来像不同人做的。
+
+               现在收敛成 3 级（对齐 tokens_v2.Typography 的档位）：
+                 区块标题  14px  semibold   —— 基本属性 / 图像源 / 高级设置
+                 字段标签  12px  medium     —— 名称: / 位置: / 混合模式:
+                 输入内容  13px  regular    —— 输入框 / 下拉 / 数字框 / 按钮
+               标签比内容小一档是刻意的：它是"说明"，不该抢内容的视觉重量。 */
             #layerPropertiesContent QLabel {{
-                font-size: {Tokens.SIDEBAR_BODY_FONT_SIZE}px;
+                font-size: {Tokens.SIDEBAR_BODY_FONT_SIZE}px;   /* 13 */
                 min-height: {Tokens.SIDEBAR_BODY_LINE_HEIGHT}px;
             }}
             #layerPropertiesContent QLabel[role="fieldLabel"],
             #layerPropertiesContent QLabel#fieldLabel {{
+                font-size: 12px;
                 font-weight: {Tokens.FONT_WEIGHT_MEDIUM};
+                color: {Tokens.TEXT_SECONDARY};
+                min-height: 0;
+            }}
+            /* 输入类控件统一 13px —— 显式写，不靠继承 */
+            #layerPropertiesContent QLineEdit,
+            #layerPropertiesContent QSpinBox,
+            #layerPropertiesContent QDoubleSpinBox,
+            #layerPropertiesContent QComboBox {{
+                font-size: {Tokens.SIDEBAR_BODY_FONT_SIZE}px;
+            }}
+            /* 分段按钮 / 普通按钮统一 13px（原来 12px，比标签还小） */
+            #layerPropertiesContent QPushButton {{
+                font-size: {Tokens.SIDEBAR_BODY_FONT_SIZE}px;
             }}
             #layerPropertiesContent QProgressBar {{
                 min-height: {Tokens.CONTROL_HEIGHT}px;
@@ -132,13 +171,19 @@ class LayerPropertiesBase(object):
                 width: 18px;
                 border: none;
             }}
+            /* 比例锁定按钮：只补「去掉左右内边距」，尺寸仍由代码的
+               setFixedSize 供给（2026-10-28）。
+
+               ⚠ 这里不能写 min/max 尺寸。原来写死 26px，26 不在
+               design_spec.Scale 的 24/28/36 三档内，而且特异性高于
+               uiSize 属性，导致它在同排按钮里永远大一圈。
+
+               真正让 setFixedSize 失效的是全局 QSS 给 QPushButton 设的
+               padding: 0 14px —— QSS 的 padding 会把 sizeHint 撑到
+               14+16+14=44，setFixedSize(24) 压不住。
+               所以这里只写 padding，不写尺寸。 */
             #layerPropertiesContent QPushButton#aspectLockButton {{
-                min-width: 26px;
-                max-width: 26px;
-                min-height: 26px;
-                max-height: 26px;
                 padding: 0;
-                font-size: 14px;
             }}
             #layerPropertiesContent QPushButton#colorSwatchButton {{
                 min-height: {Tokens.CONTROL_HEIGHT}px;
@@ -148,7 +193,6 @@ class LayerPropertiesBase(object):
             #layerPropertiesContent QPushButton[segmentButton="true"] {{
                 min-height: {Tokens.CONTROL_HEIGHT}px;
                 padding: 3px 4px;
-                font-size: 12px;
             }}
             #layerPropertiesContent QPushButton[segmentButton="true"]:checked {{
                 background-color: {Tokens.ACCENT};
@@ -158,7 +202,6 @@ class LayerPropertiesBase(object):
             }}
             #layerPropertiesContent QLabel#propertySectionLabel {{
                 color: {Tokens.TEXT_MUTED};
-                font-size: {Tokens.FONT_SIZE_SMALL}px;
                 font-weight: 700;
                 padding-top: 2px;
             }}
@@ -176,10 +219,26 @@ class LayerPropertiesBase(object):
         """
         return base + extra
 
-    def _label(self, text):
-        label = QLabel(text)
-        label.setObjectName("fieldLabel")
-        return label
+    #: 属性面板标签列宽 —— 单一真源 = design_spec.Layout.LABEL_WIDTH(72)。
+    #:
+    #: ⚠ 2026-10-28 二次修：上一版写的是「下限 58 / 上限 84，让 QFormLayout 自己撑」。
+    #: 实测照样乱，因为 **QFormLayout 的标签列宽是按「本表单里最长的那个标签」算的**：
+    #: 全是两字标签的表单 → 列宽 58；含「裁剪方向:」的表单 → 列宽 84。
+    #: 于是同一面板出现 70 / 84 / 96 三个右边缘（实测探针输出）。
+    #: 「让布局自己适配」在栅格里等价于「没有栅格」。现在一律固定。
+    LABEL_WIDTH = Tokens.LABEL_WIDTH
+
+    def _label(self, text, width=None, inline=False):
+        """字段标签 —— 代理到 property_widgets.field_label（唯一实现）。
+
+        不要在面板里再写一份标签工厂：本次整治的根因就是「每个文件自己造标签」，
+        造出来的宽度/对齐各不相同，栅格当场失效。
+        """
+        return field_label(text, width=width, inline=inline)
+
+    def _blank_label(self):
+        """占位标签列（整行控件用）。代理到 property_widgets.blank_field_label。"""
+        return blank_field_label()
 
     def _divider(self):
         divider = QFrame()
@@ -200,11 +259,21 @@ class LayerPropertiesBase(object):
         button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         return button
 
+    def _form(self, parent=None):
+        """统一表单布局 —— 代理到 property_widgets.property_form（唯一实现）。
+
+        ⚠ 属性面板里有 10+ 个 QFormLayout。2026-10-28 实测它们原来全部没设
+        行距列距（吃平台默认 5/3），而且构造完成后还会被 `_apply_compact_layouts`
+        整棵树重写一遍 —— 两个写入方互相覆盖。
+        现在规格只有一处：property_widgets.property_form()。
+        """
+        return property_form(parent)
+
     def _make_control_group(self):
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setSpacing(_Space.XS)
         return widget, layout
 
     def _is_export_ui_frozen(self):

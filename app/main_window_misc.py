@@ -244,148 +244,47 @@ class MainWindowMisc(object):
             if active_tab and hasattr(active_tab, 'canvas'):
                 active_tab.canvas.update()
 
+    #: 对齐动作 → Lucide 图标名。
+    #
+    # 2026-10-28：这 10 个图标**原来是用 QPainter 手绘**的（画方框 + 蓝矩形 + 参考线），
+    # 与界面其它位置的 Lucide 图标不是一套：
+    #   - 手绘图标是**实心填充**（ACCENT 蓝块），Lucide 全是 2px 线条描边
+    #   - 线宽 1px，与 Lucide 的 2px 差一倍
+    #   - 拿不到主题色联动，也没法跟着 DPR 走
+    # 实测截图里，工具栏右侧这排对齐按钮明显比左边文字按钮的图标"重"。
+    #
+    # 现在统一走 icon_library。语义一一对应：
+    #   left/hcenter/right  → 竖线贴边 / 居中 / 贴右边的那三条参考线
+    #   top/vcenter/bottom  → 横线贴边 / 居中 / 贴下边
+    #   distribute_*        → 等距分布
+    #   center              → 十字准心
+    #   same_size           → 撑满画板
+    _ALIGN_ICONS = {
+        "left": "align-start-vertical",
+        "hcenter": "align-center-vertical",
+        "right": "align-end-vertical",
+        "top": "align-start-horizontal",
+        "vcenter": "align-center-horizontal",
+        "bottom": "align-end-horizontal",
+        "distribute_horizontal": "align-horizontal-distribute-center",
+        "distribute_vertical": "align-vertical-distribute-center",
+        "center": "crosshair",
+        "same_size": "maximize",
+    }
+
     def _create_align_icon(self, align_type):
-        """创建对齐图标"""
-        size = 24
-        pixmap = QPixmap(size, size)
-        pixmap.fill(Qt.transparent)
-    
-        from PySide6.QtGui import QPainter, QPen, QBrush
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.Antialiasing, True)
-    
-        # 设置画笔和画刷
-        canvas_pen = QPen(QColor(80, 80, 80))
-        canvas_pen.setWidth(1)
-    
-        layer_pen = QPen(QColor(40, 40, 40))
-        layer_pen.setWidth(1)
-    
-        # PS风格的蓝色
-        layer_brush = QBrush(QColor(38, 128, 235))
-    
-        # 绘制画布边框 (浅灰色描边的矩形)
-        painter.setPen(canvas_pen)
-        canvas_rect = QRect(2, 2, size - 4, size - 4)
-        painter.drawRect(canvas_rect)
-    
-        # 设置图层画笔和画刷
-        painter.setPen(layer_pen)
-        painter.setBrush(layer_brush)
-    
-        # 根据对齐类型绘制不同的图层表示
-        if align_type == "left":
-            # 左对齐: 蓝色矩形靠左
-            layer_rect = QRect(4, 6, (size - 10) // 2, size - 12)
-    
-        elif align_type == "hcenter":
-            # 水平居中: 较窄的蓝色矩形水平居中
-            layer_rect = QRect(0, 6, size - 14, size - 12)
-            layer_rect.moveCenter(QPoint(canvas_rect.center().x(), layer_rect.center().y()))
-    
-        elif align_type == "right":
-            # 右对齐: 蓝色矩形靠右
-            layer_rect = QRect(size - (size - 10) // 2 - 4, 6, (size - 10) // 2, size - 12)
-    
-        elif align_type == "top":
-            # 顶部对齐: 蓝色矩形靠顶
-            layer_rect = QRect(6, 4, size - 12, (size - 10) // 2)
-    
-        elif align_type == "vcenter":
-            # 垂直居中: 较矮的蓝色矩形垂直居中
-            layer_rect = QRect(6, 0, size - 12, size - 14)
-            layer_rect.moveCenter(QPoint(layer_rect.center().x(), canvas_rect.center().y()))
-    
-        elif align_type == "bottom":
-            # 底部对齐: 蓝色矩形靠底
-            layer_rect = QRect(6, size - (size - 10) // 2 - 4, size - 12, (size - 10) // 2)
-    
-        elif align_type == "center":
-            # 完全居中: 小一些的蓝色矩形居中
-            layer_rect = QRect(0, 0, size - 10, size - 10)
-            layer_rect.moveCenter(canvas_rect.center())
-    
-        elif align_type == "same_size":
-            # 匹配大小: 与画布几乎相同大小的蓝色矩形
-            layer_rect = QRect(4, 4, size - 8, size - 8)
+        """返回对齐动作的图标（统一 Lucide SVG，不再手绘）。
 
-        elif align_type == "distribute_horizontal":
-            layer_rect = None
-            small_brush = QBrush(QColor(38, 128, 235))
-            painter.setBrush(small_brush)
-            for x in (5, 10, 15):
-                painter.drawRect(QRect(x, 8, 4, 8))
-            line_pen = QPen(QColor(220, 220, 220, 180))
-            line_pen.setWidth(1)
-            painter.setPen(line_pen)
-            painter.drawLine(7, 18, 17, 18)
+        保留这个函数名与签名，是为了让上面 10 个 `setIcon(self._create_align_icon(...))`
+        调用点不用改 —— 换的是实现，不是接口。
+        """
+        from app.ui.icon_library import icon
+        from app.ui.design_spec import IconSize
+        from app.ui.tokens_v2 import Color
 
-        elif align_type == "distribute_vertical":
-            layer_rect = None
-            small_brush = QBrush(QColor(38, 128, 235))
-            painter.setBrush(small_brush)
-            for y in (5, 10, 15):
-                painter.drawRect(QRect(8, y, 8, 4))
-            line_pen = QPen(QColor(220, 220, 220, 180))
-            line_pen.setWidth(1)
-            painter.setPen(line_pen)
-            painter.drawLine(18, 7, 18, 17)
-        else:
-            layer_rect = QRect(6, 6, size - 12, size - 12)
-    
-        # 绘制图层
-        if layer_rect is not None:
-            painter.drawRect(layer_rect)
-    
-        # 添加指示线条（PS风格）
-        if align_type == "left" or align_type == "hcenter" or align_type == "right":
-            # 水平方向的对齐添加垂直参考线
-            line_pen = QPen(QColor(220, 220, 220, 180))
-            line_pen.setWidth(1)
-            painter.setPen(line_pen)
-        
-            if align_type == "left":
-                # 左侧垂直线
-                painter.drawLine(4, 2, 4, size - 3)
-            elif align_type == "hcenter":
-                # 中间垂直线
-                mid_x = canvas_rect.center().x()
-                painter.drawLine(mid_x, 2, mid_x, size - 3)
-            elif align_type == "right":
-                # 右侧垂直线
-                painter.drawLine(size - 5, 2, size - 5, size - 3)
-            
-        elif align_type == "top" or align_type == "vcenter" or align_type == "bottom":
-            # 垂直方向的对齐添加水平参考线
-            line_pen = QPen(QColor(220, 220, 220, 180))
-            line_pen.setWidth(1)
-            painter.setPen(line_pen)
-        
-            if align_type == "top":
-                # 顶部水平线
-                painter.drawLine(2, 4, size - 3, 4)
-            elif align_type == "vcenter":
-                # 中间水平线
-                mid_y = canvas_rect.center().y()
-                painter.drawLine(2, mid_y, size - 3, mid_y)
-            elif align_type == "bottom":
-                # 底部水平线
-                painter.drawLine(2, size - 5, size - 3, size - 5)
-    
-        elif align_type == "center":
-            # 中心对齐添加十字参考线
-            line_pen = QPen(QColor(220, 220, 220, 180))
-            line_pen.setWidth(1)
-            painter.setPen(line_pen)
-        
-            mid_x = canvas_rect.center().x()
-            mid_y = canvas_rect.center().y()
-            painter.drawLine(mid_x, 2, mid_x, size - 3)  # 垂直线
-            painter.drawLine(2, mid_y, size - 3, mid_y)  # 水平线
-        
-        painter.end()
-    
-        return QIcon(pixmap)
+        name = self._ALIGN_ICONS.get(align_type, "align-start-vertical")
+        # 对齐栏实际 setIconSize 是 MD(20)，位图按同尺寸渲染，避免重采样模糊
+        return icon(name, color=Color.text_secondary, size=IconSize.MD)
 
     def select_all_layers(self):
         """全选图层 (Ctrl+A)"""

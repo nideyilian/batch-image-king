@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import QtQuick.Window
 import QtCore
 import "components"
 
@@ -30,7 +31,10 @@ ApplicationWindow {
         if (!workspaceSessions.applicationCloseApproved) {
             close.accepted = false
             workspaceSessions.requestApplicationClose()
+            return
         }
+        // 真正退出时才落盘（用户取消关闭的那次不该覆盖已保存的几何）
+        persistGeometryToSettings()
     }
 
     property int selectedLayer: workspace.selectedLayerIndex
@@ -479,10 +483,67 @@ ApplicationWindow {
         property string themeMode: "light"
     }
 
+    // 窗口几何记忆（2026-10-28 补）。
+    //
+    // 旧版 main_window_misc.save_window_state 用 QSettings 存了
+    // geometry（位置+大小）+ maximized；新版原本完全没有，
+    // 每次启动都回到 1600x960 居中 —— 用户把窗口挪到副屏、调窄一点，
+    // 下次启动全忘。这是旧版有、新版没有的实打实差异。
+    Settings {
+        id: windowGeometrySettings
+        objectName: "windowGeometrySettings"
+        category: "windowGeometry"
+        property int savedWidth: 0
+        property int savedHeight: 0
+        property int savedX: 0
+        property int savedY: 0
+        property bool savedMaximized: false
+        property bool hasSavedGeometry: false
+    }
+
     Component.onCompleted: {
         window.setThemeMode(appearanceSettings.themeMode)
         window.loadQuickCanvasPresets()
         window.restoreSidebarWidths()
+        window.restoreGeometryFromSettings()
+    }
+
+    // 截图/验收模式：此时不要读写几何，否则 --screenshot --width 1600
+    // 会被上次保存的尺寸顶掉，验收图尺寸就飘了。
+    //
+    // ⚠ 必须从命令行参数直接判断，不能等 Python 侧 setProperty：
+    // qml_main 是在 engine.load() **之后**才 setProperty 的，而
+    // Component.onCompleted 在 load 时就跑完了 —— 用 setProperty 的话
+    // 恢复逻辑已经先执行过一次（还可能 showMaximized），截图尺寸就错。
+    property bool screenshotMode: Qt.application.arguments.indexOf("--screenshot") >= 0
+
+    function restoreGeometryFromSettings() {
+        if (screenshotMode || !windowGeometrySettings.hasSavedGeometry)
+            return
+        if (windowGeometrySettings.savedWidth >= minimumWidth)
+            width = windowGeometrySettings.savedWidth
+        if (windowGeometrySettings.savedHeight >= minimumHeight)
+            height = windowGeometrySettings.savedHeight
+        x = windowGeometrySettings.savedX
+        y = windowGeometrySettings.savedY
+        if (windowGeometrySettings.savedMaximized)
+            showMaximized()
+    }
+
+    function persistGeometryToSettings() {
+        if (screenshotMode)
+            return
+        var maximized = visibility === Window.Maximized
+        windowGeometrySettings.savedMaximized = maximized
+        // 最大化时 width/height 是全屏尺寸，存了下次还原会变成"巨型窗口"。
+        // 只在非最大化时记录几何，与旧版 saveGeometry 的行为一致。
+        if (!maximized) {
+            windowGeometrySettings.savedWidth = width
+            windowGeometrySettings.savedHeight = height
+            windowGeometrySettings.savedX = x
+            windowGeometrySettings.savedY = y
+        }
+        windowGeometrySettings.hasSavedGeometry = true
     }
 
     onWidthChanged: {
@@ -586,7 +647,7 @@ ApplicationWindow {
     Shortcut { sequence: "V"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 0 }   // 移动/选择
     Shortcut { sequence: "H"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 1 }   // 抓手
     Shortcut { sequence: "Z"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 2 }   // 缩放（PS 标准，新增）
-    Shortcut { sequence: "T"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 3 }   // 文字工具（PS 标准；新建图层→Shift+F8）
+    Shortcut { sequence: "Shift+T"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 3 }   // 文字工具（T 让给旧版的「快速文字图层」，见下方）
     Shortcut { sequence: "C"; enabled: window.toolShortcutsEnabled; onActivated: workspace.startCropEdit() }   // 裁剪工具（PS 标准）
     Shortcut { sequence: "P"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 4 }   // 路径/钢笔
     Shortcut { sequence: "G"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 5 }   // 渐变/油漆桶
@@ -600,10 +661,15 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Alt+Shift+X";    enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onActivated: window.openMultiTabExportDrawer() } // 原 Ctrl+Shift+E：多标签导出
     Shortcut { sequence: "Alt+Shift+D";         enabled: !workspace.operationsBlocked && workspaceSessions.activeIndex >= 0;               onActivated: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) } // 原 Ctrl+D：复制标签页
     Shortcut { sequence: "Shift+F8";            enabled: window.layerShortcutsEnabled;                                                         onActivated: textLayerDialog.openFresh() } // 原 Ctrl+T：添加文字图层
+    // T = 快速文字图层（不弹窗直接建层）—— 与旧版 QAction("快速文字图层") 的快捷键一致。
+    // 文字工具因此挪到 Shift+T：旧版根本没有「工具切换」这套东西，不能因为新增能力
+    // 就把旧版用户在用的 T 抢走。门控用 layerShortcutsEnabled，打字时不会被吞。
+    Shortcut { sequence: "T";                   enabled: window.layerShortcutsEnabled;                                                         onActivated: workspace.addQuickTextLayer() }
     Shortcut { sequence: "Shift+Ctrl+N";        enabled: window.layerShortcutsEnabled;                                                         onActivated: workspace.addEmptyImageLayer() } // 原 Ctrl+L：新建空图片图层（对齐 PS 新建图层习惯）
     Shortcut { sequence: "Ctrl+Shift+P";        enabled: !workspace.operationsBlocked;                                                        onActivated: window.openProjectPresetDrawer() } // 原 Ctrl+P：预设中心
     Shortcut { sequence: "Alt+Ctrl+C";          enabled: window.hasOpenDocument && !workspace.operationsBlocked;                             onActivated: window.openResizeCanvasDialog() } // 原 Ctrl+R：修改画布尺寸（对齐 PS Alt+Ctrl+C=Canvas Size）
     Shortcut { sequence: "Ctrl+Shift+U";        onActivated: window.openUpdateDialog() }                                                      // 检查更新
+    Shortcut { sequence: "Ctrl+Q";              onActivated: window.close() }                                                                // 退出（与旧版 QKeySequence.Quit 一致）
 
     FileDialog {
         id: openDialog
@@ -2354,6 +2420,95 @@ ApplicationWindow {
         }
     }
 
+    // 图层右键菜单放在 Window 顶层（而不是图层面板内部）。
+    // 旧版在**画布上右键图层**也会弹这套菜单；菜单定义在面板里的话，
+    // 画布那侧作用域访问不到，只能再抄一份 —— 两份菜单迟早会走偏。
+    AppMenu {
+        id: layerContextMenu
+        objectName: "layerContextMenu"
+        ShapeMenuItem {
+            text: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
+            onTriggered: workspace.selectedLayerCount > 1
+                         ? workspace.duplicateSelectedLayers()
+                         : workspace.duplicateSelectedLayer()
+        }
+        ShapeMenuItem { text: "粘贴图层"; enabled: legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
+        ShapeMenuItem { text: "复制图层样式"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.copySelectedLayerStyle() }
+        ShapeMenuItem { text: "粘贴图层样式"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.pasteSelectedLayerStyle() }
+        MenuSeparator { }
+        // 编辑文案 / 重命名：旧版右键菜单一直有这两项，新版原来只能在
+        // 顶部菜单或双击里找，右键菜单里没有入口。
+        ShapeMenuItem { text: "编辑文案"; visible: workspace.selectedIsTextLayer; enabled: workspace.selectedIsTextLayer; onTriggered: window.revealTextContentEditing() }
+        ShapeMenuItem { text: "重命名图层"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealLayerNameEditor() }
+        // 路径编辑：旧版 canvas_events 里是一整套子菜单。
+        // 新版这些能力（插入/删除节点、闭合、手柄联动）在 view model 里都有，
+        // 但右键菜单没暴露，用户只能靠画布上盲操。
+        MenuSeparator { }
+        AppMenu {
+            title: "路径编辑"
+            enabled: workspace.selectedVectorPathEnabled
+            visible: workspace.selectedVectorPathEnabled
+            ShapeMenuItem { text: "删除节点"; enabled: workspace.selectedVectorNodeIndex >= 0; onTriggered: workspace.deleteSelectedVectorNode() }
+            ShapeMenuItem { text: workspace.selectedVectorPathClosed ? "打开路径" : "闭合路径"; onTriggered: workspace.setSelectedVectorPathClosed(!workspace.selectedVectorPathClosed) }
+            ShapeMenuItem { text: "循环节点类型"; enabled: workspace.selectedVectorNodeIndex >= 0; onTriggered: workspace.cycleSelectedVectorNodeType() }
+            MenuSeparator { }
+            ShapeMenuItem { text: "手柄联动：镜像"; onTriggered: workspace.setSelectedVectorHandleLinkMode("mirror") }
+            ShapeMenuItem { text: "手柄联动：共线"; onTriggered: workspace.setSelectedVectorHandleLinkMode("collinear") }
+            ShapeMenuItem { text: "手柄联动：自由"; onTriggered: workspace.setSelectedVectorHandleLinkMode("free") }
+        }
+        MenuSeparator { }
+        ShapeMenuItem { text: "建立图层组"; enabled: workspace.canGroupSelectedLayers; onTriggered: workspace.groupSelectedLayers() }
+        ShapeMenuItem { text: "解散图层组"; enabled: workspace.canUngroupSelectedLayers; onTriggered: workspace.ungroupSelectedGroups() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "显示所选"; onTriggered: workspace.setSelectedLayersVisible(true) }
+        ShapeMenuItem { text: "隐藏所选"; onTriggered: workspace.setSelectedLayersVisible(false) }
+        ShapeMenuItem { text: "锁定所选"; onTriggered: workspace.setSelectedLayersLocked(true) }
+        ShapeMenuItem { text: "解锁所选"; onTriggered: workspace.setSelectedLayersLocked(false) }
+        MenuSeparator { }
+        // enabled 用 > 0 而不是 > 1：旧版对齐按钮在**单选**时也是可用的
+        // （单选 = 对齐到画板，多选 = 对齐到首选图层）。
+        // 这里直接走 window.alignCurrentSelection 统一分发，
+        // 不要再直接调 alignSelectedLayers —— 那个只处理多选。
+        ShapeMenuItem { text: "左对齐"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("left") }
+        ShapeMenuItem { text: "水平居中"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("hcenter") }
+        ShapeMenuItem { text: "右对齐"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("right") }
+        ShapeMenuItem { text: "顶对齐"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("top") }
+        ShapeMenuItem { text: "垂直居中"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("vcenter") }
+        ShapeMenuItem { text: "底对齐"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("bottom") }
+        ShapeMenuItem { text: "双向居中"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("center") }
+        ShapeMenuItem { text: "相同尺寸"; enabled: workspace.selectedLayerCount > 0; onTriggered: window.alignCurrentSelection("same_size") }
+        ShapeMenuItem { text: "水平等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("horizontal") }
+        ShapeMenuItem { text: "垂直等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("vertical") }
+        MenuSeparator { }
+        ShapeMenuItem { text: "删除所选图层"; onTriggered: workspace.deleteSelectedLayers() }
+    }
+
+    // 画布右键菜单。
+    //
+    // 旧版 app/ui/canvas_events.py 在画布**空白处**右键会弹出这一套：
+    // 粘贴图层 / 添加图层 / 添加文本图层 / 修改画布尺寸 / 缩放 / 标尺参考线。
+    // 新版原来画布右键完全没反应（canvasPointer 只接受 LeftButton），
+    // 老用户会以为功能没了 —— 功能都在顶部菜单里，但手感断层。
+    AppMenu {
+        id: canvasContextMenu
+        objectName: "canvasContextMenu"
+        ShapeMenuItem { text: "粘贴图层"; enabled: legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "新建空图片图层"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
+        ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
+        ShapeMenuItem { text: "添加文字图层"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "修改画布尺寸"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openResizeCanvasDialog() }
+        MenuSeparator { }
+        ShapeMenuItem { text: "放大"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
+        ShapeMenuItem { text: "缩小"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
+        ShapeMenuItem { text: "重置缩放"; enabled: window.hasOpenDocument; onTriggered: workspace.resetView() }
+        MenuSeparator { }
+        ShapeMenuItem { text: workspace.showRulers ? "隐藏标尺" : "显示标尺"; enabled: window.hasOpenDocument; onTriggered: workspace.setShowRulers(!workspace.showRulers) }
+        ShapeMenuItem { text: workspace.showGuides ? "隐藏参考线" : "显示参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.setShowGuides(!workspace.showGuides) }
+        ShapeMenuItem { text: "清空参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.clearGuides() }
+    }
+
     AppMenu {
         id: fileMenu
         ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
@@ -2392,6 +2547,7 @@ ApplicationWindow {
         ShapeMenuItem { text: "新建空图片图层\tShift+Ctrl+N"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
         ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
         ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: imageFolderDialog.open() }
+        ShapeMenuItem { text: "快速文字图层\tT"; enabled: window.hasOpenDocument; onTriggered: workspace.addQuickTextLayer() }
         ShapeMenuItem { text: "添加文字图层\tShift+F8"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
         ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
         MenuSeparator { }
@@ -5024,35 +5180,6 @@ ApplicationWindow {
                                 }
                             }
 
-                            AppMenu {
-                                id: layerContextMenu
-                                ShapeMenuItem {
-                                    text: workspace.selectedLayerCount > 1 ? "复制所选图层" : "复制图层"
-                                    onTriggered: workspace.selectedLayerCount > 1
-                                                 ? workspace.duplicateSelectedLayers()
-                                                 : workspace.duplicateSelectedLayer()
-                                }
-                                ShapeMenuItem { text: "建立图层组"; enabled: workspace.canGroupSelectedLayers; onTriggered: workspace.groupSelectedLayers() }
-                                ShapeMenuItem { text: "解散图层组"; enabled: workspace.canUngroupSelectedLayers; onTriggered: workspace.ungroupSelectedGroups() }
-                                MenuSeparator { }
-                                ShapeMenuItem { text: "显示所选"; onTriggered: workspace.setSelectedLayersVisible(true) }
-                                ShapeMenuItem { text: "隐藏所选"; onTriggered: workspace.setSelectedLayersVisible(false) }
-                                ShapeMenuItem { text: "锁定所选"; onTriggered: workspace.setSelectedLayersLocked(true) }
-                                ShapeMenuItem { text: "解锁所选"; onTriggered: workspace.setSelectedLayersLocked(false) }
-                                MenuSeparator { }
-                                ShapeMenuItem { text: "左对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("left") }
-                                ShapeMenuItem { text: "水平居中"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("hcenter") }
-                                ShapeMenuItem { text: "右对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("right") }
-                                ShapeMenuItem { text: "顶对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("top") }
-                                ShapeMenuItem { text: "垂直居中"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("vcenter") }
-                                ShapeMenuItem { text: "底对齐"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("bottom") }
-                                ShapeMenuItem { text: "双向居中"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("center") }
-                                ShapeMenuItem { text: "相同尺寸"; enabled: workspace.selectedLayerCount > 1; onTriggered: workspace.alignSelectedLayers("same_size") }
-                                ShapeMenuItem { text: "水平等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("horizontal") }
-                                ShapeMenuItem { text: "垂直等距"; enabled: workspace.selectedLayerCount > 2; onTriggered: workspace.distributeSelectedLayers("vertical") }
-                                MenuSeparator { }
-                                ShapeMenuItem { text: "删除所选图层"; onTriggered: workspace.deleteSelectedLayers() }
-                            }
 
                             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
                         }
@@ -5630,7 +5757,7 @@ ApplicationWindow {
                         MouseArea {
                             id: canvasPointer
                             anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                             hoverEnabled: true
                             preventStealing: true
                             cursorShape: canvasWorkspace.transformActive
@@ -5638,6 +5765,21 @@ ApplicationWindow {
                                          : canvasWorkspace.pointerCursor(mouseX, mouseY)
 
                             onPressed: mouse => {
+                                // 右键：命中图层 → 图层菜单；空白处 → 画布菜单（旧版同一套分流）
+                                if (mouse.button === Qt.RightButton) {
+                                    mouse.accepted = true
+                                    if (workspace.cropEditing)
+                                        return
+                                    var hitIndex = workspace.hitTestLayerAt(mouse.x, mouse.y)
+                                    if (hitIndex >= 0) {
+                                        if (workspace.selectedLayerCount <= 1 && hitIndex !== workspace.selectedLayerIndex)
+                                            workspace.selectLayer(hitIndex)
+                                        layerContextMenu.popup()
+                                    } else {
+                                        canvasContextMenu.popup()
+                                    }
+                                    return
+                                }
                                 if (workspace.cropEditing)
                                     return
                                 if (workspace.textEditOverlayVisible) {

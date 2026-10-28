@@ -9,6 +9,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap
 
+from app.ui.design_spec import Space as _Space
+from app.ui.design_spec import FontSize
+from app.ui.tokens_v2 import Color, Typography
 from app.ui.preset_manager_dialog import PresetSaveDialog
 from app.ui.preset_run_dialog import PresetRunDialog
 from app.utils.preset_manager import PresetManager
@@ -34,22 +37,25 @@ class PresetCardWidget(QFrame):
         self.setFixedWidth(CARD_WIDTH)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Maximum)
         self.setObjectName("PresetCard")
-        self.setStyleSheet("""
-            QFrame#PresetCard {
-                background-color: #252B33;
-                border: 1px solid #3A424D;
+        # 卡片底色/描边/次要文字统一走 tokens_v2，不再自成一套蓝灰阶。
+        # 规范（docs/DESIGN.md 4.3）：卡片默认不加描边，靠底色差分层；
+        # 这里保留 1px 是因为卡片之间有间隙、需要被「框住」以区分可点击区域。
+        self.setStyleSheet(f"""
+            QFrame#PresetCard {{
+                background-color: {Color.surface_2};
+                border: 1px solid {Color.border_default};
                 border-radius: 8px;
-            }
-            QFrame#PresetCard:hover {
-                border-color: #5D6B7C;
-            }
-            QLabel#MetaLabel {
-                color: #9AA6B2;
+            }}
+            QFrame#PresetCard:hover {{
+                border-color: {Color.border_strong};
+            }}
+            QLabel#MetaLabel {{
+                color: {Color.text_muted};
                 font-size: 12px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 5px 8px;
-            }
+            }}
         """)
         self.setup_ui(thumbnail_path)
 
@@ -61,7 +67,7 @@ class PresetCardWidget(QFrame):
         self.thumbnail = QLabel()
         self.thumbnail.setFixedSize(CARD_WIDTH - 20, CARD_WIDTH - 20)
         self.thumbnail.setAlignment(Qt.AlignCenter)
-        self.thumbnail.setStyleSheet("background-color: #1D2229; border-radius: 6px;")
+        self.thumbnail.setStyleSheet(f"background-color: {Color.surface_base}; border-radius: 6px;")
         if thumbnail_path and os.path.exists(thumbnail_path):
             pixmap = QPixmap(thumbnail_path)
             self.thumbnail.setPixmap(pixmap.scaled(self.thumbnail.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
@@ -71,7 +77,7 @@ class PresetCardWidget(QFrame):
 
         name = QLabel(self.summary.get('name', '未命名预设'))
         name.setWordWrap(True)
-        name.setStyleSheet("font-weight: bold; font-size: 14px; color: #EEF2F6;")
+        name.setStyleSheet(f"font-weight: bold; font-size: 14px; color: {Color.text_primary};")
         layout.addWidget(name)
 
         description = QLabel(self.summary.get('description', '') or "暂无描述")
@@ -89,7 +95,7 @@ class PresetCardWidget(QFrame):
         edit_btn = QPushButton("编辑")
         edit_btn.clicked.connect(lambda: self.edit_requested.emit(self.preset_id))
         run_btn = QPushButton("运行")
-        run_btn.setStyleSheet("background-color: #2F8F5B; color: white; font-weight: bold;")
+        run_btn.setStyleSheet(f"background-color: {Color.success}; color: {Color.canvas}; font-weight: bold;")
         run_btn.clicked.connect(lambda: self.run_requested.emit(self.preset_id))
         more_btn = QPushButton("更多")
         more_btn.clicked.connect(self.show_more_menu)
@@ -142,7 +148,7 @@ class MasonryPresetGrid(QWidget):
         self._reflowing = False
         self.main_layout = QHBoxLayout(self)
         self.main_layout.setContentsMargins(14, 14, 14, 14)
-        self.main_layout.setSpacing(14)
+        self.main_layout.setSpacing(_Space.MD)
 
     def set_cards(self, cards):
         self._reflowing = True
@@ -178,7 +184,7 @@ class MasonryPresetGrid(QWidget):
             column_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.MinimumExpanding)
             column_layout = QVBoxLayout(column_widget)
             column_layout.setContentsMargins(0, 0, 0, 0)
-            column_layout.setSpacing(14)
+            column_layout.setSpacing(_Space.MD)
             column_layout.addStretch()
             self.main_layout.addWidget(column_widget)
             self.column_layouts.append(column_layout)
@@ -235,11 +241,11 @@ class PresetStoreDialog(QDialog):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setSpacing(_Space.SM)
 
         header = QHBoxLayout()
         title = QLabel("预设中心")
-        title.setStyleSheet("font-size: 22px; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {FontSize.XL}px; font-weight: bold;")
         header.addWidget(title)
         header.addStretch()
         save_btn = QPushButton("保存当前为预设")
@@ -285,10 +291,14 @@ class PresetStoreDialog(QDialog):
         empty_layout.setAlignment(Qt.AlignCenter)
         empty_title = QLabel("还没有预设")
         empty_title.setAlignment(Qt.AlignCenter)
-        empty_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #EEF2F6;")
+        # 空状态大标题：取字号令牌 XL(20) 档。
+        # 原来写死 18px，不在 tokens_v2 的档位内（11/12/13/14/16/20/24）。
+        empty_title.setStyleSheet(
+            f"font-size: {Typography.size_xl}px; font-weight: bold; "
+            f"color: {Color.text_primary};")
         empty_desc = QLabel("保存当前标签页为预设，或导入已有预设合集。")
         empty_desc.setAlignment(Qt.AlignCenter)
-        empty_desc.setStyleSheet("color: #9AA6B2;")
+        empty_desc.setStyleSheet(f"color: {Color.text_muted};")
         empty_actions = QHBoxLayout()
         empty_save = QPushButton("保存当前为预设")
         empty_save.clicked.connect(self.save_current_tabs)

@@ -40,6 +40,7 @@ def get_batch_precomputer_v2(document, document_analysis: dict) -> 'BatchExportP
 
 
 from app.utils.text_layer_virtual_path import build_text_layer_virtual_path
+from app.utils.logger import DegradationCounter
 
 
 class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstraintMixin,
@@ -50,6 +51,11 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
     def __init__(self, document, document_analysis: dict):
         self.document = document
         self.document_analysis = document_analysis
+
+        # 降级计数器：批量导出挂在热路径上的防御性 except 不能静默。
+        # 同一个降级点只详细记录一次（带 traceback），其余只累加计数，
+        # 批次结束时由调用方打印 summary()，避免刷屏又保住可排查性。
+        self.degradations = DegradationCounter(logger)
 
         # 安全地获取配置，提供默认值
         self.binding_enabled = document_analysis.get('binding_enabled', False)
@@ -72,6 +78,9 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             self.unique_use_enabled = bool(getattr(self.document, 'export_settings', {}).get('unique_use_enabled', False))
             self.unique_use_layers = list(getattr(self.document, 'export_settings', {}).get('unique_use_layers', []))
         except Exception:
+            # 读不到「素材唯一使用」设置 → 用户勾选的不重复策略被悄悄关掉，
+            # 出图会出现重复素材，但界面仍显示已开启。
+            self.degradations.note("导出设置.读取唯一使用配置失败")
             self.unique_use_enabled = False
             self.unique_use_layers = []
         self.unique_use_layers = self._normalize_unique_use_layers(self.unique_use_layers)
@@ -109,13 +118,21 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         """建立 visible_layers -> document.layers 的稳定索引映射。"""
         try:
             if not hasattr(self.document, 'layers'):
+                self.degradations.note("图层索引.文档缺少 layers 属性")
                 return list(range(len(self.visible_layers)))
             indices = [idx for idx, layer in enumerate(self.document.layers) if bool(getattr(layer, 'visible', False))]
             if len(indices) == len(self.visible_layers):
                 return indices
-            # 回退：长度不一致时保持可用，不中断导出流程
+            # 回退：长度不一致时保持可用，不中断导出流程。
+            # 这会让「可见层序号」与「文档索引」错位，组合可能落到错误图层上，
+            # 属于会直接产出错图的降级，必须记录。
+            self.degradations.note(
+                "图层索引.可见层与文档层数量不一致",
+                f"visible={len(self.visible_layers)} doc_visible={len(indices)}",
+            )
             return list(range(len(self.visible_layers)))
         except Exception:
+            self.degradations.note("图层索引.构建映射异常回退顺序索引")
             return list(range(len(self.visible_layers)))
 
     def _to_doc_layer_idx(self, visible_idx: int) -> int:
@@ -123,9 +140,15 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         try:
             idx = int(visible_idx)
         except Exception:
+            self.degradations.note("图层索引.可见层序号非整数", repr(visible_idx))
             return int(visible_idx)
         if 0 <= idx < len(self.visible_layer_doc_indices):
             return int(self.visible_layer_doc_indices[idx])
+        # 越界：直接把可见层序号当文档索引返回，可能命中错误图层。
+        self.degradations.note(
+            "图层索引.可见层序号越界",
+            f"idx={idx} 映射表长度={len(self.visible_layer_doc_indices)}",
+        )
         return idx
 
     def _resolve_layer_by_state_index(self, state_layer_idx: int):
@@ -409,7 +432,10 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                     try:
                         image_pool = self._get_folder_images_cached(layer.image_source, cancel_callback=cancel_callback)
                     except Exception as e:
-                        print(f"[V2]  {doc_layer_idx} '{layer.name}' : {e}")
+                        self.degradations.note(
+                            "素材池.读取图层素材目录失败",
+                            f"{getattr(layer, 'name', '')} @ {getattr(layer, 'image_source', '')}: {e}",
+                        )
                 else:
                     # 
                     if os.path.exists(layer.image_source):
@@ -482,6 +508,9 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 return True
             return bool(hasattr(layer, 'text_content') and not hasattr(layer, 'image_source'))
         except Exception:
+            # 判不出类型时按「非文字图层」处理，该层会被当成图片参与唯一使用，
+            # 可能导致文字层被错误纳入去重池。留痕。
+            self.degradations.note("图层类型.文字层判定失败")
             return False
 
     def _is_unique_use_eligible_layer(self, doc_layer_idx: int) -> bool:
@@ -498,6 +527,8 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 return False
             return any(isinstance(path, str) and os.path.isfile(path) for path in pool)
         except Exception:
+            # 判定失败 → 该层被排除在「唯一使用」之外，用户勾的去重对它不生效。
+            self.degradations.note("唯一使用.图层资格判定失败", str(doc_layer_idx))
             return False
 
     def _normalize_unique_use_layers(self, unique_layers: List[int]) -> List[int]:
@@ -603,7 +634,13 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                     try:
                         built_tasks[idx] = future.result()
                     except Exception as e:
-                        print(f"[V2] 任务构建失败，回退默认命名: {e}")
+                        # 任务构建失败会退回 batch_XXXX 默认命名：图还是会出，
+                        # 但文件名与用户配置的命名模板不符，且失败原因过去只
+                        # 打在控制台（打包成窗口程序后等于丢失）。
+                        self.degradations.note(
+                            "任务构建.失败回退默认命名",
+                            f"#{start_index + idx}: {e}",
+                        )
                         fallback_number = start_index + idx
                         fallback_name = f"batch_{fallback_number:04d}.{file_format}"
                         built_tasks[idx] = ExportTask(
@@ -807,8 +844,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             return result
             
         except Exception as e:
-            print(f"[V2] : {e}")
-            # 
+            self.degradations.note("文件名.模板渲染失败回退默认", f"#{file_number}: {e}")
             return f"batch_{file_number:04d}"
             processed_template = processed_template.replace("{index}", str(file_number))
             processed_template = processed_template.replace("{count}", str(len(combination.layer_states)))
@@ -834,7 +870,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                                 if clean_name not in layer_names:
                                     layer_names.append(clean_name)
                         except Exception as e:
-                            print(f"[] : {e}")
+                            self.degradations.note("命名.图层名清理失败", str(e))
                             continue
 
                 #  {layer} 
@@ -864,7 +900,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                             clean_name = self._extract_main_filename(filename)
                             return self._clean_filename(clean_name) if clean_name else f"layer{layer_index}"
                         except Exception as e:
-                            print(f"[] : {e}")
+                            self.degradations.note("命名.图层名提取失败", f"index={layer_index}: {e}")
                             return f"layer{layer_index}"
                     else:
                         return f"layer{layer_index}"
@@ -890,8 +926,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             return processed_template
 
         except Exception as e:
-            print(f"[] : {e}")
-            # 
+            self.degradations.note("文件名.模板处理失败回退默认", f"#{file_number}: {e}")
             return f"export_{file_number}"
 
     def _select_balanced_file_for_pool(
@@ -940,6 +975,10 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 try:
                     global_count = int(global_avoid_manager.get_image_usage_count(path))
                 except Exception:
+                    # 这里取不到全局使用次数会把「避免重复」退化成「随便选」，
+                    # 直接表现为同一张素材反复出现。必须留痕，否则用户只看到
+                    # 结果不对、日志里查不到任何线索。
+                    self.degradations.note("素材去重.全局使用次数读取失败", path)
                     global_count = 0
                 local_count = int(session_usage.get(path, 0))
                 recent_penalty = 3 if path in recent_set else 0
@@ -972,10 +1011,14 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 candidates = random.sample(candidates, 16)
             return random.choice(candidates)
         except Exception:
+            # 整套加权选择逻辑失败：退回纯随机。逐张重复出图的概率会上升，
+            # 必须让用户和日志知道「这一批的素材分布不可信」。
+            self.degradations.note("素材选择.加权逻辑失败回退随机")
             try:
                 import random
                 return random.choice(image_pool)
             except Exception:
+                self.degradations.note("素材选择.随机回退也失败")
                 return image_pool[0] if image_pool else None
 
     def _enforce_no_consecutive_layer_reuse(
@@ -1012,6 +1055,9 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                     adjusted[layer_key] = replacement
             return adjusted
         except Exception:
+            # 「避免连续使用同一素材」失效：相邻两张图可能用同一张图，
+            # 属于肉眼可见的分布异常。
+            self.degradations.note("素材选择.连续复用规避失效")
             return adjusted
 
     def _select_diverse_category(self, category_usage_tracker: dict, global_avoid_manager, combination_index: int) -> str:
@@ -1044,6 +1090,9 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                     try:
                         diversity_bonus = global_avoid_manager.get_category_diversity_score(category)
                     except Exception:
+                        # 只影响分类轮换的倾向性，不改变是否出图；
+                        # 但会让多分类素材的分布偏差，留痕但可接受。
+                        self.degradations.note("绑定分类.多样性评分读取失败", str(category))
                         diversity_bonus = 0
                 
                 # 
@@ -1077,8 +1126,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             return selected_category
             
         except Exception as e:
-            print(f"[V2] : {e}")
-            # 
+            self.degradations.note("绑定分类.轮换选择失败回退取模", str(e))
             selected = self.binding_categories[combination_index % len(self.binding_categories)]
             print(f"[V2] : '{selected}'")
             return selected
@@ -1199,6 +1247,12 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                             try:
                                 lines = [l for l in layer_obj.get_text_lines() if str(l).strip()]
                             except Exception:
+                                # 文案读不出来 → 该图层在绑定组里会没有候选文案，
+                                # 结果是这一格文字缺失。属于直接可见的出图缺陷。
+                                self.degradations.note(
+                                    "绑定组补全.读取文案行失败",
+                                    getattr(layer_obj, 'name', ''),
+                                )
                                 lines = []
                             chosen = None
                             for l in lines:
@@ -1220,12 +1274,20 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                                 try:
                                     base_pool = self._get_folder_images_cached(src, category=str(group_category))
                                 except Exception:
+                                    # 素材池读不出来 → 绑定组该格没有图可选，会留空。
+                                    self.degradations.note(
+                                        "绑定组补全.读取素材池失败",
+                                        f"{getattr(layer_obj, 'name', '')} @ {src}",
+                                    )
                                     base_pool = []
                             if base_pool:
                                 sel = base_pool[(combination_index * 7919 + gi * 9973) % len(base_pool)]
                                 completed[gi] = sel
                     except Exception:
-                        logger.warning("静默异常已忽略: except in utils/batch_export_precomputer_v2.py", exc_info=True)
+                        self.degradations.note(
+                            "绑定组补全.补全逻辑异常",
+                            getattr(layer_obj, 'name', ''),
+                        )
                         pass
                 if len(completed) != expected_count:
                     print(f"[🔍 预计算详细日志] ⚠️ 补全失败，跳过绑定组 '{group.name}' (覆盖 {len(completed)}/{expected_count})")
@@ -1290,8 +1352,8 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                     print(f"[V2]  {layer_idx} : {os.path.basename(selected_file)} (: {usage_count})")
                     return selected_file
             except Exception as e:
-                print(f"[V2] : {e}")
-        
+                self.degradations.note("素材选择.按全局用量挑选失败", str(e))
+
         # 
         return selector.select_next_file()
     
@@ -1332,8 +1394,13 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 return all_combinations
             
         except Exception as e:
-            print(f"[V2] : {e}")
-        
+            # 返回空列表意味着这个绑定分类一个组合都生成不出来，
+            # 整批图的该分组内容都会缺失。最严重的一类降级，必须留痕。
+            self.degradations.note(
+                "绑定组合.分类组合生成失败返回空",
+                f"{getattr(group, 'name', '')} / {category}: {e}",
+            )
+
         return []
     
     def _generate_deterministic_hash(self, layer_states: dict) -> str:
@@ -1380,9 +1447,11 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         try:
             filename = unicodedata.normalize('NFKC', filename)
         except Exception:
+            self.degradations.note("文件名.NFKC 规范化失败", str(filename))
             try:
                 filename = filename.encode('utf-8', 'ignore').decode('utf-8')
             except Exception:
+                self.degradations.note("文件名.编码清洗失败回退 export")
                 filename = "export"
 
         # Unicode

@@ -19,7 +19,7 @@ from app.models.text_layer_serialize import TextLayerSerializeMixin
 
 class TextLayer(QObject):
     """文字图层模型类"""
-class TextLayer(QObject, TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixin):
+class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixin, QObject):
     # 信号定义
     changed = Signal()
     text_changed = Signal()

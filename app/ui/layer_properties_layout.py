@@ -1,6 +1,7 @@
 import logging
 
 logger = logging.getLogger(__name__)
+from app.ui.design_spec import Space as _Space, Width as _Width, IconSize as _IconSize
 from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
@@ -9,7 +10,8 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QScrollArea, QFrame, QSizePolicy,
                                QMenu, QMainWindow, QDockWidget, QApplication, QTextEdit,
                                QProgressBar, QTabWidget)
-from PySide6.QtCore import Qt, Slot, Signal, QTimer, QSettings, QObject, QRunnable, QThreadPool
+from PySide6.QtCore import (Qt, Slot, Signal, QTimer, QSettings, QObject,
+                            QRunnable, QThreadPool, QSize)
 from PySide6.QtGui import QColor
 import os
 import time
@@ -82,7 +84,7 @@ class LayerPropertiesLayout(object):
         """初始化用户界面"""
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(2)
+        main_layout.setSpacing(_Space.NONE)
 
         self.property_tabs = QTabWidget()
         self.property_tabs.setObjectName("layerPropertyTabs")
@@ -130,7 +132,7 @@ class LayerPropertiesLayout(object):
 
         # 1. 基本属性组 (默认展开)
         self.basic_group = PropertySection("基本属性")
-        basic_form = QFormLayout()
+        basic_form = self._form()
 
         # 图层名称
         self.name_edit = QLineEdit()
@@ -139,38 +141,55 @@ class LayerPropertiesLayout(object):
         basic_form.addRow(self._label("名称:"), self.name_edit)
 
         # 图层位置 X 和 Y 在同一行
+        # 同"尺寸"行的处理：用 prefix 代替独立标签，把宽度让给输入框
         pos_layout = QHBoxLayout()
-        pos_layout.setSpacing(5)
+        pos_layout.setSpacing(_Space.XS)
         self.x_spin = QSpinBox()
         self.x_spin.setRange(-10000, 10000)
+        self.x_spin.setPrefix("X ")
         self.x_spin.valueChanged.connect(self.update_layer_position)
-        pos_layout.addWidget(self._label("X:"))
         pos_layout.addWidget(self.x_spin)
         pos_layout.addSpacing(4)
 
         self.y_spin = QSpinBox()
         self.y_spin.setRange(-10000, 10000)
+        self.y_spin.setPrefix("Y ")
         self.y_spin.valueChanged.connect(self.update_layer_position)
-        pos_layout.addWidget(self._label("Y:"))
         pos_layout.addWidget(self.y_spin)
         basic_form.addRow(self._label("位置:"), pos_layout)
 
         # 图层宽度和高度在同一行，添加锁定比例按钮
         size_layout = QHBoxLayout()
-        size_layout.setSpacing(5)
+        size_layout.setSpacing(_Space.XS)
         self.width_spin = QSpinBox()
         self.width_spin.setRange(1, 10000)
         self.width_spin.valueChanged.connect(self.update_layer_size)
-        size_layout.addWidget(self._label("宽:"))
+        # 用 prefix 表达 W/H，不再各占一个 "宽:"/"高:" 标签。
+        #
+        # 为什么（2026-10-28 实测）：这一行原来有 5 个元素
+        #   尺寸: [宽:] [spin] [锁] [高:] [spin]
+        # 面板宽 360 时，QSpinBox 的 sizeHint 是 109，实际只分到 57 ——
+        # 被挤掉一半，数字看不全，整行还会折成两行。
+        # 去掉两个 58px 的标签、改用 prefix 后，两个 spin 各能拿到 ~110px。
+        self.width_spin.setPrefix("W ")
         size_layout.addWidget(self.width_spin)
 
-        # 锁定比例按钮 - 重新设计为更符合整体UI风格
+        # 锁定比例按钮 - 嵌在尺寸输入行里的紧凑图标按钮
         self.aspect_lock_btn = QPushButton()
         self.aspect_lock_btn.setObjectName("aspectLockButton")
-        self.aspect_lock_btn.setFixedSize(26, 26)
+        # 尺寸用 setFixedSize 显式锁定 SM 档（24），**不要**只依赖 uiSize 属性。
+        #
+        # 踩过的坑（2026-10-28 实测三次）：
+        # 1) 写死 26 → 不在 24/28/36 三档内，且压过全局规则，渲染 26；
+        # 2) 只写 uiSize="iconSm" → 这个按钮 setCheckable(True) 后，
+        #    QPushButton:checked 的 sizeHint 参与计算，实测渲染 40×30；
+        # 3) 再叠加 variant 属性 → QPushButton[variant] 规则把 height 拉到 36。
+        # setFixedSize 是唯一能压住这三条的值，且数值仍取自 design_spec。
+        self.aspect_lock_btn.setProperty("uiSize", "iconSm")
+        self.aspect_lock_btn.setFixedSize(_IconSize.SM, _IconSize.SM)
+        self.aspect_lock_btn.setIconSize(QSize(_IconSize.SM, _IconSize.SM))
         self.aspect_lock_btn.setCheckable(True)
         self.aspect_lock_btn.setProperty("role", "toggle")
-        self.aspect_lock_btn.setProperty("uiSize", "icon")
         self.aspect_lock_btn.setChecked(False)
         self.aspect_lock_btn.setToolTip("锁定宽高比例")
         self.aspect_lock_btn.clicked.connect(self.toggle_aspect_ratio_lock)
@@ -180,7 +199,7 @@ class LayerPropertiesLayout(object):
         self.height_spin = QSpinBox()
         self.height_spin.setRange(1, 10000)
         self.height_spin.valueChanged.connect(self.update_layer_size)
-        size_layout.addWidget(self._label("高:"))
+        self.height_spin.setPrefix("H ")
         size_layout.addWidget(self.height_spin)
         basic_form.addRow(self._label("尺寸:"), size_layout)
 
@@ -227,7 +246,7 @@ class LayerPropertiesLayout(object):
         # 形状（几何参数优先，减少默认认知负担）
         self.shape_group = PropertySection("形状")
         shape_layout = QVBoxLayout()
-        shape_layout.setSpacing(6)
+        shape_layout.setSpacing(_Space.XS)
 
         # 形状类型：保留隐藏下拉框作为兼容层，用户入口改为分段按钮
         self.shape_type_combo = QComboBox()
@@ -236,7 +255,7 @@ class LayerPropertiesLayout(object):
         self.shape_type_combo.hide()
 
         shape_segment_layout = QHBoxLayout()
-        shape_segment_layout.setSpacing(5)
+        shape_segment_layout.setSpacing(_Space.XS)
         self.shape_type_button_group = QButtonGroup(self)
         self.shape_type_button_group.setExclusive(True)
         self.shape_type_buttons = []
@@ -258,11 +277,11 @@ class LayerPropertiesLayout(object):
 
         # 形状参数 + 形状预览并排
         shape_main_row = QHBoxLayout()
-        shape_main_row.setSpacing(6)
+        shape_main_row.setSpacing(_Space.XS)
 
         # 形状参数控制
         self.shape_params_widget = QWidget()
-        self.shape_params_layout = QFormLayout(self.shape_params_widget)
+        self.shape_params_layout = self._form(self.shape_params_widget)
         self.shape_params_layout.setContentsMargins(0, 0, 0, 0)
 
         # 梯形参数
@@ -300,13 +319,13 @@ class LayerPropertiesLayout(object):
 
         # 形状预览
         self.shape_preview = ShapePreviewWidget()
-        self.shape_preview.setFixedSize(58, 58)
+        self.shape_preview.setFixedSize(_Width.SPIN, _Width.SPIN)
         self.shape_preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         preview_container = QFrame()
         preview_container.setObjectName("shapePreviewContainer")
         pc_layout = QVBoxLayout(preview_container)
         pc_layout.setContentsMargins(6, 6, 6, 6)
-        pc_layout.setSpacing(3)
+        pc_layout.setSpacing(_Space.XS)
         pc_layout.addWidget(self.shape_preview, alignment=Qt.AlignCenter)
         shape_main_row.addWidget(preview_container, 0, Qt.AlignTop)
 
@@ -317,14 +336,14 @@ class LayerPropertiesLayout(object):
                 if item and item.widget():
                     item.widget().hide()
 
-        corner_form = QFormLayout()
+        corner_form = self._form()
         self.vector_corner_radius_spin = QSpinBox()
         self.vector_corner_radius_spin.setRange(0, 1000)
         self.vector_corner_radius_spin.valueChanged.connect(self.update_vector_corner_radius_all)
         corner_form.addRow(self._label("统一圆角:"), self.vector_corner_radius_spin)
 
         vector_corner_layout = QHBoxLayout()
-        vector_corner_layout.setSpacing(5)
+        vector_corner_layout.setSpacing(_Space.XS)
         self.vector_corner_tl_spin = QSpinBox()
         self.vector_corner_tl_spin.setRange(0, 1000)
         self.vector_corner_tl_spin.setPrefix("TL  ")
@@ -349,7 +368,7 @@ class LayerPropertiesLayout(object):
 
         self.convert_to_path_btn = QPushButton("矩形转路径节点")
         self.convert_to_path_btn.clicked.connect(self.convert_rect_to_path_nodes)
-        corner_form.addRow("", self.convert_to_path_btn)
+        corner_form.addRow(self._blank_label(), self.convert_to_path_btn)
         shape_layout.addLayout(corner_form)
 
         self.shape_group.add_content_layout(shape_layout)
@@ -363,7 +382,7 @@ class LayerPropertiesLayout(object):
 
         appearance_layout.addWidget(self._section_label("填充"))
         fill_mode_layout = QHBoxLayout()
-        fill_mode_layout.setSpacing(5)
+        fill_mode_layout.setSpacing(_Space.XS)
         self.fill_mode_button_group = QButtonGroup(self)
         self.fill_mode_button_group.setExclusive(True)
         self.fill_mode_buttons = []
@@ -381,7 +400,7 @@ class LayerPropertiesLayout(object):
         self.fill_solid_enabled_checkbox.hide()
 
         self.fill_solid_controls_widget, fill_solid_controls_layout = self._make_control_group()
-        fill_solid_form = QFormLayout()
+        fill_solid_form = self._form()
         self.fill_solid_color_btn = QPushButton("填充颜色")
         self.fill_solid_color_btn.setObjectName("colorSwatchButton")
         self.fill_solid_color_btn.setProperty("swatchLabel", "")
@@ -406,7 +425,7 @@ class LayerPropertiesLayout(object):
         self.fill_gradient_end_btn.setProperty("swatchLabel", "终点色")
         self.fill_gradient_end_btn.clicked.connect(self.pick_gradient_end_color)
         gradient_color_layout.addWidget(self.fill_gradient_end_btn)
-        fill_gradient_form = QFormLayout()
+        fill_gradient_form = self._form()
         fill_gradient_form.addRow(self._label("渐变颜色:"), gradient_color_layout)
 
         self.fill_gradient_angle_spin = QDoubleSpinBox()
@@ -425,7 +444,10 @@ class LayerPropertiesLayout(object):
         appearance_layout.addWidget(self._divider())
         appearance_layout.addWidget(self._section_label("描边"))
 
-        stroke_toggle_row, self.stroke_enabled_checkbox = switch_row("启用描边")
+        # "启用描边" 是普通字段开关，与"混合模式:"同级，
+        # 不该用 featureTitle（15px bold，比区块标题还大）
+        stroke_toggle_row, self.stroke_enabled_checkbox = switch_row(
+            "启用描边", role="fieldLabel")
         self.stroke_enabled_checkbox.clicked.connect(self.update_stroke_enabled)
         appearance_layout.addLayout(stroke_toggle_row)
 
@@ -441,9 +463,9 @@ class LayerPropertiesLayout(object):
         self.stroke_type_combo = QComboBox()
         self.stroke_type_combo.addItems(["内描边", "居中描边", "外描边"])
         self.stroke_type_combo.currentIndexChanged.connect(self.update_stroke_type)
-        stroke_width_layout.addWidget(self._label("描边对齐:"))
+        stroke_width_layout.addWidget(self._label("描边对齐:", inline=True))
         stroke_width_layout.addWidget(self.stroke_type_combo)
-        stroke_controls_form = QFormLayout()
+        stroke_controls_form = self._form()
         stroke_controls_form.addRow(self._label("描边粗细:"), stroke_width_layout)
 
         self.stroke_color_btn = QPushButton("描边颜色")
@@ -455,7 +477,7 @@ class LayerPropertiesLayout(object):
         appearance_layout.addWidget(self.stroke_controls_widget)
 
         self.stroke_advanced_group = CollapsibleGroupBox("高级线条", collapsed=True)
-        stroke_advanced_form = QFormLayout()
+        stroke_advanced_form = self._form()
 
         self.stroke_join_combo = QComboBox()
         self.stroke_join_combo.addItems(["斜接", "圆角", "斜切"])
@@ -467,7 +489,7 @@ class LayerPropertiesLayout(object):
         self.stroke_cap_combo = QComboBox()
         self.stroke_cap_combo.addItems(["平头", "圆头", "方头"])
         self.stroke_cap_combo.currentTextChanged.connect(self.update_stroke_cap)
-        stroke_line_layout.addWidget(self._label("描边端点:"))
+        stroke_line_layout.addWidget(self._label("描边端点:", inline=True))
         stroke_line_layout.addWidget(self.stroke_cap_combo)
         stroke_advanced_form.addRow(self._label("描边连接:"), stroke_line_layout)
 
@@ -475,14 +497,14 @@ class LayerPropertiesLayout(object):
         self.stroke_dash_length_spin = QSpinBox()
         self.stroke_dash_length_spin.setRange(0, 1000)
         self.stroke_dash_length_spin.valueChanged.connect(self.update_stroke_dash)
-        self.stroke_dash_length_spin.setToolTip("为 0 时连续实线；大于 0 时沿路径绘制虚线")
-        stroke_dash_layout.addWidget(self._label("段长(0=实线)"))
+        self.stroke_dash_length_spin.setToolTip("段长：为 0 时连续实线；大于 0 时沿路径绘制虚线")
+        stroke_dash_layout.addWidget(self._label("段长:", inline=True))
         stroke_dash_layout.addWidget(self.stroke_dash_length_spin)
         self.stroke_dash_gap_spin = QSpinBox()
         self.stroke_dash_gap_spin.setRange(0, 1000)
         self.stroke_dash_gap_spin.valueChanged.connect(self.update_stroke_dash)
         self.stroke_dash_gap_spin.setToolTip("虚线间隔；连续实线时请设为 0")
-        stroke_dash_layout.addWidget(self._label("间隔"))
+        stroke_dash_layout.addWidget(self._label("间隔:", inline=True))
         stroke_dash_layout.addWidget(self.stroke_dash_gap_spin)
         stroke_advanced_form.addRow(self._label("虚线:"), stroke_dash_layout)
         self.stroke_advanced_group.add_content_layout(stroke_advanced_form)
@@ -494,11 +516,17 @@ class LayerPropertiesLayout(object):
         self._sync_appearance_visibility()
 
         # 2. 图像源设置组 (默认展开)
+        #
+        # ⚠ 2026-10-28 改：这里原来是裸 QVBoxLayout，四个子控件从分区最左边
+        # （x=12）起排，而上面的「基本属性」字段列从 x=84 起 —— 同一个面板
+        # 出现两条竖线，截图里一眼就"乱"。现在改走 self._form()，
+        # 无条件落在同一条标签列栅格上（整行控件用 _blank_label() 占位）。
         self.source_group = PropertySection("图像源")
-        source_layout = QVBoxLayout()
+        source_form = self._form()
 
         # 图像源类型选择
         source_type_layout = QHBoxLayout()
+        source_type_layout.setSpacing(_Space.MD)
         self.folder_radio = QRadioButton("文件夹")
         self.file_radio = QRadioButton("单个文件")
         self.folder_radio.setChecked(True)
@@ -511,10 +539,11 @@ class LayerPropertiesLayout(object):
         source_type_layout.addWidget(self.folder_radio)
         source_type_layout.addWidget(self.file_radio)
         source_type_layout.addStretch()
-        source_layout.addLayout(source_type_layout)
+        source_form.addRow(self._label("来源:"), source_type_layout)
 
         # 图像源路径
         source_path_layout = QHBoxLayout()
+        source_path_layout.setSpacing(_Space.XS)
         self.source_path_edit = QLineEdit()
         self.source_path_edit.setPlaceholderText("输入或粘贴文件/文件夹路径")
         self.source_path_edit.setReadOnly(False)  # 允许输入
@@ -524,33 +553,35 @@ class LayerPropertiesLayout(object):
         self.browse_btn.clicked.connect(self.browse_image)
         source_path_layout.addWidget(self.source_path_edit)
         source_path_layout.addWidget(self.browse_btn)
-        source_layout.addLayout(source_path_layout)
+        source_form.addRow(self._label("路径:"), source_path_layout)
 
         # 随机按钮
         self.random_btn = QPushButton("随机选择")
         self.random_btn.setProperty("variant", "secondary")
         self.random_btn.clicked.connect(self.randomize_image)
-        source_layout.addWidget(self.random_btn)
+        source_form.addRow(self._blank_label(), self.random_btn)
 
-        # 当前图像预览
-        self.current_image_label = QLabel("当前图像: 无")
+        # 当前图像预览：值只放文件名，「当前:」走统一的标签列，
+        # 这样它和其他字段的竖线一致（原来整串文字从最左边起排）。
+        self.current_image_label = QLabel("无")
         self.current_image_label.setProperty("role", "muted")
-        source_layout.addWidget(self.current_image_label)
+        self.current_image_label.setWordWrap(True)
+        source_form.addRow(self._label("当前:"), self.current_image_label)
 
-        self.source_group.add_content_layout(source_layout)
+        self.source_group.add_content_layout(source_form)
         self.scroll_layout.addWidget(self.source_group)
         self._register_module_group("source", "图像源设置", self.source_group)
 
         self.ai_generation_group = PropertySection("AI生图")
-        ai_layout = QFormLayout()
+        ai_layout = self._form()
 
         self.ai_prompt_edit = QTextEdit()
         self.ai_prompt_edit.setAcceptRichText(False)
-        self.ai_prompt_edit.setFixedHeight(76)
+        self.ai_prompt_edit.setFixedHeight(_Width.COMBO)
         self.ai_prompt_edit.setPlaceholderText("输入当前图层的生图提示词")
         self.ai_negative_prompt_edit = QTextEdit()
         self.ai_negative_prompt_edit.setAcceptRichText(False)
-        self.ai_negative_prompt_edit.setFixedHeight(48)
+        self.ai_negative_prompt_edit.setFixedHeight(_Width.VALUE_LABEL)
         self.ai_negative_prompt_edit.setPlaceholderText("可选：输入不希望出现的内容")
         self.ai_count_spin = QSpinBox()
         self.ai_count_spin.setRange(1, 20)
@@ -572,14 +603,14 @@ class LayerPropertiesLayout(object):
         self.ai_status_label = QLabel("使用工具栏的 AI接口设置 作为全局 API 参数")
         self.ai_status_label.setProperty("role", "muted")
 
-        ai_layout.addRow("提示词:", self.ai_prompt_edit)
-        ai_layout.addRow("反向提示词:", self.ai_negative_prompt_edit)
-        ai_layout.addRow("数量:", self.ai_count_spin)
-        ai_layout.addRow("尺寸:", self.ai_size_combo)
-        ai_layout.addRow("处理:", self.ai_mode_combo)
-        ai_layout.addRow("", self.ai_generate_btn)
-        ai_layout.addRow("进度:", self.ai_progress_bar)
-        ai_layout.addRow("", self.ai_status_label)
+        ai_layout.addRow(self._label("提示词:"), self.ai_prompt_edit)
+        ai_layout.addRow(self._label("反向提示词:"), self.ai_negative_prompt_edit)
+        ai_layout.addRow(self._label("数量:"), self.ai_count_spin)
+        ai_layout.addRow(self._label("尺寸:"), self.ai_size_combo)
+        ai_layout.addRow(self._label("处理:"), self.ai_mode_combo)
+        ai_layout.addRow(self._blank_label(), self.ai_generate_btn)
+        ai_layout.addRow(self._label("进度:"), self.ai_progress_bar)
+        ai_layout.addRow(self._blank_label(), self.ai_status_label)
 
         self.ai_generation_group.add_content_layout(ai_layout)
         self.scroll_layout.addWidget(self.ai_generation_group)
@@ -587,12 +618,14 @@ class LayerPropertiesLayout(object):
 
         # 3. 高级设置组 (默认收起)
         self.advanced_group = PropertySection("高级设置")
-        advanced_form = QFormLayout()
+        advanced_form = self._form()
 
         # 使用原始尺寸
         self.use_original_size_checkbox = PropertySwitch()
         self.use_original_size_checkbox.clicked.connect(self.update_use_original_size)
-        advanced_form.addRow(QLabel("智能裁剪"), self.use_original_size_checkbox)
+        # 开关行也走统一标签列（原来直接塞裸 QLabel，宽度 52、左对齐，
+        # 与同组「适配模式:」的右对齐 72 列形成两条竖线）
+        advanced_form.addRow(self._label("智能裁剪:"), self.use_original_size_checkbox)
 
         # 图像适配模式
         # 索引定义（与 Layer.FIT_* 保持一致）：
@@ -604,7 +637,7 @@ class LayerPropertiesLayout(object):
         self.fit_mode_combo.addItem("智能缩放不裁剪")
         self.fit_mode_combo.addItem("智能适配不缩放")
         self.fit_mode_combo.currentIndexChanged.connect(self.update_fit_mode)
-        advanced_form.addRow("适配模式:", self.fit_mode_combo)
+        advanced_form.addRow(self._label("适配模式:"), self.fit_mode_combo)
 
         # 裁剪方向
         self.crop_direction_combo = QComboBox()
@@ -614,7 +647,7 @@ class LayerPropertiesLayout(object):
         self.crop_direction_combo.addItem("左侧裁剪")
         self.crop_direction_combo.addItem("右侧裁剪")
         self.crop_direction_combo.currentIndexChanged.connect(self.update_crop_direction)
-        advanced_form.addRow("裁剪方向:", self.crop_direction_combo)
+        advanced_form.addRow(self._label("裁剪方向:"), self.crop_direction_combo)
 
         # 混合模式
         self.blend_mode_combo = QComboBox()
@@ -627,7 +660,7 @@ class LayerPropertiesLayout(object):
             # 如果没有导入成功，只添加正常模式
             self.blend_mode_combo.addItem("正常")
         self.blend_mode_combo.currentTextChanged.connect(self.update_blend_mode)
-        advanced_form.addRow("混合模式:", self.blend_mode_combo)
+        advanced_form.addRow(self._label("混合模式:"), self.blend_mode_combo)
 
         self.advanced_group.add_content_layout(advanced_form)
         self.scroll_layout.addWidget(self.advanced_group)
@@ -635,13 +668,13 @@ class LayerPropertiesLayout(object):
 
         # 4. 图层分身组 (默认收起)
         self.clone_group = PropertySection("图层分身")
-        clone_layout = QFormLayout()
+        clone_layout = self._form()
 
         # 启用分身
         self.clone_enabled_checkbox = QCheckBox("启用图层分身")
         self.clone_enabled_checkbox.setChecked(False)
         self.clone_enabled_checkbox.clicked.connect(self.update_clone_enabled)
-        clone_layout.addRow("", self.clone_enabled_checkbox)
+        clone_layout.addRow(self._blank_label(), self.clone_enabled_checkbox)
 
         # 分身行数和列数放在同一行
         clone_count_layout = QHBoxLayout()
@@ -658,7 +691,7 @@ class LayerPropertiesLayout(object):
         self.clone_columns_spin.valueChanged.connect(self.update_clone_settings)
         clone_count_layout.addWidget(QLabel("列:"))
         clone_count_layout.addWidget(self.clone_columns_spin)
-        clone_layout.addRow("数量:", clone_count_layout)
+        clone_layout.addRow(self._label("数量:"), clone_count_layout)
 
         # 行间距和列间距放在同一行
         spacing_layout = QHBoxLayout()
@@ -675,13 +708,13 @@ class LayerPropertiesLayout(object):
         self.column_spacing_spin.valueChanged.connect(self.update_clone_settings)
         spacing_layout.addWidget(QLabel("列:"))
         spacing_layout.addWidget(self.column_spacing_spin)
-        clone_layout.addRow("间距:", spacing_layout)
+        clone_layout.addRow(self._label("间距:"), spacing_layout)
 
         # 分身自定义大小
         self.clone_custom_size_checkbox = QCheckBox("自定义分身大小")
         self.clone_custom_size_checkbox.setChecked(False)
         self.clone_custom_size_checkbox.clicked.connect(self.update_clone_custom_size_enabled)
-        clone_layout.addRow("", self.clone_custom_size_checkbox)
+        clone_layout.addRow(self._blank_label(), self.clone_custom_size_checkbox)
 
         # 分身宽度和高度
         clone_size_layout = QHBoxLayout()
@@ -700,42 +733,42 @@ class LayerPropertiesLayout(object):
         self.clone_height_spin.valueChanged.connect(self.update_clone_custom_size)
         clone_size_layout.addWidget(QLabel("高:"))
         clone_size_layout.addWidget(self.clone_height_spin)
-        clone_layout.addRow("分身尺寸:", clone_size_layout)
+        clone_layout.addRow(self._label("分身尺寸:"), clone_size_layout)
 
         # 元素填充功能
         self.fill_enabled_checkbox = QCheckBox("启用元素填充")
         self.fill_enabled_checkbox.setChecked(False)
         self.fill_enabled_checkbox.clicked.connect(self.update_fill_enabled)
-        clone_layout.addRow("", self.fill_enabled_checkbox)
+        clone_layout.addRow(self._blank_label(), self.fill_enabled_checkbox)
 
         self.fill_mode_combo = QComboBox()
         self.fill_mode_combo.addItems(["常规网格", "错位排列", "边框排列"])
         self.fill_mode_combo.currentIndexChanged.connect(self.update_fill_mode)
-        clone_layout.addRow("排列:", self.fill_mode_combo)
+        clone_layout.addRow(self._label("排列:"), self.fill_mode_combo)
 
         self.fill_spacing_spin = QSpinBox()
         self.fill_spacing_spin.setRange(0, 10000)
         self.fill_spacing_spin.setValue(0)
         self.fill_spacing_spin.valueChanged.connect(self.update_fill_spacing)
-        clone_layout.addRow("元素间距:", self.fill_spacing_spin)
+        clone_layout.addRow(self._label("元素间距:"), self.fill_spacing_spin)
 
         self.fill_margin_spin = QSpinBox()
         self.fill_margin_spin.setRange(0, 1000)
         self.fill_margin_spin.setValue(0)
         self.fill_margin_spin.valueChanged.connect(self.update_fill_margin)
-        clone_layout.addRow("画布边距:", self.fill_margin_spin)
+        clone_layout.addRow(self._label("画布边距:"), self.fill_margin_spin)
 
         self.fill_angle_spin = QDoubleSpinBox()
         self.fill_angle_spin.setRange(0.0, 360.0)
         self.fill_angle_spin.setDecimals(1)
         self.fill_angle_spin.setValue(0.0)
         self.fill_angle_spin.valueChanged.connect(self.update_fill_angle)
-        clone_layout.addRow("元素角度:", self.fill_angle_spin)
+        clone_layout.addRow(self._label("元素角度:"), self.fill_angle_spin)
 
         self.clone_mirror_combo = QComboBox()
         self.clone_mirror_combo.addItems(["无镜像", "左右镜像", "上下镜像"])
         self.clone_mirror_combo.currentIndexChanged.connect(self.update_clone_mirror_mode_index)
-        clone_layout.addRow("镜像:", self.clone_mirror_combo)
+        clone_layout.addRow(self._label("镜像:"), self.clone_mirror_combo)
 
         self.clone_group.add_content_layout(clone_layout)
         self.scroll_layout.addWidget(self.clone_group)
@@ -809,31 +842,21 @@ class LayerPropertiesLayout(object):
         self.set_controls_enabled(False)
 
     def _apply_compact_layouts(self):
-        """统一压缩属性面板内部表单间距，避免右侧面板挤占画布。"""
-        def compact(layout):
-            if layout is None:
-                return
-            if isinstance(layout, QFormLayout):
-                layout.setHorizontalSpacing(Tokens.ROW_GAP)
-                layout.setVerticalSpacing(Tokens.ROW_GAP)
-                layout.setContentsMargins(0, 0, 0, 0)
-                layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                layout.setFormAlignment(Qt.AlignTop)
-                layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-                layout.setRowWrapPolicy(QFormLayout.WrapLongRows)
-            else:
-                layout.setSpacing(Tokens.ROW_GAP)
+        """收窄控件最小宽度，让 dock 可以随窗口变窄。
 
-            for i in range(layout.count()):
-                item = layout.itemAt(i)
-                compact(item.layout())
-                widget = item.widget()
-                if widget is not None:
-                    compact(widget.layout())
+        ⚠ 2026-10-28 大改：这里原本还会**遍历整棵布局树重写间距/边距/对齐**：
 
-        compact(self.layout())
-        compact(getattr(self, "scroll_layout", None))
-        compact(getattr(self, "more_scroll_layout", None))
+            layout.setHorizontalSpacing(Tokens.ROW_GAP)   # 覆盖 _form() 的 12
+            layout.setContentsMargins(0, 0, 0, 0)         # 抹掉分区内边距
+            layout.setRowWrapPolicy(WrapLongRows)         # 覆盖 _form() 的 DontWrapRows
+
+        这是"改一处被另一处覆盖"的典型：`_form()` 里刚统一好的行距/列距/不折行，
+        构造完成后被这个函数逐个改回去 —— 于是同一份代码里存在**两个写布局的人**，
+        谁也不服谁。这也是为什么反复调 `_form()` 看不出效果。
+
+        布局规格现在只有 `_form()` 一个写入方，这里只保留"按内容收窄"的职责
+        （它确实与布局规格无关，是窗口自适应需要的）。
+        """
         self._apply_adaptive_widths()
 
     def _apply_adaptive_widths(self):
@@ -1006,16 +1029,29 @@ class LayerPropertiesLayout(object):
             QDockWidget.DockWidgetFloatable
         )
         dock.setWidget(group)
-        main_window.addDockWidget(Qt.RightDockWidgetArea, dock)
+        # ⚠ 这里**不要**先 addDockWidget 再 setFloating(True)（2026-10-28 修正）。
+        # 那个组合会让 dock 处于「既注册在停靠区、又标记为浮窗」的矛盾状态：
+        # 用户把它拖回主窗口时，Qt 认为它「本来就在区里」，不产生落点吸附，
+        # 表现就是「拖出来之后吸不回去」。
+        # 正确做法：setParent(main_window) + setFloating(True)，由 Qt 自己
+        # 处理浮窗；用户拖回时走正常的 dock 落点流程。
+        dock.setParent(main_window)
+        dock.show()
+        dock.resize(260, 520)
+        dock.setFloating(True)
+
+        # 信号必须在 show 之后接，否则初始的 visible 变化会误触发「合并回面板」
         dock.visibilityChanged.connect(
             lambda visible, k=module_key: self._on_module_dock_visibility_changed(k, visible)
         )
-        dock.topLevelChanged.connect(lambda _floating, _k=module_key: self._persist_module_layout())
+        dock.topLevelChanged.connect(
+            lambda _floating, _k=module_key: self._persist_module_layout()
+        )
         if hasattr(dock, "dockLocationChanged"):
-            dock.dockLocationChanged.connect(lambda _area, _k=module_key: self._persist_module_layout())
-        dock.setFloating(True)
-        dock.resize(260, 520)
-        dock.show()
+            dock.dockLocationChanged.connect(
+                lambda _area, _k=module_key: self._persist_module_layout()
+            )
+
         self._module_docks[module_key] = dock
         if not self._restoring_module_layout:
             self._persist_module_layout()
@@ -1067,18 +1103,21 @@ class LayerPropertiesLayout(object):
         self._persist_module_layout()
 
     def update_aspect_lock_icon(self):
-        """更新锁定比例按钮的图标 - 专业简洁设计"""
+        """更新锁定比例按钮的图标 - 专业简洁设计。
+
+        ⚠ 不要在这里设置 `variant` 属性（2026-10-28 修正）。
+        本按钮的尺寸由 `uiSize="iconSm"`（24px）控制，但 QSS 里
+        `QPushButton[variant]` 这条属性选择器会把 height 强制成 LG 档（36），
+        特异性高于 uiSize —— 实测该按钮渲染成 28×28，比同排按钮大一圈。
+        语义色通过图标颜色表达就够，不需要借 variant 表达。
+        """
         from app.ui.icon_manager import IconManager
 
         if self.aspect_lock_btn.isChecked():
-            # 锁定状态 - 使用图标管理器的链接图标
             IconManager.apply_icon_to_button(self.aspect_lock_btn, 'link', 'primary')
-            self.aspect_lock_btn.setProperty("variant", "default")
             self.aspect_lock_btn.setToolTip("已锁定宽高比例 - 点击解锁")
         else:
-            # 解锁状态 - 使用图标管理器的解锁图标
             IconManager.apply_icon_to_button(self.aspect_lock_btn, 'unlink', 'secondary')
-            self.aspect_lock_btn.setProperty("variant", "secondary")
             self.aspect_lock_btn.setToolTip("宽高比例未锁定 - 点击锁定")
         self.aspect_lock_btn.style().unpolish(self.aspect_lock_btn)
         self.aspect_lock_btn.style().polish(self.aspect_lock_btn)

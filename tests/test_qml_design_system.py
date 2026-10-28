@@ -147,10 +147,16 @@ def test_layer_model_exposes_semantic_icon_name_and_keeps_legacy_glyph():
 
 @pytest.mark.unit
 def test_qml_icon_assets_are_included_in_both_packaging_paths():
+    """QML 图标资源必须被打包。
+
+    打包入口已收敛到 ``批图王.spec``（build.py 只负责按模式调用它），
+    因此资源清单只维护一份、位于 spec 的 datas 里。这里断言「清单存在
+    且图标真的在磁盘上」，两条打包路径共用它，不可能只覆盖其中一条。
+    """
     build_source = (REPO_ROOT / "build.py").read_text(encoding="utf-8")
     spec_source = (REPO_ROOT / "批图王.spec").read_text(encoding="utf-8")
 
-    assert "app/qml/icons" in build_source
+    assert "批图王.spec" in build_source, "build.py 必须走 spec，否则资源清单会双份维护"
     assert "app/qml/icons" in spec_source
     assert any((QML_ROOT / "icons").glob("*.svg"))
 

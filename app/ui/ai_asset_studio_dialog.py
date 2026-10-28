@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from app.services.ai_asset_service import AIAssetService
 from app.services.ai_provider_config import AIProviderProfile, AIProviderStore
+from app.ui.tokens_v2 import Color
 
 
 class _ModelFetchSignals(QObject):
@@ -138,7 +139,7 @@ class AIAssetStudioDialog(QDialog):
         self.fetch_models_btn = QPushButton("自动拉取模型")
         self.fetch_models_btn.clicked.connect(self.fetch_models)
         self.fetch_status_label = QLabel("")
-        self.fetch_status_label.setStyleSheet("color: #8E8E93;")
+        self.fetch_status_label.setStyleSheet(f"color: {Color.text_muted};")
         fetch_row.addWidget(self.fetch_models_btn)
         fetch_row.addWidget(self.fetch_status_label, 1)
         models_layout.addLayout(fetch_row)

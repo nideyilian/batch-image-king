@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QIcon
 
+from app.ui.tokens_v2 import Color
 from app.utils.canvas_preset_manager import CanvasPresetManager
 
 class AddCanvasPresetDialog(QDialog):
@@ -272,13 +273,13 @@ class CanvasPresetManagerDialog(QDialog):
 
         self.preview_label = QLabel("未选择预设")
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ccc;
+        self.preview_label.setStyleSheet(f"""
+            QLabel {{
+                border: 2px dashed {Color.border_strong};
                 padding: 20px;
-                color: #8E8E93;
+                color: {Color.text_muted};
                 font-size: 14px;
-            }
+            }}
         """)
         preview_layout.addWidget(self.preview_label)
 

@@ -4,6 +4,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                            QTableWidgetItem, QHeaderView)
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QFont, QIcon, QColor, QBrush
+
+from app.ui.tokens_v2 import Color
 import os
 
 class MultiTabExportProgressDialog(QDialog):
@@ -24,10 +26,10 @@ class MultiTabExportProgressDialog(QDialog):
         self.setModal(True)
 
         # 设置全局样式
-        self.setStyleSheet("""
-            QLabel { font-weight: bold; }
-            QProgressBar { border: 1px solid #aaa; text-align: center; }
-            QProgressBar::chunk { background-color: #4CAF50; }
+        self.setStyleSheet(f"""
+            QLabel {{ font-weight: bold; }}
+            QProgressBar {{ border: 1px solid {Color.border_strong}; text-align: center; }}
+            QProgressBar::chunk {{ background-color: {Color.accent}; }}
         """)
 
         self.setup_ui()
@@ -155,14 +157,15 @@ class MultiTabExportProgressDialog(QDialog):
                         status_item = self.tabs_table.item(i, 1)
                         if status_item:
                             status_item.setText("正在导出")
-                            # 使用蓝色文本代替绿色
-                            status_item.setForeground(QBrush(QColor("#2F9CF4")))
-                            # 高亮显示当前处理的行
+                            # 进行中：主色文字 + 主色弱底高亮整行。
+                            # 原来用 #2F9CF4 文字 + QColor(230,240,250) 浅蓝底，
+                            # 后者是亮色主题的思路 —— 在暗色面板上会变成一块刺眼白条。
+                            status_item.setForeground(QBrush(QColor(Color.accent)))
                             for col in range(self.tabs_table.columnCount()):
                                 item = self.tabs_table.item(i, col)
                                 if item:
-                                    item.setBackground(QBrush(QColor(230, 240, 250)))  # 浅蓝色背景
-                                    item.setForeground(QBrush(QColor("#2F9CF4")))  # 深蓝色文本
+                                    item.setBackground(QBrush(QColor(Color.accent_subtle)))
+                                    item.setForeground(QBrush(QColor(Color.text_on_selected)))
 
                 # 显示当前目录
                 document = tab_info['document']

@@ -59,7 +59,7 @@ class _AIAssetLayerTask(QRunnable):
         self.signals.finished.emit(self.service.generate_assets(self.request))
 
 
-class LayerPropertiesPanel(QWidget, LayerPropertiesBase, LayerPropertiesLayout, LayerPropertiesRefresh, LayerPropertiesAttr, LayerPropertiesAi, LayerPropertiesSource, LayerPropertiesTransform, LayerPropertiesShape):
+class LayerPropertiesPanel(LayerPropertiesBase, LayerPropertiesLayout, LayerPropertiesRefresh, LayerPropertiesAttr, LayerPropertiesAi, LayerPropertiesSource, LayerPropertiesTransform, LayerPropertiesShape, QWidget):
     """图层属性面板（方法已拆分到多个 mixin 模块，见 layer_properties_*.py）"""
 
     # 属性变更信号

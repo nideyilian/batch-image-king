@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QPushButton, QListWidget, QListWidgetItem, QCheckBox,
                            QAbstractItemView, QInputDialog, QMenu, QApplication,
                            QDialog, QDialogButtonBox, QTextEdit, QSizePolicy)
-from PySide6.QtCore import Qt, Signal, QTimer, QRect, QPoint
+from PySide6.QtCore import Qt, Signal, QTimer, QRect, QPoint, QSize
 from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, QDropEvent, QPen, QBrush
 import sys
 import os
@@ -37,7 +37,10 @@ try:
 except ImportError:
     from app.models.shaped_layer_new import ShapedLayer
 
+from app.ui.tokens_v2 import Color
+from app.ui.design_spec import Scale as _Scale, Space as _Space, Width as _Width, IconSize as _IconSize
 from app.ui.icon_manager import IconManager, create_random_button, create_lock_button, create_visibility_button
+from app.ui.flow_layout import FlowLayout
 from app.ui.visual_hierarchy import VisualHierarchy
 from app.ui.shaped_layer_panel import ShapedLayerPanel
 from app.models.layer_group import LayerGroup
@@ -115,7 +118,7 @@ class LayerPanelBase(object):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(3)
+        layout.setSpacing(_Space.XS)
 
         # 图层列表 - 使用自定义的支持拖放的列表组件
         self.layer_list = DragDropLayerList()
@@ -128,13 +131,16 @@ class LayerPanelBase(object):
 
         layout.addWidget(self.layer_list)
 
-        # 按钮控制栏（固定高度，避免底部被挤压）
+        # 按钮控制栏（高度随行数自适应，避免底部被挤压）
+        #
+        # 为什么用 FlowLayout 而不是 QHBoxLayout：这里一行有 8 个按钮，
+        # 需要 210px，而 dock 最小宽度 145px（实际仅 176px）。QHBoxLayout 不会换行，
+        # Qt 只会把按钮挤在一起互相重叠（实测相邻按钮压 2px），最后一个被切掉。
+        # 改用流式布局后，窄面板自动折成两行，宽面板保持单行。
         self.button_bar = QWidget()
-        self.button_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.button_bar.setMinimumHeight(30)
-        button_layout = QHBoxLayout(self.button_bar)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(2)
+        self.button_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        button_layout = FlowLayout(self.button_bar, margin=0,
+                                   h_spacing=_Space.XS, v_spacing=_Space.XS)
 
         # 添加图层按钮
         self.add_btn = IconManager.create_icon_button('add', 16, 'primary', "添加新图层")
@@ -164,15 +170,21 @@ class LayerPanelBase(object):
         self._apply_button_style(self.down_btn, 'secondary', icon_button=True)
         button_layout.addWidget(self.down_btn)
 
-        self.group_btn = QPushButton("组")
-        self.group_btn.setToolTip("从所选图层建立组")
+        # 建组按钮
+        #
+        # ⚠ 原来是 `QPushButton("组")` —— 纯文字按钮混在一排图标按钮里
+        # （2026-10-28 实测截图：+ − ^ v 后面突然出现一个汉字"组"）。
+        # 图标按钮栏里出现文字按钮，视觉上就是没做完。
+        # 改用 Lucide 的 group 图标，与邻居同一套几何规范。
+        self.group_btn = IconManager.create_icon_button(
+            'group', 16, 'secondary', "从所选图层建立组")
         self.group_btn.clicked.connect(self.group_selected_layers)
         self._normalize_toolbar_button(self.group_btn)
         self._apply_button_style(self.group_btn, 'secondary', icon_button=True)
         button_layout.addWidget(self.group_btn)
 
         # 添加分割线
-        button_layout.addItem(self._create_separator())
+        button_layout.addWidget(self._create_separator())
 
         # 随机化所有图层按钮 - 使用图标管理器
         self.random_btn = create_random_button()
@@ -252,6 +264,16 @@ class LayerPanelBase(object):
 
         # 应用按钮样式
         if icon_button:
+            # ⚠ 内联 QSS **不要写任何尺寸**，只写配色。
+            #
+            # 实测（2026-10-28）：按钮已声明 `uiSize="iconSm"`（档位 24），
+            # 内联里再写 `min-height: 22` + `border: 1px` 时，
+            # Qt 会忽略内联的 min-height，改用档位 24 再加 border 2 = **26px**。
+            # 内联写 22、24 结果都是 26；只有把 border 去掉才是 24。
+            #
+            # 也就是说：一旦 `uiSize` 档位生效，内联的尺寸就失效了，
+            # 但内联的 border 仍会叠加到档位值上。所以尺寸归档位、
+            # 边框归配色，两者不能混在同一个内联块里重复声明。
             style = f"""
             QPushButton {{
                 background-color: {vh.get_color('background', 'secondary')};
@@ -284,8 +306,8 @@ class LayerPanelBase(object):
                 color: {vh.get_color('text', 'primary')};
                 border-radius: {vh.get_radius('md')}px;
                 padding: {vh.get_spacing('sm')}px {vh.get_spacing('md')}px;
-                min-width: 24px;
-                min-height: 24px;
+                min-width: {_Scale.PX[_Scale.SM]}px;
+                min-height: {_Scale.PX[_Scale.SM]}px;
             }}
             QPushButton:hover {{
                 background-color: {vh.get_color('background', 'surface')};
@@ -311,8 +333,8 @@ class LayerPanelBase(object):
                 color: {vh.get_color('text', 'secondary')};
                 border-radius: {vh.get_radius('md')}px;
                 padding: {vh.get_spacing('sm')}px {vh.get_spacing('md')}px;
-                min-width: 24px;
-                min-height: 24px;
+                min-width: {_Scale.PX[_Scale.SM]}px;
+                min-height: {_Scale.PX[_Scale.SM]}px;
             }}
             QPushButton:hover {{
                 background-color: {vh.get_color('interactive', 'hover')};
@@ -338,8 +360,8 @@ class LayerPanelBase(object):
                 color: {vh.get_color('state', 'error')};
                 border-radius: {vh.get_radius('md')}px;
                 padding: {vh.get_spacing('sm')}px {vh.get_spacing('md')}px;
-                min-width: 24px;
-                min-height: 24px;
+                min-width: {_Scale.PX[_Scale.SM]}px;
+                min-height: {_Scale.PX[_Scale.SM]}px;
             }}
             QPushButton:hover {{
                 background-color: {vh.get_color('state', 'error')};
@@ -347,8 +369,8 @@ class LayerPanelBase(object):
                 color: {vh.get_color('primary', 'contrast')};
             }}
             QPushButton:pressed {{
-                background-color: #D32F2F;
-                border: 1px solid #D32F2F;
+                background-color: {vh.get_color('state', 'error')};
+                border: 1px solid {vh.get_color('state', 'error')};
                 color: {vh.get_color('primary', 'contrast')};
             }}
             QPushButton:disabled {{
@@ -361,9 +383,21 @@ class LayerPanelBase(object):
         button.setStyleSheet(style)
 
     def _normalize_toolbar_button(self, button):
-        """统一底部工具按钮尺寸和图标字体，避免被挤压和风格不一致。"""
-        size = 24
-        button.setFixedSize(size, size)
+        """统一底部工具按钮尺寸和图标尺寸，避免被挤压和风格不一致。
+
+        用 ``uiSize="iconSm"`` 属性交给全局 QSS 统一控制尺寸。
+        不能只靠 setFixedSize：全局 ``QPushButton { min-height: 28px }`` 的
+        QSS 优先级高于它，24x24 的图标按钮会被撑成 24x38（实测），
+        按钮栏凭空高出 14px。
+
+        ⚠ `setIconSize` 也必须在这里统一（2026-10-28 加）：
+        各个按钮工厂的默认图标尺寸不一致（`create_random_button()` 是 18，
+        `create_icon_button(..., 16)` 是 16），实测同一排里随机化按钮的图标
+        明显比邻居粗一圈。按钮尺寸统一了，图标尺寸也得跟着统一。
+        """
+        button.setProperty("uiSize", "iconSm")
+        button.setFixedSize(_IconSize.MD, _IconSize.MD)
+        button.setIconSize(QSize(_IconSize.SM, _IconSize.SM))
         font = button.font()
         font.setFamily(IconManager.ICON_FONT_FAMILY)
         font.setPointSize(12)
@@ -371,10 +405,17 @@ class LayerPanelBase(object):
         button.setFont(font)
 
     def _create_separator(self):
-        """创建分割线"""
-        from PySide6.QtWidgets import QSpacerItem, QSizePolicy
-        return QSpacerItem(4, 1,
-                          QSizePolicy.Fixed, QSizePolicy.Minimum)
+        """创建分割线。
+
+        返回真实 QWidget 而非 QSpacerItem：FlowLayout 只接受可定位的 item，
+        QSpacerItem 没有 sizeHint，放进流式布局会占位异常。
+        用 1px 宽的竖线 widget，换行时也能跟着走。
+        """
+        sep = QWidget()
+        sep.setFixedSize(_Width.HAIRLINE, _Width.HAIRLINE * 18)
+        sep.setProperty("role", "separator")
+        sep.setStyleSheet(f"background: {Color.border_subtle};")
+        return sep
 
     def _apply_panel_style(self):
         """应用面板级别的样式"""
@@ -420,7 +461,7 @@ class LayerPanelBase(object):
         label_style = f"""
         QLabel {{
             color: {vh.get_color('text', 'primary')};
-            font-size: {vh.get_font('body').pointSize()}px;
+            font-size: {vh.get_font('body').pixelSize()}px;
             font-weight: 700;
             margin: {vh.get_spacing('sm')}px 0px;
             background: transparent;

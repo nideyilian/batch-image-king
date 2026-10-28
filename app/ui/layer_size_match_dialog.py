@@ -12,6 +12,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 
+from app.ui.design_spec import Width as _Width
+from app.ui.tokens_v2 import Color
 from app.ui.dialog_a2 import DialogA2
 from app.ui.collapsible_group import CollapsibleGroupBox
 
@@ -153,7 +155,7 @@ class LayerSizeMatchDialog(QDialog):
         self.padding_spin.setRange(0, 20)
         self.padding_spin.setValue(1)
         self.padding_spin.setSuffix(" px")
-        self.padding_spin.setFixedSize(100, DialogA2.CONTROL_HEIGHT)
+        self.padding_spin.setFixedSize(_Width.MEDIUM, DialogA2.CONTROL_HEIGHT)
         self.padding_spin.setToolTip("为避免镂空边缘出现缝隙，可增加1~2像素外扩。")
         padding_row.addWidget(self.padding_spin)
         padding_row.addStretch()
@@ -251,7 +253,7 @@ class LayerSizeMatchDialog(QDialog):
         self.auto_mask_threshold_spin.setRange(0, 128)
         self.auto_mask_threshold_spin.setValue(32)
         self.auto_mask_threshold_spin.setSuffix(" 亮度")
-        self.auto_mask_threshold_spin.setFixedSize(110, DialogA2.CONTROL_HEIGHT)
+        self.auto_mask_threshold_spin.setFixedSize(_Width.WIDE, DialogA2.CONTROL_HEIGHT)
         self.auto_mask_threshold_spin.setToolTip("RGB 任一通道亮度 <= 该值即视为黑色。")
         thr_row.addWidget(self.auto_mask_threshold_spin)
         thr_row.addStretch()
@@ -516,8 +518,8 @@ class LayerSizeMatchDialog(QDialog):
         self._syncing_targets = True
         try:
             source_name = self.source_combo.currentText().strip()
-            disabled_color = QColor("#8b8b92")
-            normal_color = QColor("#d0d0d0")
+            disabled_color = QColor(Color.text_muted)
+            normal_color = QColor(Color.text_secondary)
             for i in range(self.target_list.count()):
                 item = self.target_list.item(i)
                 if item is None:

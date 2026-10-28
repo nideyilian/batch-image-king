@@ -3,6 +3,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QSlider, QFormLayout, QButtonGroup)
 from PySide6.QtCore import Qt, Signal
 from app.ui.design_tokens import Tokens
+from app.ui.property_widgets import blank_field_label, field_label, property_form
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
 
 class LayerTransformWidget(QWidget):
@@ -30,9 +31,7 @@ class LayerTransformWidget(QWidget):
         transform_layout = layout
 
         # 旋转控制
-        rotation_layout = QFormLayout()
-        rotation_layout.setHorizontalSpacing(5)
-        rotation_layout.setVerticalSpacing(3)
+        rotation_layout = property_form()
 
         # 旋转角度数值输入
         rotation_input_layout = QHBoxLayout()
@@ -52,7 +51,7 @@ class LayerTransformWidget(QWidget):
         reset_rotation_btn.clicked.connect(self.reset_rotation)
         rotation_input_layout.addWidget(reset_rotation_btn)
 
-        rotation_layout.addRow("旋转角度:", rotation_input_layout)
+        rotation_layout.addRow(field_label("旋转角度:"), rotation_input_layout)
 
         # 旋转滑条
         self.rotation_slider = QSlider(Qt.Horizontal)
@@ -61,7 +60,7 @@ class LayerTransformWidget(QWidget):
         self.rotation_slider.setTickPosition(QSlider.TicksBelow)
         self.rotation_slider.setTickInterval(90)
         self.rotation_slider.valueChanged.connect(self.on_rotation_slider_changed)
-        rotation_layout.addRow("", self.rotation_slider)
+        rotation_layout.addRow(blank_field_label(), self.rotation_slider)
 
         transform_layout.addLayout(rotation_layout)
 

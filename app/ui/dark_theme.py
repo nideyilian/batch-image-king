@@ -20,6 +20,7 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtCore import Qt
 
 from app.ui.design_tokens import Tokens
+from app.ui.tokens_v2 import Typography
 from app.ui.theme.provider import build_global_stylesheet
 from app.ui.theme.polisher import install_semantic_polisher
 
@@ -67,14 +68,40 @@ class CursorDarkTheme:
     FONT_WEIGHT_BOLD = Tokens.FONT_WEIGHT_BOLD
     FONT_WEIGHT_MEDIUM = Tokens.FONT_WEIGHT_MEDIUM
     FONT_SIZE_BASE = Tokens.FONT_SIZE_BASE
+    # QSS 专用字体名：只含一个字体，回退交给 _install_font_fallbacks()
+    FONT_FAMILY_QSS = Typography.family
 
     @classmethod
     def apply_to_application(cls, app):
         """应用全局 QSS 与调色板到 QApplication。"""
         app.setStyle("Fusion")
+        cls._install_font_fallbacks()
         app.setStyleSheet(cls.get_complete_style())
         app.setPalette(cls.create_fixed_palette())
         install_semantic_polisher(app)
+
+    @staticmethod
+    def _install_font_fallbacks():
+        """在程序层注册字体回退，替代 QSS 里的多字体并列。
+
+        ⚠ 这不是风格问题，是启动性能问题（2026-10-27 实测）：
+        QSS 的 font-family 一旦并列两个以上字体名（含 sans-serif），
+        Qt 就要对**每个新建控件**遍历系统全部 2004 个字体族做匹配，
+        单个控件入场 0ms → 420ms，主窗口启动多花 3 秒以上。
+        实测：1 个名字 0ms / 2 个名字 2124ms / sans-serif 2157ms。
+
+        改用 QFont.insertSubstitutions 后，回退效果一样，
+        但字体解析走缓存表，实测 2ms。
+        """
+        from PySide6.QtGui import QFont
+
+        from app.ui.tokens_v2 import Typography
+
+        for primary, fallbacks in (
+            (Typography.family.strip('"'), Typography.family_fallbacks),
+            (Typography.family_mono.strip('"'), Typography.family_mono_fallbacks),
+        ):
+            QFont.insertSubstitutions(primary, list(fallbacks))
 
     @classmethod
     def create_fixed_palette(cls):
@@ -103,7 +130,7 @@ class CursorDarkTheme:
         QWidget {{
             background-color: {cls.BACKGROUND_PRIMARY};
             color: {cls.TEXT_PRIMARY};
-            font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+            font-family: {cls.FONT_FAMILY_QSS};
             font-size: {cls.FONT_SIZE_BASE}px;
             outline: none;
         }}
@@ -142,8 +169,13 @@ class CursorDarkTheme:
         QToolBar {{
             background-color: {cls.BACKGROUND_TITLEBAR};
             border: none;
-            spacing: 5px;
-            padding: 5px;
+            /* 4px 栅格：原来是 spacing/padding 各 5px，都是非栅格值。
+               5px padding 会把工具栏撑到 41px（28 按钮 + 5×2 + 3），
+               而按钮 max-height 无上限，于是被拉伸成 31px —— 不在
+               design_spec 的三档（24/28/36）里。改 4px 后
+               28 + 4×2 = 36，按钮回到 28。 */
+            spacing: 4px;
+            padding: 4px;
         }}
         QToolBar::separator {{
             background: {cls.BORDER_PRIMARY};

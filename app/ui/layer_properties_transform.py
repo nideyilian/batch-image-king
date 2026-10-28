@@ -1,3 +1,4 @@
+from app.ui.tokens_v2 import Color
 from app.utils.print_utils import safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QFormLayout,
@@ -118,17 +119,17 @@ class LayerPropertiesTransform(object):
         if is_folder:
             # 文件夹处理
             self.current_layer.current_image_path = None  # 🔧 修复：使用公共属性
-            self.current_image_label.setText("当前图像: 无")
+            self.current_image_label.setText("无")
             # 启用随机按钮
             self.random_btn.setEnabled(True)
         else:
             # 文件处理
             self.current_layer.current_image_path = path  # 🔧 修复：使用公共属性
             if os.path.isfile(path):
-                self.current_image_label.setText(f"当前图像: {os.path.basename(path)}")
+                self.current_image_label.setText(f"{os.path.basename(path)}")
             else:
                 self.current_layer.current_image_path = None  # 🔧 修复：使用公共属性
-                self.current_image_label.setText("当前图像: 无")
+                self.current_image_label.setText("无")
             # 禁用随机按钮
             self.random_btn.setEnabled(False)
 
@@ -202,7 +203,7 @@ class LayerPropertiesTransform(object):
         except Exception as e:
             safe_print(f"更新绑定状态时出错: {e}")
             self.bind_status_label.setText("未绑定")
-            self.bind_status_label.setStyleSheet("color: #606064; font-size: 9pt;")
+            self.bind_status_label.setStyleSheet(f"color: {Color.text_muted}; font-size: 9pt;")
 
     def update_layer_rotation(self, rotation):
         """更新图层旋转角度"""

@@ -12,8 +12,10 @@ import sys
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="启动批图王 QML 工作台")
     parser.add_argument("--screenshot", type=Path, help="启动后将窗口保存为 PNG 并退出")
-    parser.add_argument("--width", type=int, default=1600, help="窗口宽度")
-    parser.add_argument("--height", type=int, default=960, help="窗口高度")
+    # 默认 None = 「没指定就沿用上次窗口尺寸」（等价旧版 restore_window_state）。
+    # 以前默认写死 1600/960，等于每次启动强制覆盖用户调过的窗口，窗口几何存了也白存。
+    parser.add_argument("--width", type=int, default=None, help="窗口宽度（默认恢复上次尺寸）")
+    parser.add_argument("--height", type=int, default=None, help="窗口高度（默认恢复上次尺寸）")
     parser.add_argument("--theme", choices=("light", "dark"), help="覆盖并保存界面主题")
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
@@ -53,7 +55,68 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
+_LEGACY_QML_SETTINGS = ("BatchImageKing", "批图王 QML")
+
+# 只搬 QML 工作台自己写的键。经典版的 docks/* / layer_properties_modules/*
+# 留在原处不动 —— 两套界面的偏好互不兼容，混在一起只会互相覆盖。
+_QML_SETTING_PREFIXES = (
+    "uiAppearance/",
+    "windowGeometry/",
+    "sidebarLayout/",
+    "newCanvas/",
+)
+
+
+def _migrate_legacy_qml_settings() -> None:
+    """把旧 QML 配置目录搬到统一应用名下（一次性）。
+
+    背景：QML 早期只是 `--qml` 实验入口，应用名带 "QML" 后缀，设置落在
+    独立目录。2026-10-28 经典版下线、QML 成为唯一界面，应用名统一成
+    「批图王」。不迁移的话，用户既有设置会"凭空消失"——实测主题直接
+    从 dark 回落成 light，窗口尺寸和侧栏宽度也一起重置。
+
+    只搬 QML 自己的键；经典版那批（docks/*）留在原处不混进来。
+    旧目录不删，万一需要回退还能读到。
+    """
+    from PySide6.QtCore import QSettings
+
+    legacy = QSettings(*_LEGACY_QML_SETTINGS)
+    legacy_keys = legacy.allKeys()
+    if not legacy_keys:
+        return
+
+    current = QSettings()
+    # 用标记键判断"迁移做过没有"，而不是用「目标键是否已存在」——
+    # 统一后的命名空间里本来就残留着旧经典版写过的同名键（实测
+    # uiAppearance/themeMode 已存在且值为 light），按"存在即跳过"会导致
+    # 用户的 QML 偏好（dark）永远搬不过来。
+    if current.value("meta/migratedFromLegacyQml", False):
+        return
+
+    moved = 0
+    for key in legacy_keys:
+        if not key.startswith(_QML_SETTING_PREFIXES):
+            continue
+        current.setValue(key, legacy.value(key))
+        moved += 1
+    current.setValue("meta/migratedFromLegacyQml", True)
+    current.sync()
+    # 只搬一次：之后用户在统一命名空间里的改动不会被旧目录覆盖
+    if moved:
+        print(f"[qml] 已迁移 {moved} 项 QML 设置到统一应用名")
+
+
+def main(app=None, on_ready=None) -> int:
+    """启动 QML 工作台。
+
+    `app` 参数用于复用调用方已创建的 QApplication —— 应用级基础设施
+    （日志、崩溃会话、依赖检查、PIL 限制）全部在 `main.py` 的 bootstrap 里，
+    那些步骤必须先于 QApplication 或紧随其后完成。若这里再新建一个
+    QApplication，Qt 会直接抛「A QApplication instance already exists」。
+
+    不传 `app` 时保持原有独立启动能力（测试与 `python -m app.qml.qml_main`
+    仍可直接跑）。
+    """
     args = parse_args()
     debug_enabled = os.environ.get("BTPW_QML_DEBUG") == "1"
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
@@ -94,15 +157,21 @@ def main() -> int:
     from app.qml.viewmodels.workspace_view_model import WorkspaceViewModel
 
     debug("creating QApplication")
-    app = QApplication(sys.argv)
-    app.setApplicationName("批图王 QML")
-    app.setOrganizationName("BatchImageKing")
-    try:
-        from app.version import APP_VERSION
+    # 复用外部传入的实例；只有独立运行时才自建。
+    # 应用名/组织名统一用与 bootstrap 相同的值：不同名字会让 QSettings
+    # 落到不同目录，用户的窗口尺寸、主题选择会「看起来没保存」。
+    if app is None:
+        app = QApplication(sys.argv)
+        app.setApplicationName("批图王")
+        app.setOrganizationName("批图王")
+        try:
+            from app.version import APP_VERSION
 
-        app.setApplicationVersion(str(APP_VERSION))
-    except Exception:
-        pass
+            app.setApplicationVersion(str(APP_VERSION))
+        except Exception:
+            pass
+
+    _migrate_legacy_qml_settings()
 
     def cleanup_runtime() -> None:
         QThreadPool.globalInstance().waitForDone(5000)
@@ -373,8 +442,23 @@ def main() -> int:
         f"root window created: type={type(window).__name__}, "
         f"visible={window.property('visible')}"
     )
-    window.setProperty("width", max(1180, args.width))
-    window.setProperty("height", max(720, args.height))
+    # 首屏对象树已就绪：调用方（main.py 的 bootstrap）用这个时机收掉启动画面。
+    # 不传则什么都不做，保持独立启动路径零行为变化。
+    if on_ready is not None:
+        try:
+            on_ready(window)
+        except Exception as ready_error:  # 启动画面失败不能挡住启动
+            debug(f"on_ready failed: {ready_error}")
+    # 截图/验收模式：固定用参数尺寸，且不读写窗口几何（否则验收图会被上次尺寸顶掉）
+    window.setProperty("screenshotMode", bool(args.screenshot))
+    if args.screenshot:
+        window.setProperty("width", max(1180, args.width or 1600))
+        window.setProperty("height", max(720, args.height or 960))
+    else:
+        if args.width:
+            window.setProperty("width", max(1180, args.width))
+        if args.height:
+            window.setProperty("height", max(720, args.height))
     if args.theme:
         if not QMetaObject.invokeMethod(
             window, "setThemeMode", Q_ARG("QVariant", args.theme)

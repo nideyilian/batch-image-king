@@ -22,6 +22,8 @@ from typing import Tuple, Optional, List, Dict, Any
 from enum import Enum
 import warnings
 
+from app.utils.image import ndops
+
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
@@ -295,16 +297,11 @@ class AdvancedAntialiasing:
     
     def _detect_edges_smaa(self, alpha: np.ndarray) -> np.ndarray:
         """SMAA边缘检测"""
-        try:
-            from scipy import ndimage
-            # 使用Sobel算子
-            grad_x = ndimage.sobel(alpha, axis=1)
-            grad_y = ndimage.sobel(alpha, axis=0)
-            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            return gradient_magnitude > 0.05
-        except ImportError:
-            # 简单的边缘检测
-            return self._simple_edge_detection(alpha)
+        # 使用Sobel算子（ndops.sobel 与 scipy.ndimage.sobel 逐位等价）
+        grad_x = ndops.sobel(alpha, axis=1)
+        grad_y = ndops.sobel(alpha, axis=0)
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        return gradient_magnitude > 0.05
     
     def _simple_edge_detection(self, alpha: np.ndarray) -> np.ndarray:
         """简单边缘检测"""
@@ -381,15 +378,10 @@ class AdvancedAntialiasing:
         # 计算Alpha通道的方差
         variance = np.var(alpha)
         
-        # 计算高频成分
-        try:
-            from scipy import ndimage
-            laplacian = ndimage.laplace(alpha)
-            high_freq_energy = np.sum(np.abs(laplacian))
-            return high_freq_energy > 0.1 and variance > 0.05
-        except ImportError:
-            # 简单的细节检测
-            return variance > 0.1
+        # 计算高频成分（ndops.laplace 与 scipy.ndimage.laplace 逐位等价）
+        laplacian = ndops.laplace(alpha)
+        high_freq_energy = np.sum(np.abs(laplacian))
+        return high_freq_energy > 0.1 and variance > 0.05
     
     def _blend_with_original(self, original: np.ndarray, processed: np.ndarray, 
                            strength: float) -> np.ndarray:

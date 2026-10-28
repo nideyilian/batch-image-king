@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from app.ui.tokens_v2 import Color
+from app.ui.design_spec import FontSize, Space as _Space
 from app.ui.batch_export_dialog import BatchExportDialog
 from app.utils.preset_document_loader import documents_from_preset_data
 
@@ -29,15 +31,15 @@ class PresetRunDialog(QDialog):
 
     def setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(_Space.SM)
 
         title = QLabel(self.summary.get('name', '未命名预设'))
-        title.setStyleSheet("font-size: 18px; font-weight: bold;")
+        title.setStyleSheet(f"font-size: {FontSize.LG}px; font-weight: bold;")
         layout.addWidget(title)
 
         desc = QLabel(self.summary.get('description', '') or "将按预设中保存的批量导出设置运行。")
         desc.setWordWrap(True)
-        desc.setStyleSheet("color: #AAB4C0;")
+        desc.setStyleSheet(f"color: {Color.text_secondary};")
         layout.addWidget(desc)
 
         info_group = QGroupBox("导出摘要")

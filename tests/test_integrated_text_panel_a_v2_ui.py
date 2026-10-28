@@ -12,8 +12,14 @@ from app.ui.integrated_text_panel import IntegratedTextPanel
 from app.ui.property_panel_a2 import PropertyPanelA2
 
 # 紧凑布局几何（v1.1.5「规整图层参数布局」）：卡片正文边距/间距、文字输入框高度
-COMPACT_BODY_MARGINS = (8, 5, 8, 6)
-COMPACT_BODY_SPACING = 5
+#
+# ⚠ 2026-10-28：原来是 (8, 5, 8, 6) —— 垂直 5/6 不在 4px 栅格上，
+# 叠上卡片 1px 边框后，嵌套子卡片的字段标签正好比顶层多缩进 7px，
+# 串成 88 / 95 / 102 三个右边缘（肉眼看就是"齐了但没齐"）。
+# 现在跟随 SUBPANEL_MARGINS（8,4,8,4），不再由测试锁死魔法数字 ——
+# 测试锁的应该是「等于令牌」，而不是「等于我上次抄下来的数」。
+COMPACT_BODY_MARGINS = PropertyPanelA2.SUBPANEL_MARGINS
+COMPACT_BODY_SPACING = 4   # design_spec.Space.XS（原 5，不在 4px 栅格上）
 COMPACT_TEXT_AREA_HEIGHT = 72
 
 

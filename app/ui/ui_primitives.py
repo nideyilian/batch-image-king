@@ -14,6 +14,7 @@
 from PySide6.QtWidgets import QFrame, QLabel, QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QObject
 
+from app.ui.design_spec import Space as _Space, IconSize as _IconSize
 from app.ui.design_tokens import Tokens
 from app.ui.icon_manager import IconManager
 
@@ -40,7 +41,7 @@ class InlineAlert(QFrame):
         self.setProperty("role", "inlineAlert")
         self._level = level
         self._icon = QLabel()
-        self._icon.setFixedSize(16, 16)
+        self._icon.setFixedSize(_IconSize.SM, _IconSize.SM)
         self._label = QLabel(text)
         self._label.setWordWrap(True)
         self._label.setProperty("role", "inlineAlertText")
@@ -88,7 +89,7 @@ class EmptyState(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self._icon = QLabel()
-        self._icon.setFixedSize(48, 48)
+        self._icon.setFixedSize(_IconSize.LG, _IconSize.LG)
         self._title = QLabel(title)
         self._title.setProperty("role", "featureTitle")
         self._title.setAlignment(Qt.AlignCenter)
@@ -102,7 +103,7 @@ class EmptyState(QFrame):
 
         col = QVBoxLayout(self)
         col.setAlignment(Qt.AlignCenter)
-        col.setSpacing(10)
+        col.setSpacing(_Space.SM)
         col.addStretch(1)
         col.addWidget(self._icon, 0, Qt.AlignCenter)
         col.addWidget(self._title, 0, Qt.AlignCenter)
@@ -156,7 +157,7 @@ class _ToastCard(QFrame):
         super().__init__(parent)
         color = _STATUS_COLORS.get(kind, Tokens.INFO)
         self._icon = QLabel()
-        self._icon.setFixedSize(18, 18)
+        self._icon.setFixedSize(_IconSize.MD, _IconSize.MD)
         icon = IconManager.get_icon(_STATUS_ICONS.get(kind, "info"), 18, color)
         if not icon.isNull():
             self._icon.setPixmap(icon.pixmap(18, 18))

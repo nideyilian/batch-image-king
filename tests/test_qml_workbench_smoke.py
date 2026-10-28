@@ -108,7 +108,10 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'workspace.moveSelectedLayersTo(targetItem.layerIndex)' in qml_source
     assert 'workspace.groupSelectedLayers()' in qml_source
     assert 'workspace.ungroupSelectedGroups()' in qml_source
-    assert 'workspace.alignSelectedLayers("left")' in qml_source
+    # 对齐走统一分发：单选→画板、多选→首选图层（旧版语义）。
+    # 2026-10-28 之前右键菜单直接调 alignSelectedLayers，单选时它返回 False，
+    # 导致单项选中时右键里的对齐项全是灰的。
+    assert 'window.alignCurrentSelection("left")' in qml_source
     assert 'workspace.distributeSelectedLayers("horizontal")' in qml_source
     assert 'workspace.setSelectedFlipHorizontal(!workspace.selectedFlipHorizontal)' in qml_source
     assert 'workspace.setSelectedFlipVertical(!workspace.selectedFlipVertical)' in qml_source
@@ -197,7 +200,17 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
 
 
 @pytest.mark.unit
-def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
+def test_main_entrypoint_is_qml_only():
+    """入口只保留 QML 一条界面路径，经典版已下线。
+
+    2026-10-28 决定下线经典 Widgets 界面。这条测试守两件事：
+
+    1. **界面只有一条路**：main.py 里不能再出现经典版的窗口创建，
+       也不能再有"根据参数进不同界面"的分支（双轨是功能漂移的源头）。
+    2. **基础设施不能跟着丢**：日志、崩溃会话、依赖检查必须在 main()
+       里 —— 它们与用哪套 UI 无关。上一轮把入口直接指向 qml_main 时，
+       这整块被绕过，应用失去崩溃诊断能力且无人察觉。
+    """
     repo_root = Path(__file__).resolve().parents[1]
     main_source = (repo_root / "main.py").read_text(encoding="utf-8")
     qml_launcher_source = (repo_root / "start_qml.py").read_text(encoding="utf-8")
@@ -205,11 +218,41 @@ def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
     build_source = (repo_root / "build.py").read_text(encoding="utf-8")
     spec_source = (repo_root / "批图王.spec").read_text(encoding="utf-8")
 
-    assert 'if "--classic" in sys.argv:' in main_source
+    # 界面唯一：不再创建经典主窗口
+    assert "from app.main_window import MainWindow" not in main_source
+    assert "MainWindow()" not in main_source
+
+    # 只有一条启动路径，且走 main()（基础设施都在里面）
+    assert "sys.exit(main())" in main_source
+    assert "sys.exit(qml_main())" not in main_source, (
+        "不能再直接调 qml_main —— 会绕过日志/崩溃会话/依赖检查"
+    )
+
+    # main() 内部把窗口创建交给 QML，并复用已建好的 QApplication
     assert "from app.qml.qml_main import main as qml_main" in main_source
-    assert "sys.exit(qml_main())" in main_source
+    assert "qml_main(app=app" in main_source
+
+    # --classic 只保留参数识别与提示，不再是界面开关
+    assert '"--classic" in sys.argv' in main_source
+    assert "经典界面已下线" in main_source
+
+    # 基础设施必须在 main() 里，不能被"下线界面"顺手删掉
+    for required in (
+        "setup_logging()",
+        "begin_crash_session(",
+        "check_system_dependencies_fast()",
+        "Image.MAX_IMAGE_PIXELS = None",
+        "finish_crash_session(",
+        "setup_fixed_theme(app)",
+    ):
+        assert required in main_source, (
+            f"main.py 缺少启动基础设施 {required!r} —— 它和用哪套界面无关，不能随界面一起删"
+        )
+
+    # QML 专用启动器仍然直接进 QML（不受默认值影响）
     assert "from app.qml.qml_main import main" in qml_launcher_source
     assert "raise SystemExit(main())" in qml_launcher_source
+
     qml_main_source = (repo_root / "app" / "qml" / "qml_main.py").read_text(encoding="utf-8")
     assert "auto_render=False" in qml_main_source
     assert "defer_font_catalog_preload=True" in qml_main_source
@@ -218,12 +261,14 @@ def test_main_defaults_to_qml_and_packaging_includes_qml_assets():
     assert 'cd /d "%~dp0"' in windows_launcher_source
     assert '"%~dp0start_qml.py" %*' in windows_launcher_source
     assert "if not errorlevel 1" in windows_launcher_source
-    for source in (build_source, spec_source):
+    # QML 资源与 Qt 模块由 spec 统一声明（build.py 只按模式调用 spec）
+    for source in (spec_source,):
         assert "app/qml/Main.qml" in source
         assert "app/qml/components" in source
         assert "app/qml/assets" in source
         assert "PySide6.QtQml" in source
         assert "PySide6.QtQuick" in source
+    assert "批图王.spec" in build_source, "build.py 必须调用 spec，避免资源清单双份维护"
 
 
 @pytest.mark.integration

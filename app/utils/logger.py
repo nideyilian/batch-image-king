@@ -275,3 +275,94 @@ class Logger:
         """获取日志实例"""
         cls._ensure_initialized()
         return cls._logger
+
+# ---------------------------------------------------------------------------
+# 降级统计：热路径上的"吞掉但必须可查"
+# ---------------------------------------------------------------------------
+class DegradationCounter:
+    """按 key 统计降级事件，首次详细记录、后续聚合汇总。
+
+    为什么需要它：批量导出每张图都会走素材选择 / 图层解析等热路径，
+    这些地方的防御性 except 如果每次都 ``logger.warning(exc_info=True)``，
+    导出 5000 张就是 5000 条堆栈，日志被冲垮；但完全静默又让"图不对"
+    无从定位（这正是历史遗留 30+ 处静默 except 的成因）。
+
+    折中做法：
+      - 同一 key 第一次出现 → WARNING + 完整 traceback
+      - 后续同 key        → 只累加计数，不写日志
+      - 批次结束时调用 ``summary()`` → 一行汇总所有降级点及次数
+
+    用法::
+
+        DEGRADATION = DegradationCounter(logger)
+
+        try:
+            count = manager.get_image_usage_count(path)
+        except Exception:
+            DEGRADATION.note("global_avoid.usage_count", path)
+            count = 0
+
+        # 批次结束
+        for line in DEGRADATION.summary():
+            logger.warning(line)
+    """
+
+    def __init__(self, logger=None):
+        self._logger = logger
+        self._counts = {}
+        self._seen = set()
+        self._samples = {}
+
+    def note(self, key, detail=None, level=logging.WARNING):
+        """记录一次降级事件。
+
+        Args:
+            key: 降级点标识，建议 ``模块.动作`` 形式，稳定可聚合。
+            detail: 出问题的具体对象（路径 / 图层名 / 索引），只用于日志样本。
+        """
+        self._counts[key] = self._counts.get(key, 0) + 1
+        if key not in self._samples and detail is not None:
+            self._samples[key] = detail
+
+        if key in self._seen:
+            return
+
+        self._seen.add(key)
+        if self._logger is None:
+            return
+        sample = f" | 首个样本: {detail}" if detail is not None else ""
+        self._logger.log(
+            level,
+            "降级执行（结果可能不符合预期）: %s%s",
+            key,
+            sample,
+            exc_info=True,
+        )
+
+    def count(self, key):
+        """取某个降级点的累计次数。"""
+        return self._counts.get(key, 0)
+
+    @property
+    def total(self):
+        """所有降级事件的累计次数。"""
+        return sum(self._counts.values())
+
+    def has_any(self):
+        return bool(self._counts)
+
+    def summary(self):
+        """生成汇总行（每个 key 一行，按次数降序）。"""
+        if not self._counts:
+            return []
+        lines = [f"本次导出发生 {self.total} 次降级（{len(self._counts)} 类）："]
+        for key, n in sorted(self._counts.items(), key=lambda kv: -kv[1]):
+            sample = self._samples.get(key)
+            suffix = f"，样本: {sample}" if sample is not None else ""
+            lines.append(f"  - {key} × {n}{suffix}")
+        return lines
+
+    def reset(self):
+        self._counts.clear()
+        self._seen.clear()
+        self._samples.clear()

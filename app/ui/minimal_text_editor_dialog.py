@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
+from app.ui.tokens_v2 import Color
+
 
 class MinimalTextEditorDialog(QDialog):
     """极简文字编辑器对话框 - 类似微软记事本风格"""
@@ -30,7 +32,7 @@ class MinimalTextEditorDialog(QDialog):
 
         # 简单的标题
         title_label = QLabel("文字内容")
-        title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #FFFFFF;")
+        title_label.setStyleSheet(f"font-weight: 600; font-size: 14px; color: {Color.text_primary};")
         main_layout.addWidget(title_label)
 
         # 主要编辑区域 - 类似记事本的简洁文本框
@@ -38,23 +40,12 @@ class MinimalTextEditorDialog(QDialog):
         self.text_edit.setFont(QFont("Microsoft YaHei", 11))
         self.text_edit.setPlaceholderText("在此输入文字内容...")
 
-        # 设置文本框样式 - 简洁现代风格
-        self.text_edit.setStyleSheet("""
-            QTextEdit {
-                background-color: #1E1E1E;
-                color: #D4D4D4;
-                border: 1px solid #303033;
-                border-radius: 4px;
-                padding: 8px;
-                selection-background-color: #264F78;
-                selection-color: #FFFFFF;
-            }
-            QTextEdit:focus {
-                border-color: #2F9CF4;
-                outline: none;
-            }
-        """)
-
+        # 样式交给全局主题（dark_theme / provider）。
+        #
+        # 这里原本有一整套内联 QSS（#1E1E1E 底 / #303033 描边 / #2F9CF4 主色 /
+        # #55B2FF hover），与全局主题并存 = 两套真值。删掉后：
+        # - 文本框走全局 QTextEdit 规则（surface_3 底、无描边、focus 才出边框）
+        # - 两个按钮靠 variant 属性区分主次，由 polisher/全局 QSS 统一渲染
         main_layout.addWidget(self.text_edit)
 
         # 底部按钮区域
@@ -63,46 +54,11 @@ class MinimalTextEditorDialog(QDialog):
 
         # 取消按钮
         self.cancel_btn = QPushButton("取消")
-        self.cancel_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2F2F2F;
-                color: #F4F4F5;
-                border: 1px solid #5A5A5A;
-                padding: 6px 20px;
-                border-radius: 4px;
-                font-size: 12px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #4A4A4A;
-                border-color: #606064;
-            }
-            QPushButton:pressed {
-                background-color: #2C2C2C;
-            }
-        """)
+        self.cancel_btn.setProperty("variant", "secondary")
 
         # 确定按钮
         self.ok_btn = QPushButton("确定")
-        self.ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2F9CF4;
-                color: #FFFFFF;
-                border: none;
-                padding: 6px 20px;
-                border-radius: 4px;
-                font-size: 12px;
-                font-weight: bold;
-                min-width: 80px;
-                margin-left: 8px;
-            }
-            QPushButton:hover {
-                background-color: #55B2FF;
-            }
-            QPushButton:pressed {
-                background-color: #0D5AA7;
-            }
-        """)
+        self.ok_btn.setProperty("variant", "default")
 
         button_layout.addWidget(self.cancel_btn)
         button_layout.addWidget(self.ok_btn)

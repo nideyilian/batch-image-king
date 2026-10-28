@@ -660,6 +660,74 @@ class WorkspaceDocumentOpsMixin:
         self._set_status("已添加文字图层", toast=True)
         return True
 
+    @Slot(result=bool)
+    def addQuickTextLayer(self) -> bool:
+        """一键建文字图层 —— 旧版「快速文字图层（T）」的对等实现。
+
+        旧版 `layer_controller.add_quick_text_layer()` 的规则照搬：
+
+          - 内容「双击编辑文字」、白色、左对齐、参与绑定
+          - 字号 = **画布高 / 12**，夹在 [24, 160]
+            （600 高→50px、1080 高→90px；固定 48px 在 1080 上只占宽 16%，太小）
+          - 位置 = 画布 **6% 留白**（固定 50,50 在大画布上会挤在左上角）
+          - 图层名按内容首行生成并**去重**（连按 T 能区分「双击编辑文字 2/3」）
+          - `auto_fit_text_box = True`，否则大字号会被固定 300x100 的框裁掉
+
+        不能直接复用 `addTextLayer()`：那个是测试与内部用的居中建层，内容和
+        字号规则都不同，用户按 T 出来的层会跟旧版「长得不一样」。
+        """
+        if not self._ensure_operations_available():
+            return False
+        from app.constants import DEFAULT_TEXT_FONT_FAMILY
+        from app.models.text_layer import TextLayer
+
+        canvas_width = float(self.canvasWidth)
+        canvas_height = float(self.canvasHeight)
+        font_size = 48
+        if canvas_height > 0:
+            font_size = max(24, min(160, round(canvas_height / 12)))
+        x = round(canvas_width * 0.06) if canvas_width > 0 else 50
+        y = round(canvas_height * 0.06) if canvas_height > 0 else 50
+
+        content = "双击编辑文字"
+        base_name = content
+        existing = {
+            str(getattr(layer, "name", "") or "") for layer in self._document.layers
+        }
+        name = base_name
+        suffix = 2
+        while name in existing:
+            name = f"{base_name} {suffix}"
+            suffix += 1
+
+        try:
+            text_layer = TextLayer(name=name, x=int(x), y=int(y), width=300, height=100)
+            text_layer.auto_fit_text_box = True
+            text_layer.text_binding_enabled = True
+            text_layer.font_family = DEFAULT_TEXT_FONT_FAMILY
+            text_layer.font_size = font_size
+            text_layer.text_color = self._parse_hex_color("#FFFFFF")
+            text_layer.text_align = _TEXT_ALIGNMENTS["left"][0]
+            lines = text_layer.parse_text_input_to_lines(content)
+            text_layer.set_text_lines(lines)
+            text_layer.set_current_text(lines[0], force=True)
+
+            with self._document_lock:
+                self._ensure_history_baseline()
+                self._document.add_text_layer(text_layer)
+                self._document.is_modified = True
+        except Exception as error:
+            self._set_status(f"添加文字失败：{error}", toast=True)
+            return False
+
+        self._layer_model.reset_from_document()
+        self.documentInfoChanged.emit()
+        self.selectionChanged.emit()
+        self.historyStateChanged.emit()
+        self.requestPreview(force=True)
+        self._set_status("已添加文字图层，可在右侧属性面板调整", toast=True)
+        return True
+
     @Slot("QVariantMap", result=bool)
     def addConfiguredTextLayer(self, config) -> bool:
         if not self._ensure_operations_available():
@@ -698,7 +766,13 @@ class WorkspaceDocumentOpsMixin:
 
         try:
             text_layer = TextLayer(name=name, x=50, y=50, width=300, height=100)
-            text_layer.auto_fit_text_box = False
+            # 自动适配边框必须开启（2026-10-28 修）。
+            #
+            # 旧版 layer_controller.add_configured_text_layer 里对这一行有明确注释：
+            # 关掉时文本框固定 300x100，大字号会被直接裁掉 ——
+            # 实测 72px 的「限时特惠 5折」只渲染出「限时特惠」，「5折」整段丢失。
+            # QML 侧当时写成了 False，正是同一个坑。
+            text_layer.auto_fit_text_box = True
             text_layer.text_binding_enabled = bool(config.get("bindingEnabled", True))
             text_layer.font_family = font_family
             text_layer.font_face = str(config.get("fontFace", "") or "").strip()

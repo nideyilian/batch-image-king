@@ -1,3 +1,5 @@
+from app.ui.design_spec import Space as _Space
+from app.ui.tokens_v2 import Color
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QComboBox, QSpinBox, QDoubleSpinBox,
@@ -41,7 +43,7 @@ class ShapedLayerPanel(QWidget):
     def init_ui(self):
         """初始化UI界面"""
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(_Space.SM)
         layout.setContentsMargins(10, 10, 10, 10)
 
         # 形状预览组（保留独有功能）
@@ -53,7 +55,7 @@ class ShapedLayerPanel(QWidget):
         # self.shape_preview.setFixedSize(80, 80)
         # self.shape_preview.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         # preview_layout.setContentsMargins(8, 8, 8, 8)
-        # preview_layout.setSpacing(6)
+        # preview_layout.setSpacing(_Space.XS)
         # preview_layout.addWidget(self.shape_preview, alignment=Qt.AlignmentFlag.AlignCenter)
         # preview_layout.addStretch()
 
@@ -65,7 +67,7 @@ class ShapedLayerPanel(QWidget):
         self.params_group = QGroupBox("形状信息")
         self.params_layout = QVBoxLayout()
         self.current_shape_label = QLabel("当前形状: 矩形")
-        self.current_shape_label.setStyleSheet("color: #8E8E93; font-weight: bold;")
+        self.current_shape_label.setStyleSheet(f"color: {Color.text_muted}; font-weight: bold;")
         self.params_layout.addWidget(self.current_shape_label)
 
         # 创建参数信息显示（只读）
@@ -91,14 +93,14 @@ class ShapedLayerPanel(QWidget):
         """创建参数信息显示（只读）"""
         self.trapezoid_info_widget = QWidget()
         trapezoid_layout = QVBoxLayout()
-        trapezoid_layout.setSpacing(5)
+        trapezoid_layout.setSpacing(_Space.XS)
 
         self.trapezoid_top_label = QLabel("上底宽度: 100")
         self.trapezoid_bottom_label = QLabel("下底宽度: 80")
         self.trapezoid_side_label = QLabel("斜边方向: 左侧")
 
         for label in [self.trapezoid_top_label, self.trapezoid_bottom_label, self.trapezoid_side_label]:
-            label.setStyleSheet("color: #8E8E93; font-size: 9pt;")
+            label.setStyleSheet(f"color: {Color.text_muted}; font-size: 9pt;")
             trapezoid_layout.addWidget(label)
 
         self.trapezoid_info_widget.setLayout(trapezoid_layout)
@@ -106,13 +108,13 @@ class ShapedLayerPanel(QWidget):
         # 多边形信息显示
         self.polygon_info_widget = QWidget()
         polygon_layout = QVBoxLayout()
-        polygon_layout.setSpacing(5)
+        polygon_layout.setSpacing(_Space.XS)
 
         self.polygon_rotation_label = QLabel("旋转角度: 0°")
         self.polygon_radius_label = QLabel("圆角半径: 0")
 
         for label in [self.polygon_rotation_label, self.polygon_radius_label]:
-            label.setStyleSheet("color: #8E8E93; font-size: 9pt;")
+            label.setStyleSheet(f"color: {Color.text_muted}; font-size: 9pt;")
             polygon_layout.addWidget(label)
 
         self.polygon_info_widget.setLayout(polygon_layout)
@@ -152,7 +154,7 @@ class ShapedLayerPanel(QWidget):
             # 矩形和圆形不需要额外参数
             self.params_layout.addWidget(self.current_shape_label)
             label = QLabel("该形状无额外参数")
-            label.setStyleSheet("color: #8E8E93; font-style: italic;")
+            label.setStyleSheet(f"color: {Color.text_muted}; font-style: italic;")
             self.params_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
 
     def on_shape_changed(self, index):
@@ -272,7 +274,7 @@ class ShapedLayerDialog(QDialog):
     def init_ui(self):
         """初始化UI界面"""
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(_Space.SM)
         layout.setContentsMargins(10, 10, 10, 10)
 
         # 创建面板
@@ -310,7 +312,7 @@ class ShapePreviewWidget(QWidget):
         self._polygon_sides = 5
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setAutoFillBackground(True)
-        self.setStyleSheet("ShapePreviewWidget { background-color: #1F1F1F; border: 1px solid #303033; border-radius: 4px; }")
+        self.setStyleSheet(f"ShapePreviewWidget {{ background-color: {Color.surface_3}; border: 1px solid {Color.border_strong}; border-radius: 4px; }}")
         self.setMinimumSize(80, 80)
 
     def set_shape_type(self, shape_type: ShapeType):

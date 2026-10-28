@@ -123,7 +123,18 @@ class ColorIndicator(QPushButton):
         super().__init__()
         self.current_color = color
         self._indicator_size = size
-        self.setFixedSize(size, size)
+
+        # 必须声明 role，否则会被 polisher 当成普通按钮。
+        #
+        # 全局 QSS 早就有 `QPushButton[role="color-swatch"]` 规则，说明
+        # 设计意图就是让色块带这个 role —— 但实现里一直漏了。
+        # 后果（2026-10-28 实测）：polisher 的 QEvent.Polish 处理器会给
+        # 所有「没有 variant」的按钮打上 `variant="secondary"`，
+        # 于是命中 `QPushButton[variant="secondary"] { min-height: N }`，
+        # 把 30x30 的色块撑成 30x38（minH=38 > maxH=30 的矛盾态），
+        # 并在属性面板里溢出父容器 22px。
+        self.setProperty("role", "color-swatch")
+
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.update_color_display()
         self.clicked.connect(self.choose_color)
@@ -131,6 +142,30 @@ class ColorIndicator(QPushButton):
     def update_color_display(self):
         r, g, b, a = self.current_color
         size = self._indicator_size
+        # 尺寸**只用内联 QSS 的 min/max 声明**，不调 setFixedSize()。
+        #
+        # 为什么不能两者并用（2026-10-27 实测，全是坑）：
+        #   1. 上层 QSS（`{selector} QPushButton { min-height: CONTROL_HEIGHT(30) }`）
+        #      是 ID 选择器，特异性高于通用 role 规则，会强制最小高 30+2(边框)=32；
+        #   2. 内联 QSS 若只写 max-height，min 仍被上层压着 → 32；
+        #   3. setFixedSize(size) 会在 setStyleSheet 之后被样式约束覆盖，
+        #      先设后设结果不同，不可靠。
+        #
+        # 可行解：内联 QSS 同时写 min/max = size - 2（QSS 的 width/height 不含
+        # 1px 边框，两侧各 1px → 减 2 才能得到目标实际尺寸）。
+        # 实测 size=30 → 实际 30x30，minH=30，符合 COLOR_SWATCH_SIZE 契约。
+        # 色块是**固定尺寸**控件，尺寸由代码决定，不由 QSS 决定。
+        #
+        # 这里的坑（2026-10-27 / 10-28 两次实测，过程记录）：
+        #   QSS 的 min-height 优先级**高于** setFixedSize()。只要上层任何一条
+        #   规则（`QDialog[dialogA2] QPushButton { min-height: 32px }` 这类
+        #   后代选择器特异性更高）命中它，控件就会被撑高：
+        #   实测 30x30 被撑成 30x38（minH=38 > maxH=30 的矛盾态）。
+        #
+        # 因此三层一起上，缺一层都会漏：
+        #   1. 内联 QSS 写死 min/max（size-2 抵消 1px 边框）；
+        #   2. setStyleSheet 之后再 setFixedSize（顺序反了会被样式覆盖）；
+        #   3. 设 QSizePolicy.Fixed，禁止布局拉伸。
         css_size = max(0, size - 2)
         self.setStyleSheet(f"""
             QPushButton {{
@@ -148,6 +183,7 @@ class ColorIndicator(QPushButton):
             }}
         """)
         self.setFixedSize(size, size)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setText("")
 
     def choose_color(self):

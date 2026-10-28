@@ -14,6 +14,8 @@ from PIL import Image, ImageFilter, ImageEnhance
 from typing import Tuple, Optional, Union, List
 import warnings
 
+from app.utils.image import ndops
+
 # 抑制NumPy警告
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
@@ -138,24 +140,17 @@ class PNGRenderOptimizer:
     
     def _detect_edges(self, alpha: np.ndarray) -> np.ndarray:
         """检测Alpha通道的边缘"""
-        # 使用Sobel算子检测边缘
-        from scipy import ndimage
-        
-        try:
-            # 计算梯度
-            grad_x = ndimage.sobel(alpha, axis=1)
-            grad_y = ndimage.sobel(alpha, axis=0)
-            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            
-            # 边缘阈值
-            edge_threshold = 0.1
-            return gradient_magnitude > edge_threshold
-        except ImportError:
-            # 如果没有scipy，使用简单的边缘检测
-            return self._simple_edge_detection(alpha)
+        # 使用Sobel算子检测边缘（ndops.sobel 与 scipy.ndimage.sobel 逐位等价）
+        grad_x = ndops.sobel(alpha, axis=1)
+        grad_y = ndops.sobel(alpha, axis=0)
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+
+        # 边缘阈值
+        edge_threshold = 0.1
+        return gradient_magnitude > edge_threshold
     
     def _simple_edge_detection(self, alpha: np.ndarray) -> np.ndarray:
-        """简单的边缘检测（不依赖scipy）"""
+        """简单的边缘检测（PIL FIND_EDGES）"""
         # 使用PIL的边缘检测滤镜
         alpha_img = Image.fromarray((alpha * 255).astype(np.uint8), 'L')
         edges = alpha_img.filter(ImageFilter.FIND_EDGES)
@@ -277,15 +272,8 @@ class PNGRenderOptimizer:
         return result.resize(original_size, Image.LANCZOS)
 
     def _apply_gaussian_filter(self, data: np.ndarray, sigma: float) -> np.ndarray:
-        """应用高斯滤波"""
-        try:
-            from scipy import ndimage
-            return ndimage.gaussian_filter(data, sigma=sigma)
-        except ImportError:
-            # 如果没有scipy，使用PIL的高斯模糊
-            data_img = Image.fromarray((data * 255).astype(np.uint8), 'L')
-            blurred = data_img.filter(ImageFilter.GaussianBlur(radius=sigma))
-            return np.array(blurred).astype(np.float64) / 255.0
+        """应用高斯滤波（ndops.gaussian_filter 与 scipy 等价，sigma 为浮点精度级）"""
+        return ndops.gaussian_filter(data, sigma=sigma)
 
     def _multi_level_filtering(self, image: Image.Image) -> Image.Image:
         """多级滤波处理"""
@@ -313,13 +301,12 @@ class PNGRenderOptimizer:
         return Image.fromarray((result_array * 255).astype(np.uint8))
 
     def _edge_preserving_filter(self, data: np.ndarray) -> np.ndarray:
-        """边缘保持滤波"""
-        try:
-            from scipy import ndimage
-            return ndimage.median_filter(data, size=3)
-        except ImportError:
-            # 简单的边缘保持实现
-            return data  # 如果没有scipy，跳过此步骤
+        """边缘保持滤波（ndops.median_filter 与 scipy.ndimage.median_filter 逐位等价）。
+
+        原实现在缺少 scipy 时直接 `return data` 跳过此步骤，等于没有滤波；
+        现在恒定执行，行为更一致。
+        """
+        return ndops.median_filter(data, size=3)
 
     def _bilateral_filter(self, data: np.ndarray) -> np.ndarray:
         """双边滤波"""

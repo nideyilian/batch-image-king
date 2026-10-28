@@ -13,8 +13,6 @@ from PySide6.QtCore import QObject, Signal
 
 from app.models.layer_new import Layer
 from app.models.shaped_layer_new import ShapedLayer, ShapeType
-from app.ui.add_text_layer_dialog_simple import AddTextLayerDialog
-from app.ui.add_shaped_layer_dialog import AddShapedLayerDialog
 from app.utils.layer_tree import (
     child_indices_for_group,
     expand_group_indices,
@@ -288,11 +286,22 @@ class LayerController(QObject):
             return False
     
     def add_text_layer(self):
-        """添加文本图层 - 从MainWindow迁移"""
+        """添加文本图层（弹出配置对话框）。
+
+        这是「精细建层」入口：弹对话框让用户填名称 / 内容 / 字体 / 字号 /
+        颜色 / 对齐 / 绑定模式。
+
+        想要「不弹窗、直接建」请用 ``add_configured_text_layer(config)``
+        或 ``add_quick_text_layer()``（QML 侧对等能力，见下方说明）。
+        """
         if not self.document:
             self.status_message.emit("请先创建或打开一个文档", 3000)
             return False
-            
+
+        # 惰性导入：该对话框只服务经典（QtWidgets）界面，QML 工作台不经过这里。
+        # 模块级导入会把整条 app/ui 依赖链（30k 行）拖进默认启动路径。
+        from app.ui.add_text_layer_dialog_simple import AddTextLayerDialog
+
         dialog = AddTextLayerDialog(self.main_window)
         if dialog.exec():
             try:
@@ -302,9 +311,12 @@ class LayerController(QObject):
                 # 添加文本图层到文档
                 layer = self.document.add_text_layer(text_layer)
                 if layer:
-                    # 更新UI
+                    # 更新UI。
+                    # 注意：不调 self.main_window.update_canvas() —— MainWindow
+                    # 上根本没有这个方法（实测 AttributeError），而且不需要：
+                    # 画布已在 canvas.py 里订阅了 document.layer_changed /
+                    # document_changed，会自动重绘。
                     self.layer_panel.refresh_layers()
-                    self.main_window.update_canvas()
                     
                     self.status_message.emit("成功添加文本图层", 3000)
                     self.layer_operation_completed.emit("add_text_layer", True)
@@ -320,7 +332,235 @@ class LayerController(QObject):
                 return False
         
         return False
-    
+
+    # ------------------------------------------------------------------
+    # 快速建文字层（不弹窗）
+    #
+    # 补齐经典版缺失的能力：QML 工作台有 addConfiguredTextLayer，
+    # 经典版此前只能走对话框，建一个文字层至少要填 5 个字段。
+    #
+    # 两个入口：
+    #   add_configured_text_layer(config) —— 带完整配置，供脚本 / 批量 / 未来 UI 用
+    #   add_quick_text_layer()            —— 一键用默认值建层，建完在属性面板调
+    # ------------------------------------------------------------------
+
+    #: 快速建层的默认配置。集中一处，方便调参。
+    QUICK_TEXT_DEFAULTS = {
+        "content": "双击编辑文字",
+        "font_size": 48,
+        "color": (255, 255, 255, 255),
+        "alignment": "left",
+        "binding_enabled": True,
+    }
+
+    _ALIGNMENT_MAP = None
+
+    @classmethod
+    def _alignment_map(cls):
+        """文字对齐字符串 → TextAlign 枚举。惰性构建，避免模块级导入 Qt 枚举。"""
+        if cls._ALIGNMENT_MAP is None:
+            from app.models.text_layer import TextAlign
+
+            cls._ALIGNMENT_MAP = {
+                "left": TextAlign.LEFT,
+                "center": TextAlign.CENTER,
+                "right": TextAlign.RIGHT,
+            }
+        return cls._ALIGNMENT_MAP
+
+    def add_configured_text_layer(self, config: dict):
+        """按配置直接创建文字图层，**不弹任何对话框**。
+
+        参数 config（键均可省略，省略时取 QUICK_TEXT_DEFAULTS）：
+            content         : str        文字内容，支持 \n 多行
+            name            : str        图层名，默认按内容首行自动生成
+            font_family     : str        字体族
+            font_size       : int        字号（6~240）
+            color           : str|tuple  #RRGGBB / #AARRGGBB / (r,g,b,a)
+            alignment       : str        left / center / right
+            binding_enabled : bool       是否参与文字绑定（随机化时替换文案）
+            x, y, width, height : int    位置与尺寸
+
+        返回：成功返回创建的 TextLayer，失败返回 None（并通过 status_message 说明原因）。
+
+        校验口径与 QML 侧 addConfiguredTextLayer 保持一致，避免两侧行为分叉。
+        """
+        if not self.document:
+            self.status_message.emit("请先创建或打开一个文档", 3000)
+            return None
+
+        config = dict(config or {})
+        defaults = self.QUICK_TEXT_DEFAULTS
+
+        content = str(config.get("content", defaults["content"]) or "")
+        if not content.strip():
+            self.status_message.emit("文字内容不能为空", 3000)
+            return None
+
+        try:
+            font_size = int(config.get("font_size", defaults["font_size"]))
+        except (TypeError, ValueError):
+            self.status_message.emit("字号必须是数字", 3000)
+            return None
+        if not 6 <= font_size <= 240:
+            self.status_message.emit("字号必须在 6 到 240 像素之间", 3000)
+            return None
+
+        alignment_key = str(config.get("alignment", defaults["alignment"]) or "left").lower()
+        align_map = self._alignment_map()
+        if alignment_key not in align_map:
+            self.status_message.emit("不支持的文字对齐方式", 3000)
+            return None
+
+        color = self._coerce_color(config.get("color", defaults["color"]))
+        if color is None:
+            self.status_message.emit("文字颜色格式无效", 3000)
+            return None
+
+        try:
+            from app.constants import DEFAULT_TEXT_FONT_FAMILY
+            from app.models.text_layer import TextLayer
+
+            name = str(config.get("name", "") or "").strip()
+            if not name:
+                # 用首行内容当图层名，避免一堆「文字图层」
+                first_line = content.splitlines()[0].strip()
+                name = (first_line[:20] or "文字图层")
+                # 连按快捷键会建出同名图层，加序号区分
+                name = self._unique_layer_name(name)
+
+            text_layer = TextLayer(
+                name=name,
+                x=int(config.get("x", 50)),
+                y=int(config.get("y", 50)),
+                width=int(config.get("width", 300)),
+                height=int(config.get("height", 100)),
+            )
+            # 自动适配边框：**必须开启**。
+            #
+            # 关掉时框固定为 width/height（默认 300x100），大字号文字会被直接裁掉。
+            # 实测：72px 的「限时特惠 5折」只渲染出「限时特惠」，「5折」整段丢失。
+            # 开启后框随文字实际尺寸撑开，新建的层第一眼就能看到完整内容。
+            # （QML 侧 addConfiguredTextLayer 把这里写成了 False，是同一个坑。）
+            text_layer.auto_fit_text_box = True
+            text_layer.font_family = (
+                str(config.get("font_family", "") or "").strip()
+                or DEFAULT_TEXT_FONT_FAMILY
+            )
+            text_layer.font_size = font_size
+            text_layer.text_color = color
+            text_layer.text_align = align_map[alignment_key]
+            text_layer.text_binding_enabled = bool(
+                config.get("binding_enabled", defaults["binding_enabled"])
+            )
+
+            # 多行支持：优先用解析接口，失败再退回单行
+            try:
+                lines = text_layer.parse_text_input_to_lines(content)
+                text_layer.set_text_lines(lines)
+                text_layer.set_current_text(lines[0], force=True)
+            except Exception:
+                text_layer.text_content = content
+                text_lines = text_layer.get_text_lines()
+                if text_lines:
+                    text_layer.current_text = text_lines[0]
+
+            layer = self.document.add_text_layer(text_layer)
+        except Exception as exc:
+            self.status_message.emit(f"添加文字图层时出错: {exc}", 5000)
+            self.layer_operation_completed.emit("add_text_layer", False)
+            return None
+
+        if layer is None:
+            self.status_message.emit("添加文字图层失败", 3000)
+            self.layer_operation_completed.emit("add_text_layer", False)
+            return None
+
+        self.layer_panel.refresh_layers()
+        self.status_message.emit("已添加文字图层，可在右侧属性面板调整", 3000)
+        self.layer_operation_completed.emit("add_text_layer", True)
+        return layer
+
+    def add_quick_text_layer(self):
+        """一键建文字层：不弹窗，用默认配置直接建好，随后在属性面板调整。
+
+        对应 PS 的「点一下就有文字层」心流。对高频加字场景，
+        每次都要填 5 个字段是纯浪费。
+
+        字号按**画布高度**自适应，而不是固定 48px：
+        48px 在 800x600 上占宽 37%（合适），但在 1920x1080 上只占 16%（太小看不清）。
+        批量作图时画布尺寸差异很大，固定字号必然有一半场景不合适。
+        这里用画布高 / 12，并夹到 [24, 160]：
+            600 高 → 50px    900 高 → 75px
+            1080 高 → 90px   1440 高 → 120px
+        """
+        config = dict(self.QUICK_TEXT_DEFAULTS)
+        try:
+            canvas_h = int(getattr(self.document, "canvas_height", 0) or 0)
+            if canvas_h > 0:
+                config["font_size"] = max(24, min(160, round(canvas_h / 12)))
+        except Exception:
+            pass
+        # 位置也按画布留白算，避免贴边（原来固定 x=50 在大画布上太靠左上）
+        try:
+            canvas_w = int(getattr(self.document, "canvas_width", 0) or 0)
+            canvas_h = int(getattr(self.document, "canvas_height", 0) or 0)
+            if canvas_w > 0 and canvas_h > 0:
+                config["x"] = round(canvas_w * 0.06)
+                config["y"] = round(canvas_h * 0.06)
+        except Exception:
+            pass
+        return self.add_configured_text_layer(config)
+
+    def _unique_layer_name(self, base: str) -> str:
+        """在现有图层名基础上加序号，避免重名。
+
+        连按 T 建层时，若都叫「双击编辑文字」会在图层面板里无法区分。
+        规则：base → base 2 → base 3 …（第 1 个不加序号，保持简洁）
+        """
+        try:
+            existing = {getattr(layer, "name", "") for layer in self.document.layers}
+        except Exception:
+            return base
+        if base not in existing:
+            return base
+        n = 2
+        while f"{base} {n}" in existing:
+            n += 1
+        return f"{base} {n}"
+
+    @staticmethod
+    def _coerce_color(value):
+        """把多种颜色写法统一成 (r, g, b, a) 四元组。失败返回 None。"""
+        from PySide6.QtGui import QColor
+
+        if value is None:
+            return None
+
+        # 已是元组 / 列表
+        if isinstance(value, (tuple, list)):
+            try:
+                parts = list(value)
+                if len(parts) == 3:
+                    parts.append(255)
+                if len(parts) != 4:
+                    return None
+                return tuple(max(0, min(255, int(p))) for p in parts)
+            except (TypeError, ValueError):
+                return None
+
+        # 字符串：交给 QColor 解析（支持 #RGB / #RRGGBB / #AARRGGBB / 颜色名）
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            color = QColor(text)
+            if not color.isValid():
+                return None
+            return (color.red(), color.green(), color.blue(), color.alpha())
+
+        return None
+
     def delete_layer(self):
         """删除选中的图层，支持多选。"""
         if not self.document:

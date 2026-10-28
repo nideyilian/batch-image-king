@@ -109,6 +109,10 @@ class BatchExportFolderCacheMixin:
             return []
         abs_dir = os.path.abspath(directory)
         if not os.path.isdir(abs_dir):
+            # 目录不存在（被删除 / 改名 / 外接盘没插）时返回空列表，
+            # 上层拿到空池就会「这一层没有素材可放」→ 静默导出缺内容。
+            # 这是用户最难自查的一类故障：图出来了，但某个位置是空的。
+            self._note_degradation("素材目录.目录不存在", abs_dir)
             return []
 
         dir_mtime_ns = self._get_directory_mtime_ns(abs_dir)
@@ -130,4 +134,18 @@ class BatchExportFolderCacheMixin:
         cat = str(category).lower()
         if not cat:
             return list(base_files)
-        return [p for p in base_files if cat in os.path.basename(p).lower()]
+        filtered = [p for p in base_files if cat in os.path.basename(p).lower()]
+        if base_files and not filtered:
+            # 目录有图但按分类关键词一张都匹配不上（分类名写错 / 文件名命名不符），
+            # 该绑定组会整块缺失。
+            self._note_degradation(
+                "素材目录.分类筛选后为空",
+                f"{abs_dir} 分类={category} 目录内={len(base_files)}",
+            )
+        return filtered
+
+    def _note_degradation(self, key, detail=None):
+        """向主类的降级计数器记一笔（mixin 里没有该属性时安全跳过）。"""
+        counter = getattr(self, 'degradations', None)
+        if counter is not None:
+            counter.note(key, detail)

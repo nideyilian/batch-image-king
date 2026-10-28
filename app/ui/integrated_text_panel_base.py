@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.collapsible_group import CollapsibleGroupBox
+from app.ui.design_spec import Scale as _Scale, Space as _Space, Width as _Width
 from app.ui.property_panel_a2 import PropertyPanelA2
 
 
@@ -115,10 +116,10 @@ class IntegratedTextPanelBase(object):
         line = QFrame()
         line.setProperty("role", "coreDivider")
         if vertical:
-            line.setFixedWidth(1)
-            line.setMinimumHeight(32)  # 减少高度
+            line.setFixedWidth(_Width.HAIRLINE)
+            line.setMinimumHeight(_Scale.PX[_Scale.MD])  # 减少高度
         else:
-            line.setFixedHeight(1)
+            line.setFixedHeight(_Width.HAIRLINE)
         return line
 
     def _make_core_group(self, label_text, widget, min_width=0):
@@ -156,11 +157,25 @@ class IntegratedTextPanelBase(object):
         """)
 
     def _label(self, text, width=PropertyPanelA2.LABEL_WIDTH):
+        """字段标签：固定列宽 + **右对齐**，与图层属性面板共用同一条栅格。
+
+        2026-10-28：原来这里是 AlignLeft，而图层属性面板是 AlignRight ——
+        同一个 dock 里切一个图层，标签就换一次对齐方式，用户感知就是"乱"。
+        现在统一右对齐：冒号连成一条竖线，字段列左边缘也连成一条竖线。
+        """
         label = QLabel(text)
         label.setFixedWidth(width)
         label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         label.setProperty("role", "fieldLabel")
+        # objectName 也要有：图层属性面板用 #fieldLabel，两边取同一个选择器，
+        # 栅格契约测试才能一次扫到两个面板（原来这里只有 role 属性）。
+        # 宽度不是栅格值 → 是嵌套子标签（如 X/Y/W/H、行距/字距），标 inline，
+        # 不参与主栅格对齐检查。
+        if width == PropertyPanelA2.LABEL_WIDTH:
+            label.setObjectName("fieldLabel")
+        else:
+            label.setObjectName("fieldLabelInline")
         return label
 
     def _muted_label(self, text):
@@ -290,7 +305,7 @@ class IntegratedTextPanelBase(object):
 
     def _style_core_spinbox(self, spin, width=112):
         spin.setFixedWidth(width)
-        spin.setFixedHeight(32)  # 减少高度
+        spin.setFixedHeight(_Scale.PX[_Scale.MD])  # 减少高度
         spin.setStyleSheet(f"""
             QSpinBox {{
                 background-color: {PropertyPanelA2.CONTROL_BG_ALT};
@@ -321,7 +336,7 @@ class IntegratedTextPanelBase(object):
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(8, 8, 8, 8)
-        card_layout.setSpacing(6)
+        card_layout.setSpacing(_Space.XS)
 
         # 预览标题
         title = QLabel("文字预览")
@@ -345,18 +360,18 @@ class IntegratedTextPanelBase(object):
 
         # 创建文字按钮
         self.create_btn = QPushButton("+ 文字")
-        self.create_btn.setFixedHeight(32)
+        self.create_btn.setFixedHeight(_Scale.PX[_Scale.MD])
         self.create_btn.setToolTip("创建新的文字图层")
 
         # 编辑文字按钮
         self.edit_btn = QPushButton("编辑文案")
-        self.edit_btn.setFixedHeight(32)
+        self.edit_btn.setFixedHeight(_Scale.PX[_Scale.MD])
         self.edit_btn.setEnabled(False)
         self.edit_btn.setToolTip("打开完整文案编辑器")
 
         # 重置按钮
         self.reset_btn = QPushButton("重置")
-        self.reset_btn.setFixedHeight(32)
+        self.reset_btn.setFixedHeight(_Scale.PX[_Scale.MD])
         self.reset_btn.setEnabled(False)
         self.reset_btn.setToolTip("重置文字样式")
 
@@ -625,7 +640,7 @@ class IntegratedTextPanelBase(object):
         self.opacity_slider.setMinimumWidth(90)
         self.opacity_slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.opacity_label = QLabel("100%")
-        self.opacity_label.setFixedWidth(48)
+        self.opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.opacity_label.setAlignment(Qt.AlignCenter)
         card_layout.addLayout(self._make_param_row("透明度", self.opacity_slider, self.opacity_label, stretch_last=False))
 
@@ -634,14 +649,14 @@ class IntegratedTextPanelBase(object):
         self.gradient_enable_check.hide()
         self.gradient_type_combo = QComboBox()
         self.gradient_type_combo.addItems(["线性", "径向", "角度"])
-        self.gradient_type_combo.setFixedWidth(80)
+        self.gradient_type_combo.setFixedWidth(_Width.COMBO)
         gradient_controls_layout.addLayout(self._make_param_row("渐变类型", self.gradient_type_combo, stretch_last=False))
         gradient_color_layout = QHBoxLayout()
-        self.gradient_start_color = ColorIndicator((0, 0, 0, 255))
+        self.gradient_start_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.gradient_start_color.color_changed.connect(self.on_gradient_color_changed)
         gradient_color_layout.addWidget(self.gradient_start_color)
         gradient_color_layout.addWidget(QLabel("→"))
-        self.gradient_end_color = ColorIndicator((255, 255, 255, 255))
+        self.gradient_end_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.gradient_end_color.color_changed.connect(self.on_gradient_color_changed)
         gradient_color_layout.addWidget(self.gradient_end_color)
         gradient_color_layout.addStretch()
@@ -703,7 +718,7 @@ class IntegratedTextPanelBase(object):
         self.bg_opacity_slider.setValue(100)
         self.bg_opacity_slider.valueChanged.connect(self.on_background_opacity_changed)
         self.bg_opacity_label = QLabel("100%")
-        self.bg_opacity_label.setFixedWidth(42)
+        self.bg_opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.bg_opacity_label.setAlignment(Qt.AlignCenter)
         bg_layout.addLayout(self._make_param_row("背景透明", self.bg_opacity_slider, self.bg_opacity_label, stretch_last=False))
 
@@ -712,7 +727,7 @@ class IntegratedTextPanelBase(object):
         self.bg_size_slider.setValue(5)
         self.bg_size_slider.valueChanged.connect(self.on_background_size_changed)
         self.bg_size_label = QLabel("+5")
-        self.bg_size_label.setFixedWidth(42)
+        self.bg_size_label.setFixedWidth(_Width.VALUE_LABEL)
         self.bg_size_label.setAlignment(Qt.AlignCenter)
         bg_layout.addLayout(self._make_param_row("背景大小", self.bg_size_slider, self.bg_size_label, stretch_last=False))
         card_layout.addWidget(self.background_controls)
@@ -877,12 +892,12 @@ class IntegratedTextPanelBase(object):
     def create_core_params_card(self, parent_layout):
         """创建核心参数卡片。"""
         card, card_layout = self._make_section_card("核心参数", self.reset_core_params)
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(_Space.MD, _Space.SM, _Space.MD, _Space.SM)
+        card_layout.setSpacing(_Space.SM)
 
         def label(text):
             widget = QLabel(text)
-            widget.setFixedWidth(58)
+            widget.setFixedWidth(_Width.SPIN)
             widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             widget.setProperty("role", "fieldLabel")
@@ -890,7 +905,7 @@ class IntegratedTextPanelBase(object):
 
         def row(title, *widgets, stretch_last=True):
             line = QHBoxLayout()
-            line.setSpacing(6)
+            line.setSpacing(_Space.XS)
             line.addWidget(label(title))
             for widget in widgets:
                 if stretch_last and widget is widgets[-1]:
@@ -914,7 +929,7 @@ class IntegratedTextPanelBase(object):
             container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             grid = QGridLayout(container)
             grid.setContentsMargins(0, 0, 0, 0)
-            grid.setHorizontalSpacing(6)
+            grid.setHorizontalSpacing(_Space.SM)
             grid.setVerticalSpacing(8)
 
             for index, (title, control) in enumerate(pairs):
@@ -937,13 +952,13 @@ class IntegratedTextPanelBase(object):
         def make_spin(width=76):
             spin = QSpinBox()
             spin.setFixedWidth(width)
-            spin.setFixedHeight(30)
+            spin.setFixedHeight(_Scale.PX[_Scale.MD])
             spin.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             return spin
 
         def make_button(text, width=None):
             button = QPushButton(text)
-            button.setFixedHeight(30)
+            button.setFixedHeight(_Scale.PX[_Scale.MD])
             if width is not None:
                 button.setFixedWidth(width)
             return button
@@ -960,7 +975,7 @@ class IntegratedTextPanelBase(object):
         self.font_combo.setMaxVisibleItems(18)
         self.font_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.font_combo.setMinimumContentsLength(8)
-        self.font_combo.setFixedHeight(30)
+        self.font_combo.setFixedHeight(_Scale.PX[_Scale.MD])
         self.font_combo.setMinimumWidth(0)
         self.font_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         if self.font_combo.lineEdit():
@@ -984,13 +999,13 @@ class IntegratedTextPanelBase(object):
         card_layout.addWidget(self._make_core_divider())
 
         quick_layout = QVBoxLayout()
-        quick_layout.setSpacing(6)
+        quick_layout.setSpacing(_Space.XS)
         quick_title = QLabel("常用")
         quick_title.setProperty("role", "fieldLabel")
         quick_layout.addWidget(quick_title)
         quick_buttons_row = QGridLayout()
         quick_buttons_row.setHorizontalSpacing(8)
-        quick_buttons_row.setVerticalSpacing(6)
+        quick_buttons_row.setVerticalSpacing(_Space.SM)
         self.quick_font_buttons = []
         for index, (font_name, display_name) in enumerate([("SimHei", "黑体"), ("SimSun", "宋体"), ("KaiTi", "楷体"), ("Arial", "Arial")]):
             btn = make_tool(display_name, width=56)
@@ -1003,7 +1018,7 @@ class IntegratedTextPanelBase(object):
         card_layout.addLayout(quick_layout)
 
         recent_layout = QVBoxLayout()
-        recent_layout.setSpacing(6)
+        recent_layout.setSpacing(_Space.XS)
         recent_title = QLabel("最近")
         recent_title.setProperty("role", "fieldLabel")
         recent_layout.addWidget(recent_title)
@@ -1055,7 +1070,7 @@ class IntegratedTextPanelBase(object):
         self.opacity_slider.setMinimumWidth(90)
         self.opacity_slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.opacity_label = QLabel("100%")
-        self.opacity_label.setFixedWidth(48)
+        self.opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.opacity_label.setAlignment(Qt.AlignCenter)
         row("透明度", self.opacity_slider, self.opacity_label, stretch_last=False)
 

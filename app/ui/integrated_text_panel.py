@@ -22,6 +22,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.collapsible_group import CollapsibleGroupBox
 from app.ui.design_tokens import Tokens
+from app.ui.design_spec import Scale as _Scale, Space as _Space, Width as _Width
+
+# 紧凑多行文本框高度（≈3 行文字）。不放进 design_spec.Scale，
+# 因为 Scale 是「单行控件高度」的阶梯，多行区域是「内容区高度」，
+# 两者语义不同，混用会让 3 档阶梯失去意义。
+_Scale_COMPACT_TEXT_AREA = 72
 from app.ui.property_panel_a2 import PropertyPanelA2
 
 
@@ -33,7 +39,7 @@ from app.ui.integrated_text_panel_base import IntegratedTextPanelBase
 from app.ui.integrated_text_panel_content import IntegratedTextPanelContent
 from app.ui.integrated_text_panel_handlers import IntegratedTextPanelHandlers
 
-class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelContent, IntegratedTextPanelHandlers):
+class IntegratedTextPanel(IntegratedTextPanelBase, IntegratedTextPanelContent, IntegratedTextPanelHandlers, QWidget):
     """整合的文字图层参数面板 - 专业UI设计"""
 
     # 信号定义
@@ -84,7 +90,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.parameter_tabs.tabBar().setExpanding(True)
         self.parameter_tabs.tabBar().setUsesScrollButtons(False)
         # Tab栏高度略紧凑
-        self.parameter_tabs.tabBar().setFixedHeight(34)
+        self.parameter_tabs.tabBar().setFixedHeight(_Scale.PX[_Scale.MD])
         self.basic_scroll_area, self.basic_tab_content, self.basic_layout = self._create_parameter_tab("基本参数")
         self.more_scroll_area, self.more_tab_content, self.more_layout = self._create_parameter_tab("更多参数")
         main_layout.addWidget(self.parameter_tabs)
@@ -226,10 +232,10 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         line = QFrame()
         line.setProperty("role", "coreDivider")
         if vertical:
-            line.setFixedWidth(1)
-            line.setMinimumHeight(32)  # 减少高度
+            line.setFixedWidth(_Width.HAIRLINE)
+            line.setMinimumHeight(_Scale.PX[_Scale.MD])  # 减少高度
         else:
-            line.setFixedHeight(1)
+            line.setFixedHeight(_Width.HAIRLINE)
         return line
 
     def _make_core_group(self, label_text, widget, min_width=0):
@@ -267,11 +273,25 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         """)
 
     def _label(self, text, width=PropertyPanelA2.LABEL_WIDTH):
+        """字段标签：固定列宽 + **右对齐**，与图层属性面板共用同一条栅格。
+
+        2026-10-28：原来这里是 AlignLeft，而图层属性面板是 AlignRight ——
+        同一个 dock 里切一个图层，标签就换一次对齐方式，用户感知就是"乱"。
+        现在统一右对齐：冒号连成一条竖线，字段列左边缘也连成一条竖线。
+        """
         label = QLabel(text)
         label.setFixedWidth(width)
         label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         label.setProperty("role", "fieldLabel")
+        # objectName 也要有：图层属性面板用 #fieldLabel，两边取同一个选择器，
+        # 栅格契约测试才能一次扫到两个面板（原来这里只有 role 属性）。
+        # 宽度不是栅格值 → 是嵌套子标签（如 X/Y/W/H、行距/字距），标 inline，
+        # 不参与主栅格对齐检查。
+        if width == PropertyPanelA2.LABEL_WIDTH:
+            label.setObjectName("fieldLabel")
+        else:
+            label.setObjectName("fieldLabelInline")
         return label
 
     def _muted_label(self, text):
@@ -280,14 +300,27 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         return label
 
     def _make_param_row(self, title, *widgets, stretch_last=True):
+        """一行「标签 + 若干控件」，行末按需留弹性空白。
+
+        ⚠ 原实现是给**最后一个控件**加 stretch(=1)，本意是「占满右侧」。
+        但当最后一个控件是 QSpinBox（Expanding）时，它会吃掉全部剩余宽度，
+        把前面的 B / I 这类小按钮顶到最右边 —— 截图里就表现为
+        「大小 [40px 输入框......]  B  I」中间一大段空白，看着像孤立控件。
+
+        正确做法是：控件按自然宽度排好，只在**行末**加一个 stretch
+        吸收余量。这样控件紧凑靠左，右侧留白，符合属性面板的视觉节奏。
+        """
         row = QHBoxLayout()
+        # 边距必须显式清零：子布局一旦吃到平台默认边距，整行的标签就会
+        # 比同级其他行多缩进几个像素 —— 实测就是这 6px 让「大小」跑到 102，
+        # 而同一个卡片的「透明」在 97，肉眼看就是"没对齐"。
+        row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(PropertyPanelA2.ROW_GAP)
         row.addWidget(self._label(title))
         for widget in widgets:
-            if stretch_last and widget is widgets[-1]:
-                row.addWidget(widget, 1)
-            else:
-                row.addWidget(widget)
+            row.addWidget(widget)
+        if stretch_last:
+            row.addStretch(1)
         return row
 
     def _make_spin(self, width=PropertyPanelA2.SPIN_WIDTH):
@@ -300,8 +333,13 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
     def _make_button(self, text, width=None):
         button = QPushButton(text)
         button.setProperty("actionButton", True)
-        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
-        button.setMaximumHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        # 三步都要设：QSS 的 min-height 优先级**高于** setFixedHeight，
+        # 只调 setFixedHeight 会被 QSS 撑回去（实测 28 变 44）。
+        h = PropertyPanelA2.CONTROL_HEIGHT
+        button.setMinimumHeight(h)
+        button.setMaximumHeight(h)
+        button.setFixedHeight(h)
+        button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         if width is not None:
             button.setFixedWidth(width)
         return button
@@ -310,8 +348,10 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         button = QToolButton()
         button.setText(text)
         button.setProperty("actionButton", True)
-        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
-        button.setMaximumHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        _h = PropertyPanelA2.CONTROL_HEIGHT
+        button.setMinimumHeight(_h)
+        button.setMaximumHeight(_h)
+        button.setFixedHeight(_h)
         if width:
             button.setMinimumWidth(width)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -322,8 +362,15 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         button.setCheckable(True)
         button.setChecked(checked)
         button.setProperty("segmentButton", True)
-        button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
-        button.setMaximumHeight(PropertyPanelA2.CONTROL_HEIGHT)
+        # 必须同时设 min/max/fixed 三步 + QSizePolicy。
+        #
+        # 只调 setFixedHeight 的话会被 QSS 的 `min-height` 顶回去
+        # （QSS 的 min-height 优先级高于 setFixedHeight）：
+        # 实测 28 → 44，字体按钮变成一排大方块，把面板撑爆。
+        _h = PropertyPanelA2.CONTROL_HEIGHT
+        button.setMinimumHeight(_h)
+        button.setMaximumHeight(_h)
+        button.setFixedHeight(_h)
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         return button
 
@@ -403,7 +450,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
     def _style_core_spinbox(self, spin, width=112):
         spin.setFixedWidth(width)
-        spin.setFixedHeight(32)  # 减少高度
+        spin.setFixedHeight(_Scale.PX[_Scale.MD])  # 减少高度
         spin.setStyleSheet(f"""
             QSpinBox {{
                 background-color: {PropertyPanelA2.CONTROL_BG_ALT};
@@ -434,7 +481,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(8, 8, 8, 8)
-        card_layout.setSpacing(6)
+        card_layout.setSpacing(_Space.XS)
 
         # 预览标题
         title = QLabel("文字预览")
@@ -458,18 +505,18 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         # 创建文字按钮
         self.create_btn = QPushButton("+ 文字")
-        self.create_btn.setFixedHeight(32)
+        self.create_btn.setFixedHeight(_Scale.PX[_Scale.MD])
         self.create_btn.setToolTip("创建新的文字图层")
 
         # 编辑文字按钮
         self.edit_btn = QPushButton("编辑文案")
-        self.edit_btn.setFixedHeight(32)
+        self.edit_btn.setFixedHeight(_Scale.PX[_Scale.MD])
         self.edit_btn.setEnabled(False)
         self.edit_btn.setToolTip("打开完整文案编辑器")
 
         # 重置按钮
         self.reset_btn = QPushButton("重置")
-        self.reset_btn.setFixedHeight(32)
+        self.reset_btn.setFixedHeight(_Scale.PX[_Scale.MD])
         self.reset_btn.setEnabled(False)
         self.reset_btn.setToolTip("重置文字样式")
 
@@ -494,8 +541,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.content_card_title = card.title_label
         self.content_summary_label = card.summary_label
         # 紧凑内部边距和间距
-        card_layout.setContentsMargins(8, 5, 8, 6)
-        card_layout.setSpacing(5)
+        card_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        card_layout.setSpacing(_Space.XS)
 
         self.create_btn = QPushButton("+ 文字", self)
         self.create_btn.setToolTip("创建新的文字图层")
@@ -519,14 +566,27 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         self.inline_text_edit = QTextEdit()
         self.inline_text_edit.setAcceptRichText(False)
-        # 紧凑文字输入框：默认2-3行可见，避免首屏过高
-        self.inline_text_edit.setFixedHeight(72)
+        # 多行文本框：高度是「内容区」不是「控件高度」，**不能**用 Scale 档位。
+        # Scale 是给单行控件（按钮/输入框/下拉框）用的 3 档阶梯；
+        # 多行区域由要显示几行文字决定。72 ≈ 3 行 @13px + 行距，
+        # 且 72 是 4px 栅格倍数（18 个栅格）。
+        self.inline_text_edit.setFixedHeight(_Scale_COMPACT_TEXT_AREA)
         self.inline_text_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.inline_text_edit.setPlaceholderText("输入当前文案；开启绑定模式时，每行可作为一个候选文案")
         card_layout.addWidget(self.inline_text_edit)
 
+        # 文案操作按钮：**分两行**，不要挤成一行。
+        #
+        # 原来是 7 个按钮 + 1 个复选框 + 1 个计数标签全塞进一个 QHBoxLayout，
+        # 面板宽 344px 时每个按钮只分到 ~40px，文字被压成「上一张/下一条/随机/
+        # 颜色/清色/字号/清字号」挤成一排且大量截断（2026-10-28 截图实锤）。
+        #
+        # 按语义分两组：翻页与随机（高频）一行；局部样式（需先选中文字）另一行。
         text_actions = QHBoxLayout()
-        text_actions.setSpacing(4)
+        text_actions.setSpacing(_Space.XS)
+
+        range_actions = QHBoxLayout()
+        range_actions.setSpacing(_Space.XS)
 
         self.apply_text_btn = QPushButton("应用", self)
         self.apply_text_btn.setProperty("actionButton", True)
@@ -554,18 +614,31 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.text_count_label = QLabel("0 条")
         self.text_count_label.setProperty("role", "summaryLabel")
 
+        # 第一行：翻页 + 随机 + 绑定开关 + 计数（高频操作）
         for button in (self.prev_text_btn, self.next_text_btn, self.random_text_btn):
-            button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            text_actions.addWidget(button)
-        for button in (self.range_color_btn, self.clear_range_color_btn, self.range_size_btn, self.clear_range_size_btn):
-            button.setFixedHeight(PropertyPanelA2.CONTROL_HEIGHT)
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            _h = PropertyPanelA2.CONTROL_HEIGHT
+            button.setMinimumHeight(_h)
+            button.setMaximumHeight(_h)
+            button.setFixedHeight(_h)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             text_actions.addWidget(button)
         text_actions.addWidget(self.binding_mode_check)
         text_actions.addStretch()
         text_actions.addWidget(self.text_count_label)
+
+        # 第二行：局部样式（需先选中文字，低频）
+        for button in (self.range_color_btn, self.clear_range_color_btn,
+                       self.range_size_btn, self.clear_range_size_btn):
+            _h = PropertyPanelA2.CONTROL_HEIGHT
+            button.setMinimumHeight(_h)
+            button.setMaximumHeight(_h)
+            button.setFixedHeight(_h)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            range_actions.addWidget(button)
+        range_actions.addStretch()
+
         card_layout.addLayout(text_actions)
+        card_layout.addLayout(range_actions)
 
         parent_layout.addWidget(card)
 
@@ -577,8 +650,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.font_summary_label = card.summary_label
         self.font_reset_btn = getattr(card, "reset_button", None)
         # 紧凑内部边距
-        card_layout.setContentsMargins(8, 5, 8, 6)
-        card_layout.setSpacing(5)
+        card_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        card_layout.setSpacing(_Space.XS)
 
         self.font_combo = QComboBox()
         self.font_combo.setEditable(True)
@@ -641,16 +714,17 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.typography_card_title = card.title_label
         self.typography_summary_label = card.summary_label
         # 紧凑布局：减小边距和内部间距
-        card_layout.setContentsMargins(8, 5, 8, 6)
-        card_layout.setSpacing(5)
+        card_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        card_layout.setSpacing(_Space.XS)
 
         self.font_size_spin = self._make_spin(76)
         self.font_size_spin.setRange(6, 200)
         self.font_size_spin.setValue(24)
         self.font_size_spin.setSuffix("px")
-        self.font_size_spin.setMinimumWidth(PropertyPanelA2.SPIN_WIDTH)
-        self.font_size_spin.setMaximumWidth(16777215)
-        self.font_size_spin.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # 不吃剩余宽度：Expanding 会把 B / I 顶到行尾最右边，
+        # 中间留一大段空白，看起来像三个控件散落各处。
+        # 定宽 76 + 行末 stretch 才是正确的视觉节奏。
+        self.font_size_spin.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.bold_btn = ToggleButton("B")
         self.bold_btn.setFixedSize(PropertyPanelA2.ICON_BUTTON_WIDTH, PropertyPanelA2.CONTROL_HEIGHT)
         self.italic_btn = ToggleButton("I")
@@ -719,8 +793,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.appearance_card_title = card.title_label
         self.appearance_summary_label = card.summary_label
         # 紧凑内部布局：去除多余空白
-        card_layout.setContentsMargins(8, 5, 8, 6)
-        card_layout.setSpacing(5)
+        card_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        card_layout.setSpacing(_Space.XS)
 
         # 文字填充模式分段按钮（无/纯色/渐变），去除"文字填充"小标题
         text_fill_layout, self.text_fill_button_group, self.text_fill_mode_buttons = self._make_segment_row(
@@ -734,7 +808,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         # 纯色填充（颜色 + 透明度，纵向挨着，无分割线）
         self.text_color_controls, text_color_layout = self._make_subpanel()
         # 减小子面板内边距
-        text_color_layout.setContentsMargins(6, 4, 6, 4)
+        text_color_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
         text_color_layout.setSpacing(4)
         self.text_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.text_color_button = self._make_compact_value_button("文字颜色")
@@ -748,27 +822,27 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.opacity_slider.setMinimumWidth(90)
         self.opacity_slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.opacity_label = QLabel("100%")
-        self.opacity_label.setFixedWidth(42)
+        self.opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.opacity_label.setAlignment(Qt.AlignCenter)
         text_color_layout.addLayout(self._make_param_row("透明", self.opacity_slider, self.opacity_label, stretch_last=False))
         card_layout.addWidget(self.text_color_controls)
 
         # 渐变填充控件（与纯色控件互斥显示）
         self.gradient_controls, gradient_controls_layout = self._make_subpanel()
-        gradient_controls_layout.setContentsMargins(6, 4, 6, 4)
+        gradient_controls_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
         gradient_controls_layout.setSpacing(4)
         self.gradient_enable_check = A2Switch()
         self.gradient_enable_check.hide()  # 隐藏独立开关：已用顶部分段按钮控制
         self.gradient_type_combo = QComboBox()
         self.gradient_type_combo.addItems(["线性", "径向", "角度"])
-        self.gradient_type_combo.setFixedWidth(80)
+        self.gradient_type_combo.setFixedWidth(_Width.COMBO)
         gradient_controls_layout.addLayout(self._make_param_row("类型", self.gradient_type_combo, stretch_last=False))
         gradient_color_layout = QHBoxLayout()
-        self.gradient_start_color = ColorIndicator((0, 0, 0, 255))
+        self.gradient_start_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.gradient_start_color.color_changed.connect(self.on_gradient_color_changed)
         gradient_color_layout.addWidget(self.gradient_start_color)
         gradient_color_layout.addWidget(QLabel("→"))
-        self.gradient_end_color = ColorIndicator((255, 255, 255, 255))
+        self.gradient_end_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.gradient_end_color.color_changed.connect(self.on_gradient_color_changed)
         gradient_color_layout.addWidget(self.gradient_end_color)
         gradient_color_layout.addStretch()
@@ -820,8 +894,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.background_card = card
         self.background_card_title = card.title_label
         self.background_summary_label = card.summary_label
-        card_layout.setContentsMargins(8, 5, 8, 6)
-        card_layout.setSpacing(5)
+        card_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        card_layout.setSpacing(_Space.XS)
 
         # 背景模式（无/纯色/渐变）分段按钮，顶部分段即代表启用与否，无需独立开关
         background_layout, self.background_button_group, self.background_mode_buttons = self._make_segment_row(
@@ -833,7 +907,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         card_layout.addLayout(background_layout)
 
         self.background_controls, bg_layout = self._make_subpanel()
-        bg_layout.setContentsMargins(6, 4, 6, 4)
+        bg_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
         bg_layout.setSpacing(4)
         self.bg_enable_check = A2Switch()
         self.bg_enable_check.hide()  # 用分段按钮控制显隐，不再显示独立开关
@@ -849,7 +923,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.bg_opacity_slider.setValue(100)
         self.bg_opacity_slider.valueChanged.connect(self.on_background_opacity_changed)
         self.bg_opacity_label = QLabel("100%")
-        self.bg_opacity_label.setFixedWidth(42)
+        self.bg_opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.bg_opacity_label.setAlignment(Qt.AlignCenter)
         bg_layout.addLayout(self._make_param_row("透明", self.bg_opacity_slider, self.bg_opacity_label, stretch_last=False))
 
@@ -858,7 +932,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.bg_size_slider.setValue(5)
         self.bg_size_slider.valueChanged.connect(self.on_background_size_changed)
         self.bg_size_label = QLabel("+5")
-        self.bg_size_label.setFixedWidth(42)
+        self.bg_size_label.setFixedWidth(_Width.VALUE_LABEL)
         self.bg_size_label.setAlignment(Qt.AlignCenter)
         bg_layout.addLayout(self._make_param_row("大小", self.bg_size_slider, self.bg_size_label, stretch_last=False))
         card_layout.addWidget(self.background_controls)
@@ -884,8 +958,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         保留与 handlers 兼容的属性名：x_spin, y_spin, width_spin, height_spin, position_summary_label。"""
         self.pos_group = CollapsibleGroupBox("位置和尺寸", collapsed=True)  # 默认折叠：显著降低首屏高度
         self.pos_group.title_frame.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
-        self.pos_group.container_layout.setContentsMargins(8, 5, 8, 6)
-        self.pos_group.container_layout.setSpacing(5)
+        self.pos_group.container_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        self.pos_group.container_layout.setSpacing(_Space.XS)
         self.position_summary_label = QLabel()
         self.position_summary_label.setProperty("role", "summaryLabel")
         self.position_summary_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -943,8 +1017,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         self.effects_group = CollapsibleGroupBox("文字阴影与发光", collapsed=False)
         self.effects_group.title_frame.setFixedHeight(PropertyPanelA2.HEADER_HEIGHT)
-        self.effects_group.container_layout.setContentsMargins(8, 5, 8, 6)
-        self.effects_group.container_layout.setSpacing(5)
+        self.effects_group.container_layout.setContentsMargins(*PropertyPanelA2.SUBPANEL_MARGINS)
+        self.effects_group.container_layout.setSpacing(_Space.XS)
         self.create_effects_content(self.effects_group)
         parent_layout.addWidget(self.effects_group)
 
@@ -1095,12 +1169,12 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
     def create_core_params_card(self, parent_layout):
         """创建核心参数卡片。"""
         card, card_layout = self._make_section_card("核心参数", self.reset_core_params)
-        card_layout.setContentsMargins(12, 10, 12, 10)
-        card_layout.setSpacing(10)
+        card_layout.setContentsMargins(_Space.MD, _Space.SM, _Space.MD, _Space.SM)
+        card_layout.setSpacing(_Space.SM)
 
         def label(text):
             widget = QLabel(text)
-            widget.setFixedWidth(58)
+            widget.setFixedWidth(_Width.SPIN)
             widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             widget.setProperty("role", "fieldLabel")
@@ -1108,7 +1182,8 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
 
         def row(title, *widgets, stretch_last=True):
             line = QHBoxLayout()
-            line.setSpacing(6)
+            line.setContentsMargins(0, 0, 0, 0)
+            line.setSpacing(_Space.XS)
             line.addWidget(label(title))
             for widget in widgets:
                 if stretch_last and widget is widgets[-1]:
@@ -1132,7 +1207,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
             container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             grid = QGridLayout(container)
             grid.setContentsMargins(0, 0, 0, 0)
-            grid.setHorizontalSpacing(6)
+            grid.setHorizontalSpacing(_Space.SM)
             grid.setVerticalSpacing(8)
 
             for index, (title, control) in enumerate(pairs):
@@ -1155,13 +1230,17 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         def make_spin(width=76):
             spin = QSpinBox()
             spin.setFixedWidth(width)
-            spin.setFixedHeight(30)
+            spin.setFixedHeight(_Scale.PX[_Scale.MD])
             spin.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             return spin
 
         def make_button(text, width=None):
             button = QPushButton(text)
-            button.setFixedHeight(30)
+            _h = _Scale.PX[_Scale.MD]
+            button.setMinimumHeight(_h)
+            button.setMaximumHeight(_h)
+            button.setFixedHeight(_h)
+            button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             if width is not None:
                 button.setFixedWidth(width)
             return button
@@ -1178,7 +1257,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.font_combo.setMaxVisibleItems(18)
         self.font_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.font_combo.setMinimumContentsLength(8)
-        self.font_combo.setFixedHeight(30)
+        self.font_combo.setFixedHeight(_Scale.PX[_Scale.MD])
         self.font_combo.setMinimumWidth(0)
         self.font_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         if self.font_combo.lineEdit():
@@ -1202,13 +1281,13 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         card_layout.addWidget(self._make_core_divider())
 
         quick_layout = QVBoxLayout()
-        quick_layout.setSpacing(6)
+        quick_layout.setSpacing(_Space.XS)
         quick_title = QLabel("常用")
         quick_title.setProperty("role", "fieldLabel")
         quick_layout.addWidget(quick_title)
         quick_buttons_row = QGridLayout()
         quick_buttons_row.setHorizontalSpacing(8)
-        quick_buttons_row.setVerticalSpacing(6)
+        quick_buttons_row.setVerticalSpacing(_Space.SM)
         self.quick_font_buttons = []
         for index, (font_name, display_name) in enumerate([("SimHei", "黑体"), ("SimSun", "宋体"), ("KaiTi", "楷体"), ("Arial", "Arial")]):
             btn = make_tool(display_name, width=56)
@@ -1221,7 +1300,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         card_layout.addLayout(quick_layout)
 
         recent_layout = QVBoxLayout()
-        recent_layout.setSpacing(6)
+        recent_layout.setSpacing(_Space.XS)
         recent_title = QLabel("最近")
         recent_title.setProperty("role", "fieldLabel")
         recent_layout.addWidget(recent_title)
@@ -1273,7 +1352,7 @@ class IntegratedTextPanel(QWidget, IntegratedTextPanelBase, IntegratedTextPanelC
         self.opacity_slider.setMinimumWidth(90)
         self.opacity_slider.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.opacity_label = QLabel("100%")
-        self.opacity_label.setFixedWidth(48)
+        self.opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.opacity_label.setAlignment(Qt.AlignCenter)
         row("透明度", self.opacity_slider, self.opacity_label, stretch_last=False)
 

@@ -13,8 +13,10 @@ from PySide6.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout,
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont, QColor, QPainter, QBrush, QPen
 
+from app.ui.design_spec import Width as _Width
 from app.ui.visual_hierarchy import VisualHierarchy
 from app.ui.icon_manager import IconManager
+from app.ui.icon_library import IconName, icon_pixmap
 
 
 class StatusBadge(QLabel):
@@ -36,7 +38,7 @@ class StatusBadge(QLabel):
         self.update_style()
 
         # 设置固定高度
-        self.setFixedHeight(18)
+        self.setFixedHeight(_Width.SHORT)
         self.setAlignment(Qt.AlignCenter)
 
     def update_style(self):
@@ -79,11 +81,18 @@ class StatusBadge(QLabel):
 
 
 class StatusIndicator(QWidget):
-    """状态指示器组件"""
+    """状态指示器组件。
 
-    def __init__(self, icon="", text="", color_type="secondary", parent=None):
+    图标是**真实 Lucide SVG 位图**（不是字符）。`icon_name` 传业务名
+    （'edit' / 'visible' / 'success' …），由 `icon_library` 解析并渲染。
+    """
+
+    #: 状态栏里图标与文字并排，14px 与 11px 字号视觉重量相当。
+    ICON_PX = 14
+
+    def __init__(self, icon_name="", text="", color_type="secondary", parent=None):
         super().__init__(parent)
-        self.icon_text = icon
+        self.icon_name = icon_name
         self.status_text = text
         self.color_type = color_type
         self.setup_ui()
@@ -94,10 +103,10 @@ class StatusIndicator(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(VisualHierarchy.get_spacing('xs'))
 
-        # 图标标签
-        if self.icon_text:
-            self.icon_label = QLabel(self.icon_text)
-            self.icon_label.setFont(VisualHierarchy.get_font('small'))
+        # 图标标签（SVG 位图）
+        if self.icon_name:
+            self.icon_label = QLabel()
+            self.icon_label.setFixedSize(self.ICON_PX, self.ICON_PX)
             layout.addWidget(self.icon_label)
 
         # 文本标签
@@ -105,8 +114,21 @@ class StatusIndicator(QWidget):
         self.text_label.setFont(VisualHierarchy.get_font('small'))
         layout.addWidget(self.text_label)
 
-        # 应用样式
+        # 应用样式（同时把图标按状态色渲染出来）
         self.update_style()
+
+    def _icon_color(self) -> str:
+        """按状态取图标颜色。"""
+        vh = VisualHierarchy
+        if self.color_type == "primary":
+            return vh.get_color('primary', 'main')
+        if self.color_type == "success":
+            return vh.get_color('state', 'success')
+        if self.color_type == "warning":
+            return vh.get_color('state', 'warning')
+        if self.color_type == "error":
+            return vh.get_color('state', 'error')
+        return vh.get_color('text', 'secondary')
 
     def update_style(self):
         """更新样式"""
@@ -132,8 +154,19 @@ class StatusIndicator(QWidget):
         """
 
         if hasattr(self, 'icon_label'):
-            self.icon_label.setStyleSheet(style)
+            self.icon_label.setPixmap(
+                icon_pixmap(self.icon_name, self.ICON_PX, self._icon_color())
+            )
+            self.icon_label.setStyleSheet("background: transparent; border: none;")
         self.text_label.setStyleSheet(style)
+
+    def set_icon(self, icon_name: str):
+        """替换图标（业务名），并立即重绘。"""
+        self.icon_name = icon_name
+        if hasattr(self, 'icon_label'):
+            self.icon_label.setPixmap(
+                icon_pixmap(self.icon_name, self.ICON_PX, self._icon_color())
+            )
 
     def set_text(self, text):
         """设置文本"""
@@ -163,7 +196,7 @@ class DocumentStatusIndicator(QWidget):
 
         # 修改状态指示器
         self.modified_indicator = StatusIndicator(
-            IconManager.get_icon_text('edit'),
+            'edit',
             "未修改",
             "secondary"
         )
@@ -181,16 +214,20 @@ class DocumentStatusIndicator(QWidget):
         layout.addWidget(separator)
 
         # 图层数量指示器
+        #
+        # ⚠ 这里原来传的是 emoji "📋"。emoji 不是图标名，`resolve()` 解析不到会
+        # 回退成兜底问号图标 —— 状态栏里一直显示「? 0 图层」（2026-10-28 实测）。
+        # 图标必须传业务名或 Lucide 名。
         self.layer_count_indicator = StatusIndicator(
-            "📋",
+            "layers-3",
             "0 图层",
             "secondary"
         )
         layout.addWidget(self.layer_count_indicator)
 
-        # 选中状态指示器
+        # 选中状态指示器（同上，原来传的是 emoji "👆"）
         self.selection_indicator = StatusIndicator(
-            "👆",
+            "mouse-pointer-2",
             "未选中",
             "secondary"
         )
@@ -306,7 +343,7 @@ class LayerStatusPanel(QWidget):
 
         # 可见性状态
         self.visibility_status = StatusIndicator(
-            IconManager.get_icon_text('visible'),
+            'visible',
             "可见",
             "success"
         )
@@ -314,7 +351,7 @@ class LayerStatusPanel(QWidget):
 
         # 锁定状态
         self.lock_status = StatusIndicator(
-            IconManager.get_icon_text('unlock'),
+            'unlock',
             "未锁定",
             "secondary"
         )
@@ -322,7 +359,7 @@ class LayerStatusPanel(QWidget):
 
         # 混合模式状态
         self.blend_status = StatusIndicator(
-            IconManager.get_icon_text('blend'),
+            'blend',
             "正常",
             "secondary"
         )
@@ -330,7 +367,7 @@ class LayerStatusPanel(QWidget):
 
         # 不透明度状态
         self.opacity_status = StatusIndicator(
-            IconManager.get_icon_text('opacity'),
+            'opacity',
             "100%",
             "secondary"
         )
@@ -472,61 +509,101 @@ class ProgressIndicator(QWidget):
         self.hide()
 
 
-class ToastMessage(QLabel):
-    """吐司消息组件"""
+class ToastMessage(QWidget):
+    """吐司消息组件。
+
+    2026-10-28 改造：原来是 `QLabel` 子类，把字符图标（✓ ⚠ ✗ ℹ）直接拼进
+    文字字符串里。字符图标依赖系统字体、与 SVG 笔画重量不同，已全部移除。
+    现在改为「SVG 图标 QLabel + 文字 QLabel」的水平组合，图标是真实位图。
+
+    对外接口保持：`text()` / `setText()` 继续可用（代理到内部文字标签）。
+    """
+
+    #: 图标尺寸：与 13px 粗体文字并排时视觉重量相当。
+    ICON_PX = 16
+
+    #: 消息类型 → (背景色组, 文字色组, 图标名)
+    _VARIANTS = {
+        "success": ('state', 'success', IconName.SUCCESS),
+        "warning": ('state', 'warning', IconName.WARNING),
+        "error": ('state', 'error', IconName.ERROR),
+        "info": ('primary', 'main', IconName.INFO),
+    }
 
     def __init__(self, message="", message_type="info", parent=None):
-        super().__init__(message, parent)
+        super().__init__(parent)
         self.message_type = message_type
+        self._message = message
         self.setup_ui()
         self.setup_animation()
 
     def setup_ui(self):
         """设置UI"""
         vh = VisualHierarchy
+        group, key, self._icon_name = self._VARIANTS.get(
+            self.message_type, self._VARIANTS["info"]
+        )
+        bg_color = vh.get_color(group, key)
+        text_color = vh.get_color('primary', 'contrast')
 
-        # 设置字体
-        self.setFont(vh.get_font('body'))
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(
+            vh.get_spacing('lg'), vh.get_spacing('md'),
+            vh.get_spacing('lg'), vh.get_spacing('md'),
+        )
+        layout.setSpacing(vh.get_spacing('sm'))
 
-        # 根据消息类型设置样式
-        if self.message_type == "success":
-            bg_color = vh.get_color('state', 'success')
-            text_color = vh.get_color('primary', 'contrast')
-            icon = IconManager.get_icon_text('success')
-        elif self.message_type == "warning":
-            bg_color = vh.get_color('state', 'warning')
-            text_color = vh.get_color('primary', 'contrast')
-            icon = IconManager.get_icon_text('warning')
-        elif self.message_type == "error":
-            bg_color = vh.get_color('state', 'error')
-            text_color = vh.get_color('primary', 'contrast')
-            icon = IconManager.get_icon_text('remove')
-        else:  # info
-            bg_color = vh.get_color('primary', 'main')
-            text_color = vh.get_color('primary', 'contrast')
-            icon = IconManager.get_icon_text('info')
+        # 图标（真实 SVG 位图）
+        self.icon_label = QLabel()
+        self.icon_label.setFixedSize(self.ICON_PX, self.ICON_PX)
+        self.icon_label.setPixmap(
+            icon_pixmap(self._icon_name, self.ICON_PX, text_color)
+        )
+        self.icon_label.setStyleSheet("background: transparent; border: none;")
+        layout.addWidget(self.icon_label, 0, Qt.AlignVCenter)
 
-        # 添加图标到文本前
-        current_text = self.text()
-        self.setText(f"{icon} {current_text}")
+        # 文字
+        self.text_label = QLabel(self._message)
+        self.text_label.setFont(vh.get_font('body'))
+        self.text_label.setStyleSheet(
+            f"QLabel {{ color: {text_color}; background: transparent; border: none; }}"
+        )
+        layout.addWidget(self.text_label, 1, Qt.AlignVCenter)
 
-        # 应用样式
-        self.setStyleSheet(f"""
-            QLabel {{
-                background-color: {bg_color};
-                color: {text_color};
-                border: none;
-                border-radius: {vh.get_radius('md')}px;
-                padding: {vh.get_spacing('md')}px {vh.get_spacing('lg')}px;
-                font-weight: bold;
-            }}
-        """)
+        # 应用容器样式
+        #
+        # ⚠ 不用 QSS 画背景，改用 paintEvent 自绘。
+        # 原因（2026-10-28 实测）：这个控件是 QWidget 的 Python 子类，没有
+        # Q_OBJECT 元对象信息，QSS 类名选择器匹配不到；而 `WA_TranslucentBackground`
+        # （toast 是浮层，必须要）会让 QSS 的 background-color 被合成掉 ——
+        # 实测 4 种语义色全部渲染成 #000000 透明，语义色彻底丢失。
+        # 自绘圆角矩形在离屏与真实窗口下都稳定。
+        self._bg_color = bg_color
+        self._radius = vh.get_radius('md')
 
         # 设置窗口属性
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setAlignment(Qt.AlignCenter)
 
+    def paintEvent(self, event):
+        """自绘圆角背景（不依赖 QSS，见 setup_ui 的说明）。"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(self._bg_color))
+        rect = self.rect()
+        painter.drawRoundedRect(rect, self._radius, self._radius)
+        painter.end()
+
+    # ── QLabel 兼容接口（旧调用方可能用到）────────────────────────
+    def text(self):
+        return self.text_label.text()
+
+    def setText(self, value):
+        self._message = value
+        self.text_label.setText(value)
+
+    # ── 动画 ────────────────────────────────────────────────────
     def setup_animation(self):
         """设置动画"""
         self.opacity_effect = None

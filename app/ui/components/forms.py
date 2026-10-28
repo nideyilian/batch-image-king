@@ -187,11 +187,15 @@ class InputGroup(QFrame):
 class ColorSwatch(QPushButton):
     colorChanged = Signal(QColor)
 
+    # 色块标准尺寸（与 design_tokens.COLOR_SWATCH_SIZE 一致）。
+    SWATCH_WIDTH = 36
+    SWATCH_HEIGHT = 30
+
     def __init__(self, color="#000000", parent=None):
         super().__init__(parent)
         self.setProperty("role", "color-swatch")
         self.setAccessibleName("选择颜色")
-        self.setFixedSize(36, 30)
+        self.setFixedSize(self.SWATCH_WIDTH, self.SWATCH_HEIGHT)
         self._color = QColor()
         self.set_color(color)
 
@@ -204,6 +208,17 @@ class ColorSwatch(QPushButton):
             raise ValueError("invalid color: %s" % color)
         if candidate != self._color:
             self._color = candidate
-            self.setStyleSheet("background-color: %s;" % candidate.name(QColor.HexArgb))
+            # ⚠ 内联 QSS 会**整体覆盖**外部 `QPushButton[role="color-swatch"]` 规则
+            # （Qt 里控件自身 styleSheet 优先级高于应用级 QSS）。
+            # 所以高度必须在这里一并声明，否则全局 `QPushButton { min-height: 28px }`
+            # 会把它撑到 38px（实测：期望 30，实际 38，破坏属性面板尺寸契约）。
+            self.setStyleSheet(
+                "background-color: %s; min-height: %dpx; max-height: %dpx;"
+                % (
+                    candidate.name(QColor.HexArgb),
+                    self.SWATCH_HEIGHT,
+                    self.SWATCH_HEIGHT,
+                )
+            )
             self.setToolTip(candidate.name(QColor.HexArgb))
             self.colorChanged.emit(QColor(candidate))

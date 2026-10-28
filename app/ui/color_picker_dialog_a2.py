@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui.design_spec import Space as _Space, Width as _Width, IconSize as _IconSize
 from app.ui.dialog_a2 import DialogA2
 from app.ui.theme import Theme
 
@@ -97,7 +98,7 @@ class _HueStrip(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._hue = 0
-        self.setFixedWidth(30)
+        self.setFixedWidth(_Width.VALUE_LABEL)
         self.setMinimumHeight(320)
         self.setCursor(Qt.PointingHandCursor)
 
@@ -169,7 +170,7 @@ class _ColorSwatchButton(QPushButton):
         super().__init__(parent)
         self._color = QColor(color)
         self.setProperty("color", self._color)
-        self.setFixedSize(24, 24)
+        self.setFixedSize(_IconSize.MD, _IconSize.MD)
         self.setCursor(Qt.PointingHandCursor)
         self.setAccessibleName(f"颜色 {self._color.name()}")
         self._refresh_style(False)
@@ -318,7 +319,7 @@ class ColorPickerDialogA2(QDialog):
 
         divider = QFrame()
         divider.setProperty("role", "dialogDivider")
-        divider.setFixedHeight(1)
+        divider.setFixedHeight(_Width.HAIRLINE)
         root.addWidget(divider)
 
         body = QHBoxLayout()
@@ -328,7 +329,7 @@ class ColorPickerDialogA2(QDialog):
         field_panel = QWidget()
         field_layout = QHBoxLayout(field_panel)
         field_layout.setContentsMargins(0, 0, 0, 0)
-        field_layout.setSpacing(10)
+        field_layout.setSpacing(_Space.SM)
         self.color_field = _SaturationValueField(self)
         self.hue_strip = _HueStrip(self)
         field_layout.addWidget(self.color_field, 1)

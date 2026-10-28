@@ -49,19 +49,8 @@ class IntegratedTextEditorDialog(QDialog):
         quick_buttons_layout = QHBoxLayout()
 
         self.apply_btn = QPushButton("应用")
-        self.apply_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1677ff;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #4096ff;
-            }
-        """)
+        # 主色由 tokens_v2 统一控制，此处不再写死色值
+        self.apply_btn.setProperty("variant", "primary")
 
         self.clear_btn = QPushButton("清空")
         self.clear_btn.setStyleSheet("""
@@ -128,20 +117,8 @@ class IntegratedTextEditorDialog(QDialog):
         bottom_buttons_layout = QHBoxLayout()
 
         self.ok_btn = QPushButton("确定")
-        self.ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1677ff;
-                color: white;
-                border: none;
-                padding: 8px 24px;
-                border-radius: 4px;
-                font-weight: bold;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #4096ff;
-            }
-        """)
+        # 主色由 tokens_v2 统一控制，此处不再写死色值
+        self.ok_btn.setProperty("variant", "primary")
 
         self.cancel_btn = QPushButton("取消")
         self.cancel_btn.setStyleSheet("""

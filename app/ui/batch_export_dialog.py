@@ -15,8 +15,30 @@ from app.ui.batch_export_dialog_settings import BatchExportDialogSettingsMixin
 from app.ui.batch_export_dialog_ui import BatchExportDialogUiMixin
 from app.ui.batch_export_dialog_progress import BatchExportDialogProgressMixin
 
-class BatchExportDialog(QDialog, BatchExportDialogSettingsMixin, BatchExportDialogUiMixin, BatchExportDialogProgressMixin):
-    """批量导出对话框"""
+class BatchExportDialog(
+    BatchExportDialogSettingsMixin,
+    BatchExportDialogUiMixin,
+    BatchExportDialogProgressMixin,
+    QDialog,
+):
+    """批量导出对话框。
+
+    ⚠ 基类顺序：mixin **必须**排在 QDialog 之前。
+
+    原写法是 `class BatchExportDialog(QDialog, ...各 Mixin)`，MRO 里 QDialog
+    在第一位，于是 QDialog 自己的 `reject` / `closeEvent` 抢在 mixin 之前解析，
+    mixin 里那两份实现**从来没被执行过**。实测确认：
+
+        BatchExportDialog.reject    → QDialog.reject      ❌
+        BatchExportDialog.closeEvent→ QDialog.closeEvent  ❌
+
+    而这两份实现是有实际作用的：
+    - `closeEvent`：导出中关闭窗口时只隐藏、不取消导出
+    - `reject`：取消时仍然保存设置
+
+    顺序改对后 `super().xxx()` 依然能走到 QDialog（QDialog 在 MRO 末尾），
+    所以 mixin 里的 super 调用不受影响。
+    """
 
     SETTINGS_ORG = "批图王"
     SETTINGS_APP = "BatchExportDialog"

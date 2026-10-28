@@ -19,6 +19,21 @@ from PySide6.QtGui import QFontDatabase, QGuiApplication
 logger = logging.getLogger(__name__)
 
 
+def _is_alive(obj) -> bool:
+    """判断 QObject 的 C++ 侧是否仍存活。
+
+    后台线程收尾时应用程序可能已经在退出，此时对象已被销毁；
+    对销毁后的对象 emit 信号会抛 RuntimeError。
+    """
+    try:
+        from shiboken6 import isValid
+
+        return bool(isValid(obj))
+    except Exception:
+        # 拿不到 shiboken 就宁可直接发：漏掉一次保护好过吞掉正常信号
+        return True
+
+
 class WorkspaceFontCatalogMixin:
     def _load_text_font_names(self, layer):
         try:
@@ -350,6 +365,12 @@ class WorkspaceFontCatalogMixin:
                     logger.debug("字体 catalog Qt 兜底失败", exc_info=True)
         except Exception:
             logger.debug("后台预加载字体目录失败", exc_info=True)
+        # 线程是 daemon，进程退出时不会等它；如果此时 C++ 对象已经销毁，
+        # emit 会抛 `RuntimeError: Signal source has been deleted`。
+        # 每次退出都往日志里打两段红色 traceback，看起来像严重故障，
+        # 实际只是收尾竞态。这里先确认对象还活着。
+        if not _is_alive(self):
+            return
         self._fontCatalogLoaded.emit(options, tree)
 
     @Slot(object, object)

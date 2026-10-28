@@ -4,6 +4,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QDialog, QDialogButtonBox, QTextEdit, QSizePolicy)
 from PySide6.QtCore import Qt, Signal, QTimer, QRect, QPoint
 from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter, QDropEvent, QPen, QBrush
+
+from app.ui.tokens_v2 import Color
+from app.ui.design_tokens import Tokens
 import sys
 import os
 import builtins
@@ -38,6 +41,8 @@ except ImportError:
     from app.models.shaped_layer_new import ShapedLayer
 
 from app.ui.icon_manager import IconManager, create_random_button, create_lock_button, create_visibility_button
+from app.ui.icon_library import icon_pixmap
+from app.ui.design_spec import Scale as _Scale, IconSize as _IconSize
 from app.ui.visual_hierarchy import VisualHierarchy
 from app.ui.shaped_layer_panel import ShapedLayerPanel
 from app.models.layer_group import LayerGroup
@@ -66,12 +71,16 @@ class LayerItem(QWidget):
         self.setObjectName("layerItem")
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(5 + depth * 18, 3, 5, 3)
-        layout.setSpacing(5)
+        # 4px 栅格：原来 margins 5 / spacing 6 都是非栅格值。
+        # 宽度上：24+24+16+label+… 加上 spacing 与边距后总宽 176 > 父宽 168，
+        # 图层行会横向溢出（文字被切）。改成 4px 后省下 2(spacing×2) + 2(边距)，
+        # 纵向也能容纳 24px 的图标按钮（原 18px，已提到 WCAG 的 24 下限）。
+        layout.setContentsMargins(4 + depth * 16, 4, 4, 4)
+        layout.setSpacing(4)
 
         # 可见性切换按钮 - 改为使用按钮显示眼睛图标
         self.visibility_btn = QPushButton()
-        self.visibility_btn.setFixedSize(18, 18)
+        self.visibility_btn.setFixedSize(_Scale.PX[_Scale.SM], _Scale.PX[_Scale.SM])
         self.visibility_btn.setCheckable(True)
         self.visibility_btn.setChecked(bool(getattr(layer, 'visible', True)))
         self.visibility_btn.clicked.connect(self.toggle_visibility)
@@ -81,7 +90,7 @@ class LayerItem(QWidget):
 
         # 锁定图标按钮
         self.lock_btn = QPushButton()
-        self.lock_btn.setFixedSize(18, 18)
+        self.lock_btn.setFixedSize(_Scale.PX[_Scale.SM], _Scale.PX[_Scale.SM])
         self.lock_btn.setCheckable(True)
         self.lock_btn.setChecked(bool(getattr(layer, 'locked', False)))
         self.lock_btn.setObjectName("lockButton")
@@ -91,7 +100,7 @@ class LayerItem(QWidget):
 
         # 绑定状态图标
         self.bind_label = QLabel()
-        self.bind_label.setFixedSize(16, 16)
+        self.bind_label.setFixedSize(_IconSize.SM, _IconSize.SM)
         self.bind_label.setObjectName("bindLabel")
         self.update_bind_icon()
         layout.addWidget(self.bind_label)
@@ -101,13 +110,18 @@ class LayerItem(QWidget):
         self.name_label = QLabel(layer_name)
         self.name_label.setObjectName("nameLabel")
         self.name_label.setMinimumHeight(16)
-        self.name_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # 名称用 Preferred 而不是 Expanding：
+        # Expanding 会吃掉全部剩余空间，把右侧尺寸标签挤到边界，
+        # 同时 stretch 又占住余量 —— 两者叠加后内层 label 只分到 65px，
+        # 明明 99px 就够显示的「仅限3天 · 手慢无」被截成「仅限…慢无」。
+        self.name_label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.name_label.setWordWrap(False)
         self.name_label.setToolTip(layer_name)
         self.name_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        layout.addWidget(self.name_label)
+        layout.addWidget(self.name_label, 1)
 
-        layout.addStretch()
+        # 不再 addStretch()：名称本身就能撑开剩余空间，
+        # 多加一个 stretch 只会跟名称抢宽度。
 
         # 图层尺寸信息
         size_text = "Group" if is_layer_group(layer) else f"{getattr(layer, 'width', 0)}x{getattr(layer, 'height', 0)}"
@@ -115,7 +129,11 @@ class LayerItem(QWidget):
         self.size_label.setObjectName("sizeLabel")
         self.size_label.setMinimumHeight(16)
         self.size_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        layout.addWidget(self.size_label)
+        # 尺寸是次要信息（281x50），窄面板下应让位给图层名。
+        # 设成 Ignored：布局不会按它的 sizeHint 预留宽度，优先把空间给名称。
+        self.size_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self.size_label.setMinimumWidth(0)
+        layout.addWidget(self.size_label, 0)
 
         # 应用样式并更新显示
         self.apply_style()
@@ -145,7 +163,12 @@ class LayerItem(QWidget):
         if current_name != layer_name:
             self.name_label.setToolTip(layer_name)
             fm = self.name_label.fontMetrics()
-            elided = fm.elidedText(layer_name, Qt.ElideMiddle, max(80, self.name_label.width()))
+            # 用标签真实可用宽度做省略，不再 `max(80, width)`。
+            # 原来强制下限 80px：当面板很窄（图层面板默认 180px，扣掉图标/锁/
+            # 尺寸标签后名称区只剩 ~60px）时，仍按 80px 排版，
+            # 结果「仅限3天·手慢无」被截成「仅限3...手慢无」——明明还有空间。
+            avail = max(24, self.name_label.width() - 2)
+            elided = fm.elidedText(layer_name, Qt.ElideMiddle, avail)
             self.name_label.setText(elided)
             content_changed = True
 
@@ -173,7 +196,9 @@ class LayerItem(QWidget):
         if hasattr(self, 'name_label') and self.name_label:
             text = self._display_name()
             fm = self.name_label.fontMetrics()
-            elided = fm.elidedText(text, Qt.ElideMiddle, max(80, self.name_label.width()))
+            # 与上面保持一致：按真实可用宽度省略（下限 24px 防止宽度为 0 时出错）
+            avail = max(24, self.name_label.width() - 2)
+            elided = fm.elidedText(text, Qt.ElideMiddle, avail)
             self.name_label.setText(elided)
 
         # 减少调试输出 - 只在内容实际变化时输出
@@ -195,66 +220,50 @@ class LayerItem(QWidget):
         # 基础组件样式
         style = f"""
         QWidget#layerItem {{
-            background: {'#253244' if self.is_selected else '#1F1F1F'};
-            border: 1px solid {'#2F9CF4' if self.is_selected else '#303033'};
+            background: {Color.surface_selected if self.is_selected else Color.surface_3};
+            border: 1px solid {Color.accent if self.is_selected else Color.border_strong};
             border-radius: 5px;
             padding: 0px;
         }}
 
-        QPushButton#visibilityButton {{
+        /* 可见 / 锁定 两个小图标按钮。
+
+           **不加描边**：原来每个按钮都有 1px 描边 + 圆角，一行图层里两个框
+           贴在文字左边，视觉上像两个小方块占着半行位置，又乱又重。
+           改成默认完全透明、只在 hover / checked 时给底色。
+
+           也**不写 min-width/min-height**：全局 QSS 的 QPushButton 有
+           `padding: 0 14px`，min 尺寸 + padding 叠加会把 setFixedSize(_IconSize.MD, _IconSize.MD)
+           的按钮撑成 18x38（实测 min>max 的矛盾态），一行列表里出现竖长条。 */
+        QPushButton#visibilityButton, QPushButton#lockButton {{
             background: transparent;
-            border: 1px solid {vh.get_color('border', 'secondary')};
+            border: none;
             border-radius: {vh.get_radius('sm')}px;
-            color: {vh.get_color('text', 'secondary')};
+            color: {vh.get_color('text', 'hint')};
             font-size: 12px;
             padding: 0px;
-            min-width: 16px;
-            min-height: 16px;
         }}
 
-        QPushButton#visibilityButton:hover {{
+        QPushButton#visibilityButton:hover, QPushButton#lockButton:hover {{
             background: {vh.get_color('interactive', 'hover')};
-            border: 1px solid {vh.get_color('border', 'focus')};
             color: {vh.get_color('text', 'primary')};
         }}
 
-        QPushButton#visibilityButton:pressed {{
+        QPushButton#visibilityButton:pressed, QPushButton#lockButton:pressed {{
             background: {vh.get_color('interactive', 'active')};
-            border: 1px solid {vh.get_color('border', 'focus')};
         }}
 
         QPushButton#visibilityButton:checked {{
             background: {vh.get_color('interactive', 'selected')};
-            border: 1px solid {vh.get_color('border', 'focus')};
             color: {vh.get_color('text', 'primary')};
-        }}
-
-        QPushButton#lockButton {{
-            background: transparent;
-            border: 1px solid {vh.get_color('border', 'secondary')};
-            border-radius: {vh.get_radius('sm')}px;
-            color: {vh.get_color('text', 'secondary')};
-            font-size: 12px;
-            padding: 0px;
-            min-width: 16px;
-            min-height: 16px;
-        }}
-
-        QPushButton#lockButton:hover {{
-            background: {vh.get_color('interactive', 'hover')};
-            border: 1px solid {vh.get_color('border', 'focus')};
-            color: {vh.get_color('text', 'primary')};
-        }}
-
-        QPushButton#lockButton:pressed {{
-            background: {vh.get_color('interactive', 'active')};
-            border: 1px solid {vh.get_color('border', 'focus')};
         }}
 
         QLabel#bindLabel {{
             background: transparent;
             color: {vh.get_color('primary', 'light')};
-            font-size: 10px;
+            /* 图层面板里"绑定"角标。原来 10px 不在字号档位上（最小档 11），
+               小到中文已经糊了（10px 中文笔画会粘连）。取 CAPTION(11)。 */
+            font-size: {Tokens.FONT_SIZE_SMALL}px;
         }}
         """
 
@@ -272,7 +281,7 @@ class LayerItem(QWidget):
         QLabel#nameLabel {{
             background: transparent;
             color: {name_color};
-            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            font-family: "Microsoft YaHei UI";
             font-size: {vh.FONTS['body']['size']}px;
             font-weight: {name_weight};
             border: none;
@@ -282,7 +291,7 @@ class LayerItem(QWidget):
         QLabel#sizeLabel {{
             background: transparent;
             color: {size_color};
-            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            font-family: "Microsoft YaHei UI";
             font-size: {vh.FONTS['small']['size']}px;
             font-weight: normal;
             border: none;
@@ -463,30 +472,27 @@ class LayerItem(QWidget):
             binding_info = document.binding_manager.get_layer_binding_info(self.layer)
             if binding_info:
                 group_id, group_name = binding_info
-                # 显示绑定图标
-                icon_text = IconManager.get_icon_text('link')
-                self.bind_label.setText(icon_text)
+                # 显示绑定图标（真实 Lucide SVG 位图，不再用字符 ∞）
+                self.bind_label.setPixmap(icon_pixmap('link', 11, Color.accent))
                 self.bind_label.setAlignment(Qt.AlignCenter)
-                self.bind_label.setStyleSheet("""
-                    QLabel {
-                        color: #2F9CF4;
-                        font-weight: bold;
-                        background-color: rgba(0, 122, 204, 0.1);
-                        border: 1px solid #2F9CF4;
+                self.bind_label.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: {Color.accent_subtle};
+                        border: 1px solid {Color.accent};
                         border-radius: 2px;
-                    }
+                    }}
                 """)
                 tooltip = f"图层已绑定\\n绑定组: {group_name}"
                 self.bind_label.setToolTip(tooltip)
             else:
                 # 隐藏绑定图标
-                self.bind_label.setText("")
+                self.bind_label.clear()
                 self.bind_label.setStyleSheet("")
                 self.bind_label.setToolTip("")
         except Exception as e:
             print(f"更新绑定图标时出错: {e}")
             # 出错时隐藏图标
-            self.bind_label.setText("")
+            self.bind_label.clear()
             self.bind_label.setStyleSheet("")
             self.bind_label.setToolTip("")
 

@@ -95,23 +95,8 @@ class SimpleTextEditorDialog(QDialog):
         self.ok_btn = QPushButton("确定")
 
         # 设置主要按钮样式
-        self.ok_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1677ff;
-                color: white;
-                border: none;
-                padding: 8px 24px;
-                border-radius: 4px;
-                font-weight: bold;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #4096ff;
-            }
-            QPushButton:pressed {
-                background-color: #0d5bb8;
-            }
-        """)
+        # 主色由 tokens_v2 统一控制，此处不再写死色值
+        self.ok_btn.setProperty("variant", "primary")
 
         self.cancel_btn.setStyleSheet("""
             QPushButton {

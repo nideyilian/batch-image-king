@@ -10,6 +10,7 @@
 from PySide6.QtWidgets import QTextEdit
 from PySide6.QtGui import QTextCharFormat, QTextCursor, QTextOption, QFont, QColor, QPainter
 from PySide6.QtCore import Qt, QTimer, Signal, QPoint
+from app.ui.tokens_v2 import Color
 from app.constants import DEFAULT_TEXT_FONT_FAMILY
 
 
@@ -41,13 +42,15 @@ class CanvasTextEditor(QTextEdit):
             pass
 
         self.setFrameShape(QTextEdit.NoFrame)
+        # 画布内直接编辑文字的浮层：半透明底让下层图像可见，
+        # 虚线框表示「这是一个临时编辑区」。颜色走令牌，与主题保持一致。
         self.setStyleSheet(
-            "QTextEdit {"
-            "  background-color: rgba(28, 30, 38, 200);"
-            "  color: #f2f2f2;"
-            "  border: 1px dashed #2a9df4;"
-            "  padding: 2px;"
-            "}"
+            f"QTextEdit {{"
+            f"  background-color: {Color.surface_2};"
+            f"  color: {Color.text_primary};"
+            f"  border: 1px dashed {Color.border_focus};"
+            f"  padding: 2px;"
+            f"}}"
         )
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)

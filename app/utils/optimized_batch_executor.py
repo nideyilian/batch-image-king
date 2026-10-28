@@ -22,6 +22,11 @@ from app.utils.obe_plan_execution import OptimizedBatchExecutorPlanExecution
 from app.utils.obe_task_render import OptimizedBatchExecutorTaskRender
 from app.utils.obe_io_export import OptimizedBatchExecutorIoExport
 from app.utils.obe_task_render import SaveTaskResult  # 兼容 re-export
+# 导出报告构造函数在本模块被调用 6 次（成功/失败/取消各分支），
+# 但历史上从未导入 —— 整段报告构建被 `except: pass` 静默吞掉，
+# 导致 document._last_export_report 永远为 None：
+# 界面上的导出详情、降级汇总、吞吐统计全部读不到。
+from app.utils.export_metrics import build_export_report
 import logging
 
 logger = logging.getLogger(__name__)
@@ -189,6 +194,10 @@ class OptimizedBatchExportManager:
             'reasons': []
         }
 
+        # 提前占位：下面多处异常兜底分支会读取它的降级统计，
+        # 若构造阶段就抛异常，未初始化会导致 UnboundLocalError 掩盖真实错误。
+        precomputer = None
+
         # 验证输出目录
         try:
             # 测试目录是否存在且可写
@@ -327,6 +336,15 @@ class OptimizedBatchExportManager:
             )
             precompute_time = max(0.0, time.time() - precompute_start_time)
             precompute_diagnostics = dict(getattr(plan, 'precompute_diagnostics', {}) or {})
+
+            # 把预计算阶段的降级事件并入诊断信息：走同一条上报链路，
+            # 日志、导出报告、界面提示都能看到，不用另开通道。
+            if precomputer is not None and hasattr(precomputer, 'degradations') and precomputer.degradations.has_any():
+                precompute_diagnostics['degradations'] = list(precomputer.degradations.summary())
+                precompute_diagnostics['degradation_total'] = int(precomputer.degradations.total)
+                for line in precomputer.degradations.summary():
+                    logger.warning("%s", line)
+
             precompute_summary = OptimizedBatchExportManager._summarize_precompute_diagnostics(precompute_diagnostics)
             runtime_tuning = OptimizedBatchExportManager._derive_runtime_tuning_plan(
                 document=document,
@@ -511,6 +529,17 @@ class OptimizedBatchExportManager:
                     'memory_cache_clear_events': int(stats.get('memory_cache_clear_events', 0) or 0),
                     'runtime_fallback_attempted': bool(fallback_attempted),
                     'runtime_fallback_succeeded': bool(fallback_succeeded),
+                    # 预计算阶段的降级事件（素材去重失效、索引错位等）。
+                    # 这些不会让导出失败，但会让结果「对但不对」——必须上报，
+                    # 否则用户只看到图不符合预期却无从排查。
+                    'precompute_degradations': int(
+                        precomputer.degradations.total if precomputer is not None and hasattr(precomputer, 'degradations') else 0
+                    ),
+                    'precompute_degradation_detail': (
+                        list(precomputer.degradations.summary())
+                        if precomputer is not None and hasattr(precomputer, 'degradations') and precomputer.degradations.has_any()
+                        else []
+                    ),
                 }
                 report = build_export_report(
                     requested_count=count,

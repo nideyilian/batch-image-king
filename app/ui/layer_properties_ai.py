@@ -151,7 +151,7 @@ class LayerPropertiesAi(object):
         if hasattr(self, "source_path_edit"):
             self.source_path_edit.setText(output_dir)
         if hasattr(self, "current_image_label"):
-            self.current_image_label.setText("当前图像: 无")
+            self.current_image_label.setText("无")
 
         if self.document:
             if hasattr(self.document, "_invalidate_render_cache"):

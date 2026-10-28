@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from app.ui.design_spec import Width as _Width
+from app.ui.tokens_v2 import Color
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 """
 简化的添加文字图层对话框
@@ -122,7 +124,7 @@ class AddTextLayerDialog(QDialog):
         self.font_size_spin.setRange(6, 240)
         self.font_size_spin.setValue(24)
         self.font_size_spin.setSuffix(" px")
-        self.font_size_spin.setFixedSize(92, DialogA2.CONTROL_HEIGHT)
+        self.font_size_spin.setFixedSize(_Width.VALUE_LABEL, DialogA2.CONTROL_HEIGHT)
         self.font_size_spin.valueChanged.connect(self._refresh_core_summary)
         params_row.addWidget(self.font_size_spin)
         params_row.addWidget(self._field_label("对齐方式"))
@@ -248,7 +250,7 @@ class AddTextLayerDialog(QDialog):
             self.text_color = (color.red(), color.green(), color.blue(), color.alpha())
             self.color_btn.setStyleSheet(
                 f"background-color: rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()});"
-                "color: #FFFFFF; border-color: #55B2FF; font-weight: 700;"
+                f"color: #FFFFFF; border-color: {Color.accent_hover}; font-weight: 700;"
             )
 
 

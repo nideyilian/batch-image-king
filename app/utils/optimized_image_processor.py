@@ -25,12 +25,6 @@ try:
 except ImportError:
     NUMBA_AVAILABLE = False
 
-try:
-    import scipy.ndimage
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-
 
 class OptimizedImageProcessor:
     """优化图像处理器"""
@@ -38,12 +32,10 @@ class OptimizedImageProcessor:
     def __init__(self):
         self.use_cv2 = CV2_AVAILABLE
         self.use_numba = NUMBA_AVAILABLE
-        self.use_scipy = SCIPY_AVAILABLE
-        
+
         safe_print(f"[图像处理] 优化库状态:")
         safe_print(f"  - OpenCV: {'✓' if self.use_cv2 else '✗'}")
         safe_print(f"  - Numba: {'✓' if self.use_numba else '✗'}")
-        safe_print(f"  - SciPy: {'✓' if self.use_scipy else '✗'}")
     
     def fast_resize(self, image: Image.Image, size: Tuple[int, int], 
                    quality: str = 'high') -> Image.Image:
@@ -306,10 +298,7 @@ class OptimizedImageProcessor:
         
         if self.use_cv2:
             return self._cv2_gaussian_blur(image, radius)
-        elif self.use_scipy:
-            return self._scipy_gaussian_blur(image, radius)
-        else:
-            return image.filter(ImageFilter.GaussianBlur(radius=radius))
+        return image.filter(ImageFilter.GaussianBlur(radius=radius))
     
     def _cv2_gaussian_blur(self, image: Image.Image, radius: float) -> Image.Image:
         """使用OpenCV进行高斯模糊"""
@@ -324,28 +313,6 @@ class OptimizedImageProcessor:
             
         except Exception as e:
             safe_print(f"[图像处理] OpenCV模糊失败，回退到PIL: {e}")
-            return image.filter(ImageFilter.GaussianBlur(radius=radius))
-    
-    def _scipy_gaussian_blur(self, image: Image.Image, radius: float) -> Image.Image:
-        """使用SciPy进行高斯模糊"""
-        try:
-            img_array = np.array(image, dtype=np.float32)
-            
-            # 对每个通道分别进行模糊
-            if len(img_array.shape) == 3:
-                for i in range(img_array.shape[2]):
-                    img_array[:, :, i] = scipy.ndimage.gaussian_filter(
-                        img_array[:, :, i], sigma=radius
-                    )
-            else:
-                img_array = scipy.ndimage.gaussian_filter(img_array, sigma=radius)
-            
-            # 转换回图像
-            img_array = np.clip(img_array, 0, 255).astype(np.uint8)
-            return Image.fromarray(img_array, image.mode)
-            
-        except Exception as e:
-            safe_print(f"[图像处理] SciPy模糊失败，回退到PIL: {e}")
             return image.filter(ImageFilter.GaussianBlur(radius=radius))
     
     def batch_process_images(self, images: List[Image.Image], 
@@ -401,11 +368,10 @@ class OptimizedImageProcessor:
         return {
             'cv2_available': self.use_cv2,
             'numba_available': self.use_numba,
-            'scipy_available': self.use_scipy,
             'recommended_batch_size': 50 if self.use_cv2 else 20,
             'supports_fast_resize': self.use_cv2,
             'supports_fast_rotate': self.use_cv2,
-            'supports_fast_blur': self.use_cv2 or self.use_scipy,
+            'supports_fast_blur': self.use_cv2,
             'supports_fast_composite': self.use_numba
         }
 

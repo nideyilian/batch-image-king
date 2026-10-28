@@ -6,6 +6,8 @@ from PySide6.QtWidgets import (
     QLabel, QFrame, QHBoxLayout, QProgressBar, QPushButton, QVBoxLayout, QWidget)
 from PySide6.QtCore import Qt, Signal
 
+from app.ui.design_spec import Space as _Space
+
 
 class Badge(QLabel):
     VARIANTS = ("default", "primary", "destructive", "success", "warning", "outline")
@@ -114,7 +116,8 @@ class Spinner(QProgressBar):
         self.setProperty("role", "spinner")
         self.setRange(0, 0)
         self.setTextVisible(False)
-        self.setFixedHeight(4)
+        # 细线进度条：4px 是 Space.XS，不用 Scale（那是控件高度档位）
+        self.setFixedHeight(_Space.XS)
 
 
 class Skeleton(QFrame):

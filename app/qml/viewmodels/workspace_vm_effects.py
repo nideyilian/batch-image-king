@@ -60,37 +60,55 @@ class WorkspaceEffectsMixin:
 
     @Slot(str, result=bool)
     def alignSelected(self, mode: str) -> bool:
+        """单个图层对齐到画板（旧版 app/ui/layer_panel_align.py 的单体语义）。
+
+        旧版对齐工具栏在「只选中一个图层」时这一组全部可用：左 / 水平居中 / 右 /
+        顶 / 垂直居中 / 底 / 完全居中 / 完全匹配画板大小。QML 侧必须一致。
+
+        两处细节与旧版对齐，别改成"看起来差不多"：
+
+        1. **按整体包围盒对齐，不是按主矩形**。图层开了分身或镜像后，可见范围
+           会超出 layer.x/width；只按主矩形算会出现"主体贴边、分身出界"。
+           offset 用来保留主图层相对包围盒的偏移（旧版同样处理）。
+        2. **same_size 会关掉分身**。否则包围盒永远铺不满画板，按钮点了像没反应。
+        """
         layer = self._selected_layer()
         if layer is None:
             return False
         mode = str(mode or "").lower()
-        width = int(getattr(layer, "width", 0))
-        height = int(getattr(layer, "height", 0))
         if mode == "same_size" and bool(getattr(layer, "use_original_size", False)):
             self._set_status("原始尺寸模式下无法匹配画板大小", toast=True)
             return False
+
+        min_x, min_y, total_width, total_height = self._layer_alignment_bounds(layer)
+        offset_x = float(getattr(layer, "x", 0)) - min_x
+        offset_y = float(getattr(layer, "y", 0)) - min_y
+        canvas_width = float(self.canvasWidth)
+        canvas_height = float(self.canvasHeight)
+
         alignments = {
-            "left": {"x": 0},
-            "hcenter": {"x": (self.canvasWidth - width) // 2},
-            "right": {"x": self.canvasWidth - width},
-            "top": {"y": 0},
-            "vcenter": {"y": (self.canvasHeight - height) // 2},
-            "bottom": {"y": self.canvasHeight - height},
+            "left": {"x": int(0 + offset_x)},
+            "hcenter": {"x": int((canvas_width - total_width) / 2 + offset_x)},
+            "right": {"x": int(canvas_width - total_width + offset_x)},
+            "top": {"y": int(0 + offset_y)},
+            "vcenter": {"y": int((canvas_height - total_height) / 2 + offset_y)},
+            "bottom": {"y": int(canvas_height - total_height + offset_y)},
             "center": {
-                "x": (self.canvasWidth - width) // 2,
-                "y": (self.canvasHeight - height) // 2,
+                "x": int((canvas_width - total_width) / 2 + offset_x),
+                "y": int((canvas_height - total_height) / 2 + offset_y),
             },
             "same_size": {
                 "x": 0,
                 "y": 0,
-                "width": self.canvasWidth,
-                "height": self.canvasHeight,
+                "width": int(canvas_width),
+                "height": int(canvas_height),
+                "clone_enabled": False,
             },
         }
         changes = alignments.get(mode)
         if changes is None:
             return False
-        return self._set_layer_attrs(self.selectedLayerIndex, changes, "对齐图层")
+        return self._set_layer_attrs(self.selectedLayerIndex, changes, "对齐图层到画板")
 
     @Slot(result=bool)
     def randomizeAllLayers(self) -> bool:

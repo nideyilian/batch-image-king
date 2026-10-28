@@ -695,8 +695,34 @@ class WorkspaceLayerOpsMixin:
             self._finish_arrangement("重新排序图层", f"已移动 {len(selected_objects)} 个图层", render=False)
         return True
 
+    def _layer_alignment_bounds(self, layer):
+        """图层（含分身 / 镜像）的整体包围盒，返回 (min_x, min_y, width, height)。
+
+        为什么不能直接用 layer.x/width：分身和镜像会把可见范围撑到图层矩形之外，
+        只按主矩形对齐会出现"看着对齐了、实际分身出界"的情况。
+        旧版 app/ui/layer_panel_align.py 为此写了三层分支（分身 / 镜像 / 元素填充），
+        这里复用命中测试已经在用的 `_layer_hit_positions`（同样含分身+镜像），
+        保证"用户点得到的位置"和"对齐算的位置"是同一套。
+        """
+        positions = self._layer_hit_positions(layer) or [
+            (float(getattr(layer, "x", 0)), float(getattr(layer, "y", 0)))
+        ]
+        width = float(getattr(layer, "width", 0) or 0)
+        height = float(getattr(layer, "height", 0) or 0)
+        min_x = min(px for px, _py in positions)
+        min_y = min(py for _px, py in positions)
+        max_x = max(px + width for px, _py in positions)
+        max_y = max(py + height for _px, py in positions)
+        return min_x, min_y, max_x - min_x, max_y - min_y
+
     @Slot(str, result=bool)
     def alignSelectedLayers(self, mode: str) -> bool:
+        """多选对齐：以首选图层为基准。
+
+        ⚠ 单选不走这里 —— 单选是「对齐到画板」，由 `alignSelected()` 负责。
+        QML 侧统一入口是 `window.alignCurrentSelection(mode)`，它按选中数量分发。
+        两处不要各写一份，否则工具栏和右键菜单会出现同一操作两种结果。
+        """
         indices = self._selected_content_indices()
         if len(indices) < 2:
             return False

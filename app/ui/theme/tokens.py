@@ -40,35 +40,46 @@ except Exception:  # pragma: no cover - 允许独立导入用于文档生成
 # ---------------------------------------------------------------------------
 # 主题调色板（shadcn/ui 语义令牌）
 # ---------------------------------------------------------------------------
+# P1 收敛（2026-10-27）：暗色主题真值改指向 tokens_v2
+#
+# 历史问题：本文件与 design_tokens.py 各维护一份色值，导致同一产品出现三套主色
+# （design_tokens 的 #2F9CF4、文字编辑器里的 Ant Design #1677FF/#4096FF、
+# 以及本文件的映射值）。现在唯一事实来源是 app/ui/tokens_v2.py。
+# `_T` 仅保留给亮色主题与历史调用方兜底。
+from app.ui.tokens_v2 import Color as _C
+from app.ui.tokens_v2 import Radius as _R
+
 _THEMES = {
-    # 暗色：直接复用 design_tokens，与现有画布/控件视觉同源
+    # 暗色：唯一事实来源 = app/ui/tokens_v2（方向 01 墨黑极简）
     "dark": {
-        "background":          _T.BG_PRIMARY,        # 主背景 / 面板
-        "foreground":          _T.TEXT_PRIMARY,      # 主文本
-        "card":                _T.BG_SECONDARY,      # 卡片 / 分组
-        "card-foreground":     _T.TEXT_PRIMARY,
-        "popover":             _T.BG_ELEVATED,       # 弹层 / 下拉
-        "popover-foreground":  _T.TEXT_PRIMARY,
-        "primary":             _T.ACCENT,            # 品牌主色（蓝）
-        "primary-foreground":  _T.TEXT_INVERTED,
-        "secondary":           _T.BG_TERTIARY,       # 次级面
-        "secondary-foreground":_T.TEXT_PRIMARY,
-        "muted":               _T.BG_TERTIARY,       # 弱化面
-        "muted-foreground":    _T.TEXT_MUTED,        # 次要文本
-        "accent":              _T.BG_SELECTED,       # hover / 选中面
-        "accent-foreground":   _T.TEXT_PRIMARY,
-        "destructive":         _T.ERROR,             # 破坏性操作
-        "destructive-foreground": _T.TEXT_INVERTED,
-        "border":              _T.BORDER_PRIMARY,    # 卡片 / 面板描边
-        "input":               _T.BORDER_CONTROL,    # 输入框 / 按钮描边
-        "ring":                _T.ACCENT,            # 焦点环
-        "primary-hover":       _T.ACCENT_HOVER,
-        "primary-pressed":     _T.ACCENT_PRESSED,
-        "hover":               _T.BG_HOVER,          # 次级/ghost hover 面
-        "success":             _T.SUCCESS,
-        "warning":             _T.WARNING,
-        "info":                _T.ACCENT_HOVER,
-        "radius":              f"{_T.CONTROL_RADIUS}px",
+        "background":          _C.surface_base,
+        "foreground":          _C.text_primary,
+        "card":                _C.surface_1,
+        "card-foreground":     _C.text_primary,
+        "popover":             _C.surface_4,
+        "popover-foreground":  _C.text_primary,
+        "primary":             _C.accent,
+        "primary-foreground":  _C.text_on_accent,
+        "secondary":           _C.surface_2,
+        "secondary-foreground": _C.text_primary,
+        "muted":               _C.surface_2,
+        "muted-foreground":    _C.text_muted,
+        "accent":              _C.surface_selected,
+        "accent-foreground":   _C.text_primary,
+        "destructive":         _C.danger,
+        "destructive-foreground": _C.text_on_accent,
+        # 边框：01 方向是零边框设计，默认取最低一档（近乎不可见），
+        # 真正的层次由 surface 亮度差承担。
+        "border":              _C.border_subtle,
+        "input":               _C.surface_3,
+        "ring":                _C.border_focus,
+        "primary-hover":       _C.accent_hover,
+        "primary-pressed":     _C.accent_active,
+        "hover":               _C.surface_hover,
+        "success":             _C.success,
+        "warning":             _C.warning,
+        "info":                _C.info,
+        "radius":              f"{_R.md}px",
     },
     # 亮色：标准 shadcn zinc 亮色规范（primary 沿用品牌蓝）
     "light": {

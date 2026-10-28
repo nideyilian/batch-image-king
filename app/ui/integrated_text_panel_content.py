@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.models.text_layer import TextLayer, TextAlign, FontStyle
 from app.ui.collapsible_group import CollapsibleGroupBox
+from app.ui.design_spec import Scale as _Scale, Space as _Space, Width as _Width
 from app.ui.property_panel_a2 import PropertyPanelA2
 from app.ui.property_widgets import switch_row
 
@@ -46,8 +47,9 @@ class IntegratedTextPanelContent(object):
             if container is None:
                 continue
             grid = container.layout()
-            # 单排多参数（间距/字距/边距）容器：保持始终一行，不拆成竖排
+            # 单排多参数（间距/字距/边距）容器
             if getattr(container, "_responsive_single", False):
+                self._relayout_single_row(container, grid, stacked)
                 continue
             second_label = getattr(container, "_responsive_second_label", None)
             second_control = getattr(container, "_responsive_second_control", None)
@@ -59,6 +61,50 @@ class IntegratedTextPanelContent(object):
             else:
                 grid.addWidget(second_label, 0, 3)
                 grid.addWidget(second_control, 0, 4)
+
+    def _relayout_single_row(self, container, grid, stacked):
+        """重排「间距 | 字距 | 边距」这类多参数单行容器。
+
+        原实现是「永远一行，不拆」，但面板实际宽度是 344px（属性栏固定宽度），
+        而 3 组「标签 40 + 控件 60」加上弹性间隔需要 ~350px —— 放不下。
+        结果是 QGridLayout 挤压列宽，标签被压到 12px 高、控件错位，
+        截图里能看到「间距」「字距」标签与下方 SpinBox 不对齐。
+
+        窄面板时按 2 行重排（第一行 2 组，第二行 1 组），宽面板保持单行。
+        """
+        labels = getattr(container, "_responsive_labels", None)
+        controls = getattr(container, "_responsive_controls", None)
+        if not labels or not controls:
+            return
+
+        # 已处于目标形态就跳过，避免每次 resize 都重建布局（会闪）
+        want_stacked = stacked
+        if getattr(container, "_responsive_is_stacked", None) is want_stacked:
+            return
+        container._responsive_is_stacked = want_stacked
+
+        for label, control in zip(labels, controls):
+            grid.removeWidget(label)
+            grid.removeWidget(control)
+
+        # 清掉之前的列拉伸，重新分配
+        for col in range(0, 12):
+            grid.setColumnStretch(col, 0)
+
+        if want_stacked:
+            # 2 行：每组占「标签 + 控件」两列，行内右侧留 stretch 吸收余量
+            for index, (label, control) in enumerate(zip(labels, controls)):
+                row = index // 2
+                base = (index % 2) * 2
+                grid.addWidget(label, row, base)
+                grid.addWidget(control, row, base + 1)
+            grid.setColumnStretch(4, 1)
+        else:
+            for index, (label, control) in enumerate(zip(labels, controls)):
+                col = index * 3
+                grid.addWidget(label, 0, col)
+                grid.addWidget(control, 0, col + 1)
+                grid.setColumnStretch(col + 2, 1)
 
     def create_advanced_settings(self, parent_layout):
         """创建高级设置区域 - 补充完整内容"""
@@ -151,7 +197,7 @@ class IntegratedTextPanelContent(object):
         self.shadow_x_spin = QSpinBox()
         self.shadow_x_spin.setRange(-50, 50)
         self.shadow_x_spin.setValue(2)
-        self.shadow_x_spin.setFixedWidth(60)
+        self.shadow_x_spin.setFixedWidth(_Width.SPIN)
         self.shadow_x_spin.valueChanged.connect(self.on_shadow_params_changed)  # 连接信号
         shadow_params_layout.addWidget(self.shadow_x_spin)
 
@@ -160,7 +206,7 @@ class IntegratedTextPanelContent(object):
         self.shadow_y_spin = QSpinBox()
         self.shadow_y_spin.setRange(-50, 50)
         self.shadow_y_spin.setValue(2)
-        self.shadow_y_spin.setFixedWidth(60)
+        self.shadow_y_spin.setFixedWidth(_Width.SPIN)
         self.shadow_y_spin.valueChanged.connect(self.on_shadow_params_changed)  # 连接信号
         shadow_params_layout.addWidget(self.shadow_y_spin)
 
@@ -169,7 +215,7 @@ class IntegratedTextPanelContent(object):
         self.shadow_blur_spin = QSpinBox()
         self.shadow_blur_spin.setRange(0, 20)
         self.shadow_blur_spin.setValue(3)
-        self.shadow_blur_spin.setFixedWidth(60)
+        self.shadow_blur_spin.setFixedWidth(_Width.SPIN)
         self.shadow_blur_spin.valueChanged.connect(self.on_shadow_params_changed)  # 连接信号
         shadow_params_layout.addWidget(self.shadow_blur_spin)
 
@@ -179,7 +225,7 @@ class IntegratedTextPanelContent(object):
         # 阴影颜色
         shadow_color_layout = QHBoxLayout()
         shadow_color_layout.addWidget(QLabel("颜色:"))
-        self.shadow_color = ColorIndicator((0, 0, 0, 128))
+        self.shadow_color = ColorIndicator((0, 0, 0, 128), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.shadow_color.color_changed.connect(self.on_shadow_color_changed)  # 连接信号
         shadow_color_layout.addWidget(self.shadow_color)
         shadow_color_layout.addStretch()
@@ -196,7 +242,7 @@ class IntegratedTextPanelContent(object):
         self.glow_strength_spin = QSpinBox()
         self.glow_strength_spin.setRange(0, 20)
         self.glow_strength_spin.setValue(5)
-        self.glow_strength_spin.setFixedWidth(60)
+        self.glow_strength_spin.setFixedWidth(_Width.SPIN)
         self.glow_strength_spin.valueChanged.connect(self.on_glow_params_changed)  # 连接信号
         glow_params_layout.addWidget(self.glow_strength_spin)
 
@@ -205,7 +251,7 @@ class IntegratedTextPanelContent(object):
         self.glow_radius_spin = QSpinBox()
         self.glow_radius_spin.setRange(1, 50)
         self.glow_radius_spin.setValue(10)
-        self.glow_radius_spin.setFixedWidth(60)
+        self.glow_radius_spin.setFixedWidth(_Width.SPIN)
         self.glow_radius_spin.valueChanged.connect(self.on_glow_params_changed)  # 连接信号
         glow_params_layout.addWidget(self.glow_radius_spin)
 
@@ -215,7 +261,7 @@ class IntegratedTextPanelContent(object):
         # 发光颜色与透明度
         glow_color_layout = QHBoxLayout()
         glow_color_layout.addWidget(QLabel("颜色:"))
-        self.glow_color = ColorIndicator((255, 255, 255, 255))
+        self.glow_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.glow_color.color_changed.connect(self.on_glow_color_changed)
         glow_color_layout.addWidget(self.glow_color)
         glow_color_layout.addSpacing(10)
@@ -224,7 +270,7 @@ class IntegratedTextPanelContent(object):
         self.glow_opacity_spin.setRange(0, 100)
         self.glow_opacity_spin.setSuffix("%")
         self.glow_opacity_spin.setValue(100)
-        self.glow_opacity_spin.setFixedWidth(72)
+        self.glow_opacity_spin.setFixedWidth(_Width.COMBO)
         self.glow_opacity_spin.valueChanged.connect(self.on_glow_opacity_changed)
         glow_color_layout.addWidget(self.glow_opacity_spin)
         glow_color_layout.addStretch()
@@ -249,7 +295,7 @@ class IntegratedTextPanelContent(object):
         # 背景颜色
         bg_color_layout = QHBoxLayout()
         bg_color_layout.addWidget(QLabel("背景颜色:"))
-        self.bg_color = ColorIndicator((255, 255, 255, 255))
+        self.bg_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.bg_color.color_changed.connect(self.on_background_color_changed)  # 连接信号
         bg_color_layout.addWidget(self.bg_color)
         bg_color_layout.addStretch()
@@ -261,11 +307,11 @@ class IntegratedTextPanelContent(object):
         self.bg_opacity_slider = QSlider(Qt.Horizontal)
         self.bg_opacity_slider.setRange(0, 100)
         self.bg_opacity_slider.setValue(100)  # 默认100%透明度
-        self.bg_opacity_slider.setFixedHeight(20)
+        self.bg_opacity_slider.setFixedHeight(_Scale.PX[_Scale.MD])
         # 滑块样式由 panel_qss 的 QSlider 角色统一提供（与全局主题一致）
         self.bg_opacity_slider.valueChanged.connect(self.on_background_opacity_changed)  # 连接信号
         self.bg_opacity_label = QLabel("100%")
-        self.bg_opacity_label.setFixedWidth(35)
+        self.bg_opacity_label.setFixedWidth(_Width.VALUE_LABEL)
         self.bg_opacity_label.setAlignment(Qt.AlignCenter)
 
         bg_opacity_layout.addWidget(self.bg_opacity_slider)
@@ -279,11 +325,11 @@ class IntegratedTextPanelContent(object):
         self.bg_size_slider = QSlider(Qt.Horizontal)
         self.bg_size_slider.setRange(-50, 50)  # 支持负值（背景小于文字）到正值（背景大于文字）
         self.bg_size_slider.setValue(5)  # 默认5像素内边距
-        self.bg_size_slider.setFixedHeight(20)
+        self.bg_size_slider.setFixedHeight(_Scale.PX[_Scale.MD])
         # 滑块样式由 panel_qss 的 QSlider 角色统一提供
         self.bg_size_slider.valueChanged.connect(self.on_background_size_changed)  # 连接信号
         self.bg_size_label = QLabel("+5")
-        self.bg_size_label.setFixedWidth(35)
+        self.bg_size_label.setFixedWidth(_Width.VALUE_LABEL)
         self.bg_size_label.setAlignment(Qt.AlignCenter)
 
         bg_size_layout.addWidget(self.bg_size_slider)
@@ -293,7 +339,7 @@ class IntegratedTextPanelContent(object):
 
         # 渐变设置
         gradient_layout = QVBoxLayout()
-        gradient_layout.setSpacing(6)
+        gradient_layout.setSpacing(_Space.XS)
 
         # 渐变启用
         gradient_enable_layout, self.gradient_enable_check = switch_row("渐变")
@@ -305,7 +351,7 @@ class IntegratedTextPanelContent(object):
         gradient_type_layout.addWidget(QLabel("渐变类型:"))
         self.gradient_type_combo = QComboBox()
         self.gradient_type_combo.addItems(["线性", "径向", "角度"])
-        self.gradient_type_combo.setFixedWidth(80)
+        self.gradient_type_combo.setFixedWidth(_Width.COMBO)
         # 下拉样式由 panel_qss 的 QComboBox 角色统一提供
         self.gradient_type_combo.currentTextChanged.connect(self.on_gradient_type_changed)  # 连接信号
         gradient_type_layout.addWidget(self.gradient_type_combo)
@@ -315,11 +361,11 @@ class IntegratedTextPanelContent(object):
         # 渐变颜色
         gradient_color_layout = QHBoxLayout()
         gradient_color_layout.addWidget(QLabel("渐变颜色:"))
-        self.gradient_start_color = ColorIndicator((0, 0, 0, 255))
+        self.gradient_start_color = ColorIndicator((0, 0, 0, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.gradient_start_color.color_changed.connect(self.on_gradient_color_changed)  # 连接信号
         gradient_color_layout.addWidget(self.gradient_start_color)
         gradient_color_layout.addWidget(QLabel("→"))
-        self.gradient_end_color = ColorIndicator((255, 255, 255, 255))
+        self.gradient_end_color = ColorIndicator((255, 255, 255, 255), size=PropertyPanelA2.COLOR_SWATCH_SIZE)
         self.gradient_end_color.color_changed.connect(self.on_gradient_color_changed)  # 连接信号
         gradient_color_layout.addWidget(self.gradient_end_color)
         gradient_color_layout.addStretch()

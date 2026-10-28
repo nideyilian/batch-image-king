@@ -550,14 +550,14 @@ class LayerPropertiesRefresh(object):
             if hasattr(layer, 'current_image_path') and layer.current_image_path:
                 if os.path.isfile(layer.current_image_path):
                     filename = os.path.basename(layer.current_image_path)
-                    self.current_image_label.setText(f"当前图像: {filename}")
+                    self.current_image_label.setText(f"{filename}")
                 else:
                     # 文件不存在，清空路径并显示无
                     # 🔧 关键修复：使用公共属性setter
                     layer.current_image_path = None
-                    self.current_image_label.setText("当前图像: 无")
+                    self.current_image_label.setText("无")
             else:
-                self.current_image_label.setText("当前图像: 无")
+                self.current_image_label.setText("无")
 
             # 更新分身设置 - 安全地检查属性是否存在
             has_clone_properties = (hasattr(layer, 'clone_enabled') and

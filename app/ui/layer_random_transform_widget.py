@@ -3,7 +3,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                            QFrame, QSlider, QFormLayout)
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QPixmap, QPainter, QColor
+from app.ui.design_spec import Width as _Width
 from app.ui.design_tokens import Tokens
+from app.ui.property_widgets import field_label, property_form
 
 class LayerRandomTransformWidget(QWidget):
     """图层随机变换控制组件"""
@@ -35,9 +37,7 @@ class LayerRandomTransformWidget(QWidget):
         random_layout = layout
 
         # 随机位置抖动
-        position_layout = QFormLayout()
-        position_layout.setHorizontalSpacing(5)
-        position_layout.setVerticalSpacing(3)
+        position_layout = property_form()
 
         self.position_enabled_check = QCheckBox("启用随机位置抖动")
         self.position_enabled_check.setToolTip("启用后图层位置会在基础位置上随机偏移")
@@ -50,7 +50,7 @@ class LayerRandomTransformWidget(QWidget):
         self.position_range_spin.setSuffix(" 像素")
         self.position_range_spin.setToolTip("位置偏移的最大范围（±像素）")
         self.position_range_spin.valueChanged.connect(self.on_position_range_changed)
-        position_layout.addRow("抖动范围:", self.position_range_spin)
+        position_layout.addRow(field_label("抖动范围:"), self.position_range_spin)
 
         random_layout.addLayout(position_layout)
 
@@ -58,9 +58,7 @@ class LayerRandomTransformWidget(QWidget):
         random_layout.addWidget(self.create_separator())
 
         # 随机缩放
-        scale_layout = QFormLayout()
-        scale_layout.setHorizontalSpacing(5)
-        scale_layout.setVerticalSpacing(3)
+        scale_layout = property_form()
 
         self.scale_enabled_check = QCheckBox("启用随机缩放")
         self.scale_enabled_check.setToolTip("启用后图层会随机缩放")
@@ -89,7 +87,7 @@ class LayerRandomTransformWidget(QWidget):
         scale_range_layout.addWidget(QLabel("最大:"))
         scale_range_layout.addWidget(self.scale_max_spin)
 
-        scale_layout.addRow("缩放范围:", scale_range_layout)
+        scale_layout.addRow(field_label("缩放范围:"), scale_range_layout)
 
         random_layout.addLayout(scale_layout)
 
@@ -97,9 +95,7 @@ class LayerRandomTransformWidget(QWidget):
         random_layout.addWidget(self.create_separator())
 
         # 随机旋转
-        rotation_layout = QFormLayout()
-        rotation_layout.setHorizontalSpacing(5)
-        rotation_layout.setVerticalSpacing(3)
+        rotation_layout = property_form()
 
         self.rotation_enabled_check = QCheckBox("启用随机旋转")
         self.rotation_enabled_check.setToolTip("启用后图层会随机旋转")
@@ -114,27 +110,26 @@ class LayerRandomTransformWidget(QWidget):
         self.rotation_range_spin.setSuffix("°")
         self.rotation_range_spin.setToolTip("随机旋转的角度范围（±度），例如设置5度表示在-5度到+5度之间随机旋转")
         self.rotation_range_spin.valueChanged.connect(self.on_rotation_range_changed)
-        rotation_layout.addRow("旋转范围(±):", self.rotation_range_spin)
+        rotation_layout.addRow(field_label("旋转范围(±):"), self.rotation_range_spin)
 
         random_layout.addLayout(rotation_layout)
 
         # 分隔线
         random_layout.addWidget(self.create_separator())
 
-        # 控制按钮
+        # 控制按钮（图标为真实 Lucide SVG，不再拼字符）
         button_layout = QHBoxLayout()
 
-        # 使用图标管理器创建随机按钮
-        from app.ui.icon_manager import IconManager
+        from app.ui.icon_library import icon
 
-        self.generate_btn = QPushButton()
-        icon_text = IconManager.get_icon_text('random')
-        self.generate_btn.setText(f"{icon_text} 生成随机")
+        self.generate_btn = QPushButton("生成随机")
+        self.generate_btn.setIcon(icon('random', color=Tokens.TEXT_SECONDARY, size=16))
         self.generate_btn.setToolTip("为当前图层生成新的随机变换参数")
         self.generate_btn.clicked.connect(self.on_generate_random)
         button_layout.addWidget(self.generate_btn)
 
-        self.reset_btn = QPushButton(f"{IconManager.get_icon_text('undo')} 重置随机")
+        self.reset_btn = QPushButton("重置随机")
+        self.reset_btn.setIcon(icon('undo', color=Tokens.TEXT_SECONDARY, size=16))
         self.reset_btn.setToolTip("重置当前图层的随机变换参数")
         self.reset_btn.clicked.connect(self.on_reset_random)
         button_layout.addWidget(self.reset_btn)
@@ -155,7 +150,7 @@ class LayerRandomTransformWidget(QWidget):
         separator = QFrame()
         separator.setProperty("role", "sectionDivider")
         separator.setFrameShape(QFrame.HLine)
-        separator.setFixedHeight(1)
+        separator.setFixedHeight(_Width.HAIRLINE)
         separator.setStyleSheet(f"background-color: {Tokens.BORDER_SOFT}; margin: 2px 0;")
         return separator
 

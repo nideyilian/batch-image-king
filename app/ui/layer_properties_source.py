@@ -64,7 +64,7 @@ class LayerPropertiesSource(object):
 
                 # 更新路径显示
                 self.source_path_edit.setText(folder_path)
-                self.current_image_label.setText("当前图像: 无")
+                self.current_image_label.setText("无")
 
                 # 更新随机按钮状态
                 self.random_btn.setEnabled(True)
@@ -100,11 +100,11 @@ class LayerPropertiesSource(object):
                 # 更新路径显示
                 self.source_path_edit.setText(file_path)
                 if os.path.isfile(file_path):
-                    self.current_image_label.setText(f"当前图像: {os.path.basename(file_path)}")
+                    self.current_image_label.setText(f"{os.path.basename(file_path)}")
                 else:
                     # 文件不存在，清空并显示无
                     self.current_layer.current_image_path = None  # 🔧 修复：使用公共属性
-                    self.current_image_label.setText("当前图像: 无")
+                    self.current_image_label.setText("无")
 
                 # 更新随机按钮状态
                 self.random_btn.setEnabled(False)
@@ -129,9 +129,9 @@ class LayerPropertiesSource(object):
         image = self._randomize_layer_with_restrictions(self.current_layer)
         if image:
             if hasattr(self.current_layer, 'current_image_path') and self.current_layer.current_image_path and os.path.isfile(self.current_layer.current_image_path):
-                self.current_image_label.setText(f"当前图像: {os.path.basename(self.current_layer.current_image_path)}")
+                self.current_image_label.setText(f"{os.path.basename(self.current_layer.current_image_path)}")
             else:
-                self.current_image_label.setText("当前图像: 无")
+                self.current_image_label.setText("无")
 
             # 如果使用原始尺寸，更新尺寸控件
             if self.current_layer.use_original_size:
@@ -224,7 +224,7 @@ class LayerPropertiesSource(object):
             # 清除当前图像
             self.current_layer.current_image_path = None  # 🔧 修复：使用公共属性
             self.current_layer.cached_image = None
-            self.current_image_label.setText("当前图像: 无")
+            self.current_image_label.setText("无")
 
             # 更新随机按钮状态
             self.random_btn.setEnabled(is_folder)
@@ -699,6 +699,32 @@ class LayerPropertiesSource(object):
             self.crop_direction_combo.setCurrentIndex(self.current_layer.crop_direction)
             self.crop_direction_combo.setEnabled(self.current_layer.fit_mode == 1)
 
+            # 同步元素填充控件。
+            #
+            # 这块原来缺失：`update_fill_*` 有一份写死的回写逻辑在
+            # `layer_properties_shape.py` 的同名方法里，但那个方法因为 MRO
+            # 顺序（Source 在 Shape 之前）**从未被调用过**，所以切图层后
+            # 填充面板一直显示上一次的值。
+            #
+            # 渲染层是真实读取这些属性的（见 document_render.py），
+            # 说明功能本身没问题，缺的只是 UI 回写。
+            if hasattr(self, 'fill_enabled_checkbox') and self.current_layer is not None:
+                self.fill_enabled_checkbox.setChecked(
+                    bool(getattr(self.current_layer, 'clone_fill_enabled', False))
+                )
+                _mode = str(getattr(self.current_layer, 'clone_fill_mode', 'grid'))
+                _mode_index = {'grid': 0, 'staggered': 1, 'border': 2}.get(_mode, 0)
+                if hasattr(self, 'fill_mode_combo'):
+                    self.fill_mode_combo.setCurrentIndex(_mode_index)
+                if hasattr(self, 'fill_spacing_spin'):
+                    self.fill_spacing_spin.setValue(
+                        int(getattr(self.current_layer, 'clone_fill_spacing', 0))
+                    )
+                if hasattr(self, 'fill_angle_spin'):
+                    self.fill_angle_spin.setValue(
+                        int(getattr(self.current_layer, 'clone_fill_angle', 0))
+                    )
+
             # 同步启用状态
             self.width_spin.setEnabled(not self.current_layer.use_original_size and not self.current_layer.locked)
             self.height_spin.setEnabled(not self.current_layer.use_original_size and not self.current_layer.locked)
@@ -708,17 +734,17 @@ class LayerPropertiesSource(object):
                 self.source_path_edit.setText(self.current_layer.image_source)
                 # 更新图像名称显示（校验文件存在性）
                 if hasattr(self.current_layer, 'current_image_path') and self.current_layer.current_image_path and os.path.isfile(self.current_layer.current_image_path):
-                    self.current_image_label.setText(f"当前图像: {os.path.basename(self.current_layer.current_image_path)}")
+                    self.current_image_label.setText(f"{os.path.basename(self.current_layer.current_image_path)}")
                 else:
                     # 文件不存在或未设置
                     if hasattr(self.current_layer, 'current_image_path'):
                         self.current_layer.current_image_path = None  # 🔧 修复：使用公共属性
-                    self.current_image_label.setText("当前图像: 无")
+                    self.current_image_label.setText("无")
                 # 更新随机按钮状态
                 self.random_btn.setEnabled(self.current_layer.is_folder)
             else:
                 self.source_path_edit.setText("")
-                self.current_image_label.setText("当前图像: 无")
+                self.current_image_label.setText("无")
                 self.random_btn.setEnabled(False)
 
             # 同步随机变换控件

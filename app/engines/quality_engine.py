@@ -14,12 +14,6 @@ from PIL import Image, ImageFilter, ImageEnhance
 import cv2
 from typing import Tuple, Optional, Dict, Any
 from enum import Enum
-try:
-    import scipy.ndimage as ndimage
-    from scipy import signal
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
 
 
 def safe_print(message: str):

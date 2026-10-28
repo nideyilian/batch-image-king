@@ -1,3 +1,4 @@
+from app.ui.design_spec import Space as _Space
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                                QComboBox, QSpinBox, QPushButton, QGroupBox,
@@ -26,13 +27,13 @@ class AddShapedLayerDialog(QDialog):
     def init_ui(self):
         """初始化UI界面"""
         layout = QVBoxLayout()
-        layout.setSpacing(15)
+        layout.setSpacing(_Space.LG)
         layout.setContentsMargins(20, 20, 20, 20)
 
         # 基本信息组
         basic_group = QGroupBox("基本信息")
         basic_layout = QGridLayout()
-        basic_layout.setSpacing(10)
+        basic_layout.setSpacing(_Space.SM)
 
         # 图层名称
         basic_layout.addWidget(QLabel("图层名称:"), 0, 0)
@@ -111,7 +112,7 @@ class AddShapedLayerDialog(QDialog):
         # 图像源设置组
         source_group = QGroupBox("图像源设置")
         source_layout = QVBoxLayout()
-        source_layout.setSpacing(10)
+        source_layout.setSpacing(_Space.SM)
 
         # 图像路径
         path_layout = QHBoxLayout()

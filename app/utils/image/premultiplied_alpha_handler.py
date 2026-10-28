@@ -19,6 +19,8 @@ from PIL import Image
 from typing import Tuple, Optional, Dict, Any
 import warnings
 
+from app.utils.image import ndops
+
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
@@ -152,27 +154,11 @@ class PremultipliedAlphaHandler:
     
     def _detect_alpha_edges(self, alpha: np.ndarray) -> np.ndarray:
         """检测Alpha通道边缘"""
-        try:
-            from scipy import ndimage
-            # 使用Sobel算子检测边缘
-            grad_x = ndimage.sobel(alpha, axis=1)
-            grad_y = ndimage.sobel(alpha, axis=0)
-            gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-            return gradient_magnitude > 0.1
-        except ImportError:
-            # 简单的边缘检测
-            h, w = alpha.shape
-            edges = np.zeros_like(alpha, dtype=bool)
-            
-            # 检查相邻像素的Alpha差异
-            for i in range(1, h-1):
-                for j in range(1, w-1):
-                    center = alpha[i, j]
-                    neighbors = alpha[i-1:i+2, j-1:j+2]
-                    max_diff = np.max(np.abs(neighbors - center))
-                    edges[i, j] = max_diff > 0.1
-            
-            return edges
+        # 使用Sobel算子检测边缘（ndops.sobel 与 scipy.ndimage.sobel 逐位等价）
+        grad_x = ndops.sobel(alpha, axis=1)
+        grad_y = ndops.sobel(alpha, axis=0)
+        gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        return gradient_magnitude > 0.1
     
     def unpremultiply_alpha(self, image: Image.Image) -> Image.Image:
         """
