@@ -213,5 +213,9 @@ python -m app.qml.qml_main --screenshot out.png --width 1440 --height 900 --them
 它当时记录的深色色值表、微软雅黑字体栈、`#2378C4` 主色均已失效，
 不要从 git 历史里翻出来再用。
 
+同一阶段遗留的另外八份设计文档（`UI_SPEC.md`、`DESIGN_SYSTEM_SHADCN.md`、
+`UI设计规范.md`、`qml-design-system.md`、`THEMES.md` 等）已移入 `docs/archive/`，
+每份的作废原因见该目录的 `README.md`。**归档 ≠ 有效**，不要照着里面的色值改代码。
+
 详细组件契约（`AppButton`、`HermesField` 等逐个的尺寸与状态）见
 `docs/hermes-desktop-design-system.md`；本文档管概览、边界与取值依据。
