@@ -10,7 +10,7 @@
   - 旧 `app/ui/theme/tokens.py`（对齐 shadcn 命名，取值又回指前者）
 两套并存导致同一产品出现三套主色（#2F9CF4 / #1677FF / #4096FF）与两套字体栈。
 
-取值依据（详见 docs/DESIGN.md）：
+取值依据（详见根目录 DESIGN.md「取值依据」节）：
   字号   —— TDesign 桌面 12px 下限；11px 仅作 label 档（Material 3 labelSmall）
   间距   —— 4px 栅格（Arco / Ant / Bootstrap / Carbon 一致）
   暗色阶 —— elevation 越高越亮（Radix / Mantlr 明确规则，非简单反色）

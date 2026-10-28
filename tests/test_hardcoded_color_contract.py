@@ -5,10 +5,10 @@
 （`integrated_text_editor_dialog` / `simple_text_editor_dialog` / `preset_panel` /
 `add_shaped_layer_dialog` / `export_progress_dialog`）。
 
-docs/DESIGN.md 5.2 的取舍：
+根目录 DESIGN.md「落地经验 · 硬编码清理的取舍」：
 - 高频且与令牌一致 → 换令牌
 - 低频局部设计 → 先补令牌再替换
-- Ant 蓝 #1677FF / #4096FF → 必改
+- 确定的漂移色（如 Ant 蓝 #1677FF / #4096FF）→ 必改
 
 本测试锁住三件事：
 1. 明确的旧主题色不得出现在业务 UI 里（会直接让界面「半新半旧」）
