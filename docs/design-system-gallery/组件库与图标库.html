@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批图王 · 组件与图标</title>
+<style>
+:root{
+  --canvas:#08090A; --base:#0A0B0D; --s1:#0F1011; --s2:#161719; --s3:#1D1F21; --s4:#23252A;
+  --sel:#1F2437; --line:#141619; --t1:#F7F8F8; --t2:#B4BCC6; --t3:#949CA6; --tm:#8E97A1;
+  --accent:#5E6AD2; --accent-h:#4F5ABF; --ok:#3DD68C; --warn:#FF8A3D; --danger:#E5484D;
+  --mono:"Cascadia Mono","Consolas",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--base);color:var(--t1);
+  font:13px/1.65 "Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;}
+a{color:inherit;text-decoration:none}
+code,.mono{font-family:var(--mono)}
+
+.wrap{display:grid;grid-template-columns:232px minmax(0,1fr);max-width:1520px;margin:0 auto}
+aside{position:sticky;top:0;height:100vh;padding:26px 18px;border-right:1px solid var(--line);
+  background:var(--s1);overflow-y:auto}
+aside .brand{font-size:14px;font-weight:700;margin-bottom:3px}
+aside .ver{font-size:11px;color:var(--tm);margin-bottom:22px;font-family:var(--mono)}
+nav a{display:block;padding:6px 9px;border-radius:5px;color:var(--t2);font-size:12px;
+  margin-bottom:1px;transition:.12s}
+nav a:hover{background:var(--s3);color:var(--t1)}
+nav a.active{background:var(--sel);color:#E4E7FF}
+nav .grp{font-size:10px;color:#6B7079;letter-spacing:1px;text-transform:uppercase;
+  margin:16px 0 6px;padding-left:9px}
+main{padding:0 46px 100px;min-width:0}
+
+.hero{padding:60px 0 38px;border-bottom:1px solid var(--line)}
+.hero h1{font-size:30px;font-weight:700;letter-spacing:-.4px;margin-bottom:12px}
+.hero p{color:var(--t2);max-width:680px;font-size:13.5px}
+.hero .meta{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+.pill{font-size:11px;padding:3px 10px;border-radius:999px;background:var(--s3);
+  color:var(--t2);font-family:var(--mono)}
+.pill.on{background:var(--sel);color:#C9CEFF}
+.pill.good{background:#14321f;color:#7BE8B0}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+  margin:32px 0 0;border-radius:8px;overflow:hidden}
+.stat{background:var(--s1);padding:18px 20px}
+.stat b{display:block;font-size:26px;font-weight:700;letter-spacing:-.5px;
+  font-family:var(--mono)}
+.stat span{display:block;font-size:12px;color:var(--t2);margin-top:2px}
+.stat i{display:block;font-size:10.5px;color:#6B7079;margin-top:5px;font-style:normal;
+  font-family:var(--mono)}
+
+section{padding-top:58px;scroll-margin-top:10px}
+section>h2{font-size:19px;font-weight:700;letter-spacing:-.2px;margin-bottom:6px;
+  display:flex;align-items:baseline;gap:10px}
+section>h2 em{font-size:11px;font-weight:400;color:var(--tm);font-style:normal;
+  font-family:var(--mono)}
+.lead{color:var(--t2);font-size:13px;max-width:740px;margin-bottom:22px}
+h3{font-size:14px;font-weight:600;margin:32px 0 12px;display:flex;align-items:center;gap:8px}
+h3::before{content:"";width:3px;height:13px;background:var(--accent);border-radius:2px}
+
+.note{border-left:2px solid var(--accent);background:var(--s1);padding:11px 15px;
+  border-radius:0 6px 6px 0;font-size:12.5px;color:var(--t2);margin:14px 0}
+.note b{color:var(--t1)}
+.note.ok{border-color:var(--ok)}
+.note.warn{border-color:var(--warn)}
+.note.danger{border-color:var(--danger)}
+
+.shots{display:flex;flex-direction:column;gap:16px}
+.shots .row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.shot{background:var(--s1);border-radius:8px;overflow:hidden;
+  display:block;width:fit-content;max-width:100%}
+.shot img{display:block;width:auto;height:auto;background:var(--canvas);max-width:100%}
+.shot.wide{width:100%}
+.shot.wide img{width:100%;max-width:100%}
+.shot figcaption{padding:11px 14px;border-top:1px solid var(--line);max-width:420px}
+.shot strong{display:block;font-size:12.5px;font-weight:600;margin-bottom:2px}
+.shot span{font-size:11.5px;color:var(--tm);line-height:1.55}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;
+  color:#6B7079;font-weight:500;padding:0 12px 9px;border-bottom:1px solid var(--line)}
+tbody td{padding:10px 12px;border-bottom:1px solid #101113;vertical-align:top;color:var(--t2)}
+tbody tr:hover td{background:var(--s1)}
+.cat{display:inline-block;font-size:11px;color:var(--t1);background:var(--s3);
+  padding:2px 8px;border-radius:4px;white-space:nowrap}
+td.mono{font-family:var(--mono);font-size:11.5px;color:var(--t1)}
+td.dim{color:#8A9099;font-size:11.5px}
+
+.swgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:10px}
+.sw{display:flex;gap:10px;align-items:center;background:var(--s1);border-radius:6px;padding:9px 11px}
+.chip{width:30px;height:30px;border-radius:5px;flex:0 0 30px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.sw code{display:block;font-size:11px;color:var(--t1)}
+.sw b{font-size:10.5px;color:var(--tm);font-family:var(--mono);font-weight:400}
+.sw i{display:block;font-size:10.5px;color:#6B7079;font-style:normal;margin-top:1px}
+
+.scale{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.spec{background:var(--s1);border-radius:6px;padding:12px 14px}
+.spec h5{font-size:11px;color:var(--tm);font-weight:400;margin-bottom:8px;
+  font-family:var(--mono)}
+.spec .line{display:flex;justify-content:space-between;font-size:11.5px;
+  padding:3px 0;color:var(--t2)}
+.spec .line span:last-child{font-family:var(--mono);color:var(--t1)}
+
+.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+#q{flex:1;max-width:340px;background:var(--s3);border:none;border-radius:6px;
+  padding:8px 12px;color:var(--t1);font-size:12.5px;outline:none}
+#q:focus{box-shadow:inset 0 0 0 1px var(--accent)}
+#cnt{font-size:11px;color:var(--tm);font-family:var(--mono)}
+.icogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+.icell{display:flex;flex-direction:column;align-items:center;gap:7px;padding:13px 6px 10px;
+  background:var(--s1);border:none;border-radius:6px;cursor:pointer;color:var(--t2);
+  transition:.12s;font-family:inherit}
+.icell:hover{background:var(--s3);color:var(--t1);transform:translateY(-1px)}
+.icell.copied{box-shadow:inset 0 0 0 1px var(--accent)}
+.icell svg{width:22px;height:22px;display:block}
+.icell span{font-size:9.5px;color:#7B828C;font-family:var(--mono);text-align:center;
+  line-height:1.3;overflow-wrap:anywhere}
+
+.mgroup{margin-bottom:16px}
+.mgroup-t{display:block;font-size:10.5px;color:#6B7079;letter-spacing:.6px;
+  margin-bottom:7px;font-family:var(--mono)}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:5px}
+.mtag{display:flex;flex-direction:column;gap:1px;background:var(--s1);border-radius:5px;
+  padding:7px 10px;font-size:11px}
+.mtag b{font-weight:400;color:var(--t1);font-family:var(--mono);font-size:11px}
+.mtag i{color:#6B7079;font-style:normal;font-family:var(--mono);font-size:10px}
+
+footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--line);
+  font-size:11px;color:#6B7079;font-family:var(--mono);line-height:1.9}
+
+@media(max-width:1080px){
+  .wrap{grid-template-columns:1fr}
+  aside{display:none}
+  main{padding:0 20px 60px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside>
+  <div class="brand">批图王 · 界面资产</div>
+  <div class="ver">v1.2.0 / 2026-10-28 改版</div>
+  <nav id="nav">
+    <div class="grp">总览</div>
+    <a href="#overview" class="active">这次改了什么</a>
+    <a href="#live">真实界面</a>
+    <div class="grp">图标库</div>
+    <a href="#icons">Lucide SVG · 98</a>
+    <a href="#semantic">语义名与映射</a>
+    <a href="#alias">旧名兼容表 · 54</a>
+    <div class="grp">设计规范</div>
+    <a href="#tokens">设计令牌</a>
+    <a href="#usage">怎么用</a>
+  </nav>
+</aside>
+
+<main>
+<div class="hero">
+  <h1>组件与图标</h1>
+  <p>2026-10-28 改版：不再使用 shadcn 组件库，图标统一到 Lucide SVG 并<b>真实接入经典界面</b>。
+     本页所有界面截图都由真实 <code>MainWindow</code> 离屏渲染生成，所有图标都来自仓库里的真实 SVG 文件。</p>
+  <div class="meta">
+    <span class="pill">Python + PySide6</span>
+    <span class="pill good">Lucide SVG 单一真源</span>
+    <span class="pill">shadcn 组件库已弃用</span>
+    <span class="pill">offscreen 真实渲染</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><b>98</b><span>Lucide SVG 图标</span><i>app/qml/icons/，stroke 2px 统一</i></div><div class="stat"><b>51</b><span>语义图标名</span><i>icon_library.IconName</i></div><div class="stat"><b>54</b><span>旧名兼容映射</span><i>别名表，迁移零改动</i></div><div class="stat"><b>0</b><span>字符图标残留</span><i>旧 42 个字符图标已移除</i></div>
+  </div>
+</div>
+
+<section id="overview">
+  <h2>这次改了什么 <em>changelog</em></h2>
+  <p class="lead">两件事：<b>图标换成 Lucide SVG 真源</b>、<b>弃用 shadcn 组件库</b>。下面每一行都是实际改了代码的位置。</p>
+  <table>
+    <thead><tr><th>项目</th><th>改之前</th><th>改之后</th></tr></thead>
+    <tbody><tr><td><span class="cat">图标真源</span></td><td class="dim">icon_manager.py 内嵌 51 个手写 path + 42 个字符图标</td><td>app/qml/icons/*.svg（Lucide 98 个），QWidget 与 QML 共用</td></tr>
+<tr><td><span class="cat">图标渲染</span></td><td class="dim">QPainter 画手写 path；缺图标时降级画字符</td><td>QSvgRenderer 渲染真实 SVG，currentColor 替换为目标色</td></tr>
+<tr><td><span class="cat">icon_manager</span></td><td class="dim">图标实现本体</td><td>退化为兼容层，64 个既有调用点零改动转调新库</td></tr>
+<tr><td><span class="cat">shadcn 组件库</span></td><td class="dim">app/ui/components/ 被 3 个业务文件引用</td><td>弃用。业务依赖已全部解除，仅剩演示页自身</td></tr>
+<tr><td><span class="cat">FlowLayout</span></td><td class="dim">放在组件库 layout.py 里</td><td>迁到 app/ui/flow_layout.py —— 布局原语，不是视觉组件</td></tr>
+<tr><td><span class="cat">状态指示器</span></td><td class="dim">把字符（✎ ● ○）拼进 QLabel 文字</td><td>QLabel 贴真实 SVG 位图，颜色随状态语义</td></tr>
+<tr><td><span class="cat">Toast</span></td><td class="dim">QLabel 子类 + 字符图标 + QSS 背景</td><td>QWidget 组合 + SVG 图标 + paintEvent 自绘背景</td></tr>
+<tr><td><span class="cat">绑定对话框</span></td><td class="dim">标题与分析结果里拼字符（∞ ✗ ✓）</td><td>标题用 SVG 图标行；纯文本改用 [无效]/[完成] 语义前缀</td></tr></tbody>
+  </table>
+
+  <div class="note ok">
+    <b>怎么确认「真实应用」而不是「改了代码没生效」：</b>
+    启动真实 <code>MainWindow</code>，遍历界面上全部 102 个按钮 —— 35 个带图标，
+    逐个取位图检查像素，<b>0 个空白</b>；图标尺寸落在 16 / 18 / 20 三档。
+    下面「真实界面」一栏就是那次运行截的图。
+  </div>
+
+  <div class="note">
+    <b>保留了什么：</b><code>icon_manager.py</code> 没有删，它退化成兼容层，
+    让 64 个既有调用点零改动拿到新图标。<code>FlowLayout</code> 从组件库里<b>择出来</b>
+    迁到 <code>app/ui/flow_layout.py</code> —— 它解决的是真实的按钮换行缺陷，不是视觉组件。
+  </div>
+</section>
+
+<section id="live">
+  <h2>真实界面 <em>real render</em></h2>
+  <p class="lead">下面不是设计稿，是运行起来的主窗口截图。图标来自 <code>app/qml/icons/*.svg</code>。</p>
+  <div class="shots"><figure class="shot wide">
+      <img src="_gallery_assets/classic_main.png" alt="经典界面 · 主窗口" loading="lazy">
+      <figcaption><strong>经典界面 · 主窗口</strong><span>真实 MainWindow 离屏渲染（1600×1000）。画布区为空文档，所以中间是黑的 —— 这是真实启动状态。图标全部为 Lucide SVG；主工具栏用纯文字模式以容纳右侧对齐栏。</span></figcaption>
+    </figure>
+<figure class="shot wide">
+      <img src="_gallery_assets/classic_icons_board.png" alt="界面里的纯图标按钮" loading="lazy">
+      <figcaption><strong>界面里的纯图标按钮</strong><span>从真实主窗口提取的 8 个纯图标按钮（40px 位图，2 倍显示）。这是「图标已真实应用」的直接证据：全部 24×24 按钮、16px 图标、同一套 Lucide。</span></figcaption>
+    </figure>
+<figure class="shot">
+      <img src="_gallery_assets/classic_layerbar.png" alt="图层面板底部工具条" loading="lazy">
+      <figcaption><strong>图层面板底部工具条</strong><span>2 倍放大。新增 / 删除 / 上移 / 下移 / 随机 / 绑定 / 尺寸匹配，同一套 Lucide、同一尺寸。</span></figcaption>
+    </figure></div>
+</section>
+
+<section id="icons">
+  <h2>Lucide SVG 图标 <em>app/qml/icons · 98 个</em></h2>
+  <p class="lead">
+    全部来自 <code>lucide-static v1.28.0</code>（ISC 许可）。24×24 视图、<code>stroke-width="2"</code>、
+    圆角端点 —— 98 个文件的几何规范完全一致（有契约测试守着）。
+    <b>QWidget 与 QML 共用同一批文件</b>，一个图标只有一份定义。点击图标名可复制。
+  </p>
+  <div class="toolbar">
+    <input id="q" placeholder="搜索图标名…" autocomplete="off">
+    <span id="cnt">98 个</span>
+  </div>
+  <div class="icogrid" id="lucideGrid"><button class="icell" data-name="align-center-horizontal" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h20" /> <path d="M10 16v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" /> <path d="M10 8V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4" /> <path d="M20 16v1a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-1" /> <path d="M14 8V7c0-1.1.9-2 2-2h2a2 2 0 0 1 2 2v1" /></svg><span>align-center-horizontal</span></button>
+<button class="icell" data-name="align-center-vertical" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20" /> <path d="M8 10H4a2 2 0 0 1-2-2V6c0-1.1.9-2 2-2h4" /> <path d="M16 10h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4" /> <path d="M8 20H7a2 2 0 0 1-2-2v-2c0-1.1.9-2 2-2h1" /> <path d="M16 14h1a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-1" /></svg><span>align-center-vertical</span></button>
+<button class="icell" data-name="align-end-horizontal" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="6" height="16" x="4" y="2" rx="2" /> <rect width="6" height="9" x="14" y="9" rx="2" /> <path d="M22 22H2" /></svg><span>align-end-horizontal</span></button>
+<button class="icell" data-name="align-end-vertical" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="6" x="2" y="4" rx="2" /> <rect width="9" height="6" x="9" y="14" rx="2" /> <path d="M22 22V2" /></svg><span>align-end-vertical</span></button>
+<button class="icell" data-name="align-horizontal-distribute-center" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="6" height="14" x="4" y="5" rx="2" /> <rect width="6" height="10" x="14" y="7" rx="2" /> <path d="M17 22v-5" /> <path d="M17 7V2" /> <path d="M7 22v-3" /> <path d="M7 5V2" /></svg><span>align-horizontal-distribute-center</span></button>
+<button class="icell" data-name="align-start-horizontal" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="6" height="16" x="4" y="6" rx="2" /> <rect width="6" height="9" x="14" y="6" rx="2" /> <path d="M22 2H2" /></svg><span>align-start-horizontal</span></button>
+<button class="icell" data-name="align-start-vertical" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="9" height="6" x="6" y="14" rx="2" /> <rect width="16" height="6" x="6" y="4" rx="2" /> <path d="M2 2v20" /></svg><span>align-start-vertical</span></button>
+<button class="icell" data-name="align-vertical-distribute-center" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17h-3" /> <path d="M22 7h-5" /> <path d="M5 17H2" /> <path d="M7 7H2" /> <rect x="5" y="14" width="14" height="6" rx="2" /> <rect x="7" y="4" width="10" height="6" rx="2" /></svg><span>align-vertical-distribute-center</span></button>
+<button class="icell" data-name="app-window" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /> <path d="M10 4v4" /> <path d="M2 8h20" /> <path d="M6 4v4" /></svg><span>app-window</span></button>
+<button class="icell" data-name="arrow-down" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14" /> <path d="m19 12-7 7-7-7" /></svg><span>arrow-down</span></button>
+<button class="icell" data-name="arrow-left-right" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4" /> <path d="M4 7h16" /> <path d="m16 21 4-4-4-4" /> <path d="M20 17H4" /></svg><span>arrow-left-right</span></button>
+<button class="icell" data-name="arrow-left" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7" /> <path d="M19 12H5" /></svg><span>arrow-left</span></button>
+<button class="icell" data-name="arrow-right" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /></svg><span>arrow-right</span></button>
+<button class="icell" data-name="arrow-up-down" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4" /> <path d="M17 20V4" /> <path d="m3 8 4-4 4 4" /> <path d="M7 4v16" /></svg><span>arrow-up-down</span></button>
+<button class="icell" data-name="arrow-up" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7" /> <path d="M12 19V5" /></svg><span>arrow-up</span></button>
+<button class="icell" data-name="badge-check" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" /> <path d="m9 12 2 2 4-4" /></svg><span>badge-check</span></button>
+<button class="icell" data-name="bookmark" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z" /></svg><span>bookmark</span></button>
+<button class="icell" data-name="chevron-down" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg><span>chevron-down</span></button>
+<button class="icell" data-name="chevron-right" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg><span>chevron-right</span></button>
+<button class="icell" data-name="chevron-up" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6" /></svg><span>chevron-up</span></button>
+<button class="icell" data-name="chevrons-up-down" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 15 5 5 5-5" /> <path d="m7 9 5-5 5 5" /></svg><span>chevrons-up-down</span></button>
+<button class="icell" data-name="circle-alert" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /> <line x1="12" x2="12" y1="8" y2="12" /> <line x1="12" x2="12.01" y1="16" y2="16" /></svg><span>circle-alert</span></button>
+<button class="icell" data-name="circle-check" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /> <path d="m9 12 2 2 4-4" /></svg><span>circle-check</span></button>
+<button class="icell" data-name="circle-dot" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /> <circle cx="12" cy="12" r="1" /></svg><span>circle-dot</span></button>
+<button class="icell" data-name="circle-help" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></svg><span>circle-help</span></button>
+<button class="icell" data-name="circle-x" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /> <path d="m15 9-6 6" /> <path d="m9 9 6 6" /></svg><span>circle-x</span></button>
+<button class="icell" data-name="clipboard-paste" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 14h10" /> <path d="M16 4h2a2 2 0 0 1 2 2v1.344" /> <path d="m17 18 4-4-4-4" /> <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" /> <rect x="8" y="2" width="8" height="4" rx="1" /></svg><span>clipboard-paste</span></button>
+<button class="icell" data-name="copy" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /> <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg><span>copy</span></button>
+<button class="icell" data-name="crop" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14" /> <path d="M18 22V8a2 2 0 0 0-2-2H2" /></svg><span>crop</span></button>
+<button class="icell" data-name="download" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /></svg><span>download</span></button>
+<button class="icell" data-name="ellipsis" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1" /> <circle cx="19" cy="12" r="1" /> <circle cx="5" cy="12" r="1" /></svg><span>ellipsis</span></button>
+<button class="icell" data-name="eye-off" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" /> <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" /> <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" /> <path d="m2 2 20 20" /></svg><span>eye-off</span></button>
+<button class="icell" data-name="eye" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" /></svg><span>eye</span></button>
+<button class="icell" data-name="file-image" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <circle cx="10" cy="12" r="2" /> <path d="m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22" /></svg><span>file-image</span></button>
+<button class="icell" data-name="file-plus-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.35 22H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v5.35" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M14 19h6" /> <path d="M17 16v6" /></svg><span>file-plus-2</span></button>
+<button class="icell" data-name="file-text" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /></svg><span>file-text</span></button>
+<button class="icell" data-name="filter" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z" /></svg><span>filter</span></button>
+<button class="icell" data-name="flip-horizontal-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 5 5-5 5V7" /> <path d="m21 7-5 5 5 5V7" /> <path d="M12 20v2" /> <path d="M12 14v2" /> <path d="M12 8v2" /> <path d="M12 2v2" /></svg><span>flip-horizontal-2</span></button>
+<button class="icell" data-name="flip-vertical-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 3-5 5-5-5h10" /> <path d="m17 21-5-5-5 5h10" /> <path d="M4 12H2" /> <path d="M10 12H8" /> <path d="M16 12h-2" /> <path d="M22 12h-2" /></svg><span>flip-vertical-2</span></button>
+<button class="icell" data-name="folder-input" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1" /> <path d="M2 13h10" /> <path d="m9 16 3-3-3-3" /></svg><span>folder-input</span></button>
+<button class="icell" data-name="folder-open" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" /></svg><span>folder-open</span></button>
+<button class="icell" data-name="folder-output" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7.5V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-1.5" /> <path d="M2 13h10" /> <path d="m5 10-3 3 3 3" /></svg><span>folder-output</span></button>
+<button class="icell" data-name="folder" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg><span>folder</span></button>
+<button class="icell" data-name="group" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5c0-1.1.9-2 2-2h2" /> <path d="M17 3h2c1.1 0 2 .9 2 2v2" /> <path d="M21 17v2c0 1.1-.9 2-2 2h-2" /> <path d="M7 21H5c-1.1 0-2-.9-2-2v-2" /> <rect width="7" height="5" x="7" y="7" rx="1" /> <rect width="7" height="5" x="10" y="12" rx="1" /></svg><span>group</span></button>
+<button class="icell" data-name="hand" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" /> <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" /> <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" /> <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg><span>hand</span></button>
+<button class="icell" data-name="history" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /> <path d="M12 7v5l4 2" /></svg><span>history</span></button>
+<button class="icell" data-name="image-plus" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5h6" /> <path d="M19 2v6" /> <path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /> <circle cx="9" cy="9" r="2" /></svg><span>image-plus</span></button>
+<button class="icell" data-name="image" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg><span>image</span></button>
+<button class="icell" data-name="images" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16" /> <path d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2" /> <circle cx="13" cy="7" r="1" fill="currentColor" /> <rect x="8" y="2" width="14" height="14" rx="2" /></svg><span>images</span></button>
+<button class="icell" data-name="info" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /> <path d="M12 16v-4" /> <path d="M12 8h.01" /></svg><span>info</span></button>
+<button class="icell" data-name="layers-3" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /> <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /> <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></svg><span>layers-3</span></button>
+<button class="icell" data-name="link-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2" /> <path d="M15 7h2a5 5 0 1 1 0 10h-2" /> <line x1="8" x2="16" y1="12" y2="12" /></svg><span>link-2</span></button>
+<button class="icell" data-name="list-checks" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5h8" /> <path d="M13 12h8" /> <path d="M13 19h8" /> <path d="m3 17 2 2 4-4" /> <path d="m3 7 2 2 4-4" /></svg><span>list-checks</span></button>
+<button class="icell" data-name="loader-circle" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg><span>loader-circle</span></button>
+<button class="icell" data-name="lock-keyhole" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="16" r="1" /> <rect x="3" y="10" width="18" height="12" rx="2" /> <path d="M7 10V7a5 5 0 0 1 10 0v3" /></svg><span>lock-keyhole</span></button>
+<button class="icell" data-name="magnet" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 15 4 4" /> <path d="M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z" /> <path d="m5 8 4 4" /></svg><span>magnet</span></button>
+<button class="icell" data-name="maximize-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /> <path d="m21 3-7 7" /> <path d="m3 21 7-7" /> <path d="M9 21H3v-6" /></svg><span>maximize-2</span></button>
+<button class="icell" data-name="minimize-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 10 7-7" /> <path d="M20 10h-6V4" /> <path d="m3 21 7-7" /> <path d="M4 14h6v6" /></svg><span>minimize-2</span></button>
+<button class="icell" data-name="minus" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></svg><span>minus</span></button>
+<button class="icell" data-name="moon" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg><span>moon</span></button>
+<button class="icell" data-name="mouse-pointer-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" /></svg><span>mouse-pointer-2</span></button>
+<button class="icell" data-name="move" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20" /> <path d="m15 19-3 3-3-3" /> <path d="m19 9 3 3-3 3" /> <path d="M2 12h20" /> <path d="m5 9-3 3 3 3" /> <path d="m9 5 3-3 3 3" /></svg><span>move</span></button>
+<button class="icell" data-name="panel-left-close" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M9 3v18" /> <path d="m16 15-3-3 3-3" /></svg><span>panel-left-close</span></button>
+<button class="icell" data-name="panel-right" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M15 3v18" /></svg><span>panel-right</span></button>
+<button class="icell" data-name="pencil" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /> <path d="m15 5 4 4" /></svg><span>pencil</span></button>
+<button class="icell" data-name="plus" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /> <path d="M12 5v14" /></svg><span>plus</span></button>
+<button class="icell" data-name="redo-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5" /> <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" /></svg><span>redo-2</span></button>
+<button class="icell" data-name="refresh-cw" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></svg><span>refresh-cw</span></button>
+<button class="icell" data-name="rotate-ccw" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" /></svg><span>rotate-ccw</span></button>
+<button class="icell" data-name="rotate-cw" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /></svg><span>rotate-cw</span></button>
+<button class="icell" data-name="ruler" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z" /> <path d="m14.5 12.5 2-2" /> <path d="m11.5 9.5 2-2" /> <path d="m8.5 6.5 2-2" /> <path d="m17.5 15.5 2-2" /></svg><span>ruler</span></button>
+<button class="icell" data-name="save" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></svg><span>save</span></button>
+<button class="icell" data-name="scan-eye" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /> <path d="M17 3h2a2 2 0 0 1 2 2v2" /> <path d="M21 17v2a2 2 0 0 1-2 2h-2" /> <path d="M7 21H5a2 2 0 0 1-2-2v-2" /> <circle cx="12" cy="12" r="1" /> <path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0" /></svg><span>scan-eye</span></button>
+<button class="icell" data-name="scan-line" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2" /> <path d="M17 3h2a2 2 0 0 1 2 2v2" /> <path d="M21 17v2a2 2 0 0 1-2 2h-2" /> <path d="M7 21H5a2 2 0 0 1-2-2v-2" /> <path d="M7 12h10" /></svg><span>scan-line</span></button>
+<button class="icell" data-name="scissors" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3" /> <path d="M8.12 8.12 12 12" /> <path d="M20 4 8.12 15.88" /> <circle cx="6" cy="18" r="3" /> <path d="M14.8 14.8 20 20" /></svg><span>scissors</span></button>
+<button class="icell" data-name="search" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></svg><span>search</span></button>
+<button class="icell" data-name="send-to-back" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="14" width="8" height="8" rx="2" /> <rect x="2" y="2" width="8" height="8" rx="2" /> <path d="M7 14v1a2 2 0 0 0 2 2h1" /> <path d="M14 7h1a2 2 0 0 1 2 2v1" /></svg><span>send-to-back</span></button>
+<button class="icell" data-name="settings-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 17H5" /> <path d="M19 7h-9" /> <circle cx="17" cy="17" r="3" /> <circle cx="7" cy="7" r="3" /></svg><span>settings-2</span></button>
+<button class="icell" data-name="shapes" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z" /> <rect x="3" y="14" width="7" height="7" rx="1" /> <circle cx="17.5" cy="17.5" r="3.5" /></svg><span>shapes</span></button>
+<button class="icell" data-name="shuffle" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 14 4 4-4 4" /> <path d="m18 2 4 4-4 4" /> <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" /> <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" /> <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" /></svg><span>shuffle</span></button>
+<button class="icell" data-name="sliders-horizontal" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3" /> <path d="M12 19H3" /> <path d="M14 3v4" /> <path d="M16 17v4" /> <path d="M21 12h-9" /> <path d="M21 19h-5" /> <path d="M21 5h-7" /> <path d="M8 10v4" /> <path d="M8 12H3" /></svg><span>sliders-horizontal</span></button>
+<button class="icell" data-name="sparkles" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" /></svg><span>sparkles</span></button>
+<button class="icell" data-name="square-dashed" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a2 2 0 0 0-2 2" /> <path d="M19 3a2 2 0 0 1 2 2" /> <path d="M21 19a2 2 0 0 1-2 2" /> <path d="M5 21a2 2 0 0 1-2-2" /> <path d="M9 3h1" /> <path d="M9 21h1" /> <path d="M14 3h1" /> <path d="M14 21h1" /> <path d="M3 9v1" /> <path d="M21 9v1" /> <path d="M3 14v1" /> <path d="M21 14v1" /></svg><span>square-dashed</span></button>
+<button class="icell" data-name="sun" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></svg><span>sun</span></button>
+<button class="icell" data-name="tag" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" /> <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /></svg><span>tag</span></button>
+<button class="icell" data-name="trash-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg><span>trash-2</span></button>
+<button class="icell" data-name="triangle-alert" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></svg><span>triangle-alert</span></button>
+<button class="icell" data-name="type" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16" /> <path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2" /> <path d="M9 20h6" /></svg><span>type</span></button>
+<button class="icell" data-name="undo-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5" /> <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" /></svg><span>undo-2</span></button>
+<button class="icell" data-name="ungroup" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="11" y="14" width="10" height="7" rx="2" /> <rect x="3" y="3" width="10" height="7" rx="2" /></svg><span>ungroup</span></button>
+<button class="icell" data-name="unlink-2" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h2a5 5 0 0 1 0 10h-2m-6 0H7A5 5 0 0 1 7 7h2" /></svg><span>unlink-2</span></button>
+<button class="icell" data-name="unlock-keyhole" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="16" r="1" /> <rect width="18" height="12" x="3" y="10" rx="2" /> <path d="M7 10V7a5 5 0 0 1 9.33-2.5" /></svg><span>unlock-keyhole</span></button>
+<button class="icell" data-name="upload" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /> <path d="m17 8-5-5-5 5" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></svg><span>upload</span></button>
+<button class="icell" data-name="wand-sparkles" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72" /> <path d="m14 7 3 3" /> <path d="M5 6v4" /> <path d="M19 14v4" /> <path d="M10 2v2" /> <path d="M7 8H3" /> <path d="M21 16h-4" /> <path d="M11 3H9" /></svg><span>wand-sparkles</span></button>
+<button class="icell" data-name="wrench" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z" /></svg><span>wrench</span></button>
+<button class="icell" data-name="x" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></svg><span>x</span></button>
+<button class="icell" data-name="zoom-in" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /> <line x1="21" x2="16.65" y1="21" y2="16.65" /> <line x1="11" x2="11" y1="8" y2="14" /> <line x1="8" x2="14" y1="11" y2="11" /></svg><span>zoom-in</span></button>
+<button class="icell" data-name="zoom-out" title="点击复制图标名"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /> <line x1="21" x2="16.65" y1="21" y2="16.65" /> <line x1="8" x2="14" y1="11" y2="11" /></svg><span>zoom-out</span></button></div>
+</section>
+
+<section id="semantic">
+  <h2>语义名与映射 <em>IconName · 51 个</em></h2>
+  <p class="lead">
+    <code>IconName</code> 用<b>功能语义</b>（save / delete）而非形状（floppy / trash）命名。
+    换图标集时只改这张表，业务代码不动 —— 这是「不再出现两套图标混用」的结构保证。
+  </p>
+  <div class="mgroup"><span class="mgroup-t">图层与可见性</span><div class="mgrid"><span class="mtag"><b>layer</b><i>layers-3</i></span><span class="mtag"><b>layergroup</b><i>group</i></span><span class="mtag"><b>visible</b><i>eye</i></span><span class="mtag"><b>hidden</b><i>eye-off</i></span><span class="mtag"><b>lock</b><i>lock-keyhole</i></span><span class="mtag"><b>unlock</b><i>unlock-keyhole</i></span></div></div><div class="mgroup"><span class="mgroup-t">基础操作</span><div class="mgrid"><span class="mtag"><b>add</b><i>plus</i></span><span class="mtag"><b>remove</b><i>minus</i></span><span class="mtag"><b>delete</b><i>trash-2</i></span><span class="mtag"><b>edit</b><i>pencil</i></span><span class="mtag"><b>copy</b><i>copy</i></span><span class="mtag"><b>paste</b><i>clipboard-paste</i></span><span class="mtag"><b>cut</b><i>scissors</i></span></div></div><div class="mgroup"><span class="mgroup-t">文件</span><div class="mgrid"><span class="mtag"><b>new</b><i>file-plus-2</i></span><span class="mtag"><b>open</b><i>folder-open</i></span><span class="mtag"><b>save</b><i>save</i></span><span class="mtag"><b>import</b><i>download</i></span><span class="mtag"><b>export</b><i>upload</i></span></div></div><div class="mgroup"><span class="mgroup-t">编辑历史</span><div class="mgrid"><span class="mtag"><b>undo</b><i>undo-2</i></span><span class="mtag"><b>redo</b><i>redo-2</i></span><span class="mtag"><b>refresh</b><i>refresh-cw</i></span></div></div><div class="mgroup"><span class="mgroup-t">方向</span><div class="mgrid"><span class="mtag"><b>up</b><i>chevron-up</i></span><span class="mtag"><b>down</b><i>chevron-down</i></span><span class="mtag"><b>left</b><i>arrow-left</i></span><span class="mtag"><b>right</b><i>arrow-right</i></span><span class="mtag"><b>expand</b><i>maximize-2</i></span><span class="mtag"><b>collapse</b><i>minimize-2</i></span></div></div><div class="mgroup"><span class="mgroup-t">视图</span><div class="mgrid"><span class="mtag"><b>zoomin</b><i>zoom-in</i></span><span class="mtag"><b>zoomout</b><i>zoom-out</i></span><span class="mtag"><b>fit</b><i>square-dashed</i></span><span class="mtag"><b>sort</b><i>arrow-up-down</i></span><span class="mtag"><b>filter</b><i>filter</i></span></div></div><div class="mgroup"><span class="mgroup-t">内容类型</span><div class="mgrid"><span class="mtag"><b>text</b><i>type</i></span><span class="mtag"><b>image</b><i>image</i></span><span class="mtag"><b>shape</b><i>shapes</i></span><span class="mtag"><b>align</b><i>align-start-vertical</i></span><span class="mtag"><b>random</b><i>shuffle</i></span><span class="mtag"><b>link</b><i>link-2</i></span><span class="mtag"><b>unlink</b><i>unlink-2</i></span></div></div><div class="mgroup"><span class="mgroup-t">批量与预设</span><div class="mgrid"><span class="mtag"><b>batchexport</b><i>folder-output</i></span><span class="mtag"><b>multiexport</b><i>app-window</i></span><span class="mtag"><b>preset</b><i>bookmark</i></span><span class="mtag"><b>ai</b><i>sparkles</i></span></div></div><div class="mgroup"><span class="mgroup-t">系统</span><div class="mgrid"><span class="mtag"><b>settings</b><i>settings-2</i></span><span class="mtag"><b>tools</b><i>wrench</i></span><span class="mtag"><b>help</b><i>circle-help</i></span><span class="mtag"><b>about</b><i>info</i></span></div></div><div class="mgroup"><span class="mgroup-t">状态</span><div class="mgrid"><span class="mtag"><b>success</b><i>circle-check</i></span><span class="mtag"><b>error</b><i>circle-x</i></span><span class="mtag"><b>warning</b><i>triangle-alert</i></span><span class="mtag"><b>info</b><i>info</i></span></div></div>
+</section>
+
+<section id="alias">
+  <h2>旧名兼容表 <em>_ALIAS · 54 条</em></h2>
+  <p class="lead">
+    旧代码传 <code>icon('delete')</code>、<code>icon('zoom_in')</code> 仍然有效 —— 别名表把它们
+    映射到 Lucide 名。这张表覆盖了 <code>icon_manager</code> 时代全部业务名，所以 64 个调用点
+    一行都不用改。右侧 ✓ 表示目标文件真实存在。
+  </p>
+  <div class="note warn">
+    <b>顺带修掉两个历史 bug：</b><code>blend</code> 和 <code>opacity</code> 在旧
+    <code>icon_manager</code> 里<b>根本没有对应图标</b>，<code>get_icon_text()</code> 直接返回
+    <code>?</code>（状态栏里一直显示问号）。现在分别映射到 <code>layers-3</code> 和
+    <code>circle-dot</code>。
+  </div>
+  <table>
+    <thead><tr><th>旧业务名</th><th>Lucide 图标</th><th>文件存在</th></tr></thead>
+    <tbody><tr><td class="mono">about</td><td class="mono dim">info</td><td>✓</td></tr>
+<tr><td class="mono">add</td><td class="mono dim">plus</td><td>✓</td></tr>
+<tr><td class="mono">ai</td><td class="mono dim">sparkles</td><td>✓</td></tr>
+<tr><td class="mono">align</td><td class="mono dim">align-start-vertical</td><td>✓</td></tr>
+<tr><td class="mono">batch_export</td><td class="mono dim">folder-output</td><td>✓</td></tr>
+<tr><td class="mono">blend</td><td class="mono dim">layers-3</td><td>✓</td></tr>
+<tr><td class="mono">collapse</td><td class="mono dim">minimize-2</td><td>✓</td></tr>
+<tr><td class="mono">copy</td><td class="mono dim">copy</td><td>✓</td></tr>
+<tr><td class="mono">cut</td><td class="mono dim">scissors</td><td>✓</td></tr>
+<tr><td class="mono">delete</td><td class="mono dim">trash-2</td><td>✓</td></tr>
+<tr><td class="mono">down</td><td class="mono dim">chevron-down</td><td>✓</td></tr>
+<tr><td class="mono">edit</td><td class="mono dim">pencil</td><td>✓</td></tr>
+<tr><td class="mono">error</td><td class="mono dim">circle-x</td><td>✓</td></tr>
+<tr><td class="mono">expand</td><td class="mono dim">maximize-2</td><td>✓</td></tr>
+<tr><td class="mono">export</td><td class="mono dim">upload</td><td>✓</td></tr>
+<tr><td class="mono">file</td><td class="mono dim">file-text</td><td>✓</td></tr>
+<tr><td class="mono">filter</td><td class="mono dim">filter</td><td>✓</td></tr>
+<tr><td class="mono">fit</td><td class="mono dim">square-dashed</td><td>✓</td></tr>
+<tr><td class="mono">folder</td><td class="mono dim">folder</td><td>✓</td></tr>
+<tr><td class="mono">help</td><td class="mono dim">circle-help</td><td>✓</td></tr>
+<tr><td class="mono">hidden</td><td class="mono dim">eye-off</td><td>✓</td></tr>
+<tr><td class="mono">image</td><td class="mono dim">image</td><td>✓</td></tr>
+<tr><td class="mono">import</td><td class="mono dim">download</td><td>✓</td></tr>
+<tr><td class="mono">info</td><td class="mono dim">info</td><td>✓</td></tr>
+<tr><td class="mono">layer</td><td class="mono dim">layers-3</td><td>✓</td></tr>
+<tr><td class="mono">left</td><td class="mono dim">arrow-left</td><td>✓</td></tr>
+<tr><td class="mono">link</td><td class="mono dim">link-2</td><td>✓</td></tr>
+<tr><td class="mono">lock</td><td class="mono dim">lock-keyhole</td><td>✓</td></tr>
+<tr><td class="mono">multi_export</td><td class="mono dim">app-window</td><td>✓</td></tr>
+<tr><td class="mono">new</td><td class="mono dim">file-plus-2</td><td>✓</td></tr>
+<tr><td class="mono">opacity</td><td class="mono dim">circle-dot</td><td>✓</td></tr>
+<tr><td class="mono">open</td><td class="mono dim">folder-open</td><td>✓</td></tr>
+<tr><td class="mono">paste</td><td class="mono dim">clipboard-paste</td><td>✓</td></tr>
+<tr><td class="mono">preset</td><td class="mono dim">bookmark</td><td>✓</td></tr>
+<tr><td class="mono">random</td><td class="mono dim">shuffle</td><td>✓</td></tr>
+<tr><td class="mono">redo</td><td class="mono dim">redo-2</td><td>✓</td></tr>
+<tr><td class="mono">refresh</td><td class="mono dim">refresh-cw</td><td>✓</td></tr>
+<tr><td class="mono">remove</td><td class="mono dim">minus</td><td>✓</td></tr>
+<tr><td class="mono">right</td><td class="mono dim">arrow-right</td><td>✓</td></tr>
+<tr><td class="mono">save</td><td class="mono dim">save</td><td>✓</td></tr>
+<tr><td class="mono">settings</td><td class="mono dim">settings-2</td><td>✓</td></tr>
+<tr><td class="mono">shape</td><td class="mono dim">shapes</td><td>✓</td></tr>
+<tr><td class="mono">sort</td><td class="mono dim">arrow-up-down</td><td>✓</td></tr>
+<tr><td class="mono">success</td><td class="mono dim">circle-check</td><td>✓</td></tr>
+<tr><td class="mono">text</td><td class="mono dim">type</td><td>✓</td></tr>
+<tr><td class="mono">tools</td><td class="mono dim">wrench</td><td>✓</td></tr>
+<tr><td class="mono">undo</td><td class="mono dim">undo-2</td><td>✓</td></tr>
+<tr><td class="mono">unlink</td><td class="mono dim">unlink-2</td><td>✓</td></tr>
+<tr><td class="mono">unlock</td><td class="mono dim">unlock-keyhole</td><td>✓</td></tr>
+<tr><td class="mono">up</td><td class="mono dim">chevron-up</td><td>✓</td></tr>
+<tr><td class="mono">visible</td><td class="mono dim">eye</td><td>✓</td></tr>
+<tr><td class="mono">warning</td><td class="mono dim">triangle-alert</td><td>✓</td></tr>
+<tr><td class="mono">zoom_in</td><td class="mono dim">zoom-in</td><td>✓</td></tr>
+<tr><td class="mono">zoom_out</td><td class="mono dim">zoom-out</td><td>✓</td></tr></tbody>
+  </table>
+</section>
+
+<section id="tokens">
+  <h2>设计令牌 <em>tokens_v2 + design_spec</em></h2>
+  <p class="lead">唯一事实来源：<code>app/ui/tokens_v2.py</code>（语义色）与
+     <code>app/ui/design_spec.py</code>（强制尺寸档位）。组件库弃用后，这两处是<b>唯一</b>该去查规范的地方。</p>
+
+  <h3>语义色板（实际取值）</h3>
+  <div class="swgrid"><div class="sw"><span class="chip" style="background:#08090A"></span><div><code>canvas</code><b>#08090A</b><i>画布工作区，全站最深</i></div></div>
+<div class="sw"><span class="chip" style="background:#0A0B0D"></span><div><code>surface_base</code><b>#0A0B0D</b><i>应用底，比画布略亮</i></div></div>
+<div class="sw"><span class="chip" style="background:#0F1011"></span><div><code>surface_1</code><b>#0F1011</b><i>侧栏 / 面板</i></div></div>
+<div class="sw"><span class="chip" style="background:#161719"></span><div><code>surface_2</code><b>#161719</b><i>卡片 / 分组</i></div></div>
+<div class="sw"><span class="chip" style="background:#1D1F21"></span><div><code>surface_3</code><b>#1D1F21</b><i>输入框 / 下拉</i></div></div>
+<div class="sw"><span class="chip" style="background:#23252A"></span><div><code>surface_4</code><b>#23252A</b><i>弹层 / 悬浮</i></div></div>
+<div class="sw"><span class="chip" style="background:#1F2437"></span><div><code>surface_selected</code><b>#1F2437</b><i>选中行，靛蓝低饱和底</i></div></div>
+<div class="sw"><span class="chip" style="background:#141619"></span><div><code>border_subtle</code><b>#141619</b><i>分割线，亮度差仅 3</i></div></div>
+<div class="sw"><span class="chip" style="background:#F7F8F8"></span><div><code>text_primary</code><b>#F7F8F8</b><i>主文字</i></div></div>
+<div class="sw"><span class="chip" style="background:#B4BCC6"></span><div><code>text_secondary</code><b>#B4BCC6</b><i>次级文字</i></div></div>
+<div class="sw"><span class="chip" style="background:#8E97A1"></span><div><code>text_muted</code><b>#8E97A1</b><i>提示文字</i></div></div>
+<div class="sw"><span class="chip" style="background:#6B7079"></span><div><code>text_disabled</code><b>#6B7079</b><i>禁用</i></div></div>
+<div class="sw"><span class="chip" style="background:#5E6AD2"></span><div><code>accent</code><b>#5E6AD2</b><i>品牌靛蓝，Linear 同色系</i></div></div>
+<div class="sw"><span class="chip" style="background:#4F5ABF"></span><div><code>accent_hover</code><b>#4F5ABF</b><i>hover 更深</i></div></div>
+<div class="sw"><span class="chip" style="background:#3DD68C"></span><div><code>success</code><b>#3DD68C</b><i>成功</i></div></div>
+<div class="sw"><span class="chip" style="background:#FF8A3D"></span><div><code>warning</code><b>#FF8A3D</b><i>警告</i></div></div>
+<div class="sw"><span class="chip" style="background:#C4342B"></span><div><code>danger</code><b>#C4342B</b><i>危险填充（压白字达标）</i></div></div>
+<div class="sw"><span class="chip" style="background:#E5484D"></span><div><code>danger_emphasis</code><b>#E5484D</b><i>危险图形 / 文字（暗底够亮）</i></div></div>
+<div class="sw"><span class="chip" style="background:#9AA3EA"></span><div><code>info</code><b>#9AA3EA</b><i>信息</i></div></div></div>
+
+  <h3>强制档位</h3>
+  <div class="scale">
+    <div class="spec"><h5>Scale · 控件高度</h5>
+      <div class="line"><span>SM 工具条 / 底栏</span><span>24</span></div>
+      <div class="line"><span>MD 默认</span><span>28</span></div>
+      <div class="line"><span>LG 主操作</span><span>36</span></div>
+    </div>
+    <div class="spec"><h5>Space · 间距（4px 栅格）</h5>
+      <div class="line"><span>XS</span><span>4</span></div>
+      <div class="line"><span>SM</span><span>8</span></div>
+      <div class="line"><span>MD</span><span>12</span></div>
+      <div class="line"><span>LG</span><span>16</span></div>
+      <div class="line"><span>XL</span><span>24</span></div>
+    </div>
+    <div class="spec"><h5>Radius · 圆角</h5>
+      <div class="line"><span>SM 色块 / 标签</span><span>4</span></div>
+      <div class="line"><span>MD 按钮 / 输入</span><span>6</span></div>
+      <div class="line"><span>LG 面板</span><span>8</span></div>
+      <div class="line"><span>XL 对话框</span><span>12</span></div>
+    </div>
+    <div class="spec"><h5>FontSize · 字号</h5>
+      <div class="line"><span>CAPTION 角标</span><span>11</span></div>
+      <div class="line"><span>SMALL 次要</span><span>12</span></div>
+      <div class="line"><span>BASE 正文</span><span>13</span></div>
+      <div class="line"><span>MD 小标题</span><span>15</span></div>
+      <div class="line"><span>LG 区块</span><span>18</span></div>
+      <div class="line"><span>XL 大标题</span><span>24</span></div>
+    </div>
+    <div class="spec"><h5>IconSize · 图标（3 档）</h5>
+      <div class="line"><span>SM 内联文字旁</span><span>16</span></div>
+      <div class="line"><span>MD 工具栏默认</span><span>20</span></div>
+      <div class="line"><span>LG 面板头</span><span>24</span></div>
+    </div>
+    <div class="spec"><h5>Opacity / Motion</h5>
+      <div class="line"><span>DISABLED</span><span>0.38</span></div>
+      <div class="line"><span>HOVER</span><span>0.08</span></div>
+      <div class="line"><span>FAST 状态切换</span><span>120ms</span></div>
+      <div class="line"><span>BASE 展开收起</span><span>180ms</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="usage">
+  <h2>怎么用 <em>usage</em></h2>
+  <p class="lead">新代码只走下面这一套。不要再用 <code>app/ui/components/</code>，也不要用字符图标。</p>
+
+  <h3>图标</h3>
+  <div class="note">
+    <code>from app.ui.icon_library import icon, icon_pixmap, icon_button, IconName</code><br><br>
+    <code>btn.setIcon(icon("delete"))</code> 　　业务名，走别名表<br>
+    <code>btn.setIcon(icon(IconName.DELETE, color=Color.danger))</code> 　　语义常量 + 语义色<br>
+    <code>label.setPixmap(icon_pixmap("link", 16, Color.accent))</code> 　　贴到 QLabel<br>
+    <code>icon_button("zoom_in", size="md", tooltip="放大")</code> 　　尺寸受 design_spec 约束
+  </div>
+
+  <h3>尺寸与颜色</h3>
+  <div class="note">
+    <code>from app.ui.design_spec import Scale, Space, Radius, FontSize, IconSize</code><br>
+    <code>from app.ui.tokens_v2 import Color, Typography</code><br><br>
+    控件高度只准取 <code>Scale.PX</code> 的 24 / 28 / 36；间距只准取 <code>Space</code> 的 4/8/12/16/24；
+    图标只准取 <code>IconSize</code> 的 16/20/24。写死像素会被 <code>test_ui_rules.py</code> 拦下来。
+  </div>
+
+  <h3>不要做的事</h3>
+  <div class="note danger">
+    ✗ <code>from app.ui.components import ...</code> —— 组件库已弃用，有契约测试拦截<br>
+    ✗ <code>IconManager.get_icon_text()</code> —— 已废弃，字符图标已彻底移除<br>
+    ✗ 自己写 <code>&lt;path d="..."&gt;</code> 手绘图标 —— 与 Lucide 的几何规范对不上<br>
+    ✗ 在 <code>app/qml/icons/</code> 放非 Lucide 来源的 SVG —— 有来源校验测试
+  </div>
+</section>
+
+<footer>
+  数据来源：app/qml/icons/（98 个 SVG）、app/ui/icon_library.py（51 语义名 + 54 别名）、
+  app/ui/tokens_v2.py、app/ui/design_spec.py<br>
+  界面截图由真实 MainWindow 离屏渲染生成（_gallery_classic.py），非样式复刻。
+</footer>
+</main>
+</div>
+
+<script>
+function bindGrid(gridId, inputId, cntId, total){
+  var grid = document.getElementById(gridId);
+  var input = document.getElementById(inputId);
+  var cnt = document.getElementById(cntId);
+  var cells = [].slice.call(grid.querySelectorAll('.icell'));
+  input.addEventListener('input', function(){
+    var q = input.value.trim().toLowerCase();
+    var shown = 0;
+    cells.forEach(function(c){
+      var hit = !q || c.dataset.name.toLowerCase().indexOf(q) > -1;
+      c.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    cnt.textContent = q ? (shown + ' / ' + total + ' 个') : (total + ' 个');
+  });
+  cells.forEach(function(c){
+    c.addEventListener('click', function(){
+      var name = c.dataset.name;
+      if (navigator.clipboard) navigator.clipboard.writeText(name);
+      c.classList.add('copied');
+      var label = c.querySelector('span');
+      var old = label.textContent;
+      label.textContent = '已复制';
+      setTimeout(function(){ label.textContent = old; c.classList.remove('copied'); }, 700);
+    });
+  });
+}
+bindGrid('lucideGrid', 'q', 'cnt', 98);
+
+var links = [].slice.call(document.querySelectorAll('#nav a'));
+var secs = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+function sync(){
+  var y = window.scrollY + 120, idx = 0;
+  secs.forEach(function(s, i){ if (s && s.offsetTop <= y) idx = i; });
+  links.forEach(function(a, i){ a.classList.toggle('active', i === idx); });
+}
+window.addEventListener('scroll', sync, { passive: true });
+sync();
+</script>
+</body>
+</html>

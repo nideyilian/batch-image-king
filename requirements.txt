@@ -2,15 +2,14 @@
 # 核心GUI框架
 PySide6>=6.9.0
 
+# 图标：app/qml/icons/*.svg（Lucide，随代码分发），无需第三方图标包
+
 # 图像处理
 Pillow>=11.1.0
 fonttools>=4.0.0
 
 # 数值计算（图像处理需要）
 numpy>=2.2.0
-
-# 科学计算（图像处理算法）
-scipy>=1.15.0
 
 # 高级图像处理
 opencv-python>=4.12.0
