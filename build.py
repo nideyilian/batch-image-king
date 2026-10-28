@@ -209,81 +209,51 @@ def build():
         return
 
     # 生成 PyInstaller 版本信息文件
-    version_info_path = write_version_info(REPO_ROOT / "build" / "version_info_generated.txt", version)
+    write_version_info(REPO_ROOT / "build" / "version_info_generated.txt", version)
 
-    def pyinstaller_command(*, mode: str, distpath: str, workpath: str) -> list[str]:
-        """构造统一的 PyInstaller 命令。
+    def pyinstaller_command(*, distpath: str, workpath: str) -> list[str]:
+        """构造 PyInstaller 命令 —— 统一走 ``批图王.spec``。
 
-        安装版使用 onedir，便携版继续生成 onefile。两者共用同一组资源和
-        hidden imports，避免 build.py 与 spec 文件逐渐漂移。
+        为什么不再用一长串命令行参数：PyInstaller **没有** ``--exclude-binary``
+        开关，纯命令行无法剔除被 Qt hook 整批收集的原生 DLL
+        （``Qt6WebEngineCore.dll`` 单个 79.8MB）。只有在 spec 的 Analysis 之后
+        过滤 ``a.binaries`` 才拦得住，因此资源和排除逻辑全部收敛到 spec。
+
+        模式通过环境变量 ``BTK_BUILD_MODE`` 传给 spec（spec 内部据此决定
+        单文件还是目录结构），这里不再需要 ``--onefile`` / ``--onedir``。
         """
-        specpath = str(Path(workpath) / 'spec')
-        # 保持打包资源清单集中可读；执行时再解析为绝对路径。
-        data_files = [
-            ('app/resources', 'app/resources'),
-            ('app/qml/Main.qml', 'app/qml'),
-            ('app/qml/components', 'app/qml/components'),
-            ('app/qml/icons', 'app/qml/icons'),
-            ('app/qml/assets', 'app/qml/assets'),
-        ]
-        cmd = [
+        return [
             sys.executable,
             '-m',
             'PyInstaller',
             '--noconfirm',
             '--clean',
-            '--windowed',
-            f'--{mode}',
             f'--distpath={distpath}',
             f'--workpath={workpath}',
-            f'--specpath={specpath}',
-            f'--name={APP_NAME}',
-            f'--icon={REPO_ROOT / "app" / "resources" / "app_icon.ico"}',
-            # 版本信息
-            f'--version-file={version_info_path}',
-            # 隐藏导入
-            '--hidden-import=PySide6',
-            '--hidden-import=PySide6.QtQml',
-            '--hidden-import=PySide6.QtQuick',
-            '--hidden-import=PySide6.QtQuickControls2',
-            '--hidden-import=PySide6.QtWidgets',
-            '--hidden-import=PIL',
-            '--hidden-import=pyvips',
-            '--hidden-import=app.workers.export_worker',
-            '--hidden-import=cv2',
-            '--hidden-import=numpy',
-            '--hidden-import=scipy',
-            '--hidden-import=psutil',
-            # 排除不需要的模块以减小体积（可选）
-            # '--exclude-module=matplotlib',
-            # 入口文件
-            str(REPO_ROOT / 'main.py')
+            str(REPO_ROOT / '批图王.spec'),
         ]
 
-        for source, target in reversed(data_files):
-            cmd.insert(-1, f'--add-data={REPO_ROOT / source};{target}')
+    def run_build(mode: str, distpath: str, workpath: str) -> None:
+        """以指定模式执行一次打包（模式经环境变量传给 spec）。"""
+        cmd = pyinstaller_command(distpath=distpath, workpath=workpath)
+        print(f"Executing {mode} build:", " ".join(cmd))
+        env = dict(os.environ)
+        env['BTK_BUILD_MODE'] = mode
+        subprocess.check_call(cmd, env=env)
 
-        if os.path.exists('presets'):
-            cmd.insert(-1, f'--add-data={REPO_ROOT / "presets"};presets')
-        return [arg for arg in cmd if arg is not None]
-
-    # 安装版优先：目录内直接加载 DLL/Python 模块，不再启动时解压 250MB 单文件。
-    # onedir 的应用目录由 PyInstaller 按 ``distpath/<name>`` 生成。
+    # 安装版优先：目录内直接加载 DLL/Python 模块，不再启动时解压。
+    # onedir 的应用目录由 PyInstaller 按 ``distpath/<name>`` 生成，
     # 直接放在 dist 下，NSIS 可把该目录内容复制到安装根目录，避免额外一层目录。
     install_dist = str(REPO_ROOT / 'dist')
     install_work = str(REPO_ROOT / 'build' / 'installer')
-    install_cmd = pyinstaller_command(mode='onedir', distpath=install_dist, workpath=install_work)
-    print("Executing installer build command:", " ".join(install_cmd))
     try:
-        subprocess.check_call(install_cmd)
+        run_build('onedir', install_dist, install_work)
         # 便携版仍保留 onefile，供更新清单和免安装分发使用。
-        portable_cmd = pyinstaller_command(
-            mode='onefile',
-            distpath=str(REPO_ROOT / 'dist'),
-            workpath=str(REPO_ROOT / 'build' / 'portable'),
+        run_build(
+            'onefile',
+            str(REPO_ROOT / 'dist'),
+            str(REPO_ROOT / 'build' / 'portable'),
         )
-        print("Executing portable build command:", " ".join(portable_cmd))
-        subprocess.check_call(portable_cmd)
         print("\n" + "="*50)
         print("打包成功！")
         print(f"安装版目录: {os.path.abspath(f'dist/{APP_NAME}')}")
