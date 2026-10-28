@@ -4,7 +4,9 @@ import QtQuick
 QtObject {
     // QML mapping of Hermes-CN-Desktop shared-ui tokens. See
     // THIRD_PARTY_NOTICES.md for source and license notices.
-    property bool darkMode: false
+    // 默认深色（2026-10-28 按产品定位调整）。浅色主题仍完整保留，
+    // 由标题栏的太阳/月亮按钮切换并持久化到 uiAppearance/themeMode。
+    property bool darkMode: true
 
     readonly property color bgApp: darkMode ? "#111111" : "#f4f4f3"
     readonly property color bgBar: darkMode ? "#181818" : "#ffffff"

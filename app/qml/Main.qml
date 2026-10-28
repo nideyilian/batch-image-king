@@ -456,9 +456,17 @@ ApplicationWindow {
         return Qt.rgba(red, green, blue, alpha)
     }
 
+    // 只应用、不落盘。启动时用它，这样"用户从未点过主题按钮"的情况
+    // 会跟随 Theme.qml 里的默认值走 —— 否则每次启动都把当时的默认值
+    // 写进 uiAppearance/themeMode，默认值以后就再也改不动了
+    // （实测：默认浅色时期启动过一次的配置，改成深色后仍然回落到浅色）。
+    function applyThemeMode(mode) {
+        Theme.darkMode = mode === "dark"
+    }
+
     function setThemeMode(mode) {
         var normalizedMode = mode === "dark" ? "dark" : "light"
-        Theme.darkMode = normalizedMode === "dark"
+        applyThemeMode(normalizedMode)
         appearanceSettings.themeMode = normalizedMode
         appearanceSettings.sync()
     }
@@ -480,7 +488,9 @@ ApplicationWindow {
         id: appearanceSettings
         objectName: "appearanceSettings"
         category: "uiAppearance"
-        property string themeMode: "light"
+        // 新装默认深色。这个键只在显式切换时写入（主题按钮 / --theme），
+        // 所以「没有记录」= 用户从未选择过 = 用默认值，不会覆盖既有偏好。
+        property string themeMode: "dark"
     }
 
     // 窗口几何记忆（2026-10-28 补）。
@@ -502,7 +512,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        window.setThemeMode(appearanceSettings.themeMode)
+        window.applyThemeMode(appearanceSettings.themeMode)
         window.loadQuickCanvasPresets()
         window.restoreSidebarWidths()
         window.restoreGeometryFromSettings()

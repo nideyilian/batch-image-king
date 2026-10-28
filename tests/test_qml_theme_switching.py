@@ -29,7 +29,8 @@ def _contrast_ratio(foreground: str, background: str) -> float:
 def test_theme_tokens_define_composed_light_and_dark_palettes():
     source = (REPO_ROOT / "app/qml/components/Theme.qml").read_text(encoding="utf-8")
 
-    assert "property bool darkMode: false" in source
+    # 默认深色（2026-10-28 产品定位调整）。浅色主题仍在，靠标题栏按钮切换。
+    assert "property bool darkMode: true" in source
     for token in (
         "bgApp",
         "bgBar",
@@ -75,9 +76,11 @@ def test_qml_theme_button_persists_and_toggles_the_selected_mode():
     for marker in (
         'id: appearanceSettings',
         'category: "uiAppearance"',
-        'property string themeMode: "light"',
+        'property string themeMode: "dark"',
+        'function applyThemeMode(mode)',
         'function setThemeMode(mode)',
-        'Theme.darkMode = normalizedMode === "dark"',
+        'Theme.darkMode = mode === "dark"',
+        'window.applyThemeMode(appearanceSettings.themeMode)',
         'id: interfaceSettingsButton',
         'iconName: Theme.darkMode ? AppIcons.sun : AppIcons.moon',
         'tooltip: Theme.darkMode ? "切换为浅色主题" : "切换为暗色主题"',
@@ -116,6 +119,23 @@ def test_title_bar_only_keeps_real_navigation_actions():
         'text: "档案  default"',
     ):
         assert removed_marker not in source
+
+
+@pytest.mark.unit
+def test_startup_applies_stored_theme_without_freezing_the_default():
+    """启动只应用、不落盘，否则「默认值」会被第一次启动永久固化。
+
+    旧实现 onCompleted 直接调 setThemeMode()，它会把解析出的模式写进
+    uiAppearance/themeMode。结果是：用户哪怕从未点过主题按钮，第一次启动
+    就把当时的默认值钉死了 —— 之后再改 Theme.qml 的默认值对他无效。
+    （实测：默认改深色后，之前启动过一次的配置仍回落到浅色。）
+
+    显式切换仍然要落盘，所以按钮和 --theme 继续走 setThemeMode。
+    """
+    main_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
+
+    assert "window.applyThemeMode(appearanceSettings.themeMode)" in main_source
+    assert "window.setThemeMode(appearanceSettings.themeMode)" not in main_source
 
 
 @pytest.mark.unit
