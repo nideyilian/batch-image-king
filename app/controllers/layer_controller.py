@@ -476,7 +476,13 @@ class LayerController(QObject):
             self.layer_operation_completed.emit("add_text_layer", False)
             return None
 
-        self.layer_panel.refresh_layers()
+        # 宿主不一定有图层面板（QML 工作台走自己的 layerModel，
+        # LegacyFeatureBridge 的宿主 layer_panel 同样是 None）。
+        # 直接 self.layer_panel.refresh_layers() 会在这些场景抛
+        # AttributeError，把"建层成功"变成"看起来失败"。
+        panel = getattr(self, "layer_panel", None)
+        if panel is not None:
+            panel.refresh_layers()
         self.status_message.emit("已添加文字图层，可在右侧属性面板调整", 3000)
         self.layer_operation_completed.emit("add_text_layer", True)
         return layer

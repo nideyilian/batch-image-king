@@ -218,6 +218,23 @@ def handle_exception(exc_type: type, exc_value: BaseException, exc_traceback: Op
         print(f"原始错误: {error_msg}")
         print(tb_msg)
 
+def setup_fixed_theme(app: QApplication) -> None:
+    """设置固定主题（不跟随系统）。
+
+    名字带「经典」，但 QML 版**仍然需要**：QML 里嵌了一批 QWidget 弹窗
+    （颜色选择器、新建画布、批量导出等），它们靠这套 palette / QSS 上色。
+    实测跳过之后颜色选择器标题栏变成纯白（255,255,255），与 QML 暗色界面
+    割裂。QSS 只作用于 QWidget，不影响 QML 主界面。
+    """
+    from app.ui.dark_theme import CursorDarkTheme
+
+    # 强制 Fusion，再用自定义调色板覆盖
+    app.setStyle("Fusion")
+    # 禁用原生菜单栏，确保一致的样式
+    app.setAttribute(Qt.AA_DontUseNativeMenuBar, True)
+    CursorDarkTheme.apply_to_application(app)
+
+
 def main() -> int:
     """程序入口：应用级基础设施 + QML 工作台。
 
@@ -339,7 +356,7 @@ def main() -> int:
         # 启动画面：QML 加载期间同样有可感知的等待，保留。
         splash = None
         try:
-            from app.ui.splash_screen import SplashScreen
+            from app.splash_screen import SplashScreen
 
             splash = SplashScreen()
             splash.begin()

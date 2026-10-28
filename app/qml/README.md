@@ -1,21 +1,16 @@
 # 批图王 QML 工作台
 
-这是批图王的 Qt Quick/QML 工作台，现已接入真实业务模型和渲染导出链。除 AI 功能外，旧版 QWidget 的生产功能均已通过 QML 原生界面或兼容桥接接入。所有单图层属性都在右侧 QML 检查器中直接编辑；完整批量导出、多标签高级导出、预设中心、绑定和尺寸匹配等独立工作流复用旧窗口，并与 QML 共享同一批 `Document` 实例。
+这是批图王唯一的界面：Qt Quick/QML 工作台，接入真实业务模型和渲染导出链。除 AI 功能外，旧版 QWidget 的生产功能均已通过 QML 原生界面实现。所有图层属性都在右侧 QML 检查器中直接编辑；批量导出、多标签高级导出、预设中心、绑定和尺寸匹配都有对应的 QML 视图模型，并与 QML 共享同一批 `Document` 实例。
+
+> 2026-10-28：经典 Qt Widgets 界面（`app/ui` 主窗口、`app/main_window_*.py`）已下线。
+> `python main.py --classic` 不再切换界面，只会打印一行提示后启动 QML。
 
 ![QML 工作台预览](preview.png)
 
 ## 启动
 
-正式入口默认启动 QML：
-
 ```powershell
 python main.py
-```
-
-旧版界面仍可用于回退：
-
-```powershell
-python main.py --classic
 ```
 
 常用启动参数：

@@ -1,6 +1,8 @@
 # 批图王 · 设计规范 v2
 
-> 适用界面：Qt 经典版（`python main.py --classic`），即 `app/ui`。
+> 适用界面：**QML 工作台**（`python main.py`，即 `app/qml`）。
+> 2026-10-28 起经典 Qt Widgets 界面（`app/ui` 主窗口）已下线；
+> `app/ui` 仅保留 QML 仍在调用的 QWidget 弹窗、令牌与主题模块。
 > 令牌源文件：`app/ui/tokens_v2.py`（**唯一事实来源**）
 > 契约测试：`tests/test_design_tokens.py`（45 项，含全部对比度实测）
 

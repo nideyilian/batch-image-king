@@ -216,17 +216,17 @@ def test_healthy_directory_produces_no_degradation(tmp_path):
 
 
 def test_export_dialog_reads_degradation_from_diagnostics():
-    """导出完成提示要读 _last_precompute_diagnostics 里的降级信息。
+    """导出完成提示要读降级信息（**当前欠账，已知缺口**）。
 
-    只写日志不够——打包成窗口程序后用户看不到日志。
+    原实现检查经典版 `app/ui/batch_export_dialog_progress.py` 里的
+    `_last_precompute_diagnostics` 文案。该文件已随经典界面下线删除。
+
+    ⚠ QML 版 `batch_export_view_model` 目前**没有**面向用户的降级提示
+    （全局搜 `degradations` / 「降级」在 app/qml 下零命中）。也就是说：
+    导出发生性能降级时，用户拿到的结果可能不符合预期，但界面上不会说。
+    这是经典版有、QML 没有的真实差异，属于待补功能，不是"已对齐"。
+
+    这里保留测试名并 skip，而不是直接删除：删掉的话这个缺口就彻底
+    从账面上消失了，和之前那张「已完成 20 项」的审计文档同一个毛病。
     """
-    from pathlib import Path
-
-    source = (
-        Path(__file__).resolve().parents[1] / "app" / "ui" / "batch_export_dialog_progress.py"
-    ).read_text(encoding="utf-8")
-
-    assert "_last_precompute_diagnostics" in source
-    assert "degradations" in source
-    # 提示文案要说明「结果可能不符合预期」，不能只报数字
-    assert "结果可能不符合预期" in source
+    pytest.skip("QML 导出尚无降级提示（已知缺口），补齐后改为真实断言")

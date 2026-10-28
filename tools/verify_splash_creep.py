@@ -38,7 +38,7 @@ def main() -> int:
 
     CursorDarkTheme.apply_to_application(app)
 
-    from app.ui.splash_screen import SplashScreen
+    from app.splash_screen import SplashScreen
 
     splash = SplashScreen()
     splash.begin()

@@ -23,59 +23,60 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture(scope="module")
 def shared_win():
-    """整个模块共用一个主窗口。
+    """轻量宿主：只提供 LayerController 需要的最小接口。
 
-    为什么不用 function 级：MainWindow 构造要 2~5 秒（676 个控件），
-    10 个用例各建一次就是 50 秒，跑起来像挂死。
-    这里只建一次，每个用例自己在里面开新文档。
+    2026-10-28 经典界面下线后，这里不再构造 MainWindow（它已经不在了）。
+    LayerController 对宿主的依赖实际只有 `.document` 和 `.update_canvas()`，
+    用一个鸭子类型宿主即可 —— 顺带把每个用例的启动成本从「建 676 个控件」
+    降到接近零。
+
+    保留这些用例的原因：快速建层 / 配置建层的**语义**（字号随画布、
+    auto_fit 必须开、非法输入必须拒绝、名字必须唯一）与用哪套界面无关，
+    是图层的创建契约，任何人改坏都会让两种入口一起错。
     """
     from PySide6.QtGui import QFont, QFontDatabase
     from PySide6.QtWidgets import QApplication
 
-    from app.main_window import MainWindow
+    from app.controllers.layer_controller import LayerController
 
     app = QApplication.instance() or QApplication([])
     QFontDatabase.addApplicationFont(r"C:\Windows\Fonts\msyh.ttc")
     app.setFont(QFont("Microsoft YaHei UI", 9))
 
-    from app.ui.dark_theme import CursorDarkTheme
+    class _Host:
+        """LayerController 的最小宿主。"""
 
-    CursorDarkTheme.apply_to_application(app)
+        def __init__(self) -> None:
+            self.document = None
+            self.layer_panel = None
+            self.layer_clipboard = None
+            self.style_clipboard = None
 
-    win = MainWindow()
-    win.resize(1000, 700)
-    win.show()
-    app.processEvents()
+        def update_canvas(self) -> None:
+            pass
 
-    yield win
-
-    win.close()
-    win.deleteLater()
-    app.processEvents()
+    host = _Host()
+    host.layer_controller = LayerController(host)
+    yield host
+    host.document = None
 
 
 @pytest.fixture
 def ctx(shared_win):
-    """每个用例在共享窗口里开一个新文档，结束后关掉该标签。"""
+    """每个用例用一个干净文档，互不影响。"""
     from PySide6.QtWidgets import QApplication
 
     from app.models.document import Document
 
     app = QApplication.instance()
-    doc = Document(parent=shared_win)
+    doc = Document(parent=None)
     doc.create_new(800, 600)
-    shared_win.create_new_tab(doc)
+    shared_win.document = doc
     app.processEvents()
 
     yield shared_win, doc, shared_win.layer_controller
 
-    # 关掉本用例的文档，避免影响下一个
-    try:
-        index = shared_win.document_manager.get_document_count() - 1
-        if index >= 0:
-            shared_win.close_tab(index)
-    except Exception:
-        pass
+    shared_win.document = None
     app.processEvents()
 
 

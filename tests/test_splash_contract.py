@@ -27,7 +27,7 @@ def _make_splash():
         QFontDatabase.addApplicationFont(path)
     app.setFont(QFont("Microsoft YaHei UI", 9))
 
-    from app.ui.splash_screen import SplashScreen
+    from app.splash_screen import SplashScreen
 
     return SplashScreen()
 
@@ -99,44 +99,10 @@ def test_creep_target_is_bounded():
     splash.close()
 
 
-def test_stage_hook_signature_matches_advance():
-    """MainWindow.stage_hook 的调用约定必须与 SplashScreen.advance 一致。
-
-    当初把 (text, percent) 直接传给 advance(progress, message)，
-    结果字符串被当进度、进度条彻底不动。这里用假 hook 验证真实调用顺序。
-    """
-    from PySide6.QtWidgets import QApplication
-
-    from app.main_window import MainWindow
-
-    QApplication.instance() or QApplication([])
-
-    received = []
-
-    def fake_hook(progress, text):
-        received.append((progress, text))
-
-    original = MainWindow.stage_hook
-    try:
-        MainWindow.stage_hook = fake_hook
-        # 直接调私有方法，避免为了测一个签名去建整个主窗口（要 5 秒）
-        probe = MainWindow.__new__(MainWindow)
-        MainWindow._notify_stage(probe, "正在构架…", 0.42)
-    finally:
-        MainWindow.stage_hook = original
-
-    assert len(received) == 1
-    progress, text = received[0]
-    assert isinstance(progress, float) and progress == pytest.approx(0.42), (
-        f"hook 第一个参数必须是数字进度，实际收到 {progress!r}"
-    )
-    assert text == "正在构架…"
-
-
 def test_splash_does_not_import_heavy_modules():
     """启动画面模块不能依赖主窗口/控制器等重模块（会拖慢首帧）。"""
     source = (
-        __file__.rsplit("tests", 1)[0] + "app/ui/splash_screen.py"
+        __file__.rsplit("tests", 1)[0] + "app/splash_screen.py"
     )
     with open(source, encoding="utf-8") as fh:
         text = fh.read()
@@ -158,7 +124,7 @@ def test_splash_colors_do_not_drift_from_theme():
 
     所以这条测试锁的是**一致性**，不是禁止硬编码。
     """
-    from app.ui import splash_screen
+    from app import splash_screen
 
     #: (splash 常量名, dark_theme 里的属性名)
     PAIRS = [

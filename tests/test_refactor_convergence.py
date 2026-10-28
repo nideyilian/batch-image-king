@@ -72,13 +72,6 @@ def test_r8_layer_alias_removed():
 
 
 @pytest.mark.unit
-def test_r8_ui_consumers_redirected_to_layer_new():
-    """R8：两个 UI 消费者已重定向到 layer_new.Layer，导入不报错。"""
-    import app.ui.add_layer_dialog  # noqa: F401
-    import app.ui.layer_properties_attr  # noqa: F401
-
-
-@pytest.mark.unit
 def test_render_service_uses_public_surface_api():
     """渲染唯一边界只调用 FastRenderer 公开 surface API，不再触碰私有方法。
 

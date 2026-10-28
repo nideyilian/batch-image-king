@@ -137,11 +137,18 @@ def test_legacy_color_picker_palette_is_intact():
 @pytest.mark.parametrize(
     "module_path",
     [
-        "app.ui.layer_item",
-        "app.ui.enhanced_font_selector",
-        "app.ui.minimal_text_editor_dialog",
-        "app.ui.preset_store_dialog",
-        "app.ui.shaped_layer_panel",
+        # 2026-10-28 经典 Widgets 界面下线后，app/ui 只剩 QML 仍在用的模块
+        # （颜色选择器 / 添加文字 / 对话框基类 / 令牌 / 主题）。
+        # 这些模块依然是活的，f-string 花括号写错会直接崩启动，所以继续守着。
+        "app.ui.add_text_layer_dialog_simple",
+        "app.ui.color_picker_dialog_a2",
+        "app.ui.dark_theme",
+        "app.ui.design_spec",
+        "app.ui.design_tokens",
+        "app.ui.dialog_a2",
+        "app.ui.tokens_v2",
+        "app.ui.theme.provider",
+        "app.ui.theme.polisher",
     ],
 )
 def test_refactored_modules_import_without_error(module_path):

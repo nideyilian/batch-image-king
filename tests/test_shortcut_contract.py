@@ -166,58 +166,6 @@ def _extract_qml_shortcut_sequences(text: str) -> list[str]:
 
 
 @pytest.mark.unit
-def test_classic_ui_no_longer_hijacks_ps_core_keys():
-    """经典界面 main_window_ui.py 中，冲突源必须已迁出核心键位。"""
-    assert CLASSIC_UI.is_file(), f"{CLASSIC_UI} 不存在"
-    text = CLASSIC_UI.read_text(encoding="utf-8")
-    used = set(_extract_classic_shortcuts(text))
-
-    # 这些是曾经错误占用 PS 核心键位的映射：
-    forbidden_now = [
-        # (旧占用组合键, 原功能, 说明)
-        ("Ctrl+D", "duplicate_tab_action", "Ctrl+D 在 PS 是取消选择/Deslect，禁止用于复制标签"),
-        ("Ctrl+E", "export_action", "Ctrl+E 在 PS 是向下合并图层，禁止用于导出"),
-        ("Ctrl+P", "preset_store_action", "Ctrl+P 在 PS 是打印，禁止用于预设中心"),
-        ("Ctrl+R", "resize_canvas_action", "Ctrl+R 在 PS 是切换标尺，禁止用于改画布尺寸"),
-        ("Ctrl+L", "add_layer_action", "Ctrl+L 在 PS 是色阶，禁止用于新建图层"),
-        ("Ctrl+T", "add_text_layer_action", "Ctrl+T 在 PS 是自由变换，禁止用于新建文字层"),
-    ]
-
-    # 验证每条被释放的键位不再绑定到原 action 上（通过文本匹配）
-    bad: list[str] = []
-    for seq, old_action_id, reason in forbidden_now:
-        # 在源码中，若该 seq 仍存在，必须不在 old_action 的 setShortcut 行；
-        # 简单策略：按 seq 查找其上下文行，检查 old_action 是否是此行的左值
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if f"setShortcut(\"{seq}\")" in line or f"setShortcut(QKeySequence(\"{seq}\"))" in line:
-                if old_action_id in line:
-                    bad.append(
-                        f"L{lineno}: {old_action_id} 仍然占用 {seq} — {reason}"
-                    )
-    assert not bad, "经典界面仍有以下冲突未迁移：\n" + "\n".join(bad)
-
-
-@pytest.mark.unit
-def test_classic_ui_core_semantics_present():
-    """抽样验证：经典界面已注册 Ctrl+J/T/E/G/Shift+G/Shift+Z/Alt+Z。"""
-    text = CLASSIC_UI.read_text(encoding="utf-8")
-    used = set(_extract_classic_shortcuts(text))
-    required_any = [
-        ("Ctrl+J", "复制图层 via copy (PS)"),
-        ("Ctrl+T", "自由变换 (PS)"),
-        ("Ctrl+E", "向下合并图层 (PS)"),
-        ("Ctrl+G", "图层编组 (PS)"),
-        ("Ctrl+Shift+G", "取消图层编组 (PS)"),
-        ("Ctrl+Shift+Z", "重做 (PS 风格)"),
-        ("Ctrl+Alt+Z", "后退一步 (PS 风格)"),
-    ]
-    missing = [label for seq, label in required_any if seq not in used]
-    assert not missing, "经典界面缺少以下 Photoshop 核心快捷键：\n" + "\n".join(
-        f"- {label}" for label in missing
-    )
-
-
-@pytest.mark.unit
 def test_qml_main_no_longer_hijacks_ps_core_keys():
     """QML Main.qml 中，导出/预设中心/新建图层/新建文字层等必须已离开 PS 核心键位。"""
     assert QML_MAIN.is_file(), f"{QML_MAIN} 不存在"
@@ -279,35 +227,3 @@ def test_qml_main_has_core_semantics_and_focus_gating():
         )
 
 
-@pytest.mark.unit
-def test_canvas_events_ctrl_p_no_blind_accept():
-    """canvas_events.py 的 Ctrl+P 必须仅在 perf 启用时才 accept。
-
-    修复前：perf 未启用也会无条件 event.accept()，导致 Ctrl+P 永远无法响应菜单。
-    """
-    text = CANVAS_EVENTS.read_text(encoding="utf-8")
-    # 检查修复模式：`if handled: event.accept()` 替代无条件 accept
-    # 注意：这里只断言「无条件 accept 在 Key_P 分支中不再存在」
-    lines = text.splitlines()
-    in_ctrl_p = False
-    bad_line = None
-    for lineno, line in enumerate(lines, start=1):
-        if "Qt.Key_P" in line:
-            in_ctrl_p = True
-            continue
-        if in_ctrl_p:
-            # 该分支结束的标志：遇到一个与外层结构同级的 if / for / 缩进减小后再
-            # 不再回到 Key_P 分支。为简化判断：只要在「event.accept()」前 15 行
-            # 内没看到 perf 保护分支，就记为旧实现。
-            if "event.accept()" in line:
-                # 往前看 15 行，是否存在 if is_perf_enabled / if handled
-                start = max(0, lineno - 15)
-                snippet = "\n".join(lines[start:lineno])
-                if ("if handled:" not in snippet
-                        and "is_perf_enabled()" not in snippet):
-                    bad_line = lineno
-                break
-    assert bad_line is None, (
-        f"canvas_events.py L{bad_line} 在 Ctrl+P 分支无条件接受事件；"
-        "应只在性能报告实际输出时才 accept"
-    )
