@@ -4,6 +4,8 @@
 
 本项目是一个 Windows 桌面端图像批量合成与批量导出工具，应用名称主要使用「批图王」，部分旧代码和窗口标题仍使用「图像批量合成工具」或「模块批量出图工具」。
 
+界面只有一套：**QML（Qt Quick）工作台**，入口 `main.py`。经典 Qt Widgets 主界面已于 2026-10-28 下线。
+
 核心能力包括：
 
 - 多标签文档编辑。
@@ -18,10 +20,11 @@
 ## 技术栈
 
 - 语言：Python。
-- GUI：PySide6。
-- 图像处理：Pillow、fontTools、NumPy、SciPy、OpenCV。
+- 界面：**QML（Qt Quick）工作台**为主界面；少量 QWidget 弹窗（颜色选择器、新建画布等）
+  仍走 Qt Widgets，与 QML 共用同一 `QApplication`。经典 Qt Widgets 主界面已于 2026-10-28 下线。
+- 图像处理：Pillow、fontTools、NumPy、OpenCV。
 - 性能/监控：psutil，自研智能缓存、线程池、内存管理模块。
-- 打包：PyInstaller。
+- 打包：PyInstaller（单文件 + 目录双模式）。
 - 可选导出加速：`app/utils/vips_export_engine.py` 会尝试使用 `pyvips`，不可用时自动回退。
 
 依赖声明在 `requirements.txt`：
@@ -30,10 +33,11 @@
 - `Pillow>=11.1.0`
 - `fonttools>=4.0.0`
 - `numpy>=2.2.0`
-- `scipy>=1.15.0`
 - `opencv-python>=4.12.0`
 - `psutil>=7.0.0`
 - `PyInstaller>=6.14.1`
+
+图标是 `app/qml/icons/*.svg`（Lucide，随代码分发），**不依赖第三方图标包**。
 
 ## 常用命令
 
@@ -71,78 +75,154 @@ python -m pytest tests/test_document_core.py -v
 
 `requirements-dev.txt` 会自动继承 `requirements.txt`；开发/测试环境安装 dev 文件即可，运行或打包环境只安装 runtime 文件。
 
-测试根目录为 `tests/`，使用 pytest 风格 + 旧 unittest.TestCase 混用。配置文件 `pytest.ini` + 根目录 `conftest.py` + `tests/__init__.py` 已就绪。
+测试根目录为 `tests/`，当前 87 个测试文件、约 683 项，全量跑一次约 1 分钟。配置文件 `pytest.ini` + 根目录 `conftest.py` + `tests/__init__.py` 已就绪。
 
-覆盖范围：
+`conftest.py` 提供 **session 级 autouse 的 `qapp` fixture**，测试里不需要自己创建 `QApplication`；
+要显式拿到实例时把 `qapp` 写进参数即可。
 
-- `test_document_core.py` — Document 生命周期、序列化往返、undo/redo
-- `test_layer_serialize.py` — Layer / LayerSerializer 序列化、duplicate 独立性
-- `test_text_layer_core.py` — TextLayer 文字行、绑定模式、序列化类型保持
-- `test_fast_renderer_smoke.py` — FastRenderer 烟雾测试、batch metrics
-- 17 个原有 unittest 风格测试（AI、批量导出、UI、崩溃会话等）
+覆盖范围（按职责分组，不是全部文件）：
+
+- 模型与序列化 — `test_document_core.py`（生命周期/往返/undo-redo）、`test_layer_serialize.py`、
+  `test_text_layer_core.py`、`test_text_layer_range_colors.py`
+- 渲染 — `test_fast_renderer_smoke.py`、`test_ndops.py`（与 scipy 交叉验证，scipy 缺失时自动跳过）
+- 批量导出 — `test_batch_export_counts.py`、`test_batch_export_binding.py`、`test_batch_export_stress.py`、
+  `test_export_worker_reliability.py`、`test_export_worker_threshold.py`
+- 降级可见性 — `test_degradation_visibility.py`（计数器语义 + 预计算接线 + 界面提示文案）
+- QML 工作台 — `test_qml_workbench_smoke.py`、`test_qml_design_system.py`、
+  `test_qml_batch_export_view_model.py`、`test_qml_multi_tab_export.py`、以及一批
+  `test_qml_*.py` 的交互/像素级回归
+- 打包 — `test_packaging_modes.py`（校验 spec 与 `build_excludes.py` 的联动）
 
 新增测试请：
 
 - 用 `pytest` 风格（直接函数 + `assert`），旧文件维持 `unittest.TestCase`。
 - 纯逻辑测试加 `@pytest.mark.unit`，需要 GUI / Qt / 真实 I/O 的加 `@pytest.mark.integration`。
-- 不依赖具体 QApplication；在 `setUp` 中按需构造 document 即可。
+- 需要 Qt 就声明 `qapp` 参数，不要自己 `QApplication(...)`，否则会和 autouse fixture 抢实例。
 
 修改渲染、导出、图层序列化相关代码后，至少应跑一次 `python -m pytest`，并验证新建文档、添加图层、保存/加载、预览、导出和批量导出。
 
 ## 入口与启动流程
 
-主要入口是根目录 `main.py`。
+唯一入口是根目录 `main.py`。`app/application.py` 与 `app/main_window.py` 已随经典界面一并删除。
 
-启动流程大致为：
+`main.py` 在**导入阶段**先做三件事，顺序不能动：
 
-1. 先调用 `app.utils.stream_redirector.setup_streams()`，避免控制台编码或流对象异常影响后续导入。
-2. 初始化日志，日志目录默认位于用户配置目录下的 `批图王/logs`。
-3. 快速检查关键依赖：Pillow、NumPy。
-4. 延迟或完整检查混合模式、图像质量等功能。
-5. 创建 `QApplication`，应用固定暗色主题 `CursorDarkTheme`。
-6. 创建并显示 `app.main_window.MainWindow`。
-7. 程序退出时关闭智能线程池、高级图像缓存和任务队列。
+1. `app.utils.stream_redirector.setup_streams()` —— 必须早于其它业务导入，
+   否则控制台编码问题会让后续 import 直接失败。
+2. `--export-worker` 分流到 `app.workers.export_worker.main()`：批量导出的独立进程走这条。
+3. `--apply-update` 分流到 `app.utils.updater.apply_update()`：自升级的替换进程走这条。
 
-`app/application.py` 也是一个入口样式文件，但更像旧版/备用入口；维护时优先以根目录 `main.py` 为准。
+`main()` 的流程：
+
+1. `setup_logging()` —— 日志目录 `~/.config/批图王/logs`（**与用户数据目录 `%APPDATA%\批图王`
+   不是同一处**，这是历史遗留的不一致，别按「应该在一起」去改，改了会让老日志找不到）。
+2. `install_crash_reporter()` + `begin_crash_session()` —— 崩溃上下文；
+   正常退出时由 `mark_clean_exit()` 收尾。
+3. `show_dependency_status()` 打印可选依赖（psutil / cv2）状态。
+4. 挂 `sys.excepthook`：未捕获异常写日志并弹 `QMessageBox`。
+5. `multiprocessing.freeze_support()`。
+6. 创建 `QApplication`：优先走 `app/utils/core/startup_optimizer.py`
+   （快速依赖检查 → `Image.MAX_IMAGE_PIXELS = None` → 完整依赖检查），
+   优化器导入失败则回退到顺序执行同一组检查。
+7. `setup_fixed_theme(app)` —— 名字带「经典」但**不能删**：QML 里嵌的 QWidget 弹窗
+   （颜色选择器、新建画布等）靠这套 palette/QSS 上色，跳过之后实测标题栏变纯白，
+   与 QML 暗色界面割裂。QSS 只作用于 QWidget，不影响 QML 主界面。
+8. 设置应用名/版本/组织名，显示 `app/splash_screen.py` 的启动画面。
+9. 调 `app.qml.qml_main.main(app=..., on_ready=...)` —— QML 工作台接管窗口创建与事件循环。
+10. 事件循环返回后清理资源：智能线程池、高级任务队列、图片缓存、智能渲染缓存、预览渲染缓存。
+
+⚠️ **不要在这里补第二次 `app.exec()`**：`qml_main` 内部已经跑完事件循环，
+第二次 exec 会让进程永不退出（实测 `--screenshot` 截图完成后挂住，只能被 timeout 杀掉）。
+
+`--classic` / `--qml` 仍被识别，但只做兼容：`--classic` 打印一行「经典界面已下线」后按 QML 启动，
+`--qml` 直接丢弃（与默认行为一致）。
 
 ## 主要目录结构
 
 ```text
 .
-├── main.py                    # 当前主要启动入口
-├── build.py                   # PyInstaller 自动打包脚本
-├── 批图王.spec                # PyInstaller 配置
-├── requirements.txt           # Python 依赖
-├── 打包说明.md                # 打包说明与发布备注
-├── 更新日志.md                # 项目更新说明
-├── presets                    # 初始预设文件，内容为 pickle 二进制
+├── main.py                    # 唯一入口：应用级基础设施 + 启动 QML 工作台
+├── build.py                   # 打包脚本：安装版 onedir + 便携版 onefile + NSIS + 更新清单
+├── build_excludes.py          # 打包排除清单，build.py 与 spec 共用同一份
+├── 批图王.spec                # PyInstaller 配置，BTK_BUILD_MODE 决定 onedir / onefile
+├── updater_tool.py            # 安装版专用的独立更新工具（onefile）
+├── requirements.txt           # 运行依赖
+├── requirements-dev.txt       # 开发/测试依赖，继承 requirements.txt
+├── 打包说明.md / 更新日志.md
+├── presets                    # 初始预设文件，pickle 二进制
+├── update/                    # update.json 自动更新清单
+├── installer/                 # NSIS 安装脚本
+├── docs/                      # 设计与审计文档
+│   └── design-system-gallery/ # 组件与图标图库页面（含经典界面历史截图）
+├── tools/                     # 开发期校验脚本
 ├── app/
-│   ├── main_window.py         # 主窗口、菜单、工具栏、多标签文档协调
-│   ├── application.py         # 旧版/备用应用入口
-│   ├── constants.py           # 常量
-│   ├── controllers/           # 文档与图层控制器
-│   ├── models/                # 文档、图层、文字、异形、序列化、历史、导出协调等模型
-│   ├── ui/                    # 各类 Qt 窗口、面板、对话框和画布
-│   ├── utils/                 # 渲染、导出、缓存、线程池、日志、预设、图像质量等工具
+│   ├── version.py             # APP_VERSION —— 版本号唯一来源
+│   ├── constants.py
+│   ├── splash_screen.py       # 启动画面（已从 app/ui 移出）
+│   ├── qml/                   # 主界面，见下方展开
+│   ├── controllers/           # document_controller / layer_controller
+│   ├── models/                # 文档、图层、文字、异形、序列化、历史、导出协调
+│   ├── services/              # render_service / preview_render_service / export_service / render_quality
 │   ├── engines/               # 高级合成、Alpha 合成、Photoshop 风格混合、质量引擎
-│   └── resources/             # 图标与内置图片资源
-├── build/                     # PyInstaller 构建产物，应视为生成目录
-├── dist/                      # 打包输出目录，应视为生成目录
-├── benchmark_outputs/         # 基准测试输出
-└── benchmark_probe/           # 基准测试探针/数据
+│   ├── workers/               # export_worker.py —— 批量导出的独立进程
+│   ├── utils/                 # 渲染、导出、缓存、线程池、日志、预设、更新
+│   ├── ui/                    # 仅剩 QWidget 弹窗 + 主题 + 设计令牌，**没有主窗口**
+│   └── resources/             # 应用图标与内置资源
+├── tests/                     # pytest 测试（87 个文件 / 约 683 项）
+├── build/                     # PyInstaller 构建产物，生成目录
+└── dist/                      # 打包输出，生成目录
+```
+
+`app/qml/` 展开：
+
+```text
+app/qml/
+├── Main.qml                   # 单文件主界面，约 9000 行；对话框/抽屉多为内联 component
+├── qml_main.py                # QML 启动器：建 engine、注册 context property、管理窗口生命周期
+├── components/                # 47 个可复用组件（Theme / AppIcon / 各类 Inspector 控件）
+├── icons/                     # 102 个 Lucide SVG
+├── assets/
+├── viewmodels/                # Python 侧 QObject 视图模型
+├── preview_image_provider.py  # 预览图 QQuickImageProvider
+└── legacy_feature_bridge.py   # 非视觉的控制器兼容桥（剪贴板等）
 ```
 
 ## 核心模块职责
 
-### `app/main_window.py`
+### `app/qml/qml_main.py`
 
-`MainWindow` 是应用层协调中心，负责：
+QML 工作台的启动器，负责：
 
-- 创建主界面、菜单、工具栏、状态栏和停靠面板。
-- 管理多标签文档。
-- 创建并持有 `DocumentManager`、`DocumentController`、`LayerController`。
-- 调用新建、打开、保存、另存为、导出、批量导出、多标签页导出、预设管理等流程。
-- 为每个文档隔离批量导出窗口和多标签导出窗口，避免跨文档共享状态。
+- 解析命令行参数（`--screenshot`、`--width/--height`、`--theme`、`--open`、`--blank` 等，
+  以及一批 `--show-*` 调试入口，用于把某个抽屉/对话框直接打开后截图）。
+- 建 `QQmlApplicationEngine`、加载 `Main.qml`。
+- 把 Python 侧的视图模型注册成 context property，共 11 个：`workspace`、`workspaceSessions`、
+  `layerModel`、`batchExport`、`canvasPresets`、`projectPresets`、`bindingManager`、`sizeMatch`、
+  `multiTabExport`、`legacyTools`、`updateManager`。QML 直接按这些名字绑定属性。
+- 管理窗口尺寸/几何位置的持久化（QSettings），含一次性的旧命名空间迁移。
+- 事件循环与退出清理。`main(app=..., on_ready=...)` 接受外部已建好的 `QApplication`，
+  `on_ready` 在首屏对象树就绪时回调（`main.py` 用它收启动画面、弹上次崩溃提示）。
+
+独立运行 `python -m app.qml.qml_main` 也能起界面，适合只调 QML 时避开 `main.py` 的整套初始化。
+
+### `app/qml/viewmodels/`
+
+QML 的 Python 侧视图模型，是界面与领域模型的唯一通道：
+
+- `workspace_view_model.py` —— 主工作台 VM（当前文档、画布、选区、预览请求、导出运行态）。
+  体量大，按职责拆成 `workspace_vm_*.py` 多个 mixin：
+  `document_ops`（新建/打开/保存/标签页）、`edit_ops`（撤销/重做/剪贴板）、
+  `layer_ops`（增删/排序/对齐）、`effects`（描边/圆角/混合模式）、`text_setters`、
+  `font_catalog`、`preview`、`view`、`shared`。
+- `workspace_session_view_model.py` —— 多标签文档会话。
+- `layer_list_model.py` —— 图层面板的 `QAbstractListModel`。
+- `batch_export_view_model.py` / `multi_tab_export_view_model.py` —— 两种批量导出。
+- `binding_manager_view_model.py` / `size_match_view_model.py` —— 图层绑定与尺寸匹配。
+- `canvas_preset_view_model.py` / `preset_manager_view_model.py` —— 画布与预设。
+- `update_view_model.py` —— 检查更新，桥接 `app/utils/updater.py`。
+
+约定：QML 只读 VM 的 `@Property`，动作走 `@Slot`；VM 内部改状态后必须 emit 对应的
+`notify` 信号，否则界面不会刷新。
 
 ### `app/models/document.py`
 
@@ -158,9 +238,9 @@ python -m pytest tests/test_document_core.py -v
 
 `Document` 仍保留大量兼容旧接口的代码。新增功能时要注意不要只改新拆分模块而遗漏旧调用路径。
 
-### `app/models/layer.py` 与 `app/models/layer_new.py`
+### `app/models/layer_new.py`
 
-图片图层模型，包含：
+图片图层模型的**唯一实现**（旧 `app/models/layer.py` 已删除），类名是 `Layer`，包含：
 
 - 基础位置、尺寸、可见性、不透明度、锁定状态。
 - 图片来源：单文件或文件夹。
@@ -172,7 +252,14 @@ python -m pytest tests/test_document_core.py -v
 - 随机位置、随机缩放、随机旋转。
 - 缓存与脏状态标记。
 
-`document.py` 不再暴露 `Layer` 别名（R8 收敛），但保留工作名导出 `NewLayer`（即规范来源 `app/models/layer_new.py` 的 `Layer`）。维护图层类时以 `layer_new.Layer` 为准。
+`document.py` 不再暴露 `Layer` 别名（R8 收敛），而是 `from app.models.layer_new import Layer as NewLayer`。
+维护图层类时以 `layer_new.Layer` 为准；`layer_new` 里的 mixin（`layer_attrs_mixin`、
+`layer_transform_mixin`、`layer_rendering_mixin`、`layer_serialize_mixin`）按职责拆分，改属性时注意同步。
+
+### `app/models/shaped_layer_new.py`
+
+异形图层（`ShapedLayer`，继承 `Layer`），旧 `app/models/shaped_layer.py` 已删除。
+相关属性和通用操作集中在 `app/models/layer_properties.py`，包括 `ShapeType`、属性通知、通用图层操作等。
 
 ### `app/models/text_layer.py`
 
@@ -184,10 +271,6 @@ python -m pytest tests/test_document_core.py -v
 - 字号、字重/斜体、对齐、行距、字距、内边距、自动适配文本框、竖排。
 - 渐变文字、描边、背景、超采样渲染。
 - 渲染锁，避免预览和批量导出并发时污染临时渲染参数。
-
-### `app/models/shaped_layer.py` 与 `app/models/shaped_layer_new.py`
-
-异形图层，基于普通图层扩展形状能力。相关属性和通用操作集中在 `app/models/layer_properties.py`，包括 `ShapeType`、属性通知、通用图层操作等。
 
 ### `app/models/document_serializer.py`
 
@@ -246,6 +329,17 @@ python -m pytest tests/test_document_core.py -v
 
 支持格式包括：`png`、`jpg`、`jpeg`、`bmp`、`tiff`、`webp`。
 
+### `app/workers/export_worker.py`
+
+批量导出的**独立子进程**入口（`main.py --export-worker <request.json>`），
+由 `app/utils/export_worker_client.py` 拉起。父子进程之间只传 JSON：
+请求文件进去，manifest 文件回传进度与结果。
+
+为什么单开进程：导出是长时间、吃内存的操作，放主进程里一崩用户整个工作台就没了。
+改这条链路时注意两端契约 —— `export_worker_client.py` 与 `export_worker.py` 的字段名、
+状态值必须同步改，只改一边会得到「导出无声卡住」而不是报错。
+Windows 下 `os.replace` 可能因文件占用失败，worker 里已有重试封装，不要绕过。
+
 ### `app/utils/preset_manager.py`
 
 预设管理器。开发环境会从根目录 `presets` 复制初始预设；运行时用户预设保存在用户数据目录：
@@ -260,7 +354,8 @@ python -m pytest tests/test_document_core.py -v
 常见数据流：
 
 ```text
-MainWindow/UI
+Main.qml（QML 视图）
+  -> app/qml/viewmodels/*（@Property 读取、@Slot 触发）
   -> Document / Controllers
   -> Layer、TextLayer、ShapedLayer
   -> RenderService（FastRenderer / document_render）
@@ -276,7 +371,7 @@ MainWindow/UI
 - `.cmp`：项目/预设文件，pickle 二进制格式。读取一律走 `app/utils/trusted_pickle.py`
   的可信加载（受限反序列化，阻止经典 RCE gadget），不要直接 `pickle.load`。
 - `presets`：根目录初始预设文件，也是二进制内容。
-- `fonts_cache.json`：字体扫描缓存。
+- `fonts_cache.json`：字体扫描缓存，在用户数据目录（`app/models/text_layer_font.py`），不在仓库里。
 - `version_info.txt`：PyInstaller 版本信息。
 - `app/resources/*`：打包时需要包含的资源。
 - `build/`、`dist/`：生成产物，不应作为源码维护重点。
@@ -292,20 +387,30 @@ python build.py
 `build.py` 会：
 
 - 清理旧 `dist/` 和 `build/`。
-- 从 `app/version.py` 读取 `APP_VERSION`（版本号唯一来源），据此生成 PyInstaller 版本信息。
-- 使用 PyInstaller 单文件窗口模式打包。
-- 程序名为 `批图王`。
-- 图标使用 `app/resources/app_icon.ico`。
-- 添加 `app/resources` 和 `presets`。
-- 添加隐藏导入：PySide6、PIL、cv2、numpy、scipy、psutil。
-- 刷新 `update/update.json` 自动更新清单。
-- 若本机安装 NSIS，自动编译安装版 `dist/批图王-Setup.exe`。
+- 从 `app/version.py` 读取 `APP_VERSION`（版本号唯一来源），生成 `build/version_info_generated.txt`。
+- 走 `批图王.spec` 打包**两次**，模式靠环境变量 `BTK_BUILD_MODE` 切换：
+  - `onedir` → `dist/批图王/`，安装版用，启动不需要解压；
+  - `onefile` → `dist/批图王.exe`，便携版用，也是更新清单指向的资产。
+- 额外构建 `updater_tool.exe`（安装版专用的独立更新工具），放进 `dist/批图王/`。
+- 若本机装了 NSIS，编译 `dist/批图王-Setup.exe`。
+- 刷新 `update/update.json`（含便携版与安装包的 SHA-256）。
+
+spec 里的关键点：
+
+- 资源和排除逻辑全部收敛在 spec 和 `build_excludes.py` —— PyInstaller **没有**
+  `--exclude-binary` 开关，只有先在 `Analysis` 之后过滤 `a.binaries` 才拦得住
+  Qt hook 整批收集的大 DLL（`Qt6WebEngineCore.dll` 单个 79.8MB）。
+- datas 打包：`presets`、`app/resources`、`app/qml/{Main.qml,components,icons,assets}`。
+- hiddenimports 实际是：`PySide6`、`QtQml`、`QtQuick`、`QtQuickControls2`、`QtWidgets`、
+  `PIL`、`pyvips`、`app.workers.export_worker`、`cv2`、`numpy`。
 
 也可以直接使用：
 
 ```powershell
 pyinstaller 批图王.spec
 ```
+
+不带 `BTK_BUILD_MODE` 时按 `onedir` 构建；要单文件就设 `BTK_BUILD_MODE=onefile`。
 
 ### 版本与自动更新
 
@@ -324,16 +429,21 @@ pyinstaller 批图王.spec
 
 ## 维护注意事项
 
-- 仓库当前有大量未提交或已生成文件，修改前后都要避免误删用户已有改动。
+- 工作区应保持干净：调试脚本、截图、临时输出不要留在仓库根目录。
 - 不要手动编辑 `build/`、`dist/`、`__pycache__/` 等生成产物。
 - 不要把 `.cmp` 或根目录 `presets` 当文本文件处理。
+- **经典 Qt Widgets 界面已下线，不要在 `app/ui/` 里添加新的窗口/面板**。
+  该目录只剩 QWidget 弹窗（颜色选择器、新建画布、文字图层等）、`dark_theme.py`
+  和设计令牌（`design_spec.py` / `design_tokens.py` / `tokens_v2.py`）。
+  新界面一律写在 `app/qml/`。
 - 修改渲染逻辑时，同时检查预览、单图导出、批量导出和多标签批量导出。
 - 修改图层属性时，同步检查序列化/反序列化、历史记录、属性面板、画布刷新和导出快照。
 - 修改文字图层时，特别注意字体缓存、自动文本框、竖排、换行绑定和批量导出并发渲染。
 - 修改随机/绑定/尺寸匹配逻辑时，优先验证批量导出的去重、组合一致性和性能。
-- UI 使用 PySide6 信号槽，更新模型属性后通常需要发出对应 `changed`、`layer_changed`、`layers_changed` 或 UI 刷新信号。
+- QML 与 Python 的边界：QML 读 `@Property`、调 `@Slot`；VM 内部改状态后必须 emit 对应
+  `notify` 信号，否则界面不刷新。不要从 QML 直接摸 Document 的内部字段。
 - 日志与调试输出较多，性能敏感路径中不要增加高频 `print`。
-- 主程序退出时会清理线程池、图片缓存和任务队列；新增全局资源时也应接入退出清理。
+- 主程序退出时会清理线程池、任务队列和各类缓存；新增全局资源时也要接入退出清理。
 
 ## 建议验证清单
 
@@ -349,13 +459,29 @@ pyinstaller 批图王.spec
 8. 多标签页批量导出。
 9. 打包后运行 `dist/批图王.exe`，确认资源和预设可用。
 
+只改 QML 时的快速自检（不用手点，几秒出图）：
+
+```powershell
+# 整窗截图
+python -m app.qml.qml_main --screenshot out.png --width 1440 --height 920 --theme dark
+
+# 把某个抽屉/对话框直接打开再截
+python -m app.qml.qml_main --screenshot out.png --show-batch-export
+# 可用的 --show-* 见 qml_main.parse_args()：--show-effects / --show-new-canvas /
+# --show-color-picker / --show-multi-tab-export / --show-text-layer-dialog 等
+```
+
 ## 给后续代理的工作建议
 
-- 先用 `rg` 定位调用链，再改代码；这个项目存在新旧模块并存的兼容层。
-- 改动尽量小而集中，尤其不要顺手重构大文件。
-- 优先复用已有工具类：`DocumentSerializer`、`FastRenderer`、`PresetManager`、`LayerSerializer`、缓存/线程池管理器等。
+- 先用 `rg` 定位调用链再改代码。经典版已下线，`app/ui/` 只剩 QWidget 弹窗，
+  找主界面请去 `app/qml/`，不要再按老路径找 `main_window.py`。
+- 改动尽量小而集中，尤其不要顺手重构大文件（`Main.qml` 已近 9000 行，整体重排风险极高）。
+- 优先复用已有工具类：`DocumentSerializer`、`FastRenderer`、`PresetManager`、
+  `LayerSerializer`、缓存/线程池管理器等。
 - 遇到图像效果差异时，先确认是预览管线、导出管线还是文件编码阶段造成的。
 - 遇到批量导出重复问题时，优先检查缓存键、随机状态刷新、绑定组合和批量模式缓存禁用逻辑。
+- 改 QML 属性绑定时记得对 `--screenshot` 截一张图看实际渲染 —— 纯读代码看不出
+  图标重复、文字裁切、间距塌陷这类问题。
 
 ## 底层规则
 
