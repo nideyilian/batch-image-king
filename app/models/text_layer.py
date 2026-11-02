@@ -1,14 +1,5 @@
 from PySide6.QtCore import QObject, Signal, Property
-from PIL import Image, ImageDraw, ImageFont
-import os
-import random
-import platform
-import math
 import threading
-from typing import List, Tuple, Dict, Set, Optional
-from enum import Enum, auto
-import json
-from pathlib import Path
 from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
@@ -126,6 +117,12 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
         # 渲染锁：避免批量导出与预览并发时，超采样临时参数互相污染
         self._render_lock = threading.RLock()
         self._auto_fit_lock = False
+
+        # 字形在渲染图内的笔位偏移，用于「效果改变时保持文字不跑位」的坐标补偿
+        self._pending_pen_origin = None
+        self._content_origin = None
+        # 反序列化 / 复制过程中要整体覆盖参数，此时不能做坐标补偿，否则位置会漂
+        self._suppress_anchor_compensation = False
     
     # 属性访问器
     @Property(str)
@@ -160,25 +157,34 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     
     @Property(int)
     def width(self):
-        return self._width
+        # 必须持锁读：render_text() 在超采样阶段会临时把 _width 放大 N 倍
+        # （_render_text_supersampled），期间若外部读到，就会拿到 2 倍的临时值。
+        # 实测后果：拖动文字图层缩放手柄时，宽高被二次放大（354 -> 788）。
+        with self._render_lock:
+            return self._width
     
     @width.setter
     def width(self, value):
-        if self._width != value and value > 0:
-            self._width = value
-            self._cached_image = None
-            self.changed.emit()
+        # 与 _render_text_supersampled 的临时改写互斥，否则会互相覆盖：
+        # 用户拖到 394，渲染还原时写回旧值，或读到半程的 2 倍值。
+        with self._render_lock:
+            if self._width != value and value > 0:
+                self._width = value
+                self._cached_image = None
+                self.changed.emit()
     
     @Property(int)
     def height(self):
-        return self._height
+        with self._render_lock:
+            return self._height
     
     @height.setter
     def height(self, value):
-        if self._height != value and value > 0:
-            self._height = value
-            self._cached_image = None
-            self.changed.emit()
+        with self._render_lock:
+            if self._height != value and value > 0:
+                self._height = value
+                self._cached_image = None
+                self.changed.emit()
     
     @Property(bool)
     def visible(self):
@@ -359,9 +365,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def text_box_padding(self, value):
         value = max(0, int(value))
         if self._text_box_padding != value:
+            before_origin = self._measure_content_origin()
             self._text_box_padding = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(bool)
@@ -398,9 +405,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     @stroke_enabled.setter
     def stroke_enabled(self, value):
         if self._stroke_enabled != value:
+            before_origin = self._measure_content_origin()
             self._stroke_enabled = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(int)
@@ -410,9 +418,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     @stroke_width.setter
     def stroke_width(self, value):
         if self._stroke_width != value and value > 0:
+            before_origin = self._measure_content_origin()
             self._stroke_width = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(tuple)
@@ -486,9 +495,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def shadow_enabled(self, value):
         value = bool(value)
         if self._shadow_enabled != value:
+            before_origin = self._measure_content_origin()
             self._shadow_enabled = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(int)
@@ -499,9 +509,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def shadow_offset_x(self, value):
         value = max(-50, min(50, int(value)))
         if self._shadow_offset_x != value:
+            before_origin = self._measure_content_origin()
             self._shadow_offset_x = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(int)
@@ -512,9 +523,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def shadow_offset_y(self, value):
         value = max(-50, min(50, int(value)))
         if self._shadow_offset_y != value:
+            before_origin = self._measure_content_origin()
             self._shadow_offset_y = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(int)
@@ -525,9 +537,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def shadow_blur(self, value):
         value = max(0, min(20, int(value)))
         if self._shadow_blur != value:
+            before_origin = self._measure_content_origin()
             self._shadow_blur = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(tuple)
@@ -552,9 +565,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def glow_enabled(self, value):
         value = bool(value)
         if self._glow_enabled != value:
+            before_origin = self._measure_content_origin()
             self._glow_enabled = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(int)
@@ -577,9 +591,10 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
     def glow_radius(self, value):
         value = max(1, min(50, int(value)))
         if self._glow_radius != value:
+            before_origin = self._measure_content_origin()
             self._glow_radius = value
             self._cached_image = None
-            self._update_text_box_size_if_needed()
+            self._recompute_auto_fit_keeping_anchor(before_origin)
             self.changed.emit()
 
     @Property(tuple)
