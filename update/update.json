@@ -1,12 +1,12 @@
 {
-  "version": "1.2.0",
-  "release_notes": "批图王 v1.2.0\n请查看仓库更新日志了解本次更新内容。",
-  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.2.0/batch-image-king.exe",
-  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.2.0/batch-image-king-setup.exe",
+  "version": "1.3.0",
+  "release_notes": "批图王 v1.3.0\n请查看仓库更新日志了解本次更新内容。",
+  "download_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.3.0/batch-image-king.exe",
+  "installer_url": "https://github.com/nideyilian/batch-image-king/releases/download/v1.3.0/batch-image-king-setup.exe",
   "required": false,
-  "published_at": "2026-08-19",
-  "sha256": "157cbc77bdf694d0722c89e07e7344917a7a2f81e41286e989729595b98d3c32",
-  "installer_sha256": "1a1ab4c997602bd8e09cdee58b9cfd79f1f2471e0e63251d38c7fdf1701f8b88",
-  "signature": "vIRXuFn1sSgC4IoAemDHmUsYVmTGRwEGhjUzTsZHZvnJZuBWLLrdiQO3H9f+paL8KZTB3KA9TdMBr1kic1enBQ==",
+  "published_at": "2026-11-02",
+  "sha256": "d79233fa67e79eda65e85beab4f41abcbaf57044c572a419e270ca279d566ce5",
+  "installer_sha256": "8eeb12e7144636fe6c2912fc2c8cb87a0ad0d8754c3005808211505ecc3be0ef",
+  "signature": "MtSLdEbLe0f9haXWTZqCiALqaAcxg7wnSE7QSBVjTmtE1QPA738mAOFYaZFCaez6DPdCCgTDkc+aef9iQYGMCQ==",
   "signature_algorithm": "ed25519"
 }
