@@ -6,16 +6,8 @@ from __future__ import annotations
 import os as os_module  # 避免局部变量遮蔽
 import time
 import threading
-import builtins
-from collections import Counter, OrderedDict
-from contextlib import nullcontext
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
-from PIL import Image
+from typing import Dict, Optional, Callable
 import gc
-import io
-import math
 import logging
 from app.utils.print_utils import safe_print as print
 
@@ -34,11 +26,11 @@ class OptimizedBatchExecutorPlanExecution(object):
             print(f"[批处理] 预估时间: {plan.estimated_time:.1f}秒")
         else:
             # 非批处理模式保持详细日志
-            print(f"[]  ")
-            print(f"[]    : {len(plan.tasks)}")
-            print(f"[]    : {plan.unique_combinations}")
-            print(f"[]    : {plan.estimated_time:.1f}")
-            print(f"[]    : {self.max_workers}")
+            print(f"\n【详细模式】开始执行导出任务")
+            print(f"  任务数量: {len(plan.tasks)}")
+            print(f"  唯一组合数: {plan.unique_combinations}")
+            print(f"  预估时间: {plan.estimated_time:.1f}秒")
+            print(f"  并行线程数: {self.max_workers}")
     
         # 
         if plan.tasks:
@@ -51,8 +43,8 @@ class OptimizedBatchExecutorPlanExecution(object):
                 can_vips, reason = self._get_vips_policy_for_format(first_format)
                 print(f"[批处理] pyvips策略: {'启用' if can_vips else '禁用'} ({reason}, format={first_format})")
             else:
-                print(f"[]    : {output_dir}")
-                print(f"[]    : {file_ext}")
+                print(f"  输出目录: {output_dir}")
+                print(f"  文件扩展名: {file_ext}")
     
         self.progress_callback = progress_callback
         self.file_completed_callback = file_completed_callback
@@ -74,7 +66,7 @@ class OptimizedBatchExecutorPlanExecution(object):
             logger.warning("静默异常已忽略: except Exception: in obe_plan_execution.py", exc_info=True)
             pass
     
-        print(f"[] : {self.total_tasks} ")
+        print(f"[预加载] 任务总数: {self.total_tasks} 个")
 
         # 阶段二：批导渲染只修改 worker 文档。主 UI 文档保留原状态，靠 worker 快照清理
         # 避免预览临时路径影响导出。
@@ -98,7 +90,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                     if self.is_batch_mode:
                         print(f"[批处理] 创建目录: {directory}")
                     else:
-                        print(f"[] : {directory}")
+                        print(f"  创建目录: {directory}")
         
             # 执行并行导出
             success = self._execute_parallel_export(plan.tasks, cancel_callback)
@@ -154,12 +146,12 @@ class OptimizedBatchExecutorPlanExecution(object):
                         f"total={int(self.stats.get('max_pipeline_backlog', 0) or 0)}"
                     )
                 else:
-                    print(f"[] :")
-                    print(f"  - : {self.stats['total_time']:.2f}")
-                    print(f"  - : {self.stats['images_per_second']:.2f}/")
-                    print(f"  - : {self.stats['render_time']:.2f}")
-                    print(f"  - I/O: {self.stats['io_time']:.2f}")
-                    print(f"  - : {self.stats['cache_hits']}")
+                    print(f"\n【导出统计】")
+                    print(f"  - 总耗时: {self.stats['total_time']:.2f}秒")
+                    print(f"  - 吞吐: {self.stats['images_per_second']:.2f}张/秒")
+                    print(f"  - 渲染耗时: {self.stats['render_time']:.2f}秒")
+                    print(f"  - I/O 耗时: {self.stats['io_time']:.2f}秒")
+                    print(f"  - 缓存命中: {self.stats['cache_hits']}")
             
                 #  2
                 self._record_exported_combinations(plan)
@@ -195,7 +187,7 @@ class OptimizedBatchExecutorPlanExecution(object):
             if self.is_batch_mode:
                 print(f"[批处理] 导出错误: {e}")
             else:
-                print(f"[] : {e}")
+                print(f"[导出错误] {e}")
             return False
         finally:
             # 清理资源
@@ -270,74 +262,79 @@ class OptimizedBatchExecutorPlanExecution(object):
             #  I/O
             global_manager.force_save_if_needed()
         
-            print(f"[]  : {recorded_count} , {duplicate_count} ")
+            print(f"[记录] 新增组合: {recorded_count} 个, 重复跳过: {duplicate_count} 个")
         
             #  
             self._display_avoid_repeat_statistics(plan, global_manager, recorded_count, duplicate_count)
         
         except Exception as e:
-            print(f"[]  : {e}")
+            print(f"[记录] 写入组合历史失败: {e}")
             import traceback
             traceback.print_exc()
 
     def _display_avoid_repeat_statistics(self, plan, global_manager, recorded_count, duplicate_count):
-        """ - """
+        """打印「避免重复」统计报表（仅非批处理模式下的诊断输出）。
+
+        注：本方法内的中文标签曾在此仓库建立 git 基线前被批量剥离（历史提交中
+        同样是空串，无法从版本库还原），下列文案为按上下文与变量语义重建，
+        不影响任何导出逻辑，仅影响控制台可读性。
+        """
         try:
-            # 1. 
+            # 1. 本次导出概览
             total_exported = len(plan.tasks)
             unique_rate = (recorded_count / total_exported * 100) if total_exported > 0 else 0
             duplicate_rate = (duplicate_count / total_exported * 100) if total_exported > 0 else 0
-        
-            print(f"\n")
-            print(f"  :     {total_exported}")
-            print(f"  :     {recorded_count} ({unique_rate:.1f}%)")
-            print(f"  :   {duplicate_count} ({duplicate_rate:.1f}%)")
-        
-            # 2. 
-            print(f"\n")
-            print(f"  : {len(global_manager.combination_history)}")
-            print(f"  : {len(global_manager.image_usage_history)}")
-            print(f"  :   {len(global_manager.recent_combinations)}")
-        
-            # 3. 
+
+            print(f"\n【避免重复统计】")
+            print(f"  - 导出总数:     {total_exported}")
+            print(f"  - 新组合数:     {recorded_count} ({unique_rate:.1f}%)")
+            print(f"  - 重复组合数:   {duplicate_count} ({duplicate_rate:.1f}%)")
+
+            # 2. 历史记录规模
+            print(f"\n【历史记录】")
+            print(f"  - 组合历史: {len(global_manager.combination_history)}")
+            print(f"  - 图片使用次数: {len(global_manager.image_usage_history)}")
+            print(f"  - 近期组合:   {len(global_manager.recent_combinations)}")
+
+            # 3. 图片使用均衡度
             if global_manager.image_usage_history:
                 usage_counts = list(global_manager.image_usage_history.values())
                 avg_usage = sum(usage_counts) / len(usage_counts)
                 max_usage = max(usage_counts)
                 min_usage = min(usage_counts)
-            
-                print(f"\n")
-                print(f"  : {avg_usage:.2f}")
-                print(f"  : {max_usage}")
-                print(f"  : {min_usage}")
-                print(f"  :   {(min_usage/max_usage*100):.1f}%" if max_usage > 0 else "  :   N/A")
-        
-            # 4. 
+
+                print(f"\n【图片使用均衡度】")
+                print(f"  - 平均使用次数: {avg_usage:.2f}")
+                print(f"  - 最多使用次数: {max_usage}")
+                print(f"  - 最少使用次数: {min_usage}")
+                print(f"  - 最低/最高占比:   {(min_usage/max_usage*100):.1f}%" if max_usage > 0 else "  - 最低/最高占比:   N/A")
+
+            # 4. 多样性评分
             diversity_score = self._calculate_diversity_score(
                 recorded_count, duplicate_count, total_exported
             )
-        
-            print(f"\n")
+
+            print(f"\n【多样性评分】")
             if diversity_score >= 90:
-                grade = " "
-                advice = ""
+                grade = "优秀"
+                advice = "组合多样性很好，素材轮换充分。"
             elif diversity_score >= 70:
-                grade = " "
-                advice = ""
+                grade = "良好"
+                advice = "多样性尚可，可适当增加素材池数量。"
             elif diversity_score >= 50:
-                grade = " "
-                advice = ""
+                grade = "一般"
+                advice = "重复率偏高，建议扩充素材或文案池。"
             else:
-                grade = ""
-                advice = ""
-        
-            print(f"  :     {diversity_score:.1f}/100 ({grade})")
-            print(f"  :     {advice}")
-        
+                grade = "偏低"
+                advice = "重复率过高，请检查各图层的素材池是否过小。"
+
+            print(f"  - 综合得分:     {diversity_score:.1f}/100 ({grade})")
+            print(f"  - 建议:     {advice}")
+
             print("=" * 60 + "\n")
-        
+
         except Exception as e:
-            print(f"[]  : {e}")
+            print(f"[统计]  输出避免重复统计失败: {e}")
 
     def _calculate_diversity_score(self, recorded_count, duplicate_count, total_exported):
         """0-100"""
@@ -405,7 +402,7 @@ class OptimizedBatchExecutorPlanExecution(object):
                 layer._clone_column_spacing = clone_settings.get('clone_column_spacing', 0)
 
         except Exception as e:
-            print(f"[] : {e}")
+            print(f"[图层参数] 应用失败: {e}")
 
     def _apply_layer_parameters_fast(self, layer, params: Dict[str, object]):
         """

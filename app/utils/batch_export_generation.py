@@ -13,7 +13,7 @@ import math
 import os
 import random
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional
 
 from app.utils.batch_export_plan_models import LayerCombination
 from app.utils.print_utils import safe_print as print
@@ -538,7 +538,10 @@ class BatchExportGenerationMixin:
                     # 🔧 关键修复7: 生成**完全确定性**的随机种子
                     # 移除time.time_ns()以确保相同输入产生相同结果
                     # 只基于组合索引、图层索引和文件路径
-                    random_seed = hash((successfully_generated, layer_idx, os.path.basename(file_path), category)) & 0x7FFFFFFF
+                    # 注意：内置 hash() 受 PYTHONHASHSEED 影响，跨进程会变，必须用稳定派生
+                    from app.utils.stable_seed import stable_seed
+
+                    random_seed = stable_seed(successfully_generated, layer_idx, os.path.basename(file_path), category)
                     rng = random.Random(random_seed)
                     
                     # 预计算随机变换
@@ -824,7 +827,7 @@ class BatchExportGenerationMixin:
                                            cancel_callback: Optional[Callable[[], bool]] = None,
                                            progress_start: Optional[float] = None) -> List['LayerCombination']:
         """V2 -  """
-        print(f"[V2] : {count} ")
+        print(f"[V2] 开始生成组合，请求数量: {count} ")
 
         combinations = []
         import random
@@ -1142,12 +1145,12 @@ class BatchExportGenerationMixin:
             self._render_progress_line("预计算", len(combinations), count, progress_start, force=True)
             self._finish_progress_line()
             print(f"[V2]  {len(combinations)}  {count} ")
-            print(f"[V2] : {attempts}/{int(dynamic_budget_state['current_limit'])}")
+            print(f"[V2] 尝试次数/预算上限: {attempts}/{int(dynamic_budget_state['current_limit'])}")
             print(f"[V2] ⚠  可用唯一组合不足，已按最大唯一组合返回")
 
         self._render_progress_line("预计算", len(combinations), count, progress_start, force=True)
         self._finish_progress_line()
-        print(f"[V2] : {len(combinations)} ")
+        print(f"[V2] 组合生成完成，实际生成: {len(combinations)} ")
         self._set_precompute_diagnostics({
             "mode": "standard",
             "dedup_strategy": dedup_strategy,

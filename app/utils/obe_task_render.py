@@ -6,16 +6,12 @@ from __future__ import annotations
 import os as os_module  # 避免局部变量遮蔽
 import time
 import threading
-import builtins
-from collections import Counter, OrderedDict
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from PIL import Image
 import gc
-import io
-import math
 import logging
 from app.utils.print_utils import safe_print as print
 
@@ -252,7 +248,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         except Exception as e:
                             failed_count += 1
                             consecutive_failures += 1
-                            print(f"[] : {getattr(task, 'filename', '')}, : {e}")
+                            print(f"[渲染失败] {getattr(task, 'filename', '')}, 原因: {e}")
                         _submit_render_tasks()
                     elif future in save_future_to_task:
                         task = save_future_to_task.pop(future)
@@ -294,7 +290,7 @@ class OptimizedBatchExecutorTaskRender(object):
                         except Exception as e:
                             failed_count += 1
                             consecutive_failures += 1
-                            print(f"[] : {getattr(task, 'filename', '')}, : {e}")
+                            print(f"[渲染失败] {getattr(task, 'filename', '')}, 原因: {e}")
                         else:
                             pass
                         # A completed save frees one pipeline slot. Submit more render
@@ -357,7 +353,7 @@ class OptimizedBatchExecutorTaskRender(object):
             self.stats['completed_count'] = completed_count
             self.stats['failed_count'] = failed_count
             self.stats['final_in_flight_limit'] = int(in_flight_limit)
-        print(f"[] : {completed_count}/{self.total_tasks} ({success_rate:.1%})")
+        print(f"[渲染进度] {completed_count}/{self.total_tasks} ({success_rate:.1%})")
     
         processed_count = completed_count + failed_count
         return (
@@ -389,7 +385,7 @@ class OptimizedBatchExecutorTaskRender(object):
             return True, canvas, render_time
         except Exception as e:
             self.last_error_message = f"渲染失败: {task.filename}: {e}"
-            print(f"[] : {task.filename}, : {e}")
+            print(f"[任务异常] {task.filename}, 原因: {e}")
             return False, None, 0.0
 
     def _save_rendered_task(self, task: ExportTask, canvas: Image.Image, render_time: float,
@@ -422,7 +418,7 @@ class OptimizedBatchExecutorTaskRender(object):
             )
         except Exception as e:
             self.last_error_message = f"保存失败: {task.filename}: {e}"
-            print(f"[] : {task.filename}, : {e}")
+            print(f"[任务异常] {task.filename}, 原因: {e}")
             return SaveTaskResult(
                 success=False,
                 render_time=render_time,
@@ -497,7 +493,7 @@ class OptimizedBatchExecutorTaskRender(object):
         
         except Exception as e:
             msg = f"渲染或保存失败: {task.filename}: {e}"
-            print(f"[] : {task.filename}, : {e}")
+            print(f"[任务异常] {task.filename}, 原因: {e}")
             self.last_error_message = msg
             return False
         finally:
@@ -880,7 +876,7 @@ class OptimizedBatchExecutorTaskRender(object):
                             elif hasattr(layer, 'clone_column_spacing'):
                                 layer.clone_column_spacing = original_state['clone_column_spacing']
                         except Exception as e:
-                            print(f"[] : {e}")
+                            print(f"[清理] 释放渲染资源失败: {e}")
 
                 self._emit_runtime_snapshot_for_indices(
                     document=target_document,
@@ -897,7 +893,7 @@ class OptimizedBatchExecutorTaskRender(object):
             # 
             gc.collect()
         
-            print("[] ")
+            print("[清理] 开始释放渲染资源")
             try:
                 from app.utils.intelligent_render_cache import clear_global_cache as _irc_clear
                 _irc_clear()
@@ -908,7 +904,7 @@ class OptimizedBatchExecutorTaskRender(object):
             # 批导任务使用 worker 文档，结束时不再清理主 UI 文档，避免污染预览状态。
         
         except Exception as e:
-            print(f"[] : {e}")
+            print(f"[清理] 释放渲染资源失败: {e}")
 
     def _clear_layer_image_paths(
         self,

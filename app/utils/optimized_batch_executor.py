@@ -5,23 +5,15 @@ from app.utils.print_utils import safe_print as print  # R7 契约统一：print
 import os as os_module  # 避免局部变量遮蔽
 import time
 import threading
-import builtins
-from collections import Counter, OrderedDict
-from contextlib import nullcontext
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
-from PIL import Image
-import gc
+from collections import OrderedDict
+from typing import Dict, Optional, Callable
 import io
-import math
 
 from app.utils.obe_memory_guard import OptimizedBatchExecutorMemoryGuard
 from app.utils.obe_runtime_snapshot import OptimizedBatchExecutorRuntimeSnapshot
 from app.utils.obe_plan_execution import OptimizedBatchExecutorPlanExecution
 from app.utils.obe_task_render import OptimizedBatchExecutorTaskRender
 from app.utils.obe_io_export import OptimizedBatchExecutorIoExport
-from app.utils.obe_task_render import SaveTaskResult  # 兼容 re-export
 # 导出报告构造函数在本模块被调用 6 次（成功/失败/取消各分支），
 # 但历史上从未导入 —— 整段报告构建被 `except: pass` 静默吞掉，
 # 导致 document._last_export_report 永远为 None：
@@ -184,10 +176,10 @@ class OptimizedBatchExportManager:
                 logger.warning("静默异常已忽略: except Exception: in optimized_batch_executor.py", exc_info=True)
                 pass
 
-        print(f"[V2] : {count} ")
-        print(f"[V2] : {document_analysis['export_mode']}")
-        print(f"[V2] : {document_analysis['binding_enabled']}")
-        print(f"[V2] : {'开启' if avoid_duplicates else '关闭'}")
+        print(f"[V2] 开始优化批量导出，请求数量: {count} ")
+        print(f"[V2] 导出模式: {document_analysis['export_mode']}")
+        print(f"[V2] 图层绑定: {document_analysis['binding_enabled']}")
+        print(f"[V2] 避免重复: {'开启' if avoid_duplicates else '关闭'}")
         adjustment_info = {
             'requested': count,
             'planned': 0,
@@ -411,12 +403,12 @@ class OptimizedBatchExportManager:
                 return False
 
             #  
-            print(f"[V2] :")
-            print(f"  - : {plan.estimated_time:.1f}")
-            print(f"  - : {plan.memory_requirement_mb:.1f}MB")
-            print(f"  - : {total_combinations}")
+            print(f"[V2] 执行计划:")
+            print(f"  - 预估时间: {plan.estimated_time:.1f}秒")
+            print(f"  - 预计内存: {plan.memory_requirement_mb:.1f}MB")
+            print(f"  - 组合总数: {total_combinations}")
             for suggestion in plan.optimization_suggestions:
-                print(f"  - : {suggestion}")
+                print(f"  - 优化建议: {suggestion}")
 
             #  
             print("[V2] ...")

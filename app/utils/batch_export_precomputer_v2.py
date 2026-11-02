@@ -9,10 +9,8 @@ import sys
 import re
 import hashlib
 import time
-import json
 import math
-from typing import List, Dict, Tuple, Any, Optional, Callable
-from dataclasses import dataclass
+from typing import List, Dict, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.utils.print_utils import safe_print as _safe_print
 
@@ -71,6 +69,9 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
 
         # 
         self.layer_image_pools = {}
+        # 「图像唯一使用」资格判定结果缓存：素材池在单次预计算内不变，
+        # 而调用点在「每组合 × 每层」的循环里，不缓存就要重复做磁盘 stat。
+        self._unique_use_eligible_cache = {}
         self.binding_combinations = {}
         self.non_binding_layer_selectors = {}
         # 图像唯一使用设置
@@ -97,12 +98,12 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         self._verbose_template_logs = os.environ.get("BTPW_VERBOSE_TEMPLATE_LOGS", "0") == "1"
         self._last_precompute_diagnostics: Dict[str, Any] = {}
 
-        print(f"[V2] :")
-        print(f"  - : {self.export_mode}")
-        print(f"  - : {self.binding_enabled}")
-        print(f"  - : {len(self.visible_layers)}")
-        print(f"  - : {len(self.bound_layers)}")
-        print(f"  - : {len(self.unbound_layers)}")
+        print(f"[V2] 预计算器已初始化:")
+        print(f"  - 导出模式: {self.export_mode}")
+        print(f"  - 图层绑定: {self.binding_enabled}")
+        print(f"  - 可见图层: {len(self.visible_layers)}")
+        print(f"  - 已绑定图层: {len(self.bound_layers)}")
+        print(f"  - 未绑定图层: {len(self.unbound_layers)}")
 
     def _get_avoid_repeat_manager(self):
         """获取当前文档专属的避重管理器，与旧版预计算器保持一致。"""
@@ -250,7 +251,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
 
     def analyze_document_with_context(self, cancel_callback: Optional[Callable[[], bool]] = None) -> int:
         """"""
-        print(f"[V2] : {self.export_mode}")
+        print(f"[V2] 开始分析文档，导出模式: {self.export_mode}")
         if cancel_callback and cancel_callback():
             self._was_canceled = True
             self._precompute_total_possible = 0
@@ -403,7 +404,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 if layer_pool_size > 0:
                     total_combinations *= layer_pool_size
 
-        print(f"[V2] : {total_combinations}")
+        print(f"[V2] 理论组合总数: {total_combinations}")
         return total_combinations
 
     def _initialize_layer_image_pools(self, cancel_callback: Optional[Callable[[], bool]] = None):
@@ -442,6 +443,8 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                         image_pool = [layer.image_source]
 
             self.layer_image_pools[doc_layer_idx] = image_pool
+            # 素材池变了，该层的资格判定必须重算
+            self._unique_use_eligible_cache.pop(doc_layer_idx, None)
             print(f"[V2]  {doc_layer_idx} '{layer.name}': {len(image_pool)} ")
 
     def _build_text_virtual_path(self, layer_name: str, text_value: Any) -> str:
@@ -514,22 +517,38 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             return False
 
     def _is_unique_use_eligible_layer(self, doc_layer_idx: int) -> bool:
-        """图像唯一使用只适用于真实图片图层，不适用于文字图层的虚拟文案路径。"""
+        """图像唯一使用只适用于真实图片图层，不适用于文字图层的虚拟文案路径。
+
+        结果在一次预计算/导出期间不会变，按图层缓存，避免在
+        「每组合 × 每层」的循环里反复做 os.path.isfile。
+        """
         try:
             idx = int(doc_layer_idx)
+        except Exception:
+            return False
+
+        cache = self._unique_use_eligible_cache
+        if idx in cache:
+            return cache[idx]
+
+        result = False
+        try:
             if not hasattr(self.document, 'layers') or idx < 0 or idx >= len(self.document.layers):
-                return False
-            layer = self.document.layers[idx]
-            if self._is_text_layer(layer):
-                return False
-            pool = self.layer_image_pools.get(idx, [])
-            if not pool:
-                return False
-            return any(isinstance(path, str) and os.path.isfile(path) for path in pool)
+                result = False
+            elif self._is_text_layer(self.document.layers[idx]):
+                result = False
+            else:
+                pool = self.layer_image_pools.get(idx, [])
+                result = bool(pool) and any(
+                    isinstance(path, str) and os.path.isfile(path) for path in pool
+                )
         except Exception:
             # 判定失败 → 该层被排除在「唯一使用」之外，用户勾的去重对它不生效。
             self.degradations.note("唯一使用.图层资格判定失败", str(doc_layer_idx))
-            return False
+            result = False
+
+        cache[idx] = result
+        return result
 
     def _normalize_unique_use_layers(self, unique_layers: List[int]) -> List[int]:
         """清洗旧设置/索引漂移造成的无效唯一使用图层。"""
@@ -696,7 +715,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                           file_format: str, start_index: int, avoid_duplicates: bool = True,
                           traverse_mode: bool = False, cancel_callback: Optional[Callable[[], bool]] = None) -> 'PrecomputedExportPlan':
         """"""
-        print(f"[V2] : {count} ")
+        print(f"[V2] 开始生成导出计划，请求数量: {count} ")
         ctx = self._build_constraint_context(count, avoid_duplicates)
         self._apply_unique_use_constraints(ctx)
         self._apply_total_possible_constraints(ctx)
@@ -783,7 +802,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         )
         plan.precompute_diagnostics = base_diag
 
-        print(f"[V2] : {len(tasks)} ")
+        print(f"[V2] 计划生成完成，任务数量: {len(tasks)} ")
         self._save_persistent_folder_index_cache(force=True)
         return plan
 
@@ -840,7 +859,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             
             result = FilenameTemplateProcessor.process_template(template, context)
             if self._verbose_template_logs:
-                print(f"[V2] : '{template}' -> '{result}'")
+                print(f"[V2] 文件名模板渲染: '{template}' -> '{result}'")
             return result
             
         except Exception as e:
@@ -1069,7 +1088,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         # 
         if len(self.binding_categories) == 1:
             selected = self.binding_categories[0]
-            print(f"[V2] : '{selected}'")
+            print(f"[V2] 仅有一个绑定分类，直接使用: '{selected}'")
             return selected
         
         try:
@@ -1106,7 +1125,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 final_score = base_score - usage_penalty + diversity_bonus + rotation_bonus
                 category_scores.append((category, final_score))
                 
-                print(f"[V2]  '{category}' : ({base_score}) - ({usage_penalty:.1f}) + ({diversity_bonus:.1f}) + ({rotation_bonus:.1f}) = {final_score:.1f}")
+                print(f"[V2] 分类得分 '{category}': 基础({base_score}) - 使用惩罚({usage_penalty:.1f}) + 多样性({diversity_bonus:.1f}) + 轮换加分({rotation_bonus:.1f}) = {final_score:.1f}")
             
             # 
             category_scores.sort(key=lambda x: x[1], reverse=True)
@@ -1122,13 +1141,13 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
             else:
                 selected_category = top_categories[0][0]
             
-            print(f"[V2] : '{selected_category}'")
+            print(f"[V2] 轮换选中绑定分类: '{selected_category}'")
             return selected_category
             
         except Exception as e:
             self.degradations.note("绑定分类.轮换选择失败回退取模", str(e))
             selected = self.binding_categories[combination_index % len(self.binding_categories)]
-            print(f"[V2] : '{selected}'")
+            print(f"[V2] 轮换失败已回退取模，选中分类: '{selected}'")
             return selected
     
     def _get_diverse_binding_layer_states(self, category: str, global_avoid_manager, combination_index: int, avoid_duplicates: bool = False) -> dict:

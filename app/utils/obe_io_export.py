@@ -4,18 +4,10 @@
 from __future__ import annotations
 
 import os as os_module  # 避免局部变量遮蔽
-import time
-import threading
-import builtins
-from collections import Counter, OrderedDict
-from contextlib import nullcontext
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
+from collections import Counter
+from typing import Optional, Callable
 from PIL import Image
-import gc
 import io
-import math
 import logging
 from app.utils.print_utils import safe_print as print
 
@@ -100,14 +92,14 @@ class OptimizedBatchExecutorIoExport(object):
                     self._image_preload_cache_bytes += approx_bytes
                 preload_count += 1
             except Exception as e:
-                print(f"[]  {image_path}: {e}")
+                print(f"[预读] 跳过 {image_path}: {e}")
 
         with self._lock:
             self.stats['preload_unique_images'] = len(unique_images)
             self.stats['preload_loaded_images'] = preload_count
             self.stats['preload_skipped_by_memory'] = skipped_by_memory
             self.stats['preload_memory_mb'] = float(self._image_preload_cache_bytes) / (1024 * 1024)
-        print(f"[] : {preload_count}/{len(unique_images)} (≈{self._image_preload_cache_bytes // (1024 * 1024)}MB)")
+        print(f"[预读] 完成 {preload_count}/{len(unique_images)} 张 (≈{self._image_preload_cache_bytes // (1024 * 1024)}MB)")
 
     def _get_preloaded_image(self, image_path: str):
         """"""
@@ -409,7 +401,7 @@ class OptimizedBatchExecutorIoExport(object):
     
         except Exception as e:
             msg = f"保存文件失败: {file_path}: {e}"
-            print(f"[] : {file_path}, : {e}")
+            print(f"[保存失败] {file_path}, 原因: {e}")
             self.last_error_message = msg
             return False
 

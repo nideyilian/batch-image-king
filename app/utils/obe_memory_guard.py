@@ -11,15 +11,8 @@ logger = logging.getLogger(__name__)
 import os as os_module  # 避免局部变量遮蔽
 import time
 import threading
-import builtins
-from collections import Counter, OrderedDict
-from contextlib import nullcontext
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
-from PIL import Image
+from typing import Optional, Callable
 import gc
-import io
 import math
 
 class OptimizedBatchExecutorMemoryGuard(object):
@@ -327,5 +320,5 @@ class OptimizedBatchExecutorMemoryGuard(object):
         # 
         should_optimize = canvas_size > 4000000 or layer_count > 10  # 4MP+  10+ 
         if should_optimize:
-            print(f"[] : {canvas_size}, {layer_count}")
+            print(f"[内存保护] 触发画布优化: 画布像素={canvas_size}, 图层数={layer_count}")
         return should_optimize
