@@ -1454,15 +1454,41 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
 
         return result
 
+    # Windows 保留设备名。以这些名字（或"名字.扩展名"）创建文件会失败，
+    # 甚至写进控制台 —— 必须整体改写。
+    _WINDOWS_RESERVED_NAMES = frozenset({
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    })
+
     def _clean_filename(self, filename: str) -> str:
-        """"""
+        """清洗文件名中的非法字符，保证结果在 Windows 上可创建。
+
+        处理顺序（顺序有意义，别随意调换）：
+          1. NFKC 规范化 —— 全角字符转半角（全角冒号也是非法字符）
+          2. 非法字符替换成 ``_``（含路径分隔符，因此不会出现目录穿越）
+          3. 去掉 Unicode 控制字符（``Cc`` 类，如 \\x00 / 换行）
+          4. 连续的分隔符折叠成单个 ``-``
+          5. 去掉首尾的 ``-`` / ``_`` / 空白
+          6. **修掉 Windows 特有的非法形态**：
+             - 空名 → ``export``
+             - ``.`` / ``..`` → 会被当成当前目录 / 父目录，必须改写
+             - ``CON`` / ``NUL`` / ``COM1`` 等保留设备名 → 加后缀
+             - 结尾是 ``.`` 或空格 → Windows 静默截断，需去掉
+          7. 超长截断到 100 字符
+
+        ⚠️ 2026-11-02 补第 6 步。此前 ``_clean_filename("..")`` 原样返回 ``..``，
+        拼进输出目录后会指向父目录；``_clean_filename("CON")`` 返回保留设备名，
+        导出时文件写不进去（或写进控制台）。两者都能由用户的自定义文件名模板触发。
+        """
         import re
         import unicodedata
 
         if not isinstance(filename, str):
             filename = str(filename)
 
-        # UnicodeNFKC
+        # 1) Unicode NFKC 规范化（全角转半角）
         try:
             filename = unicodedata.normalize('NFKC', filename)
         except Exception:
@@ -1473,26 +1499,52 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 self.degradations.note("文件名.编码清洗失败回退 export")
                 filename = "export"
 
-        # Unicode
+        # 2) 非法字符替换（含 / 与 \，所以结果不会带出目录层级）
         illegal_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
         for char in illegal_chars:
             filename = filename.replace(char, '_')
 
-        # 
+        # 3) 去掉控制字符
         filename = ''.join(char for char in filename if unicodedata.category(char)[0] != 'C')
 
-        # 
+        # 4) 折叠连续分隔符
         filename = re.sub(r'[-_\s]+', '-', filename)
 
-        # 
+        # 5) 去首尾分隔符
         filename = filename.strip('-_ \t')
 
-        # 
+        # 6) Windows 特有非法形态
+        # 6a) 空名
         if not filename:
             filename = "export"
 
-        # 
-        if len(filename) > 100:
-            filename = filename[:100]
+        # 6b) 只有点："." 与 ".." 在路径里是当前/父目录
+        if set(filename) <= {'.'}:
+            self.degradations.note("文件名.仅含点号已改写", repr(filename))
+            filename = "export"
 
-        return filename
+        # 6c) 保留设备名（判断"主体名"，即第一个点之前的部分）
+        #     改写必须落在**主体名**后面，不能简单拼接在末尾 ——
+        #     否则 "con.txt" 会变成 "con.txt_file"，主体仍是 con，Windows 照样拒绝。
+        stem = filename.split('.', 1)[0]
+        if stem.strip().upper() in self._WINDOWS_RESERVED_NAMES:
+            self.degradations.note("文件名.命中 Windows 保留设备名已加后缀", filename)
+            filename = f"{stem}-file{filename[len(stem):]}"
+
+        # 6d) 结尾的点/空格（Windows 会静默截断，导致实际文件名与预期不符）
+        #     注意顺序：先 rstrip 点/空格，再 rstrip 可能露出来的分隔符。
+        #     "abc. . " 经前面折叠会变成 "abc.-."，只 rstrip('. ') 会留下 "abc.-"，
+        #     再走一次分隔符清理才彻底。
+        filename = filename.rstrip('. ')
+        filename = filename.rstrip('-_ \t')
+        filename = filename.rstrip('. ')
+
+        # 兜底：清理之后可能又变空
+        if not filename:
+            filename = "export"
+
+        # 7) 超长截断
+        if len(filename) > 100:
+            filename = filename[:100].rstrip('. ')
+
+        return filename or "export"
