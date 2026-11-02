@@ -29,9 +29,23 @@ def _should_retry_with_default_runtime(
     completed_count: int,
     canceled: bool,
 ) -> bool:
-    return (
+    """自动调参失败后，是否值得用默认参数重试一次。
+
+    重试条件（全部满足）：
+      - 这次确实失败了；
+      - 自动调参开着，且**真的推导出了**覆盖项（workers 或 io profile）；
+      - 一个文件都没导出成功（导出一半再重试会造成重复文件）；
+      - 用户没点取消。
+
+    ⚠️ 历史实现返回的是 ``... or runtime_tuning.get("derived_io_profile")``
+    的**短路值**，当两个覆盖项都为空时返回 ``None`` 而非 ``bool``。
+    调用方用的是 ``if can_retry:`` 所以行为没出错，但返回类型不稳定
+    （一旦有人写 ``if can_retry is False`` 或把它序列化进报告就会踩坑）。
+    这里显式 ``bool()`` 收口。
+    """
+    return bool(
         not success
-        and bool(runtime_tuning.get("enabled", False))
+        and runtime_tuning.get("enabled", False)
         and (
             runtime_tuning.get("derived_workers") is not None
             or runtime_tuning.get("derived_io_profile")
