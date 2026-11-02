@@ -7,6 +7,7 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parent
 APP_NAME = "批图王"
@@ -149,6 +150,20 @@ def write_update_manifest(version: str) -> Path:
         payload["installer_sha256"] = _sha256_hex(setup_exe)
         print(f"已写入安装包 SHA-256: {payload['installer_sha256']}")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 自动签名（2026-11-02 加入）。
+    #
+    # 为什么放在这里：本函数每次发版都会**重写** update.json，而签名是对
+    # 内容算的 —— 重写必然让旧签名失效。如果靠人工记得"打包完再签一次"，
+    # 迟早会漏；漏签的后果不是报错，而是所有已升级客户端**静默拒绝更新**
+    # （用户只看到"已是最新版本"），排查起来非常隐蔽。
+    #
+    # 私钥查找顺序：
+    #   1) 环境变量 BTPW_SIGNING_KEY 指向的文件
+    #   2) 签名工具约定的默认路径（当前工作目录下的 update_private_key.txt）
+    # 找不到就不签，并打醒目提示（不静默跳过）。
+    payload = _sign_manifest_payload(payload)
+
     manifest_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -156,6 +171,57 @@ def write_update_manifest(version: str) -> Path:
     print(f"更新清单已刷新: {manifest_path} (version={version})")
     print("注意: 请将该文件一并提交到 GitHub，并创建对应 v{0} Release".format(version))
     return manifest_path
+
+
+def _find_signing_key() -> Optional[Path]:
+    """定位私钥文件；找不到返回 None。"""
+    env_key = os.environ.get("BTPW_SIGNING_KEY", "").strip()
+    candidates = []
+    if env_key:
+        candidates.append(Path(env_key).expanduser())
+    candidates.append(Path.cwd() / "update_private_key.txt")
+    # 项目内也找一下（虽然 .gitignore 已屏蔽，但本地开发可能放这里）
+    candidates.append(REPO_ROOT / "update_private_key.txt")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _sign_manifest_payload(payload: dict) -> dict:
+    """给清单加 Ed25519 签名；无密钥时原样返回并提示。"""
+    signing_key = _find_signing_key()
+    if signing_key is None:
+        # 用 [错误] 前缀：build.py 顶层把 print 换成了 safe_print，
+        # 而 safe_print 只放行带"错误/失败"等关键词的消息。
+        # 这条警告若被静音，使用者会以为签名成功、实际发出去的是未签名清单。
+        print()
+        print("[错误] 未找到签名私钥，update.json 将不带签名")
+        print("[错误] 后果：已升级到「强制验签」版本的客户端会拒绝这次更新")
+        print("   处理：设置环境变量 BTPW_SIGNING_KEY 指向私钥，或把私钥放到当前目录")
+        print("   生成密钥：python tools/sign_update_manifest.py --gen-key")
+        print()
+        return payload
+
+    try:
+        import base64
+
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        from app.utils.updater_signature import SIGNATURE_ALGORITHM, canonical_payload
+
+        raw = base64.b64decode(signing_key.read_text(encoding="utf-8").strip(), validate=True)
+        private_key = Ed25519PrivateKey.from_private_bytes(raw)
+        payload["signature"] = base64.b64encode(
+            private_key.sign(canonical_payload(payload))
+        ).decode()
+        payload["signature_algorithm"] = SIGNATURE_ALGORITHM
+        print(f"更新清单已签名: {payload['signature'][:24]}...")
+    except Exception as error:  # noqa: BLE001 - 打包流程不应因签名失败整体中断
+        print(f"[错误] 清单签名失败（本次发布将不带有效签名）: {error}")
+        print("[错误] 已升级客户端会拒绝此清单，请修复后重新打包")
+    return payload
 
 
 def find_makensis() -> str:
