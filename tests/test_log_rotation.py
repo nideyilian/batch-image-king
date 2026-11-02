@@ -14,13 +14,16 @@ from __future__ import annotations
 import glob
 import logging
 import os
+import threading
 import time
 
 import pytest
 
 from app.utils.logger import (
     LEGACY_LOG_GLOB,
+    LEGACY_LOG_KEEP,
     LEGACY_LOG_MAX_AGE_DAYS,
+    LEGACY_LOG_MAX_DELETE,
     LOG_BACKUP_COUNT,
     LOG_FILENAME,
     LOG_MAX_BYTES,
@@ -144,6 +147,69 @@ def test_prune_never_touches_current_log_when_matching_glob(fresh_logger):
 def test_prune_is_noop_on_empty_dir(fresh_logger):
     """空目录不应抛异常（启动路径必须绝对稳）。"""
     assert prune_legacy_log_files(str(fresh_logger)) == 0
+
+
+@pytest.mark.unit
+def test_prune_respects_max_delete(fresh_logger):
+    """单次删除有上限，避免首次升级时几千个文件逐个删把启动拖死。
+
+    实测背景：1578 个历史日志同步删除耗时 2.5 分钟。
+    """
+    old_ts = time.time() - (LEGACY_LOG_MAX_AGE_DAYS + 10) * 86400
+    for i in range(30):
+        path = fresh_logger / f"app_2025{i + 1:02d}01_120000.log"
+        path.write_text("old", encoding="utf-8")
+        os.utime(path, (old_ts, old_ts))
+
+    removed = prune_legacy_log_files(
+        str(fresh_logger), keep=0, max_age_days=LEGACY_LOG_MAX_AGE_DAYS, max_delete=7
+    )
+    assert removed == 7, f"应受 max_delete=7 限制，实际删除 {removed}"
+
+
+@pytest.mark.unit
+def test_init_does_not_block_on_huge_backlog(fresh_logger, monkeypatch):
+    """清理必须在后台线程执行，不能在启动主路径同步跑。
+
+    这条是回归：初版把 prune 放在启动主路径同步执行，
+    实测 1578 个文件卡了 2.5 分钟（每次删除都走回收站）。
+
+    判据用"执行线程"而不是耗时/剩余数量：
+    - 耗时不可靠：max_delete=200 时删 200 个小文件不到 1 秒，同步也能过
+    - 剩余数量不可靠：同步删完上限后仍会剩下一批，看起来"没删完"
+    只有线程身份是确定的：清理必须不在 main 线程上。
+    """
+    import app.utils.logger as logger_module
+
+    records = []
+    real_prune = logger_module.prune_legacy_log_files
+
+    def _spy(log_dir, keep=None, max_age_days=None, max_delete=None):
+        records.append(threading.current_thread().name)
+        return real_prune(log_dir, keep=keep, max_age_days=max_age_days)
+
+    monkeypatch.setattr(logger_module, "prune_legacy_log_files", _spy)
+
+    old_ts = time.time() - (LEGACY_LOG_MAX_AGE_DAYS + 10) * 86400
+    for i in range(40):
+        path = fresh_logger / f"app_20250101_{i:06d}.log"
+        path.write_text("old", encoding="utf-8")
+        os.utime(path, (old_ts, old_ts))
+
+    Logger.init(log_dir=str(fresh_logger), console_output=False, logger_name="批图王")
+    assert Logger.get_logger() is not None
+
+    # 给后台线程一点时间真正跑起来
+    deadline = time.time() + 10
+    while time.time() < deadline and not records:
+        time.sleep(0.05)
+
+    assert records, "清理函数从未被调用（后台线程没起来）"
+    main_thread = threading.main_thread().name
+    assert all(name != main_thread for name in records), (
+        f"清理在 {main_thread} 上同步执行（记录: {records}）—— 必须放到后台线程"
+    )
+
 
 
 @pytest.mark.unit

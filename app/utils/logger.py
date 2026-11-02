@@ -13,6 +13,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import threading
 import time
 
 
@@ -43,6 +44,8 @@ LOG_FILENAME = "app.log"
 LEGACY_LOG_KEEP = 20
 # 只清理超过该天数的历史日志，避免误删仍在排查用文件
 LEGACY_LOG_MAX_AGE_DAYS = 30
+# 单次清理上限：首次升级的用户可能有上千个历史文件，分批删避免启动久等
+LEGACY_LOG_MAX_DELETE = 200
 
 # 匹配历史遗留的带时间戳日志（app_20261102_101530.log）。
 # 注意不会误伤现行的 app.log —— 后者没有下划线。
@@ -95,15 +98,21 @@ def log_suppressed(logger, context="", level=logging.WARNING):
 swallow = log_suppressed
 
 
-def prune_legacy_log_files(log_dir, keep=LEGACY_LOG_KEEP, max_age_days=LEGACY_LOG_MAX_AGE_DAYS):
+def prune_legacy_log_files(log_dir, keep=LEGACY_LOG_KEEP,
+                           max_age_days=LEGACY_LOG_MAX_AGE_DAYS,
+                           max_delete=LEGACY_LOG_MAX_DELETE):
     """清理历史遗留的带时间戳日志 ``app_<timestamp>.log``。
 
-    旧实现每次启动新建一个日志文件且从不清理，实测可累积到上千个文件。
+    旧实现每次启动新建一个日志文件且从不清理，实测一台机器累积到 1627 个
+    文件 / 12MB。这里做首次瘦身，之后由日志轮转接管，不再增长。
 
-    保守策略（两个条件同时满足才删除）：
+    保守策略（三个条件同时满足才删除）：
       1. 超出最近 ``keep`` 个（按修改时间倒序）；
-      2. 最后修改时间早于 ``max_age_days`` 天。
-    即"最近 20 个"和"30 天内"的文件一律保留，避免误删仍在排查用的日志。
+      2. 最后修改时间早于 ``max_age_days`` 天；
+      3. 单次最多删 ``max_delete`` 个（分批，避免首次启动久等）。
+
+    ⚠️ 不要把它放回启动主路径同步执行：实测 1578 个文件逐个删除耗时 2.5 分钟，
+    会把"打开软件"卡死。调用方应放到后台线程（见 ``Logger.init``）。
 
     现行的 ``app.log`` 及其轮转副本（``app.log.1`` …）不匹配该 glob，不受影响。
 
@@ -111,6 +120,7 @@ def prune_legacy_log_files(log_dir, keep=LEGACY_LOG_KEEP, max_age_days=LEGACY_LO
         log_dir: 日志目录。
         keep: 保留的历史日志个数（按修改时间倒序）。
         max_age_days: 只删除超过该天数的文件。
+        max_delete: 单次删除上限。
 
     Returns:
         实际删除的文件数。任何失败都只记 WARNING，不影响启动。
@@ -128,6 +138,8 @@ def prune_legacy_log_files(log_dir, keep=LEGACY_LOG_KEEP, max_age_days=LEGACY_LO
         cutoff = time.time() - max_age_days * 86400
         removed = 0
         for path in candidates[keep:]:
+            if removed >= max_delete:
+                break
             try:
                 if os.path.getmtime(path) > cutoff:
                     continue
@@ -136,16 +148,46 @@ def prune_legacy_log_files(log_dir, keep=LEGACY_LOG_KEEP, max_age_days=LEGACY_LO
             except OSError:
                 # 文件被占用/权限不足：留给下次启动再试
                 continue
-        if removed:
-            logging.getLogger(__name__).info(
-                "已清理 %d 个历史日志文件（保留最近 %d 个）: %s", removed, keep, log_dir
-            )
         return removed
     except Exception:
         logging.getLogger(__name__).warning(
             "清理历史日志文件失败: %s", log_dir, exc_info=True
         )
         return 0
+
+
+def _prune_legacy_logs_in_background(log_dir, keep=LEGACY_LOG_KEEP,
+                                     max_age_days=LEGACY_LOG_MAX_AGE_DAYS):
+    """在守护线程里清理历史日志，**不阻塞启动**。
+
+    首次升级的用户可能有上千个历史日志，同步删除会让启动卡好几分钟。
+    这里丢给 daemon 线程：失败不影响主流程，进程退出时也随之结束。
+    """
+    def _worker():
+        try:
+            removed = prune_legacy_log_files(
+                log_dir, keep=keep, max_age_days=max_age_days
+            )
+            if removed:
+                logging.getLogger(__name__).info(
+                    "已清理 %d 个历史日志文件（保留最近 %d 个）: %s",
+                    removed, keep, log_dir,
+                )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "后台清理历史日志失败: %s", log_dir, exc_info=True
+            )
+
+    try:
+        thread = threading.Thread(
+            target=_worker, name="legacy-log-prune", daemon=True
+        )
+        thread.start()
+    except Exception:
+        # 线程都起不来就放弃清理，绝不能因此影响启动
+        logging.getLogger(__name__).warning(
+            "无法启动历史日志清理线程: %s", log_dir, exc_info=True
+        )
 
 
 def get_logger(name="app", log_file="app_log.txt", level=logging.INFO):
@@ -246,8 +288,10 @@ class Logger:
             log_dir = '.'
             logging.error("[警告] 创建日志目录时出错，使用当前目录: %s", e)
 
-        # 清理旧版本遗留的时间戳日志（只保留少量样本）
-        prune_legacy_log_files(log_dir)
+        # 清理旧版本遗留的时间戳日志。
+        # 必须放后台：首次升级的用户可能有上千个文件，同步删除实测耗时
+        # 2.5 分钟，会把"打开软件"卡死。
+        _prune_legacy_logs_in_background(log_dir)
 
         # 固定文件名 + 大小轮转，替代「每次启动新建一个文件」
         log_file = os.path.join(log_dir, LOG_FILENAME)
