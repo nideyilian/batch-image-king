@@ -27,7 +27,7 @@ import time
 import psutil
 import threading
 import weakref
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Set
 from dataclasses import dataclass
 from collections import deque
 from PIL import Image

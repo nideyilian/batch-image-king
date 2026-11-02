@@ -6,17 +6,13 @@
 
 import time
 import hashlib
-import threading
 import os
 import builtins
-from collections import OrderedDict, deque
 from functools import wraps
 from typing import Optional, Dict, Any, Tuple
 import math
 from PIL import Image
 import numpy as np
-import weakref
-import gc
 
 try:
     import cv2
@@ -91,10 +87,7 @@ def _serialized_preview(method):
 
 
 # 导入新的智能缓存系统
-from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
-from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
-from .render_diagnostics import log_branch
 from .render_cache_keys import build_layer_positions_key
 from .render_geometry import normalize_angle_180, pick_min_delta_rotation, to_small_tilt_by_axis
 import logging
@@ -645,23 +638,19 @@ class FastRendererSurface(object):
         source_infos = ctx['source_infos']
         relations_hash = ctx['relations_hash']
 
-        # 整份 override 会话缓存：源图层（图像与位置）固定时跨图复用，避免重复几何计算
-        session_parts = []
-        has_random_source = False
-        for _src_layer, _surf_key, _pos_key, _is_rand in source_infos:
-            session_parts.append((_surf_key, _pos_key))
-            if _is_rand:
-                has_random_source = True
+        # 整份 override 会话缓存：源图层（图像与位置）固定时跨图复用，避免重复几何计算。
+        # session_key 里的 surf_key 已包含 current:<当前图片路径>，随机取图后会自然变化，
+        # 因此不需要因为「存在文件夹源图层」就整体放弃缓存。
+        session_parts = [(surf_key, pos_key) for _src, surf_key, pos_key, _is_rand in source_infos]
         session_key = (id(document), tuple(session_parts), relations_hash, bool(was_just_loaded))
-        if not has_random_source:
-            with self._size_match_override_session_lock:
-                _cached_overrides = self._size_match_override_session_cache.get(session_key)
-                if _cached_overrides is not None:
-                    self._size_match_override_session_cache.move_to_end(session_key)
-                    _emit_size_match_trace(
-                        f"任务={export_trace_task} 命中整份大小匹配会话缓存，跳过重复计算"
-                    )
-                    return dict(_cached_overrides)
+        with self._size_match_override_session_lock:
+            _cached_overrides = self._size_match_override_session_cache.get(session_key)
+            if _cached_overrides is not None:
+                self._size_match_override_session_cache.move_to_end(session_key)
+                _emit_size_match_trace(
+                    f"任务={export_trace_task} 命中整份大小匹配会话缓存，跳过重复计算"
+                )
+                return dict(_cached_overrides)
 
         for relation in active_relations:
             source_name = str(relation.get('source_layer_name', '')).strip()
@@ -881,7 +870,20 @@ class FastRendererSurface(object):
         """
         layers_identity = tuple(id(l) for l in visible_layers)
         relations_hash = self._hash_size_match_relations(active_relations)
-        ctx_key = (id(document), layers_identity, relations_hash)
+        # 文件夹源图层每次随机取图都会换 current_image_path，而下面算出的 surf_key 依赖它。
+        # 不把当前图片纳入 ctx_key，随机换图后这里仍会返回旧的 surf_key，
+        # 下游 override 缓存就会命中到「另一张图」的孔位结果。
+        random_state = tuple(
+            (
+                id(layer),
+                str(getattr(layer, '_current_image_path', '')
+                    or getattr(layer, 'current_image_path', '')
+                    or ''),
+            )
+            for layer in visible_layers
+            if getattr(layer, 'is_folder', False)
+        )
+        ctx_key = (id(document), layers_identity, relations_hash, random_state)
         with self._size_match_task_ctx_lock:
             cached = self._size_match_task_ctx_cache.get(ctx_key)
             if cached is not None:
@@ -1207,8 +1209,14 @@ class FastRendererSurface(object):
             raise
 
     def _detect_inner_holes_fallback(self, image: Image.Image, alpha_threshold: int = 6):
-        """检测所有内孔并返回边界、面积与角度信息。"""
+        """检测所有内孔并返回边界、面积与角度信息。
+
+        原实现是两趟纯 Python BFS（标记背景 + 逐孔收集像素），2000x2000 带 144 个孔
+        要数秒；改用 cv2 连通域标记后同一输入在 20ms 量级，且结果集合等价。
+        """
         try:
+            import cv2
+
             if image.mode != 'RGBA':
                 image = image.convert('RGBA')
             alpha = np.array(image.split()[3])
@@ -1231,73 +1239,47 @@ class FastRendererSurface(object):
                 pass
 
             h, w = transparent.shape
-            background = np.zeros_like(transparent, dtype=bool)
-            q = deque()
-
-            for x in range(w):
-                if transparent[0, x]:
-                    background[0, x] = True
-                    q.append((0, x))
-                if transparent[h - 1, x] and not background[h - 1, x]:
-                    background[h - 1, x] = True
-                    q.append((h - 1, x))
-            for y in range(h):
-                if transparent[y, 0] and not background[y, 0]:
-                    background[y, 0] = True
-                    q.append((y, 0))
-                if transparent[y, w - 1] and not background[y, w - 1]:
-                    background[y, w - 1] = True
-                    q.append((y, w - 1))
-
-            while q:
-                cy, cx = q.popleft()
-                for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
-                    if ny < 0 or ny >= h or nx < 0 or nx >= w:
-                        continue
-                    if background[ny, nx] or (not transparent[ny, nx]):
-                        continue
-                    background[ny, nx] = True
-                    q.append((ny, nx))
-
-            holes = transparent & (~background)
-            if not holes.any():
+            num, labels, stats, _ = cv2.connectedComponentsWithStats(
+                transparent.astype(np.uint8), connectivity=4, ltype=cv2.CV_32S
+            )
+            if num <= 1:
                 return []
 
-            visited = np.zeros_like(holes, dtype=bool)
+            # 与画布边界相连的透明连通块是外部背景，其余才是内孔
+            edge_labels = set(
+                np.unique(
+                    np.concatenate(
+                        [labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]]
+                    )
+                ).tolist()
+            )
+            edge_labels.discard(0)
+
             result = []
-            ys, xs = np.where(holes)
-            for y0, x0 in zip(ys, xs):
-                if visited[y0, x0]:
+            for k in range(1, num):
+                if k in edge_labels:
                     continue
-                q = deque([(y0, x0)])
-                visited[y0, x0] = True
-                area = 0
-                min_x = max_x = x0
-                min_y = max_y = y0
-                points_xy = []
+                min_x = int(stats[k, 0])
+                min_y = int(stats[k, 1])
+                bw = int(stats[k, 2])
+                bh = int(stats[k, 3])
+                area = int(stats[k, 4])
+                if area <= 0 or bw < 1 or bh < 1:
+                    continue
 
-                while q:
-                    cy, cx = q.popleft()
-                    area += 1
-                    points_xy.append((cx, cy))
-                    if cx < min_x:
-                        min_x = cx
-                    if cx > max_x:
-                        max_x = cx
-                    if cy < min_y:
-                        min_y = cy
-                    if cy > max_y:
-                        max_y = cy
-                    for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
-                        if ny < 0 or ny >= h or nx < 0 or nx >= w:
-                            continue
-                        if visited[ny, nx] or (not holes[ny, nx]):
-                            continue
-                        visited[ny, nx] = True
-                        q.append((ny, nx))
+                # 只在自身 bbox 内取像素，避免每个孔都扫一遍全图
+                sub = labels[min_y:min_y + bh, min_x:min_x + bw]
+                ys, xs = np.where(sub == k)
+                if ys.size == 0:
+                    continue
+                xs = xs + min_x
+                ys = ys + min_y
+                max_x = min_x + bw - 1
+                max_y = min_y + bh - 1
+                # 倾角搜索只依赖轮廓：把 8281 个区域点喂给 43 次旋转会让
+                # 2000x2000/144 孔的兜底跑到 26 秒，轮廓点少一两个数量级且结果一致。
+                outline_xy = None
 
-                bw = max_x - min_x + 1
-                bh = max_y - min_y + 1
                 bbox_area = max(1, bw * bh)
                 fill_ratio = float(area) / float(bbox_area)
                 rect_like = (fill_ratio >= 0.55 and area >= 30 and bw >= 8 and bh >= 8)
@@ -1310,13 +1292,16 @@ class FastRendererSurface(object):
                 bbox_center_x = float((min_x + max_x) / 2.0)
                 bbox_center_y = float((min_y + max_y) / 2.0)
                 if area >= 20 and bw >= 6 and bh >= 6:
-                    arr = np.asarray(points_xy, dtype=np.float32)
-                    mx = float(np.mean(arr[:, 0]))
-                    my = float(np.mean(arr[:, 1]))
+                    # 直接对坐标数组做统计，不构造 points_xy 元组列表：
+                    # 144 孔 x 8281 点 = 120 万个元组，光构造就要 200ms+
+                    arr_x = xs.astype(np.float32)
+                    arr_y = ys.astype(np.float32)
+                    mx = float(arr_x.mean())
+                    my = float(arr_y.mean())
                     center_x = float(mx)
                     center_y = float(my)
-                    dx = arr[:, 0] - mx
-                    dy = arr[:, 1] - my
+                    dx = arr_x - mx
+                    dy = arr_y - my
                     cov_xx = float(np.mean(dx * dx))
                     cov_yy = float(np.mean(dy * dy))
                     cov_xy = float(np.mean(dx * dy))
@@ -1324,14 +1309,17 @@ class FastRendererSurface(object):
                     area_raw_angle = math.degrees(0.5 * math.atan2(2.0 * cov_xy, cov_xx - cov_yy))
 
                     # 边界主轴通常比区域主轴更贴近“孔框方向”，可提升倾角稳定性
-                    boundary_points = []
-                    for px, py in points_xy:
-                        if (
-                            px <= 0 or py <= 0 or px >= (w - 1) or py >= (h - 1)
-                            or (not holes[py - 1, px]) or (not holes[py + 1, px])
-                            or (not holes[py, px - 1]) or (not holes[py, px + 1])
-                        ):
-                            boundary_points.append((px, py))
+                    inner_mask = transparent[min_y:min_y + bh, min_x:min_x + bw]
+                    _pad = np.pad(inner_mask, 1, mode='constant', constant_values=False)
+                    _inner = _pad[1:-1, 1:-1]
+                    _bnd = _inner & ~(
+                        _pad[:-2, 1:-1] & _pad[2:, 1:-1]
+                        & _pad[1:-1, :-2] & _pad[1:-1, 2:]
+                    )
+                    _bys, _bxs = np.where(_bnd)
+                    boundary_points = list(
+                        zip((_bxs + min_x).tolist(), (_bys + min_y).tolist())
+                    )
                     boundary_anisotropy = 0.0
                     boundary_raw_angle = area_raw_angle
                     if len(boundary_points) >= 16:
@@ -1350,8 +1338,22 @@ class FastRendererSurface(object):
                     use_boundary = bool(boundary_anisotropy >= area_anisotropy * 0.92 and len(boundary_points) >= 16)
                     chosen_raw_angle = boundary_raw_angle if use_boundary else area_raw_angle
                     chosen_anisotropy = max(area_anisotropy, boundary_anisotropy)
+                    if outline_xy is None:
+                        _cs = cv2.findContours(
+                            inner_mask.astype(np.uint8),
+                            cv2.RETR_EXTERNAL,
+                            cv2.CHAIN_APPROX_SIMPLE,
+                        )
+                        _contours = _cs[1] if len(_cs) == 3 else _cs[0]
+                        if _contours:
+                            _c = max(_contours, key=cv2.contourArea).reshape(-1, 2)
+                            outline_xy = [
+                                (float(px) + min_x, float(py) + min_y) for px, py in _c
+                            ]
+                        else:
+                            outline_xy = list(zip(xs.tolist(), ys.tolist()))
                     angle_deg, est_w, est_h, area_gain = self._estimate_tilt_from_min_rect(
-                        points_xy=points_xy,
+                        points_xy=outline_xy,
                         center_x=center_x,
                         center_y=center_y,
                         axis_w=bw,
@@ -1392,7 +1394,6 @@ class FastRendererSurface(object):
                     'oriented_h': int(oriented_h),
                     'fill_ratio': float(fill_ratio),
                 })
-
 
             return result
         except Exception:
@@ -1879,22 +1880,31 @@ class FastRendererSurface(object):
                 )
 
         with self._layer_surface_lock:
-            self._layer_surface_cache[entry_key] = {
-                "cache_key": cache_key,
-                "image": layer_image.copy(),
-                "offset_x": int(getattr(layer, "_render_offset_x", 0)),
-                "offset_y": int(getattr(layer, "_render_offset_y", 0)),
-            }
-            self._layer_surface_cache.move_to_end(entry_key)
-            while len(self._layer_surface_cache) > self._max_layer_surface_entries:
-                self._layer_surface_cache.popitem(last=False)
+            self._set_cache_value_unlocked(
+                self._layer_surface_cache,
+                self._layer_surface_entry_bytes,
+                "_layer_surface_bytes",
+                entry_key,
+                {
+                    "cache_key": cache_key,
+                    "image": layer_image.copy(),
+                    "offset_x": int(getattr(layer, "_render_offset_x", 0)),
+                    "offset_y": int(getattr(layer, "_render_offset_y", 0)),
+                },
+                self._max_layer_surface_entries,
+                self._max_layer_surface_bytes,
+            )
 
         return layer_image
 
     def _clear_layer_surface_cache(self):
-        """清空图层surface缓存"""
+        """清空图层surface缓存（同时释放 PIL 图像并归零字节计数）"""
         with self._layer_surface_lock:
-            self._layer_surface_cache.clear()
+            self._clear_budgeted_cache_unlocked(
+                self._layer_surface_cache,
+                self._layer_surface_entry_bytes,
+                "_layer_surface_bytes",
+            )
         with self._export_layer_surface_lock:
             self._clear_budgeted_cache_unlocked(
                 self._export_layer_surface_cache,
@@ -2089,8 +2099,10 @@ class FastRendererSurface(object):
                 try:
                     result = layer._apply_shape_mask(result)
                 except Exception:
-                    # 形状裁切失败时保守回退原图，避免交互中断
-                    pass
+                    # 形状裁切失败时保守回退原图，避免交互中断。
+                    # 必须留下日志：回退后画面是「圆角没生效」而不是报错，
+                    # 不记录的话用户只会看到形状不对，无从反查。
+                    logger.warning("形状蒙版裁切失败，已回退为未裁切原图", exc_info=True)
 
             if hasattr(layer, '_apply_transformations') and callable(getattr(layer, '_apply_transformations', None)):
                 result = layer._apply_transformations(result)
@@ -2236,8 +2248,12 @@ class FastRendererSurface(object):
         doc_prefix = f"{id(document)}:"
         with self._layer_surface_lock:
             keys_to_remove = [k for k in self._layer_surface_cache.keys() if str(k).startswith(doc_prefix)]
-            for k in keys_to_remove:
-                self._layer_surface_cache.pop(k, None)
+            self._remove_cache_keys_unlocked(
+                self._layer_surface_cache,
+                self._layer_surface_entry_bytes,
+                "_layer_surface_bytes",
+                keys_to_remove,
+            )
         with self._export_layer_surface_lock:
             keys_to_remove = [k for k in self._export_layer_surface_cache.keys() if str(k).startswith(doc_prefix)]
             for k in keys_to_remove:

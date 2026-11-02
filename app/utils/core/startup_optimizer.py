@@ -4,10 +4,7 @@
 """
 
 import time
-import threading
-import sys
-import os
-from typing import List, Callable, Dict, Any
+from typing import Callable, Dict, Any
 from PySide6.QtCore import QTimer, QObject, Signal
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QPixmap, QPainter, QFont, QColor

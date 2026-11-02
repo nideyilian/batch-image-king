@@ -8,7 +8,6 @@ import uuid
 import re
 import copy
 import tempfile
-from pathlib import Path
 
 from app.utils.trusted_pickle import load_trusted_pickle
 
@@ -265,7 +264,9 @@ class PresetManager:
                 self._ensure_optional_metadata(preset_data)
                 presets.append(preset_data)
 
-        # 按创建时间排序（最新的在前）
+        # 按创建时间排序（最新的在前）。
+        # 注意：这里**不**按 order 排——order 只服务于工作台的「手动排序」模式，
+        # 由 VM 层决定是否采用。放这里会污染所有调用方。
         presets.sort(key=lambda x: x.get('created_at', ''), reverse=True)
         return presets
 
@@ -279,6 +280,12 @@ class PresetManager:
         preset_info.setdefault('last_used_at', '')
         preset_info.setdefault('run_count', 0)
         preset_info.setdefault('document_count', 0)
+        preset_info.setdefault('favorite', False)
+        # 手动排序位次：None 表示「还没参与过手动排序」，由 ensure_order()
+        # 统一种子化。用 None 而不是 0，才能区分「首位」和「未排序」。
+        preset_info.setdefault('order', None)
+        # 封面文档下标：多标签预设里用哪一页当卡片封面。
+        preset_info.setdefault('cover_index', 0)
         return preset_info
 
     def get_preset_summary(self, preset_id):
@@ -335,6 +342,9 @@ class PresetManager:
             'thumbnail_path': index_info.get('thumbnail_path', ''),
             'last_used_at': index_info.get('last_used_at', ''),
             'run_count': int(index_info.get('run_count') or 0),
+            'favorite': bool(index_info.get('favorite', False)),
+            'order': index_info.get('order'),
+            'cover_index': int(index_info.get('cover_index') or 0),
         }
         return summary
     
@@ -656,6 +666,224 @@ class PresetManager:
         except Exception as e:
             safe_print(f"更新预设失败: {e}")
             return False
+
+    def set_favorite(self, preset_id, favorite):
+        """设置/取消预设收藏（工作台「收藏」分类的数据来源）。"""
+        if preset_id not in self.presets_index:
+            return False
+        try:
+            info = self.presets_index[preset_id]
+            self._ensure_optional_metadata(info)
+            info['favorite'] = bool(favorite)
+            return self._save_index()
+        except Exception as e:
+            safe_print(f"更新预设收藏状态失败: {e}")
+            return False
+
+    def set_category(self, preset_id, category):
+        """设置预设分类（工作台左侧分类树的数据来源）。
+
+        空串统一归一为「未分类」，避免出现空分类节点。
+        """
+        if preset_id not in self.presets_index:
+            return False
+        try:
+            info = self.presets_index[preset_id]
+            self._ensure_optional_metadata(info)
+            info['category'] = str(category or '').strip() or '未分类'
+            info['modified_at'] = datetime.datetime.now().isoformat()
+            return self._save_index()
+        except Exception as e:
+            safe_print(f"更新预设分类失败: {e}")
+            return False
+
+    def set_tags(self, preset_id, tags):
+        """设置预设标签列表。
+
+        去空、去重、保序；写成列表而非字符串，便于工作台搜索直接 join。
+        """
+        if preset_id not in self.presets_index:
+            return False
+        try:
+            info = self.presets_index[preset_id]
+            self._ensure_optional_metadata(info)
+            cleaned = []
+            for tag in tags or []:
+                text = str(tag or '').strip()
+                if text and text not in cleaned:
+                    cleaned.append(text)
+            info['tags'] = cleaned
+            info['modified_at'] = datetime.datetime.now().isoformat()
+            return self._save_index()
+        except Exception as e:
+            safe_print(f"更新预设标签失败: {e}")
+            return False
+
+    def rename_category(self, old_name, new_name):
+        """重命名分类：把所有属于 old_name 的预设改挂到 new_name。
+
+        返回受影响条数；new_name 为空或与旧名相同时不做任何改动。
+        """
+        old_name = str(old_name or '').strip()
+        new_name = str(new_name or '').strip()
+        if not old_name or not new_name or old_name == new_name:
+            return 0
+        try:
+            affected = 0
+            stamp = datetime.datetime.now().isoformat()
+            for preset_id, info in self.presets_index.items():
+                self._ensure_optional_metadata(info)
+                if info.get('category') == old_name:
+                    info['category'] = new_name
+                    info['modified_at'] = stamp
+                    affected += 1
+            if affected and not self._save_index():
+                return 0
+            return affected
+        except Exception as e:
+            safe_print(f"重命名预设分类失败: {e}")
+            return 0
+
+    def set_thumbnail_path(self, preset_id, thumbnail_path):
+        """记录缩略图相对路径（工作台卡片封面）。"""
+        if preset_id not in self.presets_index:
+            return False
+        try:
+            info = self.presets_index[preset_id]
+            self._ensure_optional_metadata(info)
+            info['thumbnail_path'] = str(thumbnail_path or '')
+            return self._save_index()
+        except Exception as e:
+            safe_print(f"更新预设缩略图路径失败: {e}")
+            return False
+
+    def set_cover_index(self, preset_id, cover_index):
+        """指定多标签预设用第几页当卡片封面。
+
+        只影响展示，不改预设内容本身。换封面后缩略图必须失效重算，
+        由调用方负责触发（VM 里会 force 重新渲染）。
+        """
+        if preset_id not in self.presets_index:
+            return False
+        try:
+            info = self.presets_index[preset_id]
+            self._ensure_optional_metadata(info)
+            index = int(cover_index or 0)
+            info['cover_index'] = max(0, index)
+            return self._save_index()
+        except (TypeError, ValueError):
+            safe_print(f"无效的封面下标: {cover_index}")
+            return False
+        except Exception as e:
+            safe_print(f"更新预设封面失败: {e}")
+            return False
+
+    def ensure_order(self):
+        """给所有还没排序位次的预设播种 order。
+
+        种子策略：按当前「创建时间倒序」的展示顺序编号，这样用户第一次
+        看到手动排序时，顺序和他习惯的完全一致，不会突然乱掉。
+        已有序号的预设不动。
+        """
+        try:
+            unordered = [
+                pid for pid, info in self.presets_index.items()
+                if info.get('order') is None
+            ]
+            if not unordered:
+                return 0
+
+            # 取当前实际展示顺序作为基准
+            ordered_ids = [p['id'] for p in self.get_all_presets()]
+            existing_max = max(
+                (
+                    int(info.get('order'))
+                    for info in self.presets_index.values()
+                    if info.get('order') is not None
+                ),
+                default=-1,
+            )
+            next_order = existing_max + 1
+            planted = 0
+            for pid in ordered_ids:
+                info = self.presets_index.get(pid)
+                if not isinstance(info, dict) or info.get('order') is not None:
+                    continue
+                info['order'] = next_order
+                next_order += 1
+                planted += 1
+            if planted:
+                self._save_index()
+            return planted
+        except Exception as e:
+            safe_print(f"初始化预设顺序失败: {e}")
+            return 0
+
+    def reorder_presets(self, ordered_ids):
+        """按给定 id 顺序重写全部 order（0..n-1）。
+
+        只处理传入的 id；不在列表里的预设保留原位次并顺延到末尾之后的区段，
+        避免部分排序把其它预设的序号挤乱。
+        """
+        try:
+            ordered_ids = [str(pid) for pid in (ordered_ids or [])]
+            if not ordered_ids:
+                return False
+
+            stamp = datetime.datetime.now().isoformat()
+            cursor = 0
+            for pid in ordered_ids:
+                info = self.presets_index.get(pid)
+                if not isinstance(info, dict):
+                    continue
+                self._ensure_optional_metadata(info)
+                info['order'] = cursor
+                info['modified_at'] = stamp
+                cursor += 1
+
+            # 未出现在列表里的预设，按原 order 排在后面，保持相对次序
+            rest = [
+                (pid, info) for pid, info in self.presets_index.items()
+                if pid not in ordered_ids and isinstance(info, dict)
+            ]
+            rest.sort(key=lambda pair: (pair[1].get('order') is None,
+                                        pair[1].get('order') or 0))
+            for pid, info in rest:
+                self._ensure_optional_metadata(info)
+                info['order'] = cursor
+                cursor += 1
+
+            return self._save_index()
+        except Exception as e:
+            safe_print(f"重排预设失败: {e}")
+            return False
+
+    def delete_category(self, category):
+        """删除分类：成员全部归回「未分类」，返回受影响条数。
+
+        分类不是独立实体（只存在于预设的 category 字段上），所以"删除"
+        等于把成员改挂到未分类。不删任何预设。
+        """
+        name = str(category or '').strip()
+        if not name or name == '未分类':
+            return 0
+        try:
+            affected = 0
+            stamp = datetime.datetime.now().isoformat()
+            for info in self.presets_index.values():
+                if not isinstance(info, dict):
+                    continue
+                self._ensure_optional_metadata(info)
+                if info.get('category') == name:
+                    info['category'] = '未分类'
+                    info['modified_at'] = stamp
+                    affected += 1
+            if affected and not self._save_index():
+                return 0
+            return affected
+        except Exception as e:
+            safe_print(f"删除预设分类失败: {e}")
+            return 0
 
     def export_preset(self, preset_id, export_path):
         """导出单个预设"""

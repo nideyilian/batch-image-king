@@ -25,12 +25,10 @@ def print(*args, **kwargs):
         __builtins__["print"](*args, **kwargs)
 
 import time
-import threading
 import functools
-from typing import Tuple, Optional, Dict, Any, Callable
+from typing import Tuple, Dict, Any, Callable
 from PIL import Image
-import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 import gc
 
 # 导入智能线程池管理器

@@ -1,17 +1,12 @@
 # -*- coding: utf-8 -*-
 """TextLayer 方法 mixin：本文件由拆分脚本生成，方法原属于 TextLayer。"""
 import logging
-from PySide6.QtCore import QObject, Signal, Property
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageFont
 import os
-import random
 import platform
-import math
 import threading
 from typing import List, Tuple, Dict, Set, Optional
-from enum import Enum, auto
 import json
-from pathlib import Path
 from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )

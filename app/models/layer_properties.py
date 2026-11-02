@@ -1,9 +1,7 @@
 from app.utils.print_utils import safe_print as print  # R7 契约统一：print -> 编码安全的 safe_print
-from PySide6.QtCore import QObject, Signal
-from typing import Any, Dict, Optional, Union
+from PySide6.QtCore import QObject
+from typing import Any, Dict
 from enum import Enum
-import copy
-import math
 import os
 
 
@@ -334,6 +332,13 @@ class LayerPropertyManager:
         elif name == 'clone_fill_mode' and expected_type == str:
             allowed_modes = {"grid", "staggered", "border", "diagonal", "edge_only", "hex"}
             return value if value in allowed_modes else "grid"
+        elif name == 'blend_mode' and expected_type == int:
+            # 老预设/老 .cmp 里 blend_mode 存的是中文名（如「正片叠底」）甚至英文名，
+            # 直接 int() 会抛 ValueError 并把整条属性回退成默认值（混合模式静默丢失）。
+            # blend_modes 是混合模式的唯一权威源，交给它归一化。
+            from app.utils.blend_modes import blend_mode_to_int
+
+            return blend_mode_to_int(value)
         elif name == 'stroke_type' and expected_type == int:
             return max(0, min(2, int(value)))
         elif name == 'stroke_join' and expected_type == str:

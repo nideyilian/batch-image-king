@@ -24,7 +24,6 @@ class DocumentExportAnalysis:
 
     def _analyze_document_for_export(self) -> dict:
         """完整的文档状态预分析 - 为导出提供全面的状态信息"""
-        from app.utils.print_utils import safe_print as _safe_print  # noqa: F401
         print("[文档分析] 开始完整的文档状态分析...")
 
         analysis_result = {

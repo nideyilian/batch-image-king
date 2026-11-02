@@ -18,7 +18,7 @@ import builtins
 import numpy as np
 from PIL import Image, ImageFilter, ImageEnhance
 import cv2
-from typing import Tuple, Optional, Union, List
+from typing import Tuple, List
 from enum import Enum
 import warnings
 

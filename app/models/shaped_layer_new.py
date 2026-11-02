@@ -1,11 +1,5 @@
-from PySide6.QtCore import QObject, Signal
-from PIL import Image, ImageDraw
-import numpy as np
-import math
-from enum import Enum
-from typing import List, Tuple, Optional
 from app.models.layer_new import Layer
-from app.models.layer_properties import LayerPropertyManager, ShapeType
+from app.models.layer_properties import ShapeType
 from app.utils.render_diagnostics import log_branch
 
 

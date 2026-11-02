@@ -10,9 +10,8 @@ import heapq
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Callable, Any, Set, Tuple
+from typing import Dict, List, Optional, Callable, Any, Set
 from queue import Queue, Empty, Full
-from concurrent.futures import Future, ThreadPoolExecutor
 import weakref
 import logging
 

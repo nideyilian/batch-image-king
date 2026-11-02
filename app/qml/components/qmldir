@@ -46,3 +46,6 @@ SidebarResizeHandle 1.0 SidebarResizeHandle.qml
 TinyLabel 1.0 TinyLabel.qml
 ToolRailButton 1.0 ToolRailButton.qml
 TrailingToggle 1.0 TrailingToggle.qml
+PresetWorkbench 1.0 PresetWorkbench.qml
+PresetCard 1.0 PresetCard.qml
+PresetListRow 1.0 PresetListRow.qml

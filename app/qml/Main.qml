@@ -289,7 +289,21 @@ ApplicationWindow {
             multiTabExportDrawer.open()
     }
 
+    // 预设工作台（整页三栏）。原右侧抽屉已由工作台取代；
+    // 抽屉本身保留在文件中作为回退入口（见 openProjectPresetDrawerLegacy）。
+    property bool presetWorkbenchVisible: false
+
     function openProjectPresetDrawer() {
+        if (workspace.operationsBlocked)
+            return
+        presetWorkbenchVisible = true
+    }
+
+    function closeProjectPresetWorkbench() {
+        presetWorkbenchVisible = false
+    }
+
+    function openProjectPresetDrawerLegacy() {
         if (!workspace.operationsBlocked)
             projectPresetDrawer.open()
     }
@@ -561,10 +575,26 @@ ApplicationWindow {
             applySidebarBounds()
     }
 
+    // selectionChanged 的触发面比「换选中图层」宽得多：改字号、颜色、对齐等图层属性
+    // 也会 emit（见 workspace_vm_edit_ops._set_layer_attrs）。无脑 releaseFocus 会把
+    // 用户正在输入的文字顶掉并提前提交。这里只在「正在编辑 且 选中图层真的换了」时释放。
+    property int lastEditingLayerIndex: -1
+
     Connections {
         target: workspace
         function onToastRequested(message) { showToast(message) }
-        function onSelectionChanged() { selectedTextEditor.releaseFocus() }
+        function onSelectionChanged() {
+            var current = workspace.selectedLayerIndex
+            if (!selectedTextEditor.editing) {
+                // 没在编辑：只同步跟踪值，不做释放
+                window.lastEditingLayerIndex = current
+                return
+            }
+            if (current !== window.lastEditingLayerIndex) {
+                window.lastEditingLayerIndex = current
+                selectedTextEditor.releaseFocus()
+            }
+        }
     }
 
     Connections {
@@ -5300,6 +5330,7 @@ ApplicationWindow {
 
             Rectangle {
                 id: canvasWorkspace
+                objectName: "canvasWorkspace"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 color: Theme.bgCanvas
@@ -5314,6 +5345,9 @@ ApplicationWindow {
                 property real actualScale: workspace.zoomFactor
                 property int rulerSize: 22
                 property bool transformActive: false
+                property bool transformDirty: false
+                // 拖角时是否按住了 Shift（等比缩放）
+                property bool transformShiftHeld: false
                 property string transformMode: ""
                 property real gestureStartMouseX: 0
                 property real gestureStartMouseY: 0
@@ -5489,27 +5523,65 @@ ApplicationWindow {
                     }
                 }
 
+                // 手柄尺寸（屏幕像素）。视觉与命中共用同一个值，
+                // 否则会出现「看到 8 个小方块，实际整条边都能拖」这种表里不一。
+                // 数值与 app/utils/selection_handle_geometry.py 的常量保持一致，
+                // tests/test_selection_handle_geometry.py 会直接读这段源码校验。
+                readonly property real handleHitScreenSize: 14
+
+                // 8 个手柄在选中框局部坐标中的位置（0~1 比例）
+                readonly property var handleAnchors: [
+                    {edge: "nw", fx: 0.0, fy: 0.0},
+                    {edge: "n",  fx: 0.5, fy: 0.0},
+                    {edge: "ne", fx: 1.0, fy: 0.0},
+                    {edge: "e",  fx: 1.0, fy: 0.5},
+                    {edge: "se", fx: 1.0, fy: 1.0},
+                    {edge: "s",  fx: 0.5, fy: 1.0},
+                    {edge: "sw", fx: 0.0, fy: 1.0},
+                    {edge: "w",  fx: 0.0, fy: 0.5}
+                ]
+
+                // Photoshop 规则：只在 8 个手柄方块上能缩放，边框线本身可穿透。
+                // 旧实现按「距边框 10 屏幕像素内」判定，等于整条边都是热区，
+                // 和画出来的 8 个方块对不上，点位一到边框附近就变成缩放而不是选择。
+                //
+                // 选框很小时（缩放过低），8 个手柄会叠在一起把中心盖住，
+                // 中心就再也拖不动。Photoshop 的处理是优先保留 4 个角，
+                // 隐藏边中点手柄；这里同样只在「确实会重叠」时才隐藏。
                 function handleAt(canvasX, canvasY) {
                     if (workspace.selectedLayerIndex < 0 || workspace.selectedLocked)
+                        return ""
+                    if (workspace.selectedVectorPathEnabled || workspace.cropEditing)
                         return ""
                     var point = selectedLocalPoint(canvasX, canvasY)
                     var aggregate = workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup
                     var width = Math.max(1, aggregate ? workspace.selectionBoundsWidth : workspace.selectedWidth)
                     var height = Math.max(1, aggregate ? workspace.selectionBoundsHeight : workspace.selectedHeight)
-                    var tolerance = 10 / actualScale
-                    var nearLeft = Math.abs(point.x) <= tolerance
-                    var nearRight = Math.abs(point.x - width) <= tolerance
-                    var nearTop = Math.abs(point.y) <= tolerance
-                    var nearBottom = Math.abs(point.y - height) <= tolerance
-                    if (nearLeft && nearTop) return "nw"
-                    if (nearRight && nearTop) return "ne"
-                    if (nearLeft && nearBottom) return "sw"
-                    if (nearRight && nearBottom) return "se"
-                    if (nearTop) return "n"
-                    if (nearRight) return "e"
-                    if (nearBottom) return "s"
-                    if (nearLeft) return "w"
-                    return ""
+                    var scale = Math.max(0.001, actualScale)
+                    var radius = (handleHitScreenSize / 2) / scale
+                    // 选框小到角手柄会盖住中心时，整体不显示手柄（与 Photoshop 一致），
+                    // 此时拖选框内部即可移动。否则角手柄的命中圆把中心吃掉，
+                    // 既缩放不了（太挤）又移动不了（中心被占）。
+                    if (Math.sqrt(width * width + height * height) / 2 <= radius)
+                        return ""
+                    // 相邻手柄中心距（画布单位）。小于命中直径说明会粘连。
+                    var dropEdgeHandles = (width / 2 < radius * 2) || (height / 2 < radius * 2)
+                    var best = ""
+                    var bestDist = radius * radius
+                    for (var i = 0; i < handleAnchors.length; ++i) {
+                        var anchor = handleAnchors[i]
+                        // 中点手柄（n/e/s/w）在重叠时让位给 4 角
+                        if (dropEdgeHandles && anchor.edge.length === 1)
+                            continue
+                        var dx = point.x - anchor.fx * width
+                        var dy = point.y - anchor.fy * height
+                        var dist = dx * dx + dy * dy
+                        if (dist <= bestDist) {
+                            bestDist = dist
+                            best = anchor.edge
+                        }
+                    }
+                    return best
                 }
 
                 function selectedContains(canvasX, canvasY) {
@@ -5532,6 +5604,23 @@ ApplicationWindow {
                     return Qt.ArrowCursor
                 }
 
+                // 拖动中的画面跟随。
+                // 不在每次鼠标移动都推文档：节流到约 1/60 秒，并且上一帧还没画完
+                // 就不再堆积新请求——渲染本身要 5ms 左右，堆起来只会让画面更卡。
+                // 松手时 commitTransform 会走一次正式落盘，所以这里不写历史。
+                property real lastLivePreviewMs: 0
+                function requestLivePreview() {
+                    if (!transformActive || !transformDirty)
+                        return
+                    var now = Date.now()
+                    if (now - lastLivePreviewMs < 16)
+                        return
+                    lastLivePreviewMs = now
+                    workspace.previewLiveGeometry(
+                        transientX, transientY, transientWidth, transientHeight
+                    )
+                }
+
                 function beginTransform(mode, canvasX, canvasY) {
                     transformMode = mode
                     gestureStartMouseX = canvasX
@@ -5548,15 +5637,31 @@ ApplicationWindow {
                     transientY = gestureStartY
                     transientWidth = gestureStartWidth
                     transientHeight = gestureStartHeight
+                    // 变换是否真的发生了位移/缩放。Photoshop 里单击一个图层只是选中，
+                    // 几何不变；旧实现只要按下就进入变换，抬起时无条件 commit，
+                    // 于是「点一下」也会走吸附、把图层拉到最近的参考线上。
+                    transformDirty = false
+                    transformShiftHeld = false
                     transformActive = true
                 }
 
-                function updateTransform(canvasX, canvasY) {
+                function updateTransform(canvasX, canvasY, shiftHeld) {
                     if (!transformActive)
                         return
+                    // Shift 状态实时跟随：PS 在拖动过程中按下/松开 Shift 会立即切换等比
+                    if (shiftHeld !== undefined)
+                        transformShiftHeld = !!shiftHeld
                     var deltaX = canvasX - gestureStartMouseX
                     var deltaY = canvasY - gestureStartMouseY
                     var minimumSize = 10
+                    // 超过 1 屏幕像素才算拖动。用屏幕像素而非画布像素，
+                    // 保证低缩放下也不把单击的微小抖动当成拖动。
+                    if (!transformDirty) {
+                        var deadZone = 1.0 / Math.max(0.05, actualScale)
+                        if (Math.abs(deltaX) < deadZone && Math.abs(deltaY) < deadZone)
+                            return
+                        transformDirty = true
+                    }
                     if (transformMode === "move") {
                         transientX = gestureStartX + deltaX
                         transientY = gestureStartY + deltaY
@@ -5572,7 +5677,9 @@ ApplicationWindow {
                     var changesRight = transformMode === "ne" || transformMode === "e" || transformMode === "se"
                     var changesTop = transformMode === "nw" || transformMode === "n" || transformMode === "ne"
                     var changesBottom = transformMode === "sw" || transformMode === "s" || transformMode === "se"
-                    if (workspace.selectedAspectRatioLocked && transformMode.length === 2) {
+                    // Photoshop：拖角时按住 Shift 等比缩放；松开即恢复自由缩放。
+                    // 比例锁定开关打开时也走这条等比分支。
+                    if ((workspace.selectedAspectRatioLocked || transformShiftHeld) && transformMode.length === 2) {
                         var fixedX = transformMode === "nw" || transformMode === "sw" ? right : gestureStartX
                         var fixedY = transformMode === "nw" || transformMode === "ne" ? bottom : gestureStartY
                         var desiredWidth = transformMode === "nw" || transformMode === "sw"
@@ -5608,6 +5715,16 @@ ApplicationWindow {
                 function commitTransform() {
                     if (!transformActive)
                         return
+                    var wasDirty = transformDirty
+                    transformActive = false
+                    transformMode = ""
+                    transformDirty = false
+                    transformShiftHeld = false
+                    // 没真正拖动过：单击而已，什么都不提交。
+                    // 旧实现会无条件走 snapPosition + applySelectedGeometry，
+                    // 于是单击就把图层吸到最近的参考线上。
+                    if (!wasDirty)
+                        return
                     var finalX = Math.round(transientX)
                     var finalY = Math.round(transientY)
                     var finalWidth = Math.round(transientWidth)
@@ -5615,8 +5732,11 @@ ApplicationWindow {
                     var snapped = workspace.snapPosition(finalX, finalY, finalWidth, finalHeight, 6 / canvasWorkspace.actualScale)
                     finalX = Math.round(snapped.x)
                     finalY = Math.round(snapped.y)
-                    transformActive = false
-                    transformMode = ""
+                    // 吸附后若与起始几何完全一致，也不写历史
+                    if (finalX === Math.round(gestureStartX) && finalY === Math.round(gestureStartY)
+                            && finalWidth === Math.round(gestureStartWidth)
+                            && finalHeight === Math.round(gestureStartHeight))
+                        return
                     if (workspace.selectedLayerCount > 1 || workspace.selectedIsLayerGroup)
                         workspace.transformSelectedLayers(finalX, finalY, finalWidth, finalHeight)
                     else
@@ -5624,8 +5744,17 @@ ApplicationWindow {
                 }
 
                 function cancelTransform() {
+                    var wasDirty = transformDirty
                     transformActive = false
                     transformMode = ""
+                    transformDirty = false
+                    transformShiftHeld = false
+                    // 拖动中 previewLiveGeometry 已经实时改过图层几何，
+                    // 取消必须把它们还原到手势起点，否则按 Esc 会留下半成品。
+                    if (wasDirty)
+                        workspace.restoreSelectedGeometry(
+                            gestureStartX, gestureStartY, gestureStartWidth, gestureStartHeight
+                        )
                 }
 
                 WheelHandler {
@@ -5711,6 +5840,33 @@ ApplicationWindow {
                             asynchronous: true
                             cache: false
                             smooth: true
+
+                            // 纹理按「屏幕实际像素」申请。此前不设 sourceSize，4000x4000 全尺寸纹理
+                            // 被 GPU 线性缩到窗口尺寸（无 mipmap），圆弧和细斜线因此出现阶梯状锯齿。
+                            // 缩放过程中先用上一档纹理，停手 150ms 后再换，避免连续重解码。
+                            property real settledScale: canvasWorkspace.actualScale
+                            property real dpr: Math.max(1, Screen.devicePixelRatio)
+                            property int texWidth: Math.max(1, Math.min(
+                                Math.round(canvasWorkspace.safeCanvasWidth * settledScale * dpr),
+                                Math.round(canvasWorkspace.safeCanvasWidth)))
+                            property int texHeight: Math.max(1, Math.min(
+                                Math.round(canvasWorkspace.safeCanvasHeight * settledScale * dpr),
+                                Math.round(canvasWorkspace.safeCanvasHeight)))
+                            sourceSize.width: texWidth
+                            sourceSize.height: texHeight
+
+                            Timer {
+                                id: previewScaleSettle
+                                interval: 150
+                                repeat: false
+                                onTriggered: documentPreview.settledScale = canvasWorkspace.actualScale
+                            }
+                            Connections {
+                                target: canvasWorkspace
+                                function onActualScaleChanged() {
+                                    previewScaleSettle.restart()
+                                }
+                            }
                         }
 
                         Repeater {
@@ -5773,6 +5929,7 @@ ApplicationWindow {
 
                         MouseArea {
                             id: canvasPointer
+                            objectName: "canvasPointer"
                             anchors.fill: parent
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             hoverEnabled: true
@@ -5800,9 +5957,10 @@ ApplicationWindow {
                                 if (workspace.cropEditing)
                                     return
                                 if (workspace.textEditOverlayVisible) {
+                                    // 提交编辑后继续走命中判定，而不是 return 吞掉这次点击。
+                                    // 旧实现把退出编辑的那一下点击整块吃掉，用户点别的图层没反应，
+                                    // 必须再点第二次才生效——看起来就像「点不中」。
                                     canvasTextEditOverlay.commit()
-                                    mouse.accepted = true
-                                    return
                                 }
                                 var handle = canvasWorkspace.handleAt(mouse.x, mouse.y)
                                 if (handle.length > 0) {
@@ -5828,8 +5986,13 @@ ApplicationWindow {
                             }
                             onPositionChanged: mouse => {
                                 if (!pressed) return
-                                if (canvasWorkspace.transformActive)
-                                    canvasWorkspace.updateTransform(mouse.x, mouse.y)
+                                if (canvasWorkspace.transformActive) {
+                                    canvasWorkspace.updateTransform(
+                                        mouse.x, mouse.y,
+                                        (mouse.modifiers & Qt.ShiftModifier) !== 0
+                                    )
+                                    canvasWorkspace.requestLivePreview()
+                                }
                                 else if (canvasWorkspace.marqueeActive) {
                                     canvasWorkspace.marqueeCurrentX = mouse.x
                                     canvasWorkspace.marqueeCurrentY = mouse.y
@@ -5913,9 +6076,22 @@ ApplicationWindow {
                                 ]
                                 delegate: Rectangle {
                                     required property var modelData
+                                    // 隐藏条件与 handleAt 必须一致：
+                                    // 画出来却点不到、或点得到却没画，都会让人觉得「乱」。
+                                    readonly property real hitRadius:
+                                        (canvasWorkspace.handleHitScreenSize / 2) / Math.max(0.001, canvasWorkspace.actualScale)
+                                    // 选框小到角手柄盖住中心 -> 全部隐藏
+                                    readonly property bool allDropped:
+                                        Math.sqrt(parent.width * parent.width + parent.height * parent.height) / 2 <= hitRadius
+                                    // 否则只隐藏边中点，保留 4 角
+                                    readonly property bool edgeDropped:
+                                        modelData.edge.length === 1
+                                        && (parent.width / 2 < hitRadius * 2 || parent.height / 2 < hitRadius * 2)
                                     visible: !workspace.selectedLocked
                                              && !workspace.cropEditing
                                              && !workspace.selectedVectorPathEnabled
+                                             && !allDropped
+                                             && !edgeDropped
                                     width: 8 / canvasWorkspace.actualScale
                                     height: width
                                     radius: modelData.edge.length === 1 ? 1 / canvasWorkspace.actualScale : width / 2
@@ -6222,10 +6398,20 @@ ApplicationWindow {
                                 }
 
                                 function commit() {
+                                    // 退出编辑态不能以「输入框已进入编辑」为前提。
+                                    // 覆盖层可能已显示但输入框没抢到焦点（例如窗口刚切回来就双击），
+                                    // 此时 editingIndex 仍是 -1，editing 为 false。旧实现直接什么都不做，
+                                    // 覆盖层就永远关不掉，而画布 onPressed 命中它时又会提前 return，
+                                    // 结果整块画布失去选择能力（点任何图层都没反应）。
+                                    if (!workspace.textEditOverlayVisible)
+                                        return
                                     if (canvasTextEditInput.editing) {
                                         canvasTextEditOverlay.commitValue()
-                                        canvasTextEditInput.focus = false
+                                    } else {
+                                        canvasTextEditOverlay.editingIndex = -1
+                                        workspace.cancelTextEditOverlay()
                                     }
+                                    canvasTextEditInput.focus = false
                                 }
 
                                 function commitValue() {
@@ -9056,4 +9242,49 @@ ApplicationWindow {
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top }
         }
     }
+
+    // ================= 预设工作台（整页浮层） =================
+    // 以覆盖层而非抽屉呈现：工作台需要整页三栏 + 多列卡片，抽屉 460px 装不下。
+    // 主编辑区保持不动，退出时只隐藏覆盖层，不重建编辑器状态。
+    PresetWorkbench {
+        id: presetWorkbench
+        anchors.fill: parent
+        z: 900
+        visible: window.presetWorkbenchVisible
+        vm: projectPresets
+        onRequestClose: window.closeProjectPresetWorkbench()
+        onRequestLoad: function(presetId) {
+            var loaded = projectPresets.loadPreset(presetId)
+            if (loaded > 0) {
+                showToast("已加载 " + loaded + " 个标签页")
+                window.closeProjectPresetWorkbench()
+            } else showToast(projectPresets.lastError)
+        }
+        onRequestDuplicate: function(presetId) {
+            var duplicatedId = projectPresets.duplicatePreset(presetId)
+            if (duplicatedId.length > 0) {
+                showToast("预设已复制")
+                presetWorkbench.selectPreset(duplicatedId)
+            } else showToast(projectPresets.lastError)
+        }
+        onRequestExport: function(presetId, presetName) {
+            projectPresetExportDialog.openForPreset(presetId, presetName)
+        }
+        onRequestDelete: function(presetId, presetName) {
+            presetDeleteConfirm.presetId = presetId
+            presetDeleteConfirm.presetName = presetName
+            presetDeleteConfirm.open()
+        }
+        onRequestSaveNew: window.openProjectPresetDrawerLegacy()
+        onRequestToast: function(message) { showToast(message) }
+        onRequestBatchCreate: function(presetId) {
+            var loaded = projectPresets.loadPreset(presetId)
+            if (loaded > 0) {
+                window.closeProjectPresetWorkbench()
+                window.openBatchExportDrawer()
+            } else showToast(projectPresets.lastError)
+        }
+    }
+
+
 }

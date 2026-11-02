@@ -6,7 +6,7 @@
 
 import numpy as np
 from PIL import Image, ImageFilter, ImageDraw
-from typing import Tuple, Optional, Union
+from typing import Tuple
 import os
 
 def safe_print(message: str):

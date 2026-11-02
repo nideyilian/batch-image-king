@@ -5,7 +5,6 @@
 提供各种图层混合模式的实现
 """
 
-import numpy as np
 from PIL import Image
 
 

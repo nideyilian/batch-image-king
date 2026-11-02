@@ -38,11 +38,15 @@ class PreviewImageProvider(QQuickImageProvider):
             image = QImage(self._image)
 
         if requested_size.isValid() and requested_size.width() > 0 and requested_size.height() > 0:
-            image = image.scaled(
-                requested_size,
-                aspectMode=Qt.KeepAspectRatio,
-                mode=Qt.SmoothTransformation,
-            )
+            # 只在确实要缩小时才重采样：等尺寸或放大时直接给原图，
+            # 否则每帧都白做一次全图 SmoothTransformation。
+            if (requested_size.width() < image.width()
+                    or requested_size.height() < image.height()):
+                image = image.scaled(
+                    requested_size,
+                    aspectMode=Qt.KeepAspectRatio,
+                    mode=Qt.SmoothTransformation,
+                )
         if isinstance(size, QSize):
             size.setWidth(image.width())
             size.setHeight(image.height())

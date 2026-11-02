@@ -19,6 +19,120 @@ from .workspace_vm_shared import _PreviewTask, _pil_to_qimage
 
 
 class WorkspacePreviewMixin:
+    @Slot(float, float, float, float, result=bool)
+    def previewLiveGeometry(self, x: float, y: float, width: float, height: float) -> bool:
+        """拖动过程中的画面跟随：把临时几何写进选中图层并立刻要一帧低质量预览。
+
+        与 ``applySelectedGeometry`` 的区别：
+        - **不写历史、不置 is_modified、不发 documentInfoChanged**
+          （拖动中每帧都改，写历史会把撤销栈撑满）
+        - 不走 220ms 的 final 定时器，直接进交互队列，让画面跟手
+
+        松手时仍由 ``commitTransform`` 走一次 ``applySelectedGeometry``
+        完成正式的落盘与历史记录。
+        """
+        # 几何写入与「是否自动渲染」无关：关掉预览时也要能拖动。
+        # 只有末尾决定要不要丢一帧渲染时才看 _auto_render。
+        indices = [
+            int(i)
+            for i in list(getattr(self._document, "selected_layer_indices", []) or [])
+            if 0 <= int(i) < len(getattr(self._document, "layers", []) or [])
+        ]
+        if not indices:
+            return False
+        target_x, target_y = float(x), float(y)
+        target_w, target_h = max(1.0, float(width)), max(1.0, float(height))
+        try:
+            with self._document_lock:
+                if len(indices) == 1:
+                    layer = self._document.layers[indices[0]]
+                    layer.x = int(round(target_x))
+                    layer.y = int(round(target_y))
+                    layer.width = max(1, int(round(target_w)))
+                    layer.height = max(1, int(round(target_h)))
+                else:
+                    old_x, old_y, old_w, old_h = self._selection_bounds()
+                    if old_w <= 0 or old_h <= 0:
+                        return False
+                    scale_x = target_w / float(old_w)
+                    scale_y = target_h / float(old_h)
+                    for index in indices:
+                        layer = self._document.layers[index]
+                        if not hasattr(layer, "x"):
+                            continue
+                        layer.x = round(target_x + (float(layer.x) - old_x) * scale_x)
+                        layer.y = round(target_y + (float(layer.y) - old_y) * scale_y)
+                        if hasattr(layer, "width"):
+                            layer.width = max(1, round(float(layer.width) * scale_x))
+                            layer.height = max(1, round(float(layer.height) * scale_y))
+        except Exception:
+            return False
+        # 只丢一帧交互质量预览，不升级 final
+        if not self._auto_render:
+            return True
+        self._preview_generation += 1
+        self._pending_preview_generation = self._preview_generation
+        self._pending_preview_quality = "interactive"
+        if self._render_running:
+            self._render_pending = True
+        else:
+            self._preview_timer.start(0)
+        return True
+
+    @Slot(float, float, float, float, result=bool)
+    def restoreSelectedGeometry(self, x: float, y: float, width: float, height: float) -> bool:
+        """取消拖动时把几何还原到手势起点。
+
+        ``previewLiveGeometry`` 在拖动过程中会实时改图层几何，所以取消
+        （Esc / 鼠标移出）必须显式还原，否则会留下半成品。
+        同样不写历史——这次拖动本来就该整体丢弃。
+        """
+        indices = [
+            int(i)
+            for i in list(getattr(self._document, "selected_layer_indices", []) or [])
+            if 0 <= int(i) < len(getattr(self._document, "layers", []) or [])
+        ]
+        if not indices:
+            return False
+        try:
+            with self._document_lock:
+                if len(indices) == 1:
+                    layer = self._document.layers[indices[0]]
+                    layer.x = int(round(float(x)))
+                    layer.y = int(round(float(y)))
+                    if hasattr(layer, "width"):
+                        layer.width = max(1, int(round(float(width))))
+                        layer.height = max(1, int(round(float(height))))
+                else:
+                    # 多选：拖动时按比例缩放，还原用同样的比例反向推回
+                    current = self._selection_bounds()
+                    if current[2] <= 0 or current[3] <= 0:
+                        return False
+                    scale_x = max(1.0, float(width)) / float(current[2])
+                    scale_y = max(1.0, float(height)) / float(current[3])
+                    for index in indices:
+                        layer = self._document.layers[index]
+                        if not hasattr(layer, "x"):
+                            continue
+                        layer.x = round(float(x) + (float(layer.x) - current[0]) * scale_x)
+                        layer.y = round(float(y) + (float(layer.y) - current[1]) * scale_y)
+                        if hasattr(layer, "width"):
+                            layer.width = max(1, round(float(layer.width) * scale_x))
+                            layer.height = max(1, round(float(layer.height) * scale_y))
+        except Exception:
+            return False
+        # 还原后要重画一帧，否则画面还停在拖动中的样子
+        if not self._auto_render:
+            return True
+        self._preview_generation += 1
+        self._pending_preview_generation = self._preview_generation
+        self._pending_preview_quality = "interactive"
+        if self._render_running:
+            self._render_pending = True
+        else:
+            self._preview_timer.start(0)
+        return True
+
     @Slot()
     @Slot(bool)
     def requestPreview(self, force: bool = False) -> None:
@@ -129,11 +243,19 @@ class WorkspacePreviewMixin:
     ) -> None:
         self._render_running = False
         self._active_render_task = None
+        # 判定标准是「这份结果比手上这帧新」，而不是「它就是当前最新版本」。
+        # 旧实现用 generation == self._preview_generation：拖动时每帧
+        # requestPreview 都会把 _preview_generation 推进，渲染回来时
+        # generation 必然落后，于是每一帧结果都被丢弃，画面停住不动，
+        # 只有彻底停手后那一次才被接受 —— 用户感知就是拖不动、卡顿。
+        # 用 request_id 保证不是过期请求（同一次启动里 id 唯一且递增），
+        # 用 generation 单调递增保证不拿旧的覆盖新的。
         current_result = (
             request_id == self._render_request_id
-            and generation == self._preview_generation
+            and generation >= self._accepted_preview_generation
         )
         if current_result and qimage is not None and not qimage.isNull():
+            self._accepted_preview_generation = generation
             self._preview_provider.set_image(qimage)
             self._preview_revision += 1
             self.previewChanged.emit()

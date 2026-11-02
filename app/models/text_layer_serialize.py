@@ -1,17 +1,7 @@
 # -*- coding: utf-8 -*-
 """TextLayer 方法 mixin：本文件由拆分脚本生成，方法原属于 TextLayer。"""
 import logging
-from PySide6.QtCore import QObject, Signal, Property
-from PIL import Image, ImageDraw, ImageFont
-import os
-import random
-import platform
-import math
-import threading
-from typing import List, Tuple, Dict, Set, Optional
-from enum import Enum, auto
-import json
-from pathlib import Path
+from typing import List
 from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
@@ -420,6 +410,8 @@ class TextLayerSerializeMixin:
         )
 
         layer._visible = data.get('visible', True)
+        # 回填参数期间禁用坐标补偿：这里的属性写入是整体覆盖，不是用户调效果
+        layer._suppress_anchor_compensation = True
         layer._opacity = data.get('opacity', 1.0)
         layer._locked = data.get('locked', False)
         layer._use_original_size = data.get('use_original_size', False)
@@ -466,6 +458,8 @@ class TextLayerSerializeMixin:
         layer.glow_radius = int(data.get('glow_radius', 10))
         layer.glow_color = tuple(data.get('glow_color', (255, 255, 255, 255)))
         layer._update_text_box_size_if_needed()
+        layer._suppress_anchor_compensation = False
+        layer._content_origin = None
 
         return layer
 

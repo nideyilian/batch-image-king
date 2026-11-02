@@ -9,7 +9,6 @@ import os
 import gc
 import threading
 from typing import Dict, Any, Optional
-import weakref
 
 
 class ImageCacheManager:

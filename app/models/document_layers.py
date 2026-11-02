@@ -1,24 +1,6 @@
 import os
-import random
-import json
-import pickle
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageChops
-from PIL.Image import Resampling, Transpose
-import numpy as np
-from PySide6.QtCore import QObject, Signal
-import re
-import glob
-import gc
 from app.models.layer_new import Layer as NewLayer
-from app.models.document_blend import BlendMode
-from app.models.document_blend import Blender
-from typing import List, Tuple
-from app.models.binding_manager import BindingGroup
-import time
-import hashlib
-from app.utils.render_diagnostics import log_branch, log_sampling
 from app.utils.print_utils import safe_print as _safe_print
-from app.models.layer_size_match_manager import LayerSizeMatchManager
 import logging
 logger = logging.getLogger(__name__)
 
@@ -30,6 +12,16 @@ class DocumentLayers:
     """Document 方法拆分 mixin，保持与 Document 完全兼容（通过多重继承组合）。"""
 
     def add_layer(self, name, x, y, width, height, image_source=None, use_original_size=False, is_folder=True):
+        # 尺寸归一化：Layer 构造走 set_property(validate=False) 直接写值，
+        # 负宽高会一路流到下游 —— selectionBounds 算出 (x, y, -50, -50)，
+        # 选中框在 QML 里变成负尺寸，命中测试返回 -1，图层静默「消失」。
+        # 这里钳到 >= 1，与 applySelectedGeometry 的「尺寸必须大于零」口径一致。
+        try:
+            width = max(1, int(width))
+            height = max(1, int(height))
+        except (TypeError, ValueError):
+            width, height = 1, 1
+
         # 保存当前状态
         self.save_state("添加图层前")
         
@@ -382,7 +374,9 @@ class DocumentLayers:
                         reason="layer_selection_changed",
                     )
             except Exception:
-                pass
+                # 变更上下文只用于诊断/审计，失败不该中断选择。
+                # 但静默吞掉会让「操作历史里缺一条上下文」这种问题无法定位，故记一条 warning。
+                logger.warning("设置图层选择变更上下文失败", exc_info=True)
             self.layer_changed.emit()
             self.layer_selected.emit(primary)
             self.layers_selection_changed.emit(list(valid_indices))

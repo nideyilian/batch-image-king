@@ -7,7 +7,7 @@ from app.utils.print_utils import safe_print as print  # R7 契约统一：print
 import re
 import os
 import hashlib
-from typing import Dict, Any, List, Optional, Union, Tuple
+from typing import Dict, Any, Union, Tuple
 
 
 class FilenameTemplateProcessor:

@@ -124,12 +124,7 @@ class WorkspaceLayerOpsMixin:
             self._set_status(f"删除图层失败：{error}", toast=True)
             return False
 
-        self._layer_model.reset_from_document()
-        self.documentInfoChanged.emit()
-        self.selectionChanged.emit()
-        self.historyStateChanged.emit()
-        self.requestPreview(force=True)
-        self._set_status("已删除图层", toast=True)
+        self._finish_arrangement("删除图层", "已删除图层", history=False)
         return True
 
     def _duplicate_layer_name(self, original_name: str) -> str:
@@ -145,6 +140,38 @@ class WorkspaceLayerOpsMixin:
             number += 1
         return f"{base_name} 副本 {number}"
 
+    def _clone_layer(self, original):
+        """复制单个图层对象：新 ID、去重名称、偏移 12px、继承所属组、接 changed 信号。
+
+        单层复制与多选复制共用这一份实现。此前是两份副本，已经漂移出两个缺陷：
+        单层版漏了 ``set_parent_group_id``（把组内图层复制出来会脱离组），
+        多选版漏了 ``changed`` 信号连接（副本改属性不会触发文档级重绘）。
+        """
+        try:
+            duplicate = original.duplicate(parent=self._document)
+        except TypeError:
+            duplicate = original.duplicate()
+        if duplicate is None:
+            raise RuntimeError("图层复制失败")
+
+        if hasattr(duplicate, "_layer_id"):
+            duplicate._layer_id = str(uuid.uuid4())
+        duplicate.name = self._duplicate_layer_name(getattr(original, "name", ""))
+
+        if hasattr(duplicate, "x") and hasattr(duplicate, "width"):
+            max_x = max(0, self.canvasWidth - int(getattr(duplicate, "width", 0) or 0))
+            duplicate.x = min(max_x, max(0, int(getattr(original, "x", 0) or 0) + 12))
+        if hasattr(duplicate, "y") and hasattr(duplicate, "height"):
+            max_y = max(0, self.canvasHeight - int(getattr(duplicate, "height", 0) or 0))
+            duplicate.y = min(max_y, max(0, int(getattr(original, "y", 0) or 0) + 12))
+
+        set_parent_group_id(duplicate, get_parent_group_id(original))
+
+        changed_signal = getattr(duplicate, "changed", None)
+        if changed_signal is not None:
+            changed_signal.connect(self._document.document_changed.emit)
+        return duplicate
+
     @Slot(result=bool)
     def duplicateSelectedLayer(self) -> bool:
         if not self._ensure_operations_available():
@@ -158,28 +185,7 @@ class WorkspaceLayerOpsMixin:
         try:
             with self._document_lock:
                 self._ensure_history_baseline()
-                try:
-                    duplicate = original.duplicate(parent=self._document)
-                except TypeError:
-                    duplicate = original.duplicate()
-                if duplicate is None:
-                    raise RuntimeError("图层复制失败")
-
-                if hasattr(duplicate, "_layer_id"):
-                    duplicate._layer_id = str(uuid.uuid4())
-                duplicate.name = self._duplicate_layer_name(getattr(original, "name", ""))
-
-                if hasattr(duplicate, "x") and hasattr(duplicate, "width"):
-                    max_x = max(0, self.canvasWidth - int(getattr(duplicate, "width", 0) or 0))
-                    duplicate.x = min(max_x, max(0, int(getattr(original, "x", 0) or 0) + 12))
-                if hasattr(duplicate, "y") and hasattr(duplicate, "height"):
-                    max_y = max(0, self.canvasHeight - int(getattr(duplicate, "height", 0) or 0))
-                    duplicate.y = min(max_y, max(0, int(getattr(original, "y", 0) or 0) + 12))
-
-                changed_signal = getattr(duplicate, "changed", None)
-                if changed_signal is not None:
-                    changed_signal.connect(self._document.document_changed.emit)
-
+                duplicate = self._clone_layer(original)
                 insert_index = index + 1
                 self._document.layers.insert(insert_index, duplicate)
                 self._document.selected_layer_index = insert_index
@@ -237,12 +243,7 @@ class WorkspaceLayerOpsMixin:
             self._document._invalidate_render_cache()
             self._document.document_changed.emit()
 
-        self._layer_model.reset_from_document()
-        self.documentInfoChanged.emit()
-        self.selectionChanged.emit()
-        self.historyStateChanged.emit()
-        self.requestPreview(force=True)
-        self._set_status(f"图层已{action_text}", toast=True)
+        self._finish_arrangement(action_text, f"图层已{action_text}", history=False)
         return True
 
     def _move_selected_layer_to_boundary(self, side: str) -> bool:
@@ -268,15 +269,9 @@ class WorkspaceLayerOpsMixin:
             action_text = "置于顶层" if side == "front" else "置于底层"
             self._document.is_modified = True
             self._document._invalidate_render_cache()
-            self._document.save_state(action_text)
             self._document.document_changed.emit()
 
-        self._layer_model.reset_from_document()
-        self.documentInfoChanged.emit()
-        self.selectionChanged.emit()
-        self.historyStateChanged.emit()
-        self.requestPreview(force=True)
-        self._set_status(f"图层已{action_text}", toast=True)
+        self._finish_arrangement(action_text, f"图层已{action_text}")
         return True
 
     @Slot(result=bool)
@@ -312,11 +307,19 @@ class WorkspaceLayerOpsMixin:
             self._set_status("已编组为合并容器（向下合并：Ctrl+E）", toast=True)
         return ok
 
-    def _finish_arrangement(self, action: str, status: str, *, render: bool = True) -> None:
+    def _finish_arrangement(self, action: str, status: str, *, render: bool = True,
+                            history: bool = True) -> None:
+        """结构性改动后的统一收尾：脏标记、缓存失效、命中版本、历史、信号、预览、状态栏。
+
+        ``history=False`` 用于调用方已经自己存过历史快照的场景（Document 层的
+        ``remove_layer`` / ``move_layer_up`` / ``move_layer_down`` 都会在改动**前**
+        存一份 "xxx前" 快照），避免同一次操作往撤销栈里塞两条。
+        """
         self._document.is_modified = True
         self._document._invalidate_render_cache()
         self._document.bump_hit_test_version()
-        self._document.save_state(action)
+        if history:
+            self._document.save_state(action)
         self._document.layer_changed.emit()
         self._document.document_changed.emit()
         self._layer_model.reset_from_document()
@@ -383,19 +386,39 @@ class WorkspaceLayerOpsMixin:
         self._selection_anchor_index = primary
         return bool(hits)
 
-    @Slot(float, float, result=int)
-    def hitTestLayerAt(self, x: float, y: float) -> int:
+    def _hit_indices_at(self, x: float, y: float, *, require_content: bool):
+        """按 z 从顶到底收集命中的非组图层索引。
+
+        require_content=True 走像素判定；False 是文字层矩形兜底轮。
+        """
+        from app.models.text_layer import TextLayer
+
         hits = []
         for index in range(len(self._document.layers) - 1, -1, -1):
             layer = self._document.layers[index]
             if is_layer_group(layer):
                 continue
+            if not require_content and not isinstance(layer, TextLayer):
+                # 兜底轮只需补文字层，其他图层在像素轮已判定过，避免重复算 alpha
+                continue
             if not is_effectively_visible(layer, self._document.layers):
                 continue
             for position in self._layer_hit_positions(layer):
-                if self._layer_contains_point(layer, x, y, position):
+                if self._layer_contains_point(layer, x, y, position, require_content=require_content):
                     hits.append(index)
                     break
+        return hits
+
+    @Slot(float, float, result=int)
+    def hitTestLayerAt(self, x: float, y: float) -> int:
+        # 第一趟：只认真正有像素的图层（文字层也算像素），透明处让位给下层。
+        hits = self._hit_indices_at(x, y, require_content=True)
+        if hits:
+            return hits[0]
+
+        # 第二趟：文字层矩形兜底。点文字框空白处仍能选中该文字层，
+        # 但排在像素命中之后，不会再遮挡下层图层。
+        hits = self._hit_indices_at(x, y, require_content=False)
         if hits:
             return hits[0]
 
@@ -415,17 +438,10 @@ class WorkspaceLayerOpsMixin:
 
     @Slot(float, float, result="QVariantList")
     def hitTestLayersAt(self, x: float, y: float):
-        hits = []
-        for index in range(len(self._document.layers) - 1, -1, -1):
-            layer = self._document.layers[index]
-            if is_layer_group(layer) or not is_effectively_visible(layer, self._document.layers):
-                continue
-            if any(
-                self._layer_contains_point(layer, x, y, position)
-                for position in self._layer_hit_positions(layer)
-            ):
-                hits.append(index)
-        return hits
+        hits = self._hit_indices_at(x, y, require_content=True)
+        if hits:
+            return hits
+        return self._hit_indices_at(x, y, require_content=False)
 
     def _layer_hit_positions(self, layer):
         positions = [(float(getattr(layer, "x", 0)), float(getattr(layer, "y", 0)))]
@@ -620,18 +636,7 @@ class WorkspaceLayerOpsMixin:
             insert_at = max(indices) + 1
             duplicates = []
             for original in originals:
-                try:
-                    duplicate = original.duplicate(parent=self._document)
-                except TypeError:
-                    duplicate = original.duplicate()
-                if hasattr(duplicate, "_layer_id"):
-                    duplicate._layer_id = str(uuid.uuid4())
-                duplicate.name = self._duplicate_layer_name(getattr(original, "name", ""))
-                if hasattr(duplicate, "x"):
-                    duplicate.x = min(max(0, self.canvasWidth - int(duplicate.width)), int(original.x) + 12)
-                    duplicate.y = min(max(0, self.canvasHeight - int(duplicate.height)), int(original.y) + 12)
-                set_parent_group_id(duplicate, get_parent_group_id(original))
-                duplicates.append(duplicate)
+                duplicates.append(self._clone_layer(original))
             self._document.layers[insert_at:insert_at] = duplicates
             duplicate_indices = list(range(insert_at, insert_at + len(duplicates)))
             self._document.select_layers(duplicate_indices, primary_index=duplicate_indices[0])
@@ -867,14 +872,17 @@ class WorkspaceLayerOpsMixin:
             return None
 
     @classmethod
-    def _layer_contains_point(cls, layer, x: float, y: float, position=None) -> bool:
+    def _layer_contains_point(cls, layer, x: float, y: float, position=None, *, require_content: bool = False) -> bool:
         local = cls._layer_local_point(layer, x, y, position)
         if local is None:
             return False
         local_x, local_y = local
         width = float(getattr(layer, "width", 0) or 0)
         height = float(getattr(layer, "height", 0) or 0)
-        if not (0.0 <= local_x <= width and 0.0 <= local_y <= height):
+        # 半开区间 [0, width)。宽度 400 的像素是 0..399，
+        # 用 <= width 会让右/下边缘多占 1px，与紧贴的下层图层互相抢点，
+        # 表现为「点在两个图层的接缝上，选中的总是上面那个」。
+        if not (0.0 <= local_x < width and 0.0 <= local_y < height):
             return False
 
         shape = getattr(layer, "shape_type", ShapeType.RECTANGLE)
@@ -915,7 +923,11 @@ class WorkspaceLayerOpsMixin:
 
         from app.models.text_layer import TextLayer
 
-        if isinstance(layer, TextLayer):
+        # 文字层：require_content=True 时按像素透明度判定，和图片层一致——
+        # 否则文字框（尤其关掉自动适配的大框）的整块矩形都会抢占命中，
+        # 落在框内空白处的点击永远选不中下面真正有内容的图层。
+        # require_content=False 时退化为矩形兜底，保证点文字框空白处仍能选中文字层。
+        if isinstance(layer, TextLayer) and not require_content:
             return True
         image = cls._layer_alpha_image(layer)
         if image is None or image.mode != "RGBA":

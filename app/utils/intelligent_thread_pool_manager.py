@@ -8,11 +8,11 @@ import os
 import psutil
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Callable, Any, List, Union, Tuple
-from queue import PriorityQueue, Queue
+from typing import Dict, Optional, Callable, Any, List, Tuple
+from queue import PriorityQueue
 import logging
 
 logger = logging.getLogger(__name__)

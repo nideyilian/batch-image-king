@@ -34,13 +34,15 @@ class BatchExportCombinationMetadataMixin:
             # 文字图层不参与随机缩放/旋转
             is_text_layer = bool(hasattr(layer, 'get_text_lines') and callable(getattr(layer, 'get_text_lines', None)))
 
-            # 使用稳定种子，保证预计算可复现
-            random_seed = hash((
+            # 使用稳定种子，保证预计算可复现（内置 hash() 受 PYTHONHASHSEED 影响，跨进程会变）
+            from app.utils.stable_seed import stable_seed
+
+            random_seed = stable_seed(
                 int(combination_index),
                 int(layer_idx),
                 os.path.basename(str(file_path or "")),
                 category_key,
-            )) & 0x7FFFFFFF
+            )
             rng = random.Random(random_seed)
 
             if is_text_layer:

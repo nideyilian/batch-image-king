@@ -1,24 +1,9 @@
-import os
 import copy
-import random
-import json
-import pickle
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageChops
-from PIL.Image import Resampling, Transpose
-import numpy as np
+from PIL import Image
 from PySide6.QtCore import QObject, Signal
-import re
-import glob
-import gc
 # 导入新的Layer类作为主要实现
 from app.models.layer_new import Layer as NewLayer
-from app.models.document_blend import BlendMode
-from app.models.document_blend import Blender
-from typing import List, Tuple
-from app.models.binding_manager import BindingGroup
 import time
-import hashlib
-from app.utils.render_diagnostics import log_branch, log_sampling
 from app.utils.print_utils import safe_print as _safe_print
 from app.models.layer_size_match_manager import LayerSizeMatchManager
 
@@ -251,8 +236,12 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         self.view_settings.update(settings)
         self.document_changed.emit()
 
-    def save_state(self, action_name):
-        """保存当前状态到历史记录"""
+    def save_state(self, action_name, coalesce_key=None):
+        """保存当前状态到历史记录。
+
+        coalesce_key 非空时，同一键在 400ms 内的连续快照会被合并成一条
+        （拖滑块一次触发几十次属性变更，不合并会把撤销栈占满）。
+        """
         # 使用各图层自己的 serialize()（普通/文字/异形图层均已实现），
         # 避免使用不存在的 to_dict 导致图层被序列化为 None，撤销后图层全部丢失。
         from app.utils.layer_tree import serialize_layer_tree
@@ -267,7 +256,7 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
             'binding_groups': copy.deepcopy(self.binding_manager.serialize()),
             'layer_size_matches': copy.deepcopy(self.layer_size_match_manager.serialize()),
         }
-        self._history_manager.save_state(action_name, state)
+        self._history_manager.save_state(action_name, state, coalesce_key=coalesce_key)
 
     def can_undo(self):
         return self._history_manager.can_undo()
@@ -342,7 +331,20 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
             logger.warning("撤销/重做恢复尺寸匹配失败: %s", error)
 
     def create_new(self, width, height):
-        """创建新文档"""
+        """创建新文档。
+
+        画布尺寸必须在这里拦住：``export_image`` 早就有 16~32768 的校验，
+        但 ``create_new`` 没有，于是 ``create_new(0, 0)`` 能成功，
+        渲染出 0×0 图像，一直拖到导出才报「画布尺寸无效」——校验放错了层。
+        这里的下限与 ``resizeCanvas`` 保持一致，避免两套口径。
+        """
+        width = int(width)
+        height = int(height)
+        # 先判上限再判下限，否则 (40000, 10) 这类会报「不能小于 16」误导排查
+        if width > 32768 or height > 32768:
+            raise ValueError(f"画布尺寸不能大于 32768×32768（收到 {width}×{height}）")
+        if width < 16 or height < 16:
+            raise ValueError(f"画布尺寸不能小于 16×16（收到 {width}×{height}）")
         self.canvas_width = width
         self.canvas_height = height
         self.layers = []

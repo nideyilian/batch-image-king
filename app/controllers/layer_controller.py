@@ -11,8 +11,6 @@ import os
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 from PySide6.QtCore import QObject, Signal
 
-from app.models.layer_new import Layer
-from app.models.shaped_layer_new import ShapedLayer, ShapeType
 from app.utils.layer_tree import (
     child_indices_for_group,
     expand_group_indices,

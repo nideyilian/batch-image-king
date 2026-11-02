@@ -16,7 +16,7 @@
 
 import numpy as np
 from PIL import Image
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Dict, Any
 import warnings
 
 from app.utils.image import ndops

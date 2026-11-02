@@ -11,11 +11,30 @@ from PIL.Image import Resampling
 from app.utils.vector_layer_geometry import build_vector_outline_points_px
 
 
-def _vector_raster_supersample(stroke_width_px: int, *, has_stroke: bool) -> int:
-    """矢量容器在较高分辨率光栅化再降采样，减轻锯齿与描边含糊感。"""
+def _vector_raster_supersample(
+    stroke_width_px: int,
+    *,
+    has_stroke: bool,
+    width: int = 0,
+    height: int = 0,
+) -> int:
+    """矢量容器在较高分辨率光栅化再降采样。
+
+    倍数按「描边越宽需要越多级灰阶」取基准值，再按输出像素数封顶 ——
+    原实现固定 10~16 倍，3000x3000 图层单张 L 蒙版就要 900MB~1.4GB，
+    而实测 6 倍与 10 倍的均值差只有 0.02/255，肉眼不可辨。
+    """
     if not has_stroke or stroke_width_px <= 0:
-        return 10
-    return int(min(16, max(10, 8 + stroke_width_px // 2)))
+        base = 6
+    else:
+        base = int(min(6, max(4, 4 + int(stroke_width_px) // 8)))
+    if width > 0 and height > 0:
+        budget = 180 * 1024 * 1024  # 单张 L 蒙版上限约 180MB
+        s = base
+        while s > 2 and int(width) * int(height) * s * s > budget:
+            s -= 1
+        return s
+    return base
 
 
 def _downsample_mask(mask: Image.Image, out_size: Tuple[int, int]) -> Image.Image:
@@ -206,6 +225,106 @@ class VectorEffectParams:
         )
 
 
+def _signed_area(points: List[Tuple[float, float]]) -> float:
+    """带符号面积（屏幕坐标 y 向下时，视觉顺时针为正）。"""
+    n = len(points)
+    if n < 3:
+        return 0.0
+    a = 0.0
+    for i in range(n):
+        x1, y1 = points[i]
+        x2, y2 = points[(i + 1) % n]
+        a += x1 * y2 - x2 * y1
+    return a * 0.5
+
+
+def _point_in_polygon(pt: Tuple[float, float], poly: List[Tuple[float, float]]) -> bool:
+    x, y = pt
+    inside = False
+    n = len(poly)
+    j = n - 1
+    for i in range(n):
+        xi, yi = poly[i]
+        xj, yj = poly[j]
+        if (yi > y) != (yj > y):
+            x_cross = (xj - xi) * (y - yi) / ((yj - yi) or 1e-12) + xi
+            if x < x_cross:
+                inside = not inside
+        j = i
+    return inside
+
+
+def _offset_polygon_once(
+    pts: List[Tuple[float, float]],
+    distance: float,
+    sign: float,
+    miter_limit: float,
+) -> List[Tuple[float, float]]:
+    n = len(pts)
+    out: List[Tuple[float, float]] = []
+    for i in range(n):
+        px, py = pts[i - 1]
+        cx, cy = pts[i]
+        qx, qy = pts[(i + 1) % n]
+        d1x, d1y = cx - px, cy - py
+        l1 = math.hypot(d1x, d1y)
+        d2x, d2y = qx - cx, qy - cy
+        l2 = math.hypot(d2x, d2y)
+        if l1 < 1e-9 or l2 < 1e-9:
+            out.append((cx, cy))
+            continue
+        d1x, d1y = d1x / l1, d1y / l1
+        d2x, d2y = d2x / l2, d2y / l2
+        # 边方向顺时针转 90° 得到外法线（屏幕坐标 y 向下）
+        n1x, n1y = -d1y * sign, d1x * sign
+        n2x, n2y = -d2y * sign, d2x * sign
+        mx, my = n1x + n2x, n1y + n2y
+        ml = math.hypot(mx, my)
+        if ml < 1e-9:  # 180° 折返
+            out.append((cx + n1x * distance, cy + n1y * distance))
+            continue
+        mx, my = mx / ml, my / ml
+        cos_half = mx * n1x + my * n1y
+        if cos_half <= 1e-6:
+            out.append((cx + n1x * distance, cy + n1y * distance))
+            continue
+        if 1.0 / cos_half > miter_limit:  # 尖角超过 miter limit，退化为 bevel
+            out.append((cx + n1x * distance, cy + n1y * distance))
+            out.append((cx + n2x * distance, cy + n2y * distance))
+        else:
+            k = distance / cos_half
+            out.append((cx + mx * k, cy + my * k))
+    return out
+
+
+def _offset_closed_path(
+    points: List[Tuple[float, float]],
+    distance: float,
+    *,
+    miter_limit: float = 4.0,
+) -> List[Tuple[float, float]]:
+    """
+    把闭合折线整体沿外法线平移 distance 像素（miter join，超限退化 bevel）。
+
+    Pillow 的 ``ImageDraw.polygon(outline=..., width=w)`` 只会朝路径内侧画线，
+    无法直接得到「压在路径中心线上」的描边。做法是先把路径向外平移，
+    再朝内绘制 —— 平移量决定描边落在内侧 / 居中 / 外侧。
+    """
+    if len(points) < 3 or abs(distance) < 1e-9:
+        return list(points)
+    pts = [(float(x), float(y)) for x, y in points]
+    if math.hypot(pts[0][0] - pts[-1][0], pts[0][1] - pts[-1][1]) < 1e-6:
+        pts.pop()
+    if len(pts) < 3:
+        return list(points)
+    sign = 1.0 if _signed_area(pts) > 0 else -1.0
+    result = _offset_polygon_once(pts, distance, sign, miter_limit)
+    # 方向自检：外偏移后首点应落在原多边形外，否则翻转法线重算
+    if len(result) >= 3 and _point_in_polygon(result[0], pts):
+        result = _offset_polygon_once(pts, distance, -sign, miter_limit)
+    return result
+
+
 def _closed_polyline_for_stroke(large_points: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     """闭合折线：Pillow line 需要首尾闭合；去除重复尾点避免零长折返。"""
     if len(large_points) < 2:
@@ -229,7 +348,9 @@ def draw_polygon_outline_mask(
     dash_length: int,
     dash_gap: int,
 ) -> Image.Image:
-    scale = _vector_raster_supersample(max(1, int(width)), has_stroke=True)
+    scale = _vector_raster_supersample(
+        max(1, int(width)), has_stroke=True, width=size[0], height=size[1]
+    )
     large_size = (int(size[0] * scale), int(size[1] * scale))
     large_points = [(p[0] * scale, p[1] * scale) for p in points]
     mask = Image.new("L", large_size, 0)
@@ -329,9 +450,13 @@ def apply_vector_path_effects(
     shifted_points = _offset_points(points, outside_expand, outside_expand)
 
     if params.stroke_enabled:
-        superscale = _vector_raster_supersample(stroke_w, has_stroke=True)
+        superscale = _vector_raster_supersample(
+            stroke_w, has_stroke=True, width=size[0], height=size[1]
+        )
     else:
-        superscale = _vector_raster_supersample(0, has_stroke=False)
+        superscale = _vector_raster_supersample(
+            0, has_stroke=False, width=size[0], height=size[1]
+        )
     base_hi = _draw_fill_mask_hi(
         size,
         shifted_points,
@@ -351,21 +476,68 @@ def apply_vector_path_effects(
         content.info["vector_offset_y"] = int(-outside_expand)
         return content
 
-    # 统一使用几何等宽描边，避免闭合形状在形态学描边下出现圆角处比直边更粗的问题
-    stroke_mask = draw_polygon_outline_mask(
-        size,
-        shifted_points,
-        stroke_w,
-        closed,
-        params.stroke_join,
-        params.stroke_cap,
-        params.stroke_dash_length,
-        params.stroke_dash_gap,
-    )
-    if params.stroke_type == 0:
-        stroke_mask = ImageChops.multiply(stroke_mask, base_mask)
-    elif params.stroke_type == 2:
-        stroke_mask = ImageChops.multiply(stroke_mask, ImageChops.invert(base_mask))
+    # 描边走距离场（SDF）：圆弧等距线严格平行于边界，径向宽度恒定；
+    # 覆盖度用 1px 线性过渡，天然抗锯齿；内外由距离符号直接决定，不需要事后裁剪。
+    # 虚线仍是逐段绘制，保留旧实现。
+    if params.stroke_dash_length <= 0:
+        from app.utils.vector_stroke_sdf import build_stroke_mask
+
+        centerline_hi = None
+        if not closed:
+            # 开放路径没有「填充内外」，距离场以中心线为源：所有模式都按居中处理
+            centerline_hi = Image.new(
+                "L", (size[0] * superscale, size[1] * superscale), 0
+            )
+            ImageDraw.Draw(centerline_hi).line(
+                [(p[0] * superscale, p[1] * superscale) for p in shifted_points],
+                fill=255,
+                width=1,
+            )
+        stroke_mask = build_stroke_mask(
+            base_hi,
+            superscale,
+            size,
+            stroke_width=stroke_w,
+            stroke_type=params.stroke_type,
+            closed=closed,
+            join=params.stroke_join,
+            path_points=shifted_points,
+            centerline_hi=centerline_hi,
+        )
+        if params.stroke_type == 0:
+            # 内描边贴着形状边界，其外沿必须继承填充的 AA，否则边缘会变硬
+            stroke_mask = ImageChops.multiply(stroke_mask, base_mask)
+    else:
+        stroke_path = shifted_points
+        band_w = stroke_w
+        if closed:
+            if params.stroke_join == "round":
+                if params.stroke_type in (0, 2):
+                    band_w = stroke_w * 2
+            elif params.stroke_type == 2:
+                stroke_path = _offset_closed_path(shifted_points, float(stroke_w))
+            elif params.stroke_type == 1:
+                stroke_path = _offset_closed_path(shifted_points, stroke_w / 2.0)
+        elif params.stroke_type in (0, 2):
+            # 开放路径走 draw.line（居中），需要双倍带宽再裁一半
+            band_w = stroke_w * 2
+
+        stroke_mask = draw_polygon_outline_mask(
+            size,
+            stroke_path,
+            band_w,
+            closed,
+            params.stroke_join,
+            params.stroke_cap,
+            params.stroke_dash_length,
+            params.stroke_dash_gap,
+        )
+        if params.stroke_type == 0:
+            stroke_mask = ImageChops.multiply(stroke_mask, base_mask)
+        elif params.stroke_type == 2:
+            stroke_mask = ImageChops.multiply(
+                stroke_mask, ImageChops.invert(base_mask)
+            )
 
     stroke_layer = Image.new("RGBA", size, params.stroke_color)
     stroke_layer.putalpha(stroke_mask)

@@ -264,7 +264,12 @@ class WorkspaceViewMixin:
                 continue
             x = int(layer.x)
             y = int(layer.y)
-            bounds.append((x, y, x + int(layer.width), y + int(layer.height)))
+            # 尺寸钳到 >= 1：负宽高会让 right/bottom 落到起点左侧，
+            # 选中框在 QML 里变成负宽高，拖动手柄与命中判定全部错位。
+            # add_layer 已经做了归一化，这里是历史文件/旧数据流入时的第二道防线。
+            w = max(1, int(layer.width))
+            h = max(1, int(layer.height))
+            bounds.append((x, y, x + w, y + h))
         if not bounds:
             return 0, 0, 0, 0
         left = min(item[0] for item in bounds)

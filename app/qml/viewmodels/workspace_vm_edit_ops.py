@@ -270,7 +270,14 @@ class WorkspaceEditOpsMixin:
                     if callable(invalidate):
                         invalidate()
                 if save_history:
-                    self._document.save_state(action)
+                    # 同一图层同一批属性在 400ms 内的连续变更合并成一条历史，
+                    # 否则拖一次滑块会往撤销栈里塞几十个全文档快照。
+                    self._document.save_state(
+                        action,
+                        coalesce_key=(
+                            f"layer{index}:" + ",".join(sorted(effective_changes))
+                        ),
+                    )
         finally:
             self._suppress_document_selection_notify -= 1
         self._layer_model.notify_row(index)

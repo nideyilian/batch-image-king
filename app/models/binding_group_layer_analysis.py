@@ -16,7 +16,7 @@ import os
 import re
 import time
 import logging
-from typing import Set, List
+from typing import Set
 
 from app.utils.print_utils import safe_print as _safe_print
 from app.utils.text_layer_virtual_path import (

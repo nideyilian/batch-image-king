@@ -12,17 +12,15 @@ import os
 import time
 import hashlib
 import threading
-import weakref
-from typing import Optional, Tuple, Dict, Any, List
-from PIL import Image, ImageOps, ImageFilter
+from typing import Optional, Tuple, Dict, Any
+from PIL import Image, ImageFilter
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from .memory_manager import get_image_cache_manager
 from .performance_optimizer import time_it
 
 # 尝试导入高性能库
 try:
-    import cv2
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False

@@ -18,7 +18,6 @@
 import numpy as np
 from PIL import Image, ImageFilter
 import cv2
-from typing import Tuple, Optional, Union
 from enum import Enum
 
 

@@ -30,8 +30,8 @@ import random
 import json
 import threading
 import re
-from typing import Dict, List, Set, Tuple, Optional, Union, Any, Callable
-from collections import defaultdict, Counter
+from typing import Dict, List, Optional, Any, Callable
+from collections import defaultdict
 
 
 class GlobalAvoidRepeatManager:

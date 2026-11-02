@@ -21,7 +21,6 @@ from app.utils.print_utils import safe_print as print  # R7 契约统一：print
 import os
 import hashlib
 import logging
-from collections import OrderedDict
 from typing import List
 
 from PIL import Image, ImageDraw, ImageFilter, ImageChops

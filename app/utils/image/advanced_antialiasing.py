@@ -17,8 +17,8 @@
 """
 
 import numpy as np
-from PIL import Image, ImageFilter, ImageEnhance
-from typing import Tuple, Optional, List, Dict, Any
+from PIL import Image, ImageFilter
+from typing import Tuple, List, Dict, Any
 from enum import Enum
 import warnings
 

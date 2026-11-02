@@ -126,6 +126,11 @@ class WorkspaceViewModel(QObject, metaclass=_WorkspaceMixinsMeta):
         self._document_lock = threading.RLock()
         self._render_request_id = 0
         self._preview_generation = 0
+        # 已接受的预览版本。用来丢弃「比手上这帧更旧」的回流结果，
+        # 而不是要求结果必须等于当前最新版本——拖动时每帧都会推进
+        # _preview_generation，用等号判定会让每一帧的渲染结果全被丢掉，
+        # 画面永远停在旧帧，松手后才跳一次（这是「卡顿感」的真身）。
+        self._accepted_preview_generation = -1
         self._render_running = False
         self._render_pending = False
         self._active_render_task = None

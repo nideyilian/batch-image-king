@@ -11,9 +11,8 @@
 import logging
 
 logger = logging.getLogger(__name__)
-import numpy as np
 from PIL import Image
-from typing import Tuple, Optional, Dict, Any, List, Union
+from typing import Tuple, Optional, Dict, Any, List
 from enum import Enum
 import time
 import gc
@@ -21,8 +20,8 @@ import gc
 # 导入我们的高级引擎
 try:
     from .photoshop_compositor import PhotoshopCompositor, BlendMode as PSBlendMode
-    from .alpha_compositor import AlphaCompositor, CompositeOperation
-    from .quality_engine import QualityEngine, ScalingMethod, ContentType
+    from .alpha_compositor import AlphaCompositor
+    from .quality_engine import QualityEngine, ScalingMethod
     from .professional_blends import ProfessionalBlender, BlendMode as ProBlendMode
     ADVANCED_ENGINES_AVAILABLE = True
 except ImportError as e:
@@ -34,8 +33,7 @@ except ImportError as e:
 
 # 导入现有的混合模式作为后备
 try:
-    from app.models.document_blend import Blender as LegacyBlender, BlendMode as LegacyBlendMode
-    from app.ui.blend_mode_manager import BlendModeManager
+    from app.models.document_blend import LegacyBlender
     LEGACY_BLENDER_AVAILABLE = True
 except ImportError:
     LEGACY_BLENDER_AVAILABLE = False

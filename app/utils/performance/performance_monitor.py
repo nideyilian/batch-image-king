@@ -6,23 +6,19 @@
 import time
 import threading
 import functools
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Callable
 from collections import defaultdict, deque
 import statistics
-import gc
 
 def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
+    """安全的打印函数，避免编码问题（注意：不要在此函数内调用自身）"""
     try:
-        safe_print(message)
+        print(message)
     except (UnicodeEncodeError, OSError):
         try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            safe_print(f"[DEBUG] {ascii_message}")
+            print("[DEBUG]", message.encode("ascii", "ignore").decode("ascii"))
         except Exception:
-            # 最后的备选方案
-            safe_print("[DEBUG] Message encoding failed")
+            pass
 
 
 

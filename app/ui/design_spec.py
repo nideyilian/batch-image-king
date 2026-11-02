@@ -55,7 +55,6 @@
 from __future__ import annotations
 
 # 字号真源：tokens_v2.Typography（见 FontSize 类说明）
-from app.ui.tokens_v2 import Typography as _Typo
 
 
 class Scale:

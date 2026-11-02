@@ -1,16 +1,9 @@
 # -*- coding: utf-8 -*-
 """TextLayer 方法 mixin：本文件由拆分脚本生成，方法原属于 TextLayer。"""
-from PySide6.QtCore import QObject, Signal, Property
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
-import os
+from PIL import Image, ImageDraw, ImageFilter
 import random
-import platform
 import math
-import threading
-from typing import List, Tuple, Dict, Set, Optional
-from enum import Enum, auto
-import json
-from pathlib import Path
+from typing import List, Tuple, Optional
 from app.models.text_layer_enums import (
     TextAlign, FontStyle, GradientType, GradientDirection, safe_print
 )
@@ -32,6 +25,49 @@ class TextLayerRenderMixin:
         if getattr(self, '_glow_enabled', False):
             margin = max(margin, int(getattr(self, '_glow_radius', 1)) * 3)
         return margin
+
+    def _measure_content_origin(self) -> Optional[Tuple[float, float]]:
+        """返回首字笔位在当前渲染图中的偏移。
+
+        这个偏移就是字形相对图层盒子的落点。描边、阴影、发光、内边距都会改变它：
+        盒子必须给效果留出外扩空间，字形只能往里退。盒子一长，字就在画布上跟着跑。
+        """
+        if self._content_origin is None or self._cached_image is None:
+            cached = self._cached_image
+            self._cached_image = None  # 强制重渲染一次，保证偏移与当前参数一致
+            try:
+                self.render_text()
+            except Exception:
+                self._cached_image = cached
+                return None
+        return self._content_origin
+
+    def _keep_content_anchor(self, before: Optional[Tuple[float, float]]) -> None:
+        """盒子尺寸重算后反向补偿图层坐标，让字形在画布上保持原位。
+
+        只用 before/after 的字形偏移差做补偿，与文字内容无关：改文案、改字号时
+        偏移差为 0，不会误动坐标；只有描边/阴影/发光/内边距这类会改变盒子外扩量
+        的改动才会触发。
+        """
+        if before is None or getattr(self, "_suppress_anchor_compensation", False):
+            return
+        # 固定边框时盒子是用户显式设的硬边界，不跟着效果挪，保持原有行为
+        if not getattr(self, "_auto_fit_text_box", True):
+            return
+        after = self._measure_content_origin()
+        if after is None:
+            return
+        delta_x = int(round(before[0] - after[0]))
+        delta_y = int(round(before[1] - after[1]))
+        if delta_x == 0 and delta_y == 0:
+            return
+        self.x = int(getattr(self, "_x", 0)) + delta_x
+        self.y = int(getattr(self, "_y", 0)) + delta_y
+
+    def _recompute_auto_fit_keeping_anchor(self, before: Optional[Tuple[float, float]]) -> None:
+        """重算自动适配尺寸，并保持字形位置不变。"""
+        self._update_text_box_size_if_needed()
+        self._keep_content_anchor(before)
 
     @staticmethod
     def _colored_mask(mask: Image.Image, color) -> Image.Image:
@@ -297,140 +333,6 @@ class TextLayerRenderMixin:
 
             return None
 
-    def _draw_text_background(self, draw: ImageDraw.Draw, lines: list, font, start_y: int, line_widths: list, line_heights: list, max_line_height: int) -> None:
-        """绘制文字背景 - 基于实际文字像素边界的完全居中算法，支持±距离控制"""
-        if not self._background_enabled or not lines:
-            return
-
-        # 创建一个临时图像来获取文字的实际像素边界（包含所有效果）
-        temp_image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-        temp_draw = ImageDraw.Draw(temp_image)
-
-        # 准备渐变图像（如果启用）
-        gradient_image = None
-        if self._gradient_enabled:
-            gradient_image = self._create_gradient_image(self._width, self._height)
-
-        # 渲染文字到临时图像（包含所有效果：描边、渐变等）
-        current_y = start_y
-        for i, line in enumerate(lines):
-            if i >= len(line_widths):
-                break
-
-            line_width = line_widths[i]
-            line_height = line_heights[i] if i < len(line_heights) else max_line_height
-
-            # 计算X位置
-            if self._text_align == TextAlign.CENTER:
-                x = max(0, (self._width - line_width) // 2)
-            elif self._text_align == TextAlign.RIGHT:
-                x = max(0, self._width - line_width)
-            else:  # LEFT
-                x = 0
-
-            # 渲染描边（如果启用）
-            if self._stroke_enabled and self._stroke_width > 0:
-                if self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
-                    # 斜体描边：创建描边蒙版并应用斜体变换
-                    stroke_mask = Image.new('L', (self._width, self._height), 0)
-                    stroke_draw = ImageDraw.Draw(stroke_mask)
-
-                    # 绘制描边蒙版
-                    for dx in range(-self._stroke_width, self._stroke_width + 1):
-                        for dy in range(-self._stroke_width, self._stroke_width + 1):
-                            if dx != 0 or dy != 0:
-                                stroke_draw.text((x + dx, current_y + dy), line, font=font, fill=255)
-
-                    # 应用斜体变换
-                    stroke_mask = self._apply_italic_shear(stroke_mask)
-
-                    # 创建描边颜色图像并应用蒙版
-                    stroke_colored = Image.new('RGBA', (self._width, self._height), self._stroke_color)
-                    stroke_result = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-                    stroke_result.paste(stroke_colored, (0, 0), stroke_mask)
-
-                    # 合成描边到临时图像
-                    temp_image = Image.alpha_composite(temp_image, stroke_result)
-                else:
-                    # 普通描边：直接绘制
-                    for dx in range(-self._stroke_width, self._stroke_width + 1):
-                        for dy in range(-self._stroke_width, self._stroke_width + 1):
-                            if dx != 0 or dy != 0:
-                                temp_draw.text(
-                                    (x + dx, current_y + dy),
-                                    line,
-                                    font=font,
-                                    fill=self._stroke_color
-                                )
-
-            # 渲染主文字，考虑渐变和字体样式
-            if self._gradient_enabled and gradient_image:
-                # 使用渐变绘制
-                gradient_result = self._draw_text_with_style(temp_draw, x, current_y, line, font, gradient_image)
-                if gradient_result:
-                    # 将渐变文字合成到临时图像
-                    temp_image = Image.alpha_composite(temp_image, gradient_result)
-            else:
-                # 使用纯色绘制（可能返回合成图像用于斜体）
-                color_result = self._draw_text_with_style(temp_draw, x, current_y, line, font, self._text_color)
-                if color_result:
-                    temp_image = Image.alpha_composite(temp_image, color_result)
-                else:
-                    temp_draw.text((x, current_y), line, font=font, fill=self._text_color)
-
-            # 移动到下一行
-            if i < len(line_heights) - 1 and line_heights:
-                current_y += line_heights[i] + int(max_line_height * (self._line_spacing - 1))
-
-        # 扫描像素找到文字的实际边界（包含所有效果）
-        pixels = temp_image.load()
-        text_left = self._width
-        text_top = self._height
-        text_right = 0
-        text_bottom = 0
-        found_text = False
-
-        for y in range(self._height):
-            for x in range(self._width):
-                r, g, b, a = pixels[x, y]
-                if a > 10:  # 检测到文字像素（包含描边等效果）
-                    text_left = min(text_left, x)
-                    text_top = min(text_top, y)
-                    text_right = max(text_right, x)
-                    text_bottom = max(text_bottom, y)
-                    found_text = True
-
-        if not found_text:
-            return
-
-        # 计算文字的中心位置
-        text_center_x = (text_left + text_right) // 2
-        text_center_y = (text_top + text_bottom) // 2
-        text_width = text_right - text_left + 1
-        text_height = text_bottom - text_top + 1
-
-        # 根据背景内边距参数计算背景尺寸
-        # 正数：背景大于文字（向外扩展），负数：背景小于文字（向内收缩）
-        bg_width = max(1, text_width + 2 * self._background_padding)  # 确保最小宽度
-        bg_height = max(1, text_height + 2 * self._background_padding)  # 确保最小高度
-
-        # 计算背景位置（以文字中心为基准，实现完全居中）
-        bg_left = text_center_x - bg_width // 2
-        bg_top = text_center_y - bg_height // 2
-        bg_right = bg_left + bg_width
-        bg_bottom = bg_top + bg_height
-
-        # 确保背景不超出图层边界
-        bg_left = max(0, bg_left)
-        bg_right = min(self._width, bg_right)
-        bg_top = max(0, bg_top)
-        bg_bottom = min(self._height, bg_bottom)
-
-        # 绘制背景矩形
-        draw.rectangle(
-            [bg_left, bg_top, bg_right, bg_bottom],
-            fill=self._background_color
-        )
 
     def _apply_italic_shear(self, mask_img: Image.Image) -> Image.Image:
         """对文字蒙版应用水平斜切以模拟斜体"""
@@ -708,211 +610,6 @@ class TextLayerRenderMixin:
         safe_print(f"文字图层 '{self._name}' 渲染当前文字: '{self._current_text}'")
         return self.render_text()
 
-    def _get_rendered_text_bounds(self, lines, font, line_widths, line_heights) -> tuple:
-        """获取渲染后文字的实际像素边界（ink bounds）
-
-        Returns:
-            tuple: (left, top, right, bottom) - 实际像素边界
-        """
-        # 创建临时图像用于渲染和测量
-        temp_image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-        temp_draw = ImageDraw.Draw(temp_image)
-
-        # 计算基础布局（使用当前逻辑）
-        if not line_heights:
-            return (0, 0, 0, 0)
-
-        max_line_height = max(line_heights)
-        total_height = sum(line_heights) + (len(lines) - 1) * int(max_line_height * (self._line_spacing - 1))
-
-        # 基础居中位置
-        if total_height > 0:
-            start_y = (self._height - total_height) // 2 + 2  # 使用当前的偏移
-        else:
-            start_y = (self._height - total_height) // 2
-
-        # 准备渐变图像（如果启用）
-        gradient_image = None
-        if self._gradient_enabled:
-            gradient_image = self._create_gradient_image(self._width, self._height)
-
-        # 渲染文字到临时图像
-        current_y = start_y
-        for i, line in enumerate(lines):
-            if i >= len(line_widths):
-                break
-
-            line_width = line_widths[i]
-            line_height = line_heights[i] if i < len(line_heights) else max_line_height
-
-            # 计算X位置
-            if self._text_align == TextAlign.CENTER:
-                x = max(0, (self._width - line_width) // 2)
-            elif self._text_align == TextAlign.RIGHT:
-                x = max(0, self._width - line_width)
-            else:  # LEFT
-                x = 0
-
-            current_line_y = current_y
-
-            # 绘制描边
-            if self._stroke_enabled and self._stroke_width > 0:
-                if self._font_style in (FontStyle.ITALIC, FontStyle.BOLD_ITALIC):
-                    # 斜体描边：创建描边蒙版并应用斜体变换
-                    stroke_mask = Image.new('L', (self._width, self._height), 0)
-                    stroke_draw = ImageDraw.Draw(stroke_mask)
-
-                    # 绘制描边蒙版
-                    for dx in range(-self._stroke_width, self._stroke_width + 1):
-                        for dy in range(-self._stroke_width, self._stroke_width + 1):
-                            if dx != 0 or dy != 0:
-                                stroke_draw.text((x + dx, current_line_y + dy), line, font=font, fill=255)
-
-                    # 应用斜体变换
-                    stroke_mask = self._apply_italic_shear(stroke_mask)
-
-                    # 创建描边颜色图像并应用蒙版
-                    stroke_colored = Image.new('RGBA', (self._width, self._height), self._stroke_color)
-                    stroke_result = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-                    stroke_result.paste(stroke_colored, (0, 0), stroke_mask)
-
-                    # 合成描边到主图像
-                    temp_image = Image.alpha_composite(temp_image, stroke_result)
-                else:
-                    # 普通描边：直接绘制
-                    for dx in range(-self._stroke_width, self._stroke_width + 1):
-                        for dy in range(-self._stroke_width, self._stroke_width + 1):
-                            if dx != 0 or dy != 0:
-                                temp_draw.text(
-                                    (x + dx, current_line_y + dy),
-                                    line,
-                                    font=font,
-                                    fill=self._stroke_color
-                                )
-
-            # 绘制主文字，考虑渐变和字体样式
-            if self._gradient_enabled and gradient_image:
-                # 使用渐变绘制
-                gradient_result = self._draw_text_with_style(temp_draw, x, current_line_y, line, font, gradient_image)
-                if gradient_result:
-                    # 将渐变文字合成到主图像
-                    temp_image = Image.alpha_composite(temp_image, gradient_result)
-            else:
-                # 使用纯色绘制（可能返回合成图像用于斜体）
-                color_result = self._draw_text_with_style(temp_draw, x, current_line_y, line, font, self._text_color)
-                if color_result:
-                    temp_image = Image.alpha_composite(temp_image, color_result)
-
-            # 移动到下一行
-            if i < len(line_heights) - 1 and line_heights:
-                current_y += line_heights[i] + int(max_line_height * (self._line_spacing - 1))
-
-        # 扫描像素获取实际边界
-        pixels = temp_image.load()
-        left = self._width
-        top = self._height
-        right = 0
-        bottom = 0
-        found_pixels = False
-
-        for y in range(self._height):
-            for x in range(self._width):
-                r, g, b, a = pixels[x, y]
-                # 检测非透明像素（文字或描边）
-                if a > 5:  # 使用阈值5来忽略抗锯齿的轻微透明
-                    left = min(left, x)
-                    top = min(top, y)
-                    right = max(right, x)
-                    bottom = max(bottom, y)
-                    found_pixels = True
-
-        if not found_pixels:
-            return (0, 0, 0, 0)
-
-        return (left, top, right + 1, bottom + 1)  # +1 转换为exclusive边界
-
-    def _calculate_visual_center_y(self, lines: list, font, temp_draw: ImageDraw.Draw) -> int:
-        """基于实际渲染像素计算视觉居中Y位置"""
-        if not lines:
-            return self._height // 2
-
-        # 创建一个临时图像来渲染文字并分析实际像素边界
-        test_image = Image.new('RGBA', (self._width, self._height), (0, 0, 0, 0))
-        test_draw = ImageDraw.Draw(test_image)
-
-        # 先使用字体度量计算基础位置
-        line_heights = []
-        line_widths = []
-
-        for line in lines:
-            # 使用字间距计算宽度
-            line_width = self._get_text_width_with_spacing(line, font)
-            bbox = temp_draw.textbbox((0, 0), line, font=font)
-            line_height = bbox[3] - bbox[1]
-            line_widths.append(line_width)
-            line_heights.append(line_height)
-
-        if not line_heights:
-            return self._height // 2
-
-        max_line_height = max(line_heights)
-        total_height = sum(line_heights) + (len(lines) - 1) * int(max_line_height * (self._line_spacing - 1))
-        base_start_y = (self._height - total_height) // 2
-
-        # 在临时图像上渲染文字（使用基础位置）
-        current_y = base_start_y
-        for i, line in enumerate(lines):
-            if i >= len(line_widths):
-                break
-
-            line_width = line_widths[i]
-            line_height = line_heights[i] if i < len(line_heights) else max_line_height
-
-            # 计算X位置
-            if self._text_align == TextAlign.CENTER:
-                x = max(0, (self._width - line_width) // 2)
-            elif self._text_align == TextAlign.RIGHT:
-                x = max(0, self._width - line_width)
-            else:  # LEFT
-                x = 0
-
-            # 渲染文字到临时图像
-            test_draw.text((x, current_y), line, font=font, fill=(255, 255, 255, 255))
-
-            # 移动到下一行
-            if i < len(line_heights) - 1 and line_heights:
-                current_y += line_heights[i] + int(max_line_height * (self._line_spacing - 1))
-
-        # 分析实际像素边界
-        pixels = test_image.load()
-        left = self._width
-        top = self._height
-        right = 0
-        bottom = 0
-        found_pixels = False
-
-        for y in range(self._height):
-            for x in range(self._width):
-                r, g, b, a = pixels[x, y]
-                if a > 10:  # 检测到文字像素
-                    left = min(left, x)
-                    top = min(top, y)
-                    right = max(right, x)
-                    bottom = max(bottom, y)
-                    found_pixels = True
-
-        if not found_pixels:
-            return base_start_y
-
-        # 计算实际文字中心
-        actual_text_center = (top + bottom) // 2
-        layer_center = self._height // 2
-
-        # 计算需要调整的偏移量
-        center_offset = layer_center - actual_text_center
-
-        # 返回调整后的Y位置
-        return max(0, min(self._height - total_height, base_start_y + center_offset))
 
     def render_text(self) -> Image.Image:
         """渲染文字为图像（基于实际像素边界的智能居中算法）"""
@@ -990,6 +687,12 @@ class TextLayerRenderMixin:
             large_image = self._render_text_internal()
             # 缩回目标尺寸
             image = large_image.resize((original['width'], original['height']), Image.Resampling.LANCZOS)
+            # 笔位坐标同步缩回，供外部按最终尺寸计算字形落点
+            if self._pending_pen_origin is not None:
+                self._pending_pen_origin = (
+                    self._pending_pen_origin[0] / scale,
+                    self._pending_pen_origin[1] / scale,
+                )
         finally:
             # 还原参数
             self._width = original['width']
@@ -1011,12 +714,24 @@ class TextLayerRenderMixin:
     def _normalize_auto_fit_padding(self, image: Image.Image) -> Image.Image:
         """自动适配时按真实非透明像素统一四边内边距。"""
         if not self._auto_fit_text_box or self._auto_fit_lock or self._background_enabled:
+            if self._pending_pen_origin is not None:
+                self._content_origin = self._pending_pen_origin
             return image
 
         try:
             normalized, normalized_size = normalize_auto_fit_padding(image, self._text_box_padding)
             if normalized_size:
                 self._width, self._height = normalized_size
+            if self._pending_pen_origin is not None:
+                bbox = image.getchannel("A").getbbox()
+                if bbox:
+                    pad = max(0, int(self._text_box_padding))
+                    self._content_origin = (
+                        self._pending_pen_origin[0] - bbox[0] + pad,
+                        self._pending_pen_origin[1] - bbox[1] + pad,
+                    )
+                else:
+                    self._content_origin = self._pending_pen_origin
             return normalized
         except Exception:
             return image
@@ -1046,19 +761,6 @@ class TextLayerRenderMixin:
                 current = style
         yield segment_start, len(line), current[0], current[1]
 
-    def _iter_line_color_segments(self, line: str, line_start_index: int):
-        if not line:
-            return
-
-        segment_start = 0
-        segment_color = self._color_for_text_index(line_start_index)
-        for offset in range(1, len(line)):
-            color = self._color_for_text_index(line_start_index + offset)
-            if color != segment_color:
-                yield segment_start, offset, segment_color
-                segment_start = offset
-                segment_color = color
-        yield segment_start, len(line), segment_color
 
     def _draw_text_fill_piece(self, image: Image.Image, x: int, y: int, text: str, font, fill) -> Image.Image:
         if not text:
@@ -1112,6 +814,7 @@ class TextLayerRenderMixin:
         """内部渲染实现（不写缓存）"""
         # 自动适配边框：在渲染前保证尺寸与当前文字一致
         self._update_text_box_size_if_needed()
+        self._pending_pen_origin = None
 
         # 获取字体
         font = self._get_font_object()
@@ -1228,6 +931,8 @@ class TextLayerRenderMixin:
             current_line_y = current_y
             draw_x = x + x_offset
             draw_y = current_line_y + y_offset
+            if self._pending_pen_origin is None:
+                self._pending_pen_origin = (float(draw_x), float(draw_y))
 
             # 混合字号时行内按最大 ascent 基线对齐
             max_ascent = max((seg_data[4] for seg_data in segments), default=0)
@@ -1367,6 +1072,8 @@ class TextLayerRenderMixin:
             for char_width, char_height, char_left_off, char_top_off, ch, char_index, char_size in char_sizes:
                 char_x = current_x + max(0, (col_width - char_width) // 2) + char_left_off
                 char_y = current_y + char_top_off
+                if self._pending_pen_origin is None:
+                    self._pending_pen_origin = (float(char_x), float(char_y))
                 char_font = self._get_font_object(size=char_size)
 
                 if self._stroke_enabled and self._stroke_width > 0:

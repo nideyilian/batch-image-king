@@ -20,11 +20,11 @@ def print(*args, **kwargs):
 
 import os
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from .intelligent_thread_pool_manager import TaskType, TaskPriority, PoolConfig
+from .intelligent_thread_pool_manager import TaskType, PoolConfig
 
 
 @dataclass

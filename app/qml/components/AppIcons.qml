@@ -93,6 +93,8 @@ QtObject {
     readonly property string exportAction: "send-to-back"
     readonly property string check: "circle-check"
     readonly property string info: "info"
+    readonly property string bookmark: "bookmark"
+    readonly property string loaderCircle: "loader-circle"
     readonly property string warning: "triangle-alert"
     readonly property string error: "circle-x"
     readonly property string loader: "loader-circle"

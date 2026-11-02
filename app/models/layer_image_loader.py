@@ -7,7 +7,7 @@
 import os
 import glob
 import random
-from typing import Optional, List, Tuple
+from typing import Optional, List
 from PIL import Image
 from PIL.Image import Resampling
 from app.utils.image.high_quality_resampler import HighQualityResampler

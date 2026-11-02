@@ -1,24 +1,10 @@
 import os
 import random
-import json
-import pickle
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageChops
-from PIL.Image import Resampling, Transpose
-import numpy as np
-from PySide6.QtCore import QObject, Signal
-import re
-import glob
+from PIL import Image
+from PIL.Image import Resampling
 import gc
-from app.models.layer_new import Layer as NewLayer
-from app.models.document_blend import BlendMode
-from app.models.document_blend import Blender
-from typing import List, Tuple
-from app.models.binding_manager import BindingGroup
-import time
-import hashlib
-from app.utils.render_diagnostics import log_branch, log_sampling
+from typing import List
 from app.utils.print_utils import safe_print as _safe_print
-from app.models.layer_size_match_manager import LayerSizeMatchManager
 import logging
 logger = logging.getLogger(__name__)
 

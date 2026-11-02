@@ -5,18 +5,12 @@
 """
 
 import time
-import hashlib
-import threading
 import os
 import builtins
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from functools import wraps
-from typing import Optional, Dict, Any, Tuple
-import math
+from typing import Optional
 from PIL import Image
-import numpy as np
-import weakref
-import gc
 
 # 默认关闭快速渲染器调试输出，避免预览阶段高频 I/O 导致掉帧
 _FAST_RENDERER_DEBUG = os.environ.get("BTPW_FAST_RENDERER_DEBUG", "0") == "1"
@@ -46,10 +40,7 @@ def _serialized_preview(method):
 
 
 # 导入新的智能缓存系统
-from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
-from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
-from .render_diagnostics import log_branch
 import logging
 
 logger = logging.getLogger(__name__)

@@ -8,19 +8,7 @@ from app.utils.print_utils import safe_print as print
 
 logger = logging.getLogger(__name__)
 
-import os as os_module  # 避免局部变量遮蔽
-import time
-import threading
-import builtins
-from collections import Counter, OrderedDict
-from contextlib import nullcontext
-from dataclasses import dataclass
-from typing import List, Dict, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
-from PIL import Image
-import gc
-import io
-import math
+from typing import List, Dict, Optional
 
 class OptimizedBatchExecutorRuntimeSnapshot(object):
     def _collect_layer_runtime_snapshot(self, layer) -> str:

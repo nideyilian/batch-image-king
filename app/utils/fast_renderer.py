@@ -9,13 +9,10 @@ import hashlib
 import threading
 import os
 import builtins
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from functools import wraps
-from typing import Optional, Dict, Any, Tuple
-import math
+from typing import Optional
 from PIL import Image
-import numpy as np
-import weakref
 import gc
 
 # 默认关闭快速渲染器调试输出，避免预览阶段高频 I/O 导致掉帧
@@ -48,8 +45,7 @@ def _serialized_preview(method):
 # 导入新的智能缓存系统
 from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
-from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
-from .render_diagnostics import log_branch
+from .intelligent_memory_manager import get_memory_manager
 
 
 class SmartCache:
@@ -247,6 +243,13 @@ class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, 
         self._layer_surface_cache = OrderedDict()
         self._layer_surface_lock = threading.RLock()
         self._max_layer_surface_entries = 96
+        # 条数上限管不住内存：96 个 2000x2000 图层就是 1.5GB。加字节预算，
+        # 驱逐时连同 PIL 图像一起 close，长时运行才不会一路涨到 OOM。
+        self._layer_surface_bytes = 0
+        self._layer_surface_entry_bytes = {}
+        self._max_layer_surface_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_LAYER_CACHE_MB", 512, minimum_mb=128
+        )
         # 导出层缓存（按图层+参数hash复用），提升批量导出重复参数命中率
         self._export_layer_surface_cache = OrderedDict()
         self._export_layer_surface_lock = threading.RLock()

@@ -3,15 +3,11 @@
 """图层绑定管理相关模块（从 binding_manager.py 拆分）"""
 
 import os
-import re
 import random
 import time
 import hashlib
-import itertools
-import json
 import threading
-from typing import Dict, List, Set, Tuple, Optional
-from collections import defaultdict, Counter
+from typing import Dict, List, Tuple, Optional
 from app.utils.print_utils import safe_print as _safe_print
 from app.utils.text_layer_virtual_path import (
     is_text_layer_virtual_path,

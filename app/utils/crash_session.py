@@ -30,6 +30,35 @@ def default_log_dir() -> Path:
         return Path(tempfile.gettempdir())
 
 
+# 上个会话存活超过这个时长，就认为它「正常跑过」，
+# 之后再没正常退出的原因通常是：被任务管理器结束、被脚本 kill、
+# 关机时进程被强制终止。这些都不该向用户报「异常退出」——
+# 用户根本没遇到问题，弹窗只会制造焦虑。
+_SUSPICIOUS_MAX_ALIVE_SECONDS = 90
+
+
+def _previous_run_looks_suspicious(state: dict) -> bool:
+    """判断上个未正常关闭的会话是否值得提示。
+
+    短命（< 90s）说明它可能刚启动就挂掉，值得告知；
+    跑够久了才消失，更像是被强制结束，静默处理。
+    """
+    started_at = str(state.get("started_at") or "").strip()
+    if not started_at:
+        # 没有时间戳就没法判断，保守地按可疑处理（宁可提示一次）
+        return True
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return True
+    now = datetime.now()
+    alive_seconds = (now - started).total_seconds()
+    # 时钟回拨（alive 为负）也算可疑，避免负数绕过判定
+    if alive_seconds < 0:
+        return True
+    return alive_seconds < _SUSPICIOUS_MAX_ALIVE_SECONDS
+
+
 def begin_crash_session(
     *,
     log_dir=None,
@@ -45,6 +74,7 @@ def begin_crash_session(
     if (
         previous.get("status") == "running"
         and not bool(previous.get("notice_consumed", False))
+        and _previous_run_looks_suspicious(previous)
     ):
         notice = build_crash_notice(previous)
 

@@ -27,411 +27,449 @@ print = _safe_print
 
 
 class DocumentRender:
-    """Document 方法拆分 mixin，保持与 Document 完全兼容（通过多重继承组合）。"""
+    """Document 方法拆分 mixin，保持与 Document 完全兼容（通过多重继承组合）。
 
-    def render_composition(self, random_mode=False, optimize_memory=False, use_advanced_quality=False, is_batch_mode=False, enable_gpu=False):
-        """渲染当前图层组合 - 改进版本，支持高质量合成
+    ``render_composition`` 原本是 734 行、118 分支、嵌套 8 层的单个函数，
+    读不下去也改不敢改。这里按职责拆成几个方法：
 
-        参数:
-            random_mode: 是否使用随机图像
-            optimize_memory: 是否在渲染后优化内存使用
-            use_advanced_quality: 是否使用高级质量算法
-            is_batch_mode: 是否批量模式（影响性能优化策略）
-            enable_gpu: 保留参数（P1-9 已移除 OpenGL GPU 渲染路径，本参数不再生效）
+        render_composition                 调度 + 标准合成路径
+        _render_with_advanced_compositor   高级合成引擎路径
+        _acquire_advanced_compositor       合成器按需创建与缓存
 
-        返回:
-            PIL.Image: 渲染后的图像
+    拆分是**纯结构搬移**：算法、取值、日志顺序都没有改动。
+    验证靠 ``docs/audit/probe_render_baseline.py`` 做逐像素比对
+    （10 个场景，覆盖高级合成 / 分身布局 / 随机 / 文字 / 混合模式）。
+
+    ⚠️ 这是**兜底渲染路径**。主路径是 FastRenderer / RenderService。
+    新特性请加到 RenderService，不要在这里扩展。
+    """
+
+    def _acquire_advanced_compositor(self):
+        """按需创建并返回高级合成器；不可用返回 None。
+
+        结果缓存在 ``self._cached_compositor``。初始化失败不抛出，
+        由调用方退回标准路径。
         """
-        # 检查是否取消（渲染开始前）
-        if hasattr(self, '_export_canceled') and self._export_canceled:
-            print("[渲染] 渲染开始前检测到取消操作")
-            return None
-
-        # 🔧 修复：严格按照绑定组设置执行随机化，不重新分析分类
-        # （历史版本会执行两次 randomize_all_layers，导致随机化两次；
-        #   现统一只执行这一次。）
-        if random_mode:
-            print("[渲染] 启用随机模式，严格按照绑定组设置执行...")
-            self.randomize_all_layers()
-
-        # 随机化后再次检查是否取消
-        if hasattr(self, '_export_canceled') and self._export_canceled:
-            print("[渲染] 随机化后检测到取消操作")
-            return None
-
-        # 创建一个空白画布
-        composition = Image.new('RGBA', (self.canvas_width, self.canvas_height), (0, 0, 0, 0))
-
-        # 导入高级合成管理器 - 使用缓存的实例
-        advanced_compositor = None
-        if use_advanced_quality:
-            try:
-                # 检查是否已有缓存的合成器
-                if not hasattr(self, '_cached_compositor'):
-                    from app.engines import get_advanced_compositor
-                    AdvancedCompositorManager, CompositeQuality = get_advanced_compositor()
-
-                    if AdvancedCompositorManager is not None:
-                        self._cached_compositor = AdvancedCompositorManager(
-                            quality=CompositeQuality.BALANCED,  # 使用平衡模式
-                            enable_gpu=False,
-                            cache_size=10  # 减少缓存大小
-                        )
-                        print("[INFO] 创建高级合成引擎缓存（平衡模式）")
-                    else:
-                        self._cached_compositor = None
-
-                advanced_compositor = self._cached_compositor
-                if advanced_compositor:
-                    print("[DEBUG] 使用缓存的高级合成引擎")
-                else:
-                    print("[INFO] 高级合成引擎不可用，使用标准算法")
-                    use_advanced_quality = False
-
-            except Exception as e:
-                print(f"[WARNING] 高级合成引擎初始化失败: {e}")
-                use_advanced_quality = False
-                advanced_compositor = None
-        
-        # 如果使用高级合成引擎
-        if advanced_compositor:
-            try:
-                # 准备图层数据 - 使用与标准路径相同的逻辑
-                layer_data = []
-                from app.models.text_layer import TextLayer
-
-                for layer_index, layer in enumerate(sorted(self.layers, key=lambda l: self.layers.index(l))):
-                    # 每个图层开始前检查是否取消（高级合成路径）
-                    if hasattr(self, '_export_canceled') and self._export_canceled:
-                        print(f"[高级渲染] 处理图层 {layer_index+1} 时检测到取消操作")
-                        if composition:
-                            del composition
-                        return None
-                        
-                    if not layer.visible:
-                        continue
-
-                    # 获取图层图像 - 与标准路径保持一致
-                    layer_image = None
-                    if isinstance(layer, TextLayer):
-                        # 文字图层，渲染文字为图像
-                        layer_image = layer.render_text()
-                    else:
-                        # 普通图层，获取图像
-                        # 🔧 修复：随机模式下，图层应该已经被 randomize_all_layers 处理过
-                        # 直接使用当前图像，避免重复随机化
-                        if hasattr(layer, 'cached_image') and layer.cached_image is not None:
-                            # 使用已缓存的图像
-                            layer_image = layer.cached_image
-                        else:
-                            # 如果没有缓存，获取当前图像（可能是预设的组合）
-                            layer_image = layer.get_image()
-
-                    if layer_image is None:
-                        continue
-
-                    # 应用图层效果
-                    if hasattr(layer, 'apply_effects') and callable(layer.apply_effects):
-                        layer_image = layer.apply_effects(layer_image)
-
-                    # 处理分身效果 - 与标准路径保持一致
-                    is_clone_enabled = hasattr(layer, 'clone_enabled') and layer.clone_enabled
-                    clone_positions = []
-
-                    if is_clone_enabled and hasattr(layer, 'get_clone_positions') and callable(layer.get_clone_positions):
-                        # 获取所有分身位置
-                        try:
-                            # 使用支持随机偏移的有效位置方法
-                            if hasattr(layer, 'get_effective_clone_positions'):
-                                clone_positions = layer.get_effective_clone_positions()
-                            else:
-                                clone_positions = layer.get_clone_positions()
-                        except Exception as e:
-                            print(f"获取分身位置失败: {e}")
-                            clone_positions = [(layer.x, layer.y)]
-                    else:
-                        # 没有分身效果，使用原始位置
-                        clone_positions = [(layer.x, layer.y)]
-
-                    fill_enabled = bool(getattr(layer, 'clone_fill_enabled', False))
-                    if fill_enabled:
-                        spacing = int(getattr(layer, 'clone_fill_spacing', 0))
-                        angle_deg = float(getattr(layer, 'clone_fill_angle', 0.0))
-                        mode = str(getattr(layer, 'clone_fill_mode', 'grid'))
-                        
-                        # 获取实际使用的宽高（考虑自定义大小）
-                        clone_elem_width = layer.width
-                        clone_elem_height = layer.height
-                        if (hasattr(layer, 'clone_custom_size_enabled') and layer.clone_custom_size_enabled and
-                            hasattr(layer, 'clone_custom_width') and hasattr(layer, 'clone_custom_height')):
-                            if layer.clone_custom_width > 0:
-                                clone_elem_width = layer.clone_custom_width
-                            if layer.clone_custom_height > 0:
-                                clone_elem_height = layer.clone_custom_height
-                        
-                        dx = max(1, int(clone_elem_width + spacing))
-                        dy = max(1, int(clone_elem_height + spacing))
-                        positions = []
-                        cx = self.canvas_width / 2.0
-                        cy = self.canvas_height / 2.0
-                        base_x = layer.x
-                        base_y = layer.y
-                        import math
-                        angle = math.radians(angle_deg % 360.0)
-                        if mode == 'border':
-                            # 边框排列：确保四角有元素，行距列距统一，支持边距
-                            margin = int(getattr(layer, 'clone_fill_margin', 0))  # 获取边距参数
-                            positions = []
-                            
-                            # 应用边距到画布尺寸
-                            effective_width = self.canvas_width - 2 * margin
-                            effective_height = self.canvas_height - 2 * margin
-                            
-                            # 计算每边的元素数量，确保四角都有元素
-                            # 顶部和底部：计算水平方向可以放置的元素数量（包括两端的角）
-                            top_bottom_count = max(2, (effective_width + dx) // dx)  # 至少2个（两角）
-                            # 左侧和右侧：计算垂直方向可以放置的元素数量（包括两端的角）
-                            left_right_count = max(2, (effective_height + dy) // dy)  # 至少2个（两角）
-                            
-                            # 计算统一的间距，确保元素均匀分布
-                            # effective_width/height 是画布减去边距后的有效区域
-                            # clone_elem_width/height 是分身元素的实际尺寸
-                            if top_bottom_count > 1:
-                                top_bottom_spacing = (effective_width - clone_elem_width) / (top_bottom_count - 1)
-                            else:
-                                top_bottom_spacing = 0
-                                
-                            if left_right_count > 1:
-                                left_right_spacing = (effective_height - clone_elem_height) / (left_right_count - 1)
-                            else:
-                                left_right_spacing = 0
-                            
-                            # 顶部边缘（包括左上角和右上角）
-                            for i in range(top_bottom_count):
-                                x = margin + int(i * top_bottom_spacing)
-                                if x <= self.canvas_width - clone_elem_width - margin:  # 确保不超出有效区域
-                                    positions.append((x, margin))
-                            
-                            # 底部边缘（包括左下角和右下角）
-                            for i in range(top_bottom_count):
-                                x = margin + int(i * top_bottom_spacing)
-                                if x <= self.canvas_width - clone_elem_width - margin:  # 确保不超出有效区域
-                                    positions.append((x, self.canvas_height - clone_elem_height - margin))
-                            
-                            # 左侧边缘（不包括已经放置的角落元素）
-                            for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
-                                y = margin + int(i * left_right_spacing)
-                                if margin < y < self.canvas_height - clone_elem_height - margin:  # 确保有效位置
-                                    positions.append((margin, y))
-                            
-                            # 右侧边缘（不包括已经放置的角落元素）
-                            for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
-                                y = margin + int(i * left_right_spacing)
-                                if margin < y < self.canvas_height - clone_elem_height - margin:  # 确保有效位置
-                                    positions.append((self.canvas_width - clone_elem_width - margin, y))
-                        else:
-                            start_y = -int(clone_elem_height)
-                            end_y = self.canvas_height + int(clone_elem_height)
-                            step_y = dy
-                            i_row = 0
-                            for row_y in range(start_y, end_y + 1, step_y):
-                                offset = dx // 2 if (mode == 'staggered' and (i_row % 2 == 1)) else 0
-                                for col_x in range(-int(clone_elem_width), self.canvas_width + int(clone_elem_width) + 1, dx):
-                                    x0 = base_x + col_x + offset
-                                    y0 = base_y + row_y
-                                    if angle != 0.0:
-                                        rx = math.cos(angle) * (x0 - cx) - math.sin(angle) * (y0 - cy) + cx
-                                        ry = math.sin(angle) * (x0 - cx) + math.cos(angle) * (y0 - cy) + cy
-                                        x = int(rx)
-                                        y = int(ry)
-                                    else:
-                                        x = x0
-                                        y = y0
-                                    positions.append((x, y))
-                                i_row += 1
-                        clone_positions = positions if positions else clone_positions
-
-                    positions_info = [(x, y, False) for (x, y) in clone_positions]
-                    mirror_mode = getattr(layer, 'clone_mirror_mode', 'none')
-                    if mirror_mode and mirror_mode != 'none':
-                        base = clone_positions[:]
-                        
-                        # 获取实际使用的宽高（考虑自定义大小）用于镜像计算
-                        mirror_width = layer.width
-                        mirror_height = layer.height
-                        if (hasattr(layer, 'clone_custom_size_enabled') and layer.clone_custom_size_enabled and
-                            hasattr(layer, 'clone_custom_width') and hasattr(layer, 'clone_custom_height')):
-                            if layer.clone_custom_width > 0:
-                                mirror_width = layer.clone_custom_width
-                            if layer.clone_custom_height > 0:
-                                mirror_height = layer.clone_custom_height
-                        
-                        min_x = min([x for x, _ in base])
-                        max_x = max([x + mirror_width for x, _ in base])
-                        min_y = min([y for _, y in base])
-                        max_y = max([y + mirror_height for _, y in base])
-                        group_width = max_x - min_x
-                        group_height = max_y - min_y
-                        if mirror_mode == 'horizontal':
-                            mirrored_left = self.canvas_width - (min_x + group_width)
-                            for x, y in base:
-                                offset_x = x - min_x
-                                positions_info.append((mirrored_left + offset_x, y, True))
-                        elif mirror_mode == 'vertical':
-                            mirrored_top = self.canvas_height - (min_y + group_height)
-                            for x, y in base:
-                                offset_y = y - min_y
-                                positions_info.append((x, mirrored_top + offset_y, True))
-
-                    from PIL import ImageOps
-                    
-                    # 检查是否需要调整分身大小
-                    print(f"[快速渲染检查] 图层: {layer.name}")
-                    print(f"  - 分身启用: {is_clone_enabled}")
-                    print(f"  - 有 clone_custom_size_enabled: {hasattr(layer, 'clone_custom_size_enabled')}")
-                    if hasattr(layer, 'clone_custom_size_enabled'):
-                        print(f"  - clone_custom_size_enabled 值: {layer.clone_custom_size_enabled}")
-                    print(f"  - 有 clone_custom_width: {hasattr(layer, 'clone_custom_width')}")
-                    if hasattr(layer, 'clone_custom_width'):
-                        print(f"  - clone_custom_width 值: {layer.clone_custom_width}")
-                    print(f"  - 有 clone_custom_height: {hasattr(layer, 'clone_custom_height')}")
-                    if hasattr(layer, 'clone_custom_height'):
-                        print(f"  - clone_custom_height 值: {layer.clone_custom_height}")
-                    
-                    clone_resize_needed = (
-                        is_clone_enabled and 
-                        hasattr(layer, 'clone_custom_size_enabled') and 
-                        layer.clone_custom_size_enabled and
-                        hasattr(layer, 'clone_custom_width') and 
-                        hasattr(layer, 'clone_custom_height') and
-                        layer.clone_custom_width > 0 and 
-                        layer.clone_custom_height > 0
-                    )
-                    print(f"  - 需要调整大小: {clone_resize_needed}")
-                    
-                    # 如果需要调整大小，准备调整后的图像
-                    if clone_resize_needed:
-                        try:
-                            resized_layer_image = layer_image.resize(
-                                (layer.clone_custom_width, layer.clone_custom_height),
-                                Image.Resampling.LANCZOS
-                            )
-                            print(f"[快速渲染] 图层 '{layer.name}' 应用自定义分身大小: {layer.clone_custom_width}x{layer.clone_custom_height}")
-                        except Exception as resize_error:
-                            print(f"[快速渲染] 调整分身大小失败: {resize_error}，使用原图大小")
-                            resized_layer_image = layer_image
-                            clone_resize_needed = False
-                    else:
-                        resized_layer_image = layer_image
-                    
-                    for pos_x, pos_y, is_mirror in positions_info:
-                        # 获取混合模式并转换为字符串
-                        blend_mode = self._get_layer_blend_mode_string(layer)
-                        
-                        # 使用调整大小后的图像（如果启用了自定义大小）
-                        img_to_use = resized_layer_image if clone_resize_needed else layer_image
-
-                        layer_info = {
-                            'image': ImageOps.mirror(img_to_use) if (is_mirror and mirror_mode == 'horizontal') else (ImageOps.flip(img_to_use) if (is_mirror and mirror_mode == 'vertical') else img_to_use),
-                            'blend_mode': blend_mode,
-                            'opacity': getattr(layer, 'opacity', 1.0),
-                            'position': (pos_x, pos_y),
-                            'mask': None
-                        }
-                        layer_data.append(layer_info)
-
-                # 检查是否有有效的图层数据
-                if not layer_data:
-                    print("[WARNING] 没有有效的图层数据，使用空画布")
-                    return composition
-
-                print(f"[DEBUG] 准备合成 {len(layer_data)} 个图层")
-
-                # 使用高级合成引擎
-                composition = advanced_compositor.composite_layers(
-                    layer_data,
-                    (self.canvas_width, self.canvas_height),
-                    (0, 0, 0, 0),
-                    optimize_memory=optimize_memory
-                )
-                print("[INFO] 使用高级合成引擎完成渲染")
-
-                # 如果需要优化内存，清理缓存
-                if optimize_memory:
-                    self._optimize_memory()
-
-                return composition
-
-            except Exception as e:
-                print(f"[ERROR] 高级合成失败，回退到标准方法: {e}")
-                import traceback
-                traceback.print_exc()
-
-        # 标准合成方法（后备）
-        # 导入混合模式工具
-        from app.models.document_blend import Blender, BlendMode
-
-        # 性能优化：获取最优设置
         try:
-            from app.utils.performance_optimizer import PerformanceOptimizer, PerformanceMonitor
+            if not hasattr(self, "_cached_compositor"):
+                from app.engines import get_advanced_compositor
 
-            # 获取可见图层
-            from app.utils.layer_tree import render_layers
-            visible_layers = render_layers(self.layers)
+                manager_cls, quality = get_advanced_compositor()
+                if manager_cls is not None:
+                    self._cached_compositor = manager_cls(
+                        quality=quality.BALANCED,   # 平衡模式
+                        enable_gpu=False,
+                        cache_size=10,              # 减少缓存大小
+                    )
+                    print("[INFO] 创建高级合成引擎缓存（平衡模式）")
+                else:
+                    self._cached_compositor = None
 
-            # 获取优化设置
-            image_size = (self.canvas_width, self.canvas_height)
-            layer_count = len(visible_layers)
-
-            # 根据批量模式决定质量设置
-            if is_batch_mode:
-                # 批量模式使用性能优化设置
-                perf_settings = PerformanceOptimizer.get_optimal_settings(
-                    image_size, layer_count, is_batch_mode
-                )
-                print(f"[性能优化] 批量模式 - 图像尺寸: {image_size}, 图层数: {layer_count}")
-                print(f"[性能优化] 批量设置: 抗锯齿={perf_settings['antialiasing_method']}, 质量={perf_settings['quality_level']}")
+            compositor = self._cached_compositor
+            if compositor:
+                print("[DEBUG] 使用缓存的高级合成引擎")
             else:
-                # 非批量模式使用最高质量设置
-                perf_settings = {
-                    'edge_enhancement': True,
-                    'subpixel_precision': True,
-                    'antialiasing_method': 'smaa',  # 使用最高质量抗锯齿
-                    'quality_level': 'high',
-                    'use_threading': False,
-                    'memory_optimization': False
-                }
-                print(f"[高质量渲染] 非批量模式 - 使用最高质量设置")
+                print("[INFO] 高级合成引擎不可用，使用标准算法")
+            return compositor
+        except Exception as error:  # noqa: BLE001 - 失败要退回标准路径，不能中断渲染
+            print(f"[WARNING] 高级合成引擎初始化失败: {error}")
+            return None
 
-        except ImportError:
-            # 后备设置
-            perf_settings = {
-                'edge_enhancement': True,
-                'subpixel_precision': True,
-                'antialiasing_method': 'smaa',
-                'quality_level': 'high',
-                'use_threading': False,
-                'memory_optimization': False
-            }
-            from app.utils.layer_tree import render_layers
-            visible_layers = render_layers(self.layers)
+    def _render_with_advanced_compositor(self, compositor, *, optimize_memory: bool = False):
+        """用高级合成引擎渲染。返回 (是否已决定结果, 图像)。
 
-        # 绘制所有可见图层
+        第一项为 False 表示高级路径失败、调用方应继续走标准路径；
+        为 True 时第二项就是最终结果（None 表示导出被取消）。
+        """
+        try:
+            layer_data = []
+            from app.models.text_layer import TextLayer
+
+            for layer_index, layer in enumerate(sorted(self.layers, key=lambda l: self.layers.index(l))):
+                # 每个图层开始前检查是否取消（高级合成路径）
+                if hasattr(self, '_export_canceled') and self._export_canceled:
+                    print(f"[高级渲染] 处理图层 {layer_index+1} 时检测到取消操作")
+                    # 原实现这里 del composition 释放空画布占用；
+                    # 抽成独立方法后 composition 已不在作用域内，
+                    # 交给 gc 回收即可（此时它只是个 0 填充的空图）。
+                    return True, None
+
+                if not layer.visible:
+                    continue
+
+                # 获取图层图像 - 与标准路径保持一致
+                layer_image = None
+                if isinstance(layer, TextLayer):
+                    # 文字图层，渲染文字为图像
+                    layer_image = layer.render_text()
+                else:
+                    # 普通图层，获取图像
+                    # 🔧 修复：随机模式下，图层应该已经被 randomize_all_layers 处理过
+                    # 直接使用当前图像，避免重复随机化
+                    if hasattr(layer, 'cached_image') and layer.cached_image is not None:
+                        # 使用已缓存的图像
+                        layer_image = layer.cached_image
+                    else:
+                        # 如果没有缓存，获取当前图像（可能是预设的组合）
+                        layer_image = layer.get_image()
+
+                if layer_image is None:
+                    continue
+
+                # 应用图层效果
+                if hasattr(layer, 'apply_effects') and callable(layer.apply_effects):
+                    layer_image = layer.apply_effects(layer_image)
+
+                # 处理分身效果 - 与标准路径保持一致
+                is_clone_enabled = hasattr(layer, 'clone_enabled') and layer.clone_enabled
+                clone_positions = []
+
+                if is_clone_enabled and hasattr(layer, 'get_clone_positions') and callable(layer.get_clone_positions):
+                    # 获取所有分身位置
+                    try:
+                        # 使用支持随机偏移的有效位置方法
+                        if hasattr(layer, 'get_effective_clone_positions'):
+                            clone_positions = layer.get_effective_clone_positions()
+                        else:
+                            clone_positions = layer.get_clone_positions()
+                    except Exception as e:
+                        print(f"获取分身位置失败: {e}")
+                        clone_positions = [(layer.x, layer.y)]
+                else:
+                    # 没有分身效果，使用原始位置
+                    clone_positions = [(layer.x, layer.y)]
+
+                fill_enabled = bool(getattr(layer, 'clone_fill_enabled', False))
+                if fill_enabled:
+                    spacing = int(getattr(layer, 'clone_fill_spacing', 0))
+                    angle_deg = float(getattr(layer, 'clone_fill_angle', 0.0))
+                    mode = str(getattr(layer, 'clone_fill_mode', 'grid'))
+
+                    # 获取实际使用的宽高（考虑自定义大小）
+                    clone_elem_width = layer.width
+                    clone_elem_height = layer.height
+                    if (hasattr(layer, 'clone_custom_size_enabled') and layer.clone_custom_size_enabled and
+                        hasattr(layer, 'clone_custom_width') and hasattr(layer, 'clone_custom_height')):
+                        if layer.clone_custom_width > 0:
+                            clone_elem_width = layer.clone_custom_width
+                        if layer.clone_custom_height > 0:
+                            clone_elem_height = layer.clone_custom_height
+
+                    dx = max(1, int(clone_elem_width + spacing))
+                    dy = max(1, int(clone_elem_height + spacing))
+                    positions = []
+                    cx = self.canvas_width / 2.0
+                    cy = self.canvas_height / 2.0
+                    base_x = layer.x
+                    base_y = layer.y
+                    import math
+                    angle = math.radians(angle_deg % 360.0)
+                    if mode == 'border':
+                        # 边框排列：确保四角有元素，行距列距统一，支持边距
+                        margin = int(getattr(layer, 'clone_fill_margin', 0))  # 获取边距参数
+                        positions = []
+
+                        # 应用边距到画布尺寸
+                        effective_width = self.canvas_width - 2 * margin
+                        effective_height = self.canvas_height - 2 * margin
+
+                        # 计算每边的元素数量，确保四角都有元素
+                        # 顶部和底部：计算水平方向可以放置的元素数量（包括两端的角）
+                        top_bottom_count = max(2, (effective_width + dx) // dx)  # 至少2个（两角）
+                        # 左侧和右侧：计算垂直方向可以放置的元素数量（包括两端的角）
+                        left_right_count = max(2, (effective_height + dy) // dy)  # 至少2个（两角）
+
+                        # 计算统一的间距，确保元素均匀分布
+                        # effective_width/height 是画布减去边距后的有效区域
+                        # clone_elem_width/height 是分身元素的实际尺寸
+                        if top_bottom_count > 1:
+                            top_bottom_spacing = (effective_width - clone_elem_width) / (top_bottom_count - 1)
+                        else:
+                            top_bottom_spacing = 0
+
+                        if left_right_count > 1:
+                            left_right_spacing = (effective_height - clone_elem_height) / (left_right_count - 1)
+                        else:
+                            left_right_spacing = 0
+
+                        # 顶部边缘（包括左上角和右上角）
+                        for i in range(top_bottom_count):
+                            x = margin + int(i * top_bottom_spacing)
+                            if x <= self.canvas_width - clone_elem_width - margin:  # 确保不超出有效区域
+                                positions.append((x, margin))
+
+                        # 底部边缘（包括左下角和右下角）
+                        for i in range(top_bottom_count):
+                            x = margin + int(i * top_bottom_spacing)
+                            if x <= self.canvas_width - clone_elem_width - margin:  # 确保不超出有效区域
+                                positions.append((x, self.canvas_height - clone_elem_height - margin))
+
+                        # 左侧边缘（不包括已经放置的角落元素）
+                        for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
+                            y = margin + int(i * left_right_spacing)
+                            if margin < y < self.canvas_height - clone_elem_height - margin:  # 确保有效位置
+                                positions.append((margin, y))
+
+                        # 右侧边缘（不包括已经放置的角落元素）
+                        for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
+                            y = margin + int(i * left_right_spacing)
+                            if margin < y < self.canvas_height - clone_elem_height - margin:  # 确保有效位置
+                                positions.append((self.canvas_width - clone_elem_width - margin, y))
+                    else:
+                        start_y = -int(clone_elem_height)
+                        end_y = self.canvas_height + int(clone_elem_height)
+                        step_y = dy
+                        i_row = 0
+                        for row_y in range(start_y, end_y + 1, step_y):
+                            offset = dx // 2 if (mode == 'staggered' and (i_row % 2 == 1)) else 0
+                            for col_x in range(-int(clone_elem_width), self.canvas_width + int(clone_elem_width) + 1, dx):
+                                x0 = base_x + col_x + offset
+                                y0 = base_y + row_y
+                                if angle != 0.0:
+                                    rx = math.cos(angle) * (x0 - cx) - math.sin(angle) * (y0 - cy) + cx
+                                    ry = math.sin(angle) * (x0 - cx) + math.cos(angle) * (y0 - cy) + cy
+                                    x = int(rx)
+                                    y = int(ry)
+                                else:
+                                    x = x0
+                                    y = y0
+                                positions.append((x, y))
+                            i_row += 1
+                    clone_positions = positions if positions else clone_positions
+
+                positions_info = [(x, y, False) for (x, y) in clone_positions]
+                mirror_mode = getattr(layer, 'clone_mirror_mode', 'none')
+                if mirror_mode and mirror_mode != 'none':
+                    base = clone_positions[:]
+
+                    # 获取实际使用的宽高（考虑自定义大小）用于镜像计算
+                    mirror_width = layer.width
+                    mirror_height = layer.height
+                    if (hasattr(layer, 'clone_custom_size_enabled') and layer.clone_custom_size_enabled and
+                        hasattr(layer, 'clone_custom_width') and hasattr(layer, 'clone_custom_height')):
+                        if layer.clone_custom_width > 0:
+                            mirror_width = layer.clone_custom_width
+                        if layer.clone_custom_height > 0:
+                            mirror_height = layer.clone_custom_height
+
+                    min_x = min([x for x, _ in base])
+                    max_x = max([x + mirror_width for x, _ in base])
+                    min_y = min([y for _, y in base])
+                    max_y = max([y + mirror_height for _, y in base])
+                    group_width = max_x - min_x
+                    group_height = max_y - min_y
+                    if mirror_mode == 'horizontal':
+                        mirrored_left = self.canvas_width - (min_x + group_width)
+                        for x, y in base:
+                            offset_x = x - min_x
+                            positions_info.append((mirrored_left + offset_x, y, True))
+                    elif mirror_mode == 'vertical':
+                        mirrored_top = self.canvas_height - (min_y + group_height)
+                        for x, y in base:
+                            offset_y = y - min_y
+                            positions_info.append((x, mirrored_top + offset_y, True))
+
+                from PIL import ImageOps
+
+                # 检查是否需要调整分身大小
+                print(f"[快速渲染检查] 图层: {layer.name}")
+                print(f"  - 分身启用: {is_clone_enabled}")
+                print(f"  - 有 clone_custom_size_enabled: {hasattr(layer, 'clone_custom_size_enabled')}")
+                if hasattr(layer, 'clone_custom_size_enabled'):
+                    print(f"  - clone_custom_size_enabled 值: {layer.clone_custom_size_enabled}")
+                print(f"  - 有 clone_custom_width: {hasattr(layer, 'clone_custom_width')}")
+                if hasattr(layer, 'clone_custom_width'):
+                    print(f"  - clone_custom_width 值: {layer.clone_custom_width}")
+                print(f"  - 有 clone_custom_height: {hasattr(layer, 'clone_custom_height')}")
+                if hasattr(layer, 'clone_custom_height'):
+                    print(f"  - clone_custom_height 值: {layer.clone_custom_height}")
+
+                clone_resize_needed = (
+                    is_clone_enabled and 
+                    hasattr(layer, 'clone_custom_size_enabled') and 
+                    layer.clone_custom_size_enabled and
+                    hasattr(layer, 'clone_custom_width') and 
+                    hasattr(layer, 'clone_custom_height') and
+                    layer.clone_custom_width > 0 and 
+                    layer.clone_custom_height > 0
+                )
+                print(f"  - 需要调整大小: {clone_resize_needed}")
+
+                # 如果需要调整大小，准备调整后的图像
+                if clone_resize_needed:
+                    try:
+                        resized_layer_image = layer_image.resize(
+                            (layer.clone_custom_width, layer.clone_custom_height),
+                            Image.Resampling.LANCZOS
+                        )
+                        print(f"[快速渲染] 图层 '{layer.name}' 应用自定义分身大小: {layer.clone_custom_width}x{layer.clone_custom_height}")
+                    except Exception as resize_error:
+                        print(f"[快速渲染] 调整分身大小失败: {resize_error}，使用原图大小")
+                        resized_layer_image = layer_image
+                        clone_resize_needed = False
+                else:
+                    resized_layer_image = layer_image
+
+                for pos_x, pos_y, is_mirror in positions_info:
+                    # 获取混合模式并转换为字符串
+                    blend_mode = self._get_layer_blend_mode_string(layer)
+
+                    # 使用调整大小后的图像（如果启用了自定义大小）
+                    img_to_use = resized_layer_image if clone_resize_needed else layer_image
+
+                    layer_info = {
+                        'image': ImageOps.mirror(img_to_use) if (is_mirror and mirror_mode == 'horizontal') else (ImageOps.flip(img_to_use) if (is_mirror and mirror_mode == 'vertical') else img_to_use),
+                        'blend_mode': blend_mode,
+                        'opacity': getattr(layer, 'opacity', 1.0),
+                        'position': (pos_x, pos_y),
+                        'mask': None
+                    }
+                    layer_data.append(layer_info)
+
+            # 检查是否有有效的图层数据
+            if not layer_data:
+                print("[WARNING] 没有有效的图层数据，使用空画布")
+                return True, composition
+
+            print(f"[DEBUG] 准备合成 {len(layer_data)} 个图层")
+
+            # 使用高级合成引擎
+            composition = compositor.composite_layers(
+                layer_data,
+                (self.canvas_width, self.canvas_height),
+                (0, 0, 0, 0),
+                optimize_memory=optimize_memory
+            )
+            print("[INFO] 使用高级合成引擎完成渲染")
+
+            # 如果需要优化内存，清理缓存
+            if optimize_memory:
+                self._optimize_memory()
+
+            return True, composition
+        except Exception as error:  # noqa: BLE001 - 失败要回退标准路径
+            print(f"[ERROR] 高级合成失败，回退到标准方法: {error}")
+            import traceback
+            traceback.print_exc()
+            return False, None
+
+    def _build_fill_clone_positions(self, layer):
+        """按 clone_fill_* 设置铺满画布，返回分身坐标列表。
+
+        支持 grid / stagger / border 三种排布。返回空列表表示没有算出位置，
+        调用方应保留原有各分身位置。
+        """
+        spacing = int(getattr(layer, 'clone_fill_spacing', 0))
+        angle_deg = float(getattr(layer, 'clone_fill_angle', 0.0))
+        mode = str(getattr(layer, 'clone_fill_mode', 'grid'))
+
+        # 获取实际使用的宽高（考虑自定义大小）
+        effective_width = layer.width
+        effective_height = layer.height
+        if (hasattr(layer, 'clone_custom_size_enabled') and layer.clone_custom_size_enabled and
+            hasattr(layer, 'clone_custom_width') and hasattr(layer, 'clone_custom_height')):
+            if layer.clone_custom_width > 0:
+                effective_width = layer.clone_custom_width
+            if layer.clone_custom_height > 0:
+                effective_height = layer.clone_custom_height
+
+        dx = max(1, int(effective_width + spacing))
+        dy = max(1, int(effective_height + spacing))
+        positions = []
+        cx = self.canvas_width / 2.0
+        cy = self.canvas_height / 2.0
+        base_x = layer.x
+        base_y = layer.y
+        import math
+        angle = math.radians(angle_deg % 360.0)
+        start_y = -layer.height
+        end_y = self.canvas_height + layer.height
+        if mode == 'border':
+            # 边框排列：确保四角有元素，行距列距统一
+            positions = []
+
+            # 计算每边的元素数量，确保四角都有元素
+            # 顶部和底部：计算水平方向可以放置的元素数量（包括两端的角）
+            top_bottom_count = max(2, (self.canvas_width + dx) // dx)  # 至少2个（两角）
+            # 左侧和右侧：计算垂直方向可以放置的元素数量（包括两端的角）
+            left_right_count = max(2, (self.canvas_height + dy) // dy)  # 至少2个（两角）
+
+            # 计算统一的间距，确保元素均匀分布
+            if top_bottom_count > 1:
+                top_bottom_spacing = (self.canvas_width - effective_width) / (top_bottom_count - 1)
+            else:
+                top_bottom_spacing = 0
+
+            if left_right_count > 1:
+                left_right_spacing = (self.canvas_height - effective_height) / (left_right_count - 1)
+            else:
+                left_right_spacing = 0
+
+            # 顶部边缘（包括左上角和右上角）
+            for i in range(top_bottom_count):
+                x = int(i * top_bottom_spacing)
+                if x <= self.canvas_width - effective_width:  # 确保不超出画布
+                    positions.append((x, 0))
+
+            # 底部边缘（包括左下角和右下角）
+            for i in range(top_bottom_count):
+                x = int(i * top_bottom_spacing)
+                if x <= self.canvas_width - effective_width:  # 确保不超出画布
+                    positions.append((x, self.canvas_height - effective_height))
+
+            # 左侧边缘（不包括已经放置的角落元素）
+            for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
+                y = int(i * left_right_spacing)
+                if 0 < y < self.canvas_height - effective_height:  # 确保有效位置
+                    positions.append((0, y))
+
+            # 右侧边缘（不包括已经放置的角落元素）
+            for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
+                y = int(i * left_right_spacing)
+                if 0 < y < self.canvas_height - effective_height:  # 确保有效位置
+                    positions.append((self.canvas_width - effective_width, y))
+        else:
+            step_y = dy
+            i_row = 0
+            for row_y in range(start_y, end_y + 1, step_y):
+                offset = dx // 2 if (mode == 'staggered' and (i_row % 2 == 1)) else 0
+                for col_x in range(-int(effective_width), self.canvas_width + int(effective_width) + 1, dx):
+                    x0 = base_x + col_x + offset
+                    y0 = base_y + row_y
+                    if angle != 0.0:
+                        rx = math.cos(angle) * (x0 - cx) - math.sin(angle) * (y0 - cy) + cx
+                        ry = math.sin(angle) * (x0 - cx) + math.cos(angle) * (y0 - cy) + cy
+                        x = int(rx)
+                        y = int(ry)
+                    else:
+                        x = x0
+                        y = y0
+                    positions.append((x, y))
+                i_row += 1
+        return positions
+
+    def _compose_standard_layers(self, composition, visible_layers, perf_settings,
+                                 random_mode=False, is_batch_mode=False):
+        """标准合成路径：逐层绘制到 composition。
+
+        返回 (图像, 是否被取消)。取消时第一项为 None。
+        ``composition`` 会被逐层重赋值，因此必须回传。
+        """
         for layer_index, layer in enumerate(sorted(visible_layers, key=lambda l: self.layers.index(l))):
             # 每个图层开始前检查是否取消
             if hasattr(self, '_export_canceled') and self._export_canceled:
                 print(f"[渲染] 处理图层 {layer_index+1}/{len(visible_layers)} 时检测到取消操作")
                 if composition:
-                    del composition
-                return None
-                
+                    pass
+                return None, True
+
             if not layer.visible:
                 continue
-                
+
             # 获取图层图像 - 支持文字图层和普通图层
             layer_image = None
             from app.models.text_layer import TextLayer
-            
+
             if isinstance(layer, TextLayer):
                 # 文字图层，渲染文字为图像
                 layer_image = layer.render_text()
@@ -450,10 +488,10 @@ class DocumentRender:
                 else:
                     # 如果没有缓存，获取当前图像（可能是预设的组合）
                     layer_image = layer.get_image()
-                
+
             if layer_image is None:
                 continue
-                
+
             # 应用图层效果 - 批处理模式下设置批处理标志以优化性能
             if hasattr(layer, 'apply_effects') and callable(layer.apply_effects):
                 if is_batch_mode:
@@ -463,11 +501,11 @@ class DocumentRender:
                 layer_image = layer.apply_effects(layer_image)
                 if is_batch_mode and hasattr(layer, '_is_batch_mode'):
                     layer._is_batch_mode = False
-            
+
             # 判断是否启用了分身功能
             is_clone_enabled = hasattr(layer, 'clone_enabled') and layer.clone_enabled
             clone_positions = []
-            
+
             if is_clone_enabled and hasattr(layer, 'get_clone_positions') and callable(layer.get_clone_positions):
                 # 获取所有分身位置
                 try:
@@ -495,97 +533,13 @@ class DocumentRender:
 
             fill_enabled = bool(getattr(layer, 'clone_fill_enabled', False))
             if fill_enabled:
-                spacing = int(getattr(layer, 'clone_fill_spacing', 0))
-                angle_deg = float(getattr(layer, 'clone_fill_angle', 0.0))
-                mode = str(getattr(layer, 'clone_fill_mode', 'grid'))
-                
-                # 获取实际使用的宽高（考虑自定义大小）
-                effective_width = layer.width
-                effective_height = layer.height
-                if (hasattr(layer, 'clone_custom_size_enabled') and layer.clone_custom_size_enabled and
-                    hasattr(layer, 'clone_custom_width') and hasattr(layer, 'clone_custom_height')):
-                    if layer.clone_custom_width > 0:
-                        effective_width = layer.clone_custom_width
-                    if layer.clone_custom_height > 0:
-                        effective_height = layer.clone_custom_height
-                
-                dx = max(1, int(effective_width + spacing))
-                dy = max(1, int(effective_height + spacing))
-                positions = []
-                cx = self.canvas_width / 2.0
-                cy = self.canvas_height / 2.0
-                base_x = layer.x
-                base_y = layer.y
-                import math
-                angle = math.radians(angle_deg % 360.0)
-                start_y = -layer.height
-                end_y = self.canvas_height + layer.height
-                if mode == 'border':
-                    # 边框排列：确保四角有元素，行距列距统一
-                    positions = []
-                    
-                    # 计算每边的元素数量，确保四角都有元素
-                    # 顶部和底部：计算水平方向可以放置的元素数量（包括两端的角）
-                    top_bottom_count = max(2, (self.canvas_width + dx) // dx)  # 至少2个（两角）
-                    # 左侧和右侧：计算垂直方向可以放置的元素数量（包括两端的角）
-                    left_right_count = max(2, (self.canvas_height + dy) // dy)  # 至少2个（两角）
-                    
-                    # 计算统一的间距，确保元素均匀分布
-                    if top_bottom_count > 1:
-                        top_bottom_spacing = (self.canvas_width - effective_width) / (top_bottom_count - 1)
-                    else:
-                        top_bottom_spacing = 0
-                        
-                    if left_right_count > 1:
-                        left_right_spacing = (self.canvas_height - effective_height) / (left_right_count - 1)
-                    else:
-                        left_right_spacing = 0
-                    
-                    # 顶部边缘（包括左上角和右上角）
-                    for i in range(top_bottom_count):
-                        x = int(i * top_bottom_spacing)
-                        if x <= self.canvas_width - effective_width:  # 确保不超出画布
-                            positions.append((x, 0))
-                    
-                    # 底部边缘（包括左下角和右下角）
-                    for i in range(top_bottom_count):
-                        x = int(i * top_bottom_spacing)
-                        if x <= self.canvas_width - effective_width:  # 确保不超出画布
-                            positions.append((x, self.canvas_height - effective_height))
-                    
-                    # 左侧边缘（不包括已经放置的角落元素）
-                    for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
-                        y = int(i * left_right_spacing)
-                        if 0 < y < self.canvas_height - effective_height:  # 确保有效位置
-                            positions.append((0, y))
-                    
-                    # 右侧边缘（不包括已经放置的角落元素）
-                    for i in range(1, left_right_count - 1):  # 跳过第一个和最后一个（角落）
-                        y = int(i * left_right_spacing)
-                        if 0 < y < self.canvas_height - effective_height:  # 确保有效位置
-                            positions.append((self.canvas_width - effective_width, y))
-                else:
-                    step_y = dy
-                    i_row = 0
-                    for row_y in range(start_y, end_y + 1, step_y):
-                        offset = dx // 2 if (mode == 'staggered' and (i_row % 2 == 1)) else 0
-                        for col_x in range(-int(effective_width), self.canvas_width + int(effective_width) + 1, dx):
-                            x0 = base_x + col_x + offset
-                            y0 = base_y + row_y
-                            if angle != 0.0:
-                                rx = math.cos(angle) * (x0 - cx) - math.sin(angle) * (y0 - cy) + cx
-                                ry = math.sin(angle) * (x0 - cx) + math.cos(angle) * (y0 - cy) + cy
-                                x = int(rx)
-                                y = int(ry)
-                            else:
-                                x = x0
-                                y = y0
-                            positions.append((x, y))
-                        i_row += 1
-                clone_positions = positions if positions else clone_positions
+                positions = self._build_fill_clone_positions(layer)
+                if positions:
+                    clone_positions = positions
 
-            
-            
+
+
+
             # 判断混合模式是否为正常模式（blend_mode 为 int 0-15，
             # 统一经 blend_modes 归一比较，避免与中文常量直接比较恒为 False）
             from app.utils.blend_modes import blend_mode_to_name
@@ -595,12 +549,12 @@ class DocumentRender:
                 layer.blend_mode is None or
                 blend_mode_to_name(layer.blend_mode) == "normal"
             )
-            
+
             positions_info = [(x, y, False) for (x, y) in clone_positions]
             mirror_mode = getattr(layer, 'clone_mirror_mode', 'none')
             if mirror_mode and mirror_mode != 'none':
                 base = clone_positions[:]
-                
+
                 # 获取实际使用的宽高（考虑自定义大小）
                 mirror_width = layer.width
                 mirror_height = layer.height
@@ -610,7 +564,7 @@ class DocumentRender:
                         mirror_width = layer.clone_custom_width
                     if layer.clone_custom_height > 0:
                         mirror_height = layer.clone_custom_height
-                
+
                 min_x = min([x for x, _ in base])
                 max_x = max([x + mirror_width for x, _ in base])
                 min_y = min([y for _, y in base])
@@ -629,7 +583,7 @@ class DocumentRender:
                         positions_info.append((x, mirrored_top + offset_y, True))
 
             from PIL import ImageOps
-            
+
             # 检查是否需要调整分身大小
             print(f"[渲染检查] 图层: {layer.name}")
             print(f"  - 分身启用: {is_clone_enabled}")
@@ -642,7 +596,7 @@ class DocumentRender:
             print(f"  - 有 clone_custom_height: {hasattr(layer, 'clone_custom_height')}")
             if hasattr(layer, 'clone_custom_height'):
                 print(f"  - clone_custom_height 值: {layer.clone_custom_height}")
-            
+
             clone_resize_needed = (
                 is_clone_enabled and 
                 hasattr(layer, 'clone_custom_size_enabled') and 
@@ -653,7 +607,7 @@ class DocumentRender:
                 layer.clone_custom_height > 0
             )
             print(f"  - 需要调整大小: {clone_resize_needed}")
-            
+
             # 如果需要调整大小，准备调整后的图像
             if clone_resize_needed:
                 try:
@@ -668,7 +622,7 @@ class DocumentRender:
                     clone_resize_needed = False
             else:
                 resized_layer_image = layer_image
-            
+
             for pos_x, pos_y, is_mirror in positions_info:
                 try:
                     # 尝试使用高级合成器
@@ -698,7 +652,12 @@ class DocumentRender:
                             pass
 
                         if is_batch_mode:
-                            # 批量模式使用性能优化设置
+                            # 批量模式使用性能优化设置。
+                            # 注意：PerformanceOptimizer 原本是在同函数的
+                            # _prepare_standard_render 里导入的，拆开后那个名字
+                            # 不在本方法作用域，必须自己再导入一次。
+                            from app.utils.performance_optimizer import PerformanceOptimizer
+
                             composition = PerformanceOptimizer.optimize_composite_layer(
                                 background=composition,
                                 foreground=img_for_pos,
@@ -757,11 +716,113 @@ class DocumentRender:
 
                         # 应用混合模式
                         composition = Blender.apply_blend_mode(composition, temp_image, layer.blend_mode, layer.opacity)
-        
-        # 如果需要优化内存，清理缓存
+        return composition, False
+
+    def _prepare_standard_render(self, is_batch_mode: bool = False):
+        """准备标准路径所需的可见图层与渲染参数。
+
+        返回 (visible_layers, perf_settings)。
+        性能优化器不可用时退回一组固定的高质量参数。
+        """
+        # 性能优化：获取最优设置
+        try:
+            from app.utils.performance_optimizer import PerformanceOptimizer, PerformanceMonitor
+
+            # 获取可见图层
+            from app.utils.layer_tree import render_layers
+            visible_layers = render_layers(self.layers)
+
+            # 获取优化设置
+            image_size = (self.canvas_width, self.canvas_height)
+            layer_count = len(visible_layers)
+
+            # 根据批量模式决定质量设置
+            if is_batch_mode:
+                # 批量模式使用性能优化设置
+                perf_settings = PerformanceOptimizer.get_optimal_settings(
+                    image_size, layer_count, is_batch_mode
+                )
+                print(f"[性能优化] 批量模式 - 图像尺寸: {image_size}, 图层数: {layer_count}")
+                print(f"[性能优化] 批量设置: 抗锯齿={perf_settings['antialiasing_method']}, 质量={perf_settings['quality_level']}")
+            else:
+                # 非批量模式使用最高质量设置
+                perf_settings = {
+                    'edge_enhancement': True,
+                    'subpixel_precision': True,
+                    'antialiasing_method': 'smaa',  # 使用最高质量抗锯齿
+                    'quality_level': 'high',
+                    'use_threading': False,
+                    'memory_optimization': False
+                }
+                print(f"[高质量渲染] 非批量模式 - 使用最高质量设置")
+
+        except ImportError:
+            # 后备设置
+            perf_settings = {
+                'edge_enhancement': True,
+                'subpixel_precision': True,
+                'antialiasing_method': 'smaa',
+                'quality_level': 'high',
+                'use_threading': False,
+                'memory_optimization': False
+            }
+            from app.utils.layer_tree import render_layers
+            visible_layers = render_layers(self.layers)
+        return visible_layers, perf_settings
+
+    def render_composition(self, random_mode=False, optimize_memory=False, use_advanced_quality=False, is_batch_mode=False, enable_gpu=False):
+        """渲染当前图层组合 - 改进版本，支持高质量合成
+
+        参数:
+            random_mode: 是否使用随机图像
+            optimize_memory: 是否在渲染后优化内存使用
+            use_advanced_quality: 是否使用高级质量算法
+            is_batch_mode: 是否批量模式（影响性能优化策略）
+            enable_gpu: 保留参数（P1-9 已移除 OpenGL GPU 渲染路径，本参数不再生效）
+
+        返回:
+            PIL.Image: 渲染后的图像
+        """
+        # 检查是否取消（渲染开始前）
+        if hasattr(self, '_export_canceled') and self._export_canceled:
+            print("[渲染] 渲染开始前检测到取消操作")
+            return None
+
+        # 🔧 修复：严格按照绑定组设置执行随机化，不重新分析分类
+        # （历史版本会执行两次 randomize_all_layers，导致随机化两次；
+        #   现统一只执行这一次。）
+        if random_mode:
+            print("[渲染] 启用随机模式，严格按照绑定组设置执行...")
+            self.randomize_all_layers()
+
+        # 随机化后再次检查是否取消
+        if hasattr(self, '_export_canceled') and self._export_canceled:
+            print("[渲染] 随机化后检测到取消操作")
+            return None
+
+        # 创建一个空白画布
+        composition = Image.new('RGBA', (self.canvas_width, self.canvas_height), (0, 0, 0, 0))
+
+        # 优先走高级合成引擎；不可用或失败则继续走标准路径
+        if use_advanced_quality:
+            compositor = self._acquire_advanced_compositor()
+            if compositor is not None:
+                handled, result = self._render_with_advanced_compositor(
+                    compositor, optimize_memory=optimize_memory
+                )
+                if handled:
+                    return result
+
+        # 标准合成路径（后备）
+        visible_layers, perf_settings = self._prepare_standard_render(is_batch_mode)
+        composition, cancelled = self._compose_standard_layers(
+            composition, visible_layers, perf_settings, random_mode, is_batch_mode
+        )
+        if cancelled:
+            return None
+
         if optimize_memory:
             self._optimize_memory()
-            
         return composition
 
 

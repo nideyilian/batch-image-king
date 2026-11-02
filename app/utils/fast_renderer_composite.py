@@ -4,19 +4,12 @@
 集成智能渲染缓存系统
 """
 
-import time
-import hashlib
-import threading
 import os
 import builtins
-from collections import OrderedDict, deque
 from functools import wraps
-from typing import Optional, Dict, Any, Tuple
-import math
+from typing import Optional
 from PIL import Image
 import numpy as np
-import weakref
-import gc
 
 # 默认关闭快速渲染器调试输出，避免预览阶段高频 I/O 导致掉帧
 _FAST_RENDERER_DEBUG = os.environ.get("BTPW_FAST_RENDERER_DEBUG", "0") == "1"
@@ -46,10 +39,7 @@ def _serialized_preview(method):
 
 
 # 导入新的智能缓存系统
-from .intelligent_render_cache import get_intelligent_cache
 # 导入智能内存管理系统
-from .intelligent_memory_manager import get_memory_manager, register_image_for_tracking
-from .render_diagnostics import log_branch
 import logging
 
 logger = logging.getLogger(__name__)
@@ -659,68 +649,56 @@ class FastRendererComposite(object):
 
     def _high_quality_alpha_composite(self, background: Image.Image, foreground: Image.Image,
                                      dst_x: int, dst_y: int) -> Image.Image:
-        """高精度alpha合成"""
+        """高精度alpha合成。
+
+        只把前景覆盖的那块区域转成浮点：整画布转 float32 在 4800x3200 下是
+        245MB，且每层每帧都要付一次，而真正参与混合的只有这块 bbox。
+        """
         try:
-            # 使用numpy进行高精度alpha混合
-            bg_array = np.array(background, dtype=np.float32) / 255.0
-            fg_array = np.array(foreground, dtype=np.float32) / 255.0
+            bg_w, bg_h = background.size
+            fg_w, fg_h = foreground.size
 
-            # 获取前景区域
-            fg_h, fg_w = fg_array.shape[:2]
-            bg_h, bg_w = bg_array.shape[:2]
-
-            # 确保不越界
             end_x = min(dst_x + fg_w, bg_w)
             end_y = min(dst_y + fg_h, bg_h)
-
             if end_x <= dst_x or end_y <= dst_y:
                 return background
 
-            # 提取区域
-            bg_region = bg_array[dst_y:end_y, dst_x:end_x]
-            fg_region = fg_array[:end_y-dst_y, :end_x-dst_x]
+            rw, rh = end_x - dst_x, end_y - dst_y
+            bg_region = np.asarray(
+                background.crop((dst_x, dst_y, end_x, end_y)), dtype=np.float32
+            ) / 255.0
+            fg_region = np.asarray(
+                foreground.crop((0, 0, rw, rh)), dtype=np.float32
+            ) / 255.0
 
-            # Alpha混合
-            fg_alpha = fg_region[:,:,3:4]
-            bg_alpha = bg_region[:,:,3:4]
-
-            # 转换为线性颜色空间进行混合 - 解决颜色变灰变黑问题
             from app.utils.unified_alpha_compositor import UnifiedAlphaCompositor
-            
-            fg_rgb = fg_region[:,:,:3]
-            bg_rgb = bg_region[:,:,:3]
-            
-            # 转换到线性颜色空间
-            fg_rgb_linear = UnifiedAlphaCompositor._srgb_to_linear(fg_rgb)
-            bg_rgb_linear = UnifiedAlphaCompositor._srgb_to_linear(bg_rgb)
 
-            # 计算输出alpha
+            fg_alpha = fg_region[:, :, 3:4]
+            bg_alpha = bg_region[:, :, 3:4]
+
+            # 转换到线性颜色空间进行混合 - 解决颜色变灰变黑问题
+            fg_rgb_linear = UnifiedAlphaCompositor._srgb_to_linear(fg_region[:, :, :3])
+            bg_rgb_linear = UnifiedAlphaCompositor._srgb_to_linear(bg_region[:, :, :3])
+
             out_alpha = fg_alpha + bg_alpha * (1 - fg_alpha)
-
-            # 避免除零
             safe_alpha = np.where(out_alpha > 1e-6, out_alpha, 1e-6)
+            out_rgb = UnifiedAlphaCompositor._linear_to_srgb(
+                (fg_rgb_linear * fg_alpha + bg_rgb_linear * bg_alpha * (1 - fg_alpha))
+                / safe_alpha
+            )
+            region = np.concatenate([out_rgb, out_alpha], axis=2)
 
-            # 在线性颜色空间中计算输出颜色 - 解决颜色变灰问题
-            out_rgb_linear = (fg_rgb_linear * fg_alpha + bg_rgb_linear * bg_alpha * (1 - fg_alpha)) / safe_alpha
-            
-            # 转换回sRGB颜色空间
-            out_rgb = UnifiedAlphaCompositor._linear_to_srgb(out_rgb_linear)
-
-            # 组合结果
-            result_region = np.concatenate([out_rgb, out_alpha], axis=2)
-
-            # 更新背景
-            result_array = bg_array.copy()
-            result_array[dst_y:end_y, dst_x:end_x] = result_region
-
-            # 🔧 修复：使用抖动转换以消除色阶分层
+            # 抖动也只在 bbox 内做，避免整画布往返
             try:
                 from app.utils.unified_alpha_compositor import _float_to_uint8_with_dithering
-                result_8bit = _float_to_uint8_with_dithering(result_array, use_dithering=True)
+
+                region_u8 = _float_to_uint8_with_dithering(region, use_dithering=True)
             except ImportError:
-                # 后备方案：使用四舍五入
-                result_8bit = np.round(np.clip(result_array, 0.0, 1.0) * 255.0).astype(np.uint8)
-            return Image.fromarray(result_8bit)
+                region_u8 = np.round(np.clip(region, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+            result = background.copy()
+            result.paste(Image.fromarray(region_u8, "RGBA"), (dst_x, dst_y))
+            return result
 
         except Exception as e:
             print(f"[快速渲染] 高精度alpha合成失败: {e}")

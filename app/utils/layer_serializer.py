@@ -4,8 +4,7 @@
 """
 
 import copy
-from typing import Dict, Any, Optional, Union
-from PIL import Image
+from typing import Dict, Any
 import logging
 logger = logging.getLogger(__name__)
 
@@ -332,7 +331,11 @@ class LayerSerializer:
         try:
             setattr(layer_obj, attr_name, value)
         except Exception:
-            pass  # 忽略无法设置的属性
+            # 忽略无法设置的属性，但要说清是哪个属性丢了。
+            # 反序列化缺字段的表现是「打开项目后某个效果没了」，
+            # 静默跳过等于把排查线索一起吞掉。
+            logger.warning("反序列化时无法设置属性 %s（值类型 %s），已跳过",
+                           attr_name, type(value).__name__, exc_info=True)
     
     @classmethod
     def _deserialize_blend_mode(cls, layer_obj, data: Dict[str, Any]):

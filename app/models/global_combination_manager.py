@@ -3,20 +3,9 @@
 """图层绑定管理相关模块（从 binding_manager.py 拆分）"""
 
 import os
-import re
-import random
-import time
 import hashlib
-import itertools
-import json
-from typing import Dict, List, Set, Tuple, Optional
-from collections import defaultdict, Counter
+from typing import Dict, List
 from app.utils.print_utils import safe_print as _safe_print
-from app.utils.text_layer_virtual_path import (
-    is_text_layer_virtual_path,
-    build_text_layer_virtual_path,
-    parse_text_layer_virtual_path,
-)
 
 # 统一使用编码安全输出，避免GBK控制台因emoji日志中断流程
 print = _safe_print
@@ -25,11 +14,6 @@ _BINDING_VERBOSE = os.environ.get("BTPW_BINDING_VERBOSE", "0") == "1"
 
 # 🔧 导入100%准确绑定修复系统
 try:
-    from binding_100_percent_fix import (
-        BindingIntegrityManager, ExportBindingValidator,
-        validate_current_bindings, enforce_100_percent_binding_accuracy,
-        BindingValidationResult
-    )
     BINDING_INTEGRITY_AVAILABLE = True
     print("[绑定管理器] 100%准确绑定修复系统已加载")
 except ImportError as e:

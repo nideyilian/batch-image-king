@@ -254,11 +254,18 @@ class WorkspaceDocumentOpsMixin:
     def newDocument(self, width: int = 1080, height: int = 1350) -> bool:
         if not self._ensure_operations_available():
             return False
-        if width <= 0 or height <= 0:
-            self._set_status("新建失败：画布尺寸无效", toast=True)
+        # 与 Document.create_new 的口径保持一致（16~32768）。
+        # 旧实现只拦 <= 0，1~15 会穿过去，而 create_new 校验更严会抛异常，
+        # 在 QML 槽里抛出去就是崩溃。
+        if not (16 <= int(width) <= 32768) or not (16 <= int(height) <= 32768):
+            self._set_status("新建失败：画布尺寸需在 16 ~ 32768 之间", toast=True)
             return False
         document = Document()
-        document.create_new(int(width), int(height))
+        try:
+            document.create_new(int(width), int(height))
+        except ValueError as error:
+            self._set_status(f"新建失败：{error}", toast=True)
+            return False
         document._history_manager.clear()
         document.save_state("初始状态")
         self._preview_provider.clear()

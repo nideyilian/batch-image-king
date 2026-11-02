@@ -25,13 +25,62 @@ import time
 import hashlib
 import threading
 import os
-import weakref
 import gc
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Optional, Any, Tuple
+
+
+# 影响文字渲染结果的状态字段（TextLayerRenderMixin 实际读取的那批 _xxx）。
+# 只列显式清单，不做 __dict__ 全量遍历 —— 否则 _text_lines / 锁 / 缓存对象
+# 会混进键里，导致每次渲染键都不同、缓存永不命中。
+_TEXT_KEY_STATE = (
+    "_text_color",
+    "_text_color_ranges",
+    "_font_size_ranges",
+    "_stroke_enabled",
+    "_stroke_width",
+    "_stroke_color",
+    "_background_enabled",
+    "_background_color",
+    "_background_padding",
+    "_shadow_enabled",
+    "_shadow_offset_x",
+    "_shadow_offset_y",
+    "_shadow_blur",
+    "_shadow_color",
+    "_glow_enabled",
+    "_glow_strength",
+    "_glow_radius",
+    "_glow_color",
+    "_gradient_enabled",
+    "_gradient_type",
+    "_gradient_direction",
+    "_gradient_start_color",
+    "_gradient_end_color",
+)
+
+
+def _normalize_key_value(value: Any) -> str:
+    """把任意属性值压成可稳定比较的短字符串（颜色元组、区间列表、枚举等）。"""
+    if isinstance(value, (int, float, bool, str)) or value is None:
+        return repr(value)
+    if isinstance(value, (tuple, list)):
+        try:
+            parts = [_normalize_key_value(v) for v in value]
+        except Exception:
+            return repr(value)[:120]
+        return "[" + ",".join(parts) + "]"
+    if isinstance(value, dict):
+        try:
+            items = sorted((str(k), _normalize_key_value(v)) for k, v in value.items())
+        except Exception:
+            return repr(value)[:120]
+        return "{" + ",".join(f"{k}:{v}" for k, v in items) + "}"
+    if hasattr(value, "value"):  # 枚举
+        return str(getattr(value, "value"))
+    return repr(value)[:120]
 from dataclasses import dataclass
 from collections import OrderedDict
 from PIL import Image
-import numpy as np
 
 
 @dataclass
@@ -219,9 +268,33 @@ class IntelligentRenderCache:
                 if hasattr(layer, 'blend_mode'):
                     layer_parts.append(f"blend:{getattr(layer, 'blend_mode', 0)}")
                 
-                # 🔧 修复：添加圆角参数
-                if hasattr(layer, 'corner_radius') and getattr(layer, 'corner_radius', 0) > 0:
+                # 圆角参数。注意不能只在 >0 时加入：从 40 改回 0 会命中旧的圆角缓存。
+                if hasattr(layer, 'corner_radius'):
                     layer_parts.append(f"radius:{getattr(layer, 'corner_radius', 0)}")
+                for _attr in (
+                    'vector_corner_radius_tl', 'vector_corner_radius_tr',
+                    'vector_corner_radius_br', 'vector_corner_radius_bl',
+                ):
+                    if hasattr(layer, _attr):
+                        layer_parts.append(f"{_attr}:{getattr(layer, _attr, 0)}")
+
+                # 自定义矢量路径：编辑节点后必须换键，否则画布停在旧形状
+                if hasattr(layer, 'vector_path_enabled'):
+                    _vpe = bool(getattr(layer, 'vector_path_enabled', False))
+                    layer_parts.append(f"vpath:{int(_vpe)}")
+                    if _vpe:
+                        _pts = getattr(layer, 'vector_path_points', None) or []
+                        _bez = getattr(layer, 'vector_bezier_nodes', None) or []
+                        layer_parts.append(
+                            f"vpts:{hashlib.md5(repr(_pts).encode()).hexdigest()[:10]}"
+                        )
+                        layer_parts.append(
+                            f"vbez:{hashlib.md5(repr(_bez).encode()).hexdigest()[:10]}"
+                        )
+                        layer_parts.append(
+                            f"vmode:{getattr(layer, 'vector_path_mode', '')}"
+                            f":{int(bool(getattr(layer, 'vector_path_closed', True)))}"
+                        )
 
                 # 🔧 关键修复：加入形状相关参数，确保切换形状时缓存失效
                 try:
@@ -246,14 +319,31 @@ class IntelligentRenderCache:
                     logger.warning("静默异常已忽略: except in utils/intelligent_render_cache.py", exc_info=True)
                     pass
                 
-                # 🔧 修复：添加描边参数到缓存键
-                if hasattr(layer, 'stroke_enabled') and getattr(layer, 'stroke_enabled', False):
-                    stroke_width = getattr(layer, 'stroke_width', 1)
-                    stroke_type = getattr(layer, 'stroke_type', 0)
-                    stroke_color = getattr(layer, 'stroke_color', (0, 0, 0, 255))
-                    # 将颜色元组转换为简短的哈希
-                    color_str = f"{stroke_color[0]},{stroke_color[1]},{stroke_color[2]},{stroke_color[3]}"
-                    layer_parts.append(f"stroke:{stroke_width}:{stroke_type}:{color_str}")
+                # 描边参数。同样不能在 stroke_enabled=False 时跳过 ——
+                # 关掉描边 / 改回 0 宽必须换键，否则画布仍然带着旧描边。
+                if hasattr(layer, 'stroke_enabled'):
+                    layer_parts.append(
+                        f"stroke_on:{int(bool(getattr(layer, 'stroke_enabled', False)))}"
+                    )
+                    layer_parts.append(
+                        f"stroke:{getattr(layer, 'stroke_width', 1)}"
+                        f":{getattr(layer, 'stroke_type', 0)}"
+                    )
+                    _sc = getattr(layer, 'stroke_color', (0, 0, 0, 255))
+                    try:
+                        layer_parts.append(
+                            "sc:" + ",".join(str(int(v)) for v in tuple(_sc)[:4])
+                        )
+                    except Exception:
+                        layer_parts.append(f"sc:{_sc}")
+                    layer_parts.append(
+                        f"join:{getattr(layer, 'stroke_join', '')}"
+                        f":{getattr(layer, 'stroke_cap', '')}"
+                    )
+                    layer_parts.append(
+                        f"dash:{getattr(layer, 'stroke_dash_length', 0)}"
+                        f":{getattr(layer, 'stroke_dash_gap', 0)}"
+                    )
                 
                 # 分身与镜像参数
                 if hasattr(layer, 'clone_enabled'):
@@ -294,6 +384,25 @@ class IntelligentRenderCache:
                     layer_parts.append(f"vertical:{int(bool(getattr(layer, 'vertical_layout', False)))}")
                     layer_parts.append(f"autofit:{int(bool(getattr(layer, 'auto_fit_text_box', False)))}")
                     layer_parts.append(f"pad:{int(getattr(layer, 'text_box_padding', 0))}")
+
+                    # 颜色 / 描边 / 背景 / 阴影 / 发光 / 渐变 / 富文本区间：
+                    # 这些字段此前完全没进键，改文字颜色会命中旧图（用户看到「改了没反应」）。
+                    # 用显式状态清单而不是遍历 __dict__，避免把渲染产物（_text_lines 等）
+                    # 和锁对象混进键里造成永不命中。
+                    _state = []
+                    for _attr in _TEXT_KEY_STATE:
+                        if not hasattr(layer, _attr):
+                            continue
+                        try:
+                            _val = getattr(layer, _attr)
+                        except Exception:
+                            continue
+                        _state.append(f"{_attr}={_normalize_key_value(_val)}")
+                    if _state:
+                        layer_parts.append(
+                            "tstate:"
+                            + hashlib.md5("|".join(_state).encode()).hexdigest()[:12]
+                        )
                 
                 key_parts.append(":".join(layer_parts))
             

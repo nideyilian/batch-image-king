@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from pathlib import Path
 import sys
+import threading
+
+logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,6 +23,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", choices=("light", "dark"), help="覆盖并保存界面主题")
     parser.add_argument("--open", dest="open_path", type=Path, help="启动后打开指定 .cmp 项目")
     parser.add_argument("--blank", action="store_true", help="启动为空白文档，不载入内置示例")
+    parser.add_argument(
+        "--open-presets",
+        action="store_true",
+        help="启动时直接进入预设工作台（作为首页）",
+    )
     parser.add_argument("--demo", action="store_true", help="启动内置演示文档")
     parser.add_argument("--show-batch-export", action="store_true", help="启动后打开批量导出面板")
     parser.add_argument("--show-batch-advanced", action="store_true", help="展示批量导出高级策略")
@@ -34,6 +43,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")
     parser.add_argument("--demo-effects", action="store_true", help="为选中图片图层应用演示效果")
     parser.add_argument("--select-layer", type=int, help="启动后选中指定图层索引")
+    parser.add_argument(
+        "--select-preset",
+        type=int,
+        default=None,
+        help="兼容 --show-project-presets：启动后选中预设工作台中的第 N 张卡片（0 起）",
+    )
     parser.add_argument("--duplicate-selected", action="store_true", help="启动后复制当前选中图层")
     parser.add_argument("--demo-tabs", action="store_true", help="启动后创建多个文档标签用于验收")
     parser.add_argument("--demo-shaped", action="store_true", help="启动后创建真实异形图层用于验收")
@@ -104,6 +119,35 @@ def _migrate_legacy_qml_settings() -> None:
     # 只搬一次：之后用户在统一命名空间里的改动不会被旧目录覆盖
     if moved:
         print(f"[qml] 已迁移 {moved} 项 QML 设置到统一应用名")
+
+
+def _schedule_font_warmup(delay_ms: int = 1500) -> None:
+    """首屏渲染完成后，在后台线程预热系统字体索引。
+
+    首次调用 ``TextLayer.get_system_fonts()`` 要遍历字体目录、用 fontTools 解析
+    TTF/TTC 头部，本机实测 935 个字体约 390ms。这次扫描原本发生在用户第一次
+    打开文字属性面板时，整段卡在 GUI 线程上；预热后交互路径直接命中进程级缓存（0ms）。
+
+    只使用 os.walk 与 fontTools，不触碰 QFontDatabase（它绑定了 GUI 线程亲和性），
+    因此可以在非 GUI 线程执行。失败只影响「首次使用回退为同步扫描」，不影响功能。
+    """
+
+    def _spawn() -> None:
+        def _run() -> None:
+            try:
+                from app.models.text_layer import TextLayer
+
+                TextLayer().get_system_fonts()
+            except Exception:
+                logger.debug("字体预热失败，首次使用时会回退为同步扫描", exc_info=True)
+
+        threading.Thread(target=_run, name="font-warmup", daemon=True).start()
+
+    from PySide6.QtCore import QTimer
+
+    # 走 QTimer 而不是直接起线程：确保预热排在首屏渲染与启动画面收尾之后，
+    # 不和首帧抢 CPU。
+    QTimer.singleShot(delay_ms, _spawn)
 
 
 def main(app=None, on_ready=None) -> int:
@@ -449,6 +493,12 @@ def main(app=None, on_ready=None) -> int:
             on_ready(window)
         except Exception as ready_error:  # 启动画面失败不能挡住启动
             debug(f"on_ready failed: {ready_error}")
+    # 字体索引预热：把首次 390ms 的字体扫描挪到空闲时段（截图模式跳过，避免扰动验收时序）
+    if not args.screenshot:
+        try:
+            _schedule_font_warmup()
+        except Exception:
+            logger.debug("字体预热调度失败", exc_info=True)
     # 截图/验收模式：固定用参数尺寸，且不读写窗口几何（否则验收图会被上次尺寸顶掉）
     window.setProperty("screenshotMode", bool(args.screenshot))
     if args.screenshot:
@@ -579,13 +629,40 @@ def main(app=None, on_ready=None) -> int:
 
         QTimer.singleShot(80, open_canvas_presets)
 
-    if args.show_project_presets:
+    # 预设工作台作为首页。
+    #
+    # 触发条件（任一）：
+    #   - `--open-presets` / `--show-project-presets`：显式要求
+    #   - 「没给任何文档相关参数」：即普通双击启动。此时工作台就是首页，
+    #     而不是一张空白画布——用户是奔着"用预设出图"来的，不是来开白纸的。
+    #
+    # 反面条件：给了 --open / --demo / --blank / --select-layer 等，
+    # 说明调用方明确想直接看编辑器（调试、自动化、关联文件打开），不能被抢。
+    open_presets_as_home = bool(args.open_presets or args.show_project_presets) or not (
+        initial_document_requested or args.open_path
+    )
+    if open_presets_as_home:
         def open_project_presets() -> None:
-            drawer = window.findChild(QObject, "projectPresetDrawer")
-            if drawer is None or not QMetaObject.invokeMethod(drawer, "open"):
-                debug("project preset drawer could not be opened")
+            # 预设中心已升级为整页工作台：探测入口改为切到工作台视图，
+            # 不再打开已被取代的右侧抽屉。
+            if not QMetaObject.invokeMethod(window, "openProjectPresetDrawer"):
+                # QML 根对象的普通 function 在部分版本下不暴露给 QMetaObject，
+                # 兜底直接写属性切换工作台。
+                try:
+                    window.setProperty("presetWorkbenchVisible", True)
+                except Exception:
+                    debug("preset workbench could not be opened")
 
         QTimer.singleShot(80, open_project_presets)
+        if args.select_preset is not None:
+            def select_preset_card() -> None:
+                workbench = window.findChild(QObject, "presetWorkbench")
+                if workbench is None:
+                    debug("preset workbench item not found")
+                    return
+                workbench.setProperty("selectPresetIndex", int(args.select_preset))
+
+            QTimer.singleShot(400, select_preset_card)
 
     if args.show_data_relations or args.show_size_match:
         def open_data_relations() -> None:
@@ -684,6 +761,19 @@ def main(app=None, on_ready=None) -> int:
                         print(f"截图保存失败：{output_path}", file=sys.stderr)
                         app.exit(3)
                     return
+                # 工作台是 captureRoot 的兄弟节点（浮层），grabToImage 抓不到它。
+                # 它可见时必须走整窗抓取，否则截图丢失整个工作台。
+                if bool(window.property("presetWorkbenchVisible")):
+                    image = window.grabWindow()
+                    saved = not image.isNull() and image.save(str(output_path), "PNG")
+                    if saved:
+                        print(f"截图已保存：{output_path}")
+                        app.exit(0)
+                    else:
+                        print(f"截图保存失败：{output_path}", file=sys.stderr)
+                        app.exit(3)
+                    return
+
                 capture_item = window.findChild(QQuickItem, "captureRoot")
                 if capture_item is None:
                     raise RuntimeError("未找到 QML 截图根节点")
@@ -713,6 +803,20 @@ def main(app=None, on_ready=None) -> int:
 
     exit_code = app.exec()
     debug(f"event loop exited with code {exit_code}")
+
+    # 事件循环已退出，QML 对象随时可能被销毁。必须先把缩略图后台线程停掉并
+    # 断开 VM 订阅，否则工作线程会在 VM 析构后回调，抛
+    # "libshiboken: Internal C++ object (PresetManagerViewModel) already deleted"。
+    try:
+        project_presets.shutdown()
+    except Exception as error:
+        debug(f"preset view model shutdown failed: {error}")
+    try:
+        from app.utils.preset_thumbnail import shutdown_thumbnail_services
+
+        shutdown_thumbnail_services()
+    except Exception as error:
+        debug(f"thumbnail services shutdown failed: {error}")
     return exit_code
 
 

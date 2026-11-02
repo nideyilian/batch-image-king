@@ -4,21 +4,18 @@
 
 import numpy as np
 from PIL import Image, ImageFilter
-from typing import Tuple, Optional
+from typing import Tuple
 import warnings
 
 def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
+    """安全的打印函数，避免编码问题（注意：不要在此函数内调用自身）"""
     try:
-        safe_print(message)
+        print(message)
     except (UnicodeEncodeError, OSError):
         try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            safe_print(f"[DEBUG] {ascii_message}")
+            print("[DEBUG]", message.encode("ascii", "ignore").decode("ascii"))
         except Exception:
-            # 最后的备选方案
-            safe_print("[DEBUG] Message encoding failed")
+            pass
 
 
 # 抑制numpy警告

@@ -17,7 +17,6 @@ BindingGroup 通过多继承聚合上述 mixin，外部 `from app.models.binding
 import BindingGroup` 写法继续有效。
 """
 
-import os
 import logging
 
 from app.models.binding_group_cache import BindingGroupCache
