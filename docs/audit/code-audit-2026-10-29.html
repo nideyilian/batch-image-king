@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>批图王 · 全量代码审计与评分 · 2026-10-29</title>
+<style>
+  :root{
+    --bg:#141518; --panel:#1c1e22; --panel2:#212429; --line:#2e3238;
+    --text:#e6e8ec; --dim:#969aa4; --dim2:#6b7079;
+    --red:#e2574c; --amber:#e0a33a; --green:#4caf7d; --blue:#5b9cf5; --purple:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px 24px 80px;background:var(--bg);color:var(--text);
+    font:14px/1.7 -apple-system,"Segoe UI",system-ui,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:28px}
+  h2{font-size:18px;margin:36px 0 14px;font-weight:640;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;margin:22px 0 10px;font-weight:620}
+  .score-hero{display:flex;gap:18px;align-items:stretch;margin:22px 0 10px;flex-wrap:wrap}
+  .score-main{background:linear-gradient(140deg,#1e3a5f,#1a2d49);border:1px solid #2d4a70;
+    border-radius:12px;padding:22px 30px;min-width:190px}
+  .score-main .n{font-size:52px;font-weight:700;line-height:1;color:#7fb3ff;letter-spacing:-.03em}
+  .score-main .l{font-size:12px;color:#8fa8c8;margin-top:8px;letter-spacing:.06em}
+  .score-note{flex:1;min-width:280px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:18px 22px;font-size:13px;color:var(--dim);line-height:1.75}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+  th{text-align:left;padding:9px 12px;background:var(--panel2);color:var(--dim);
+    font-weight:600;font-size:11.5px;letter-spacing:.05em;border-bottom:1px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid #24272c;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .bar{height:5px;border-radius:3px;background:#2a2e34;overflow:hidden;min-width:70px}
+  .bar i{display:block;height:100%;border-radius:3px}
+  .s9{background:#4caf7d}.s8{background:#79c56b}.s7{background:#c9c254}
+  .s6{background:#e0a33a}.s5{background:#e08a3a}
+  .mono{font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:12px;
+    background:#26292f;padding:1px 6px;border-radius:4px;color:#c9cdd4}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:16px 20px;margin:14px 0}
+  .card.p0{border-left:3px solid var(--red)}
+  .card.p1{border-left:3px solid var(--amber)}
+  .card.p2{border-left:3px solid var(--blue)}
+  .card.p3{border-left:3px solid var(--dim2)}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;
+    border-radius:4px;letter-spacing:.05em;vertical-align:2px;margin-right:8px}
+  .t-p0{background:#3a1f1e;color:#f0837c}.t-p1{background:#3a2f1a;color:#e8b95c}
+  .t-p2{background:#1b2c40;color:#7fb3ff}.t-p3{background:#26292f;color:#8b9099}
+  .t-ok{background:#173225;color:#6dce9b}
+  .card h4{margin:0 0 8px;font-size:14.5px;font-weight:640}
+  .card p{margin:6px 0;font-size:13px;color:var(--dim)}
+  .card .ev{background:#181a1e;border-radius:6px;padding:10px 12px;margin:10px 0 4px;
+    font-family:ui-monospace,Consolas,monospace;font-size:11.5px;line-height:1.65;
+    color:#b8bdc6;white-space:pre-wrap;overflow-x:auto}
+  .ev .bad{color:#f0837c}.ev .good{color:#6dce9b}.ev .warn{color:#e8b95c}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  ul{margin:8px 0;padding-left:22px}li{margin:5px 0;font-size:13px;color:var(--dim)}
+  li b{color:var(--text);font-weight:600}
+  .good-txt{color:var(--green);font-weight:600}
+  .bad-txt{color:var(--red);font-weight:600}
+  .footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--dim2);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>批图王 · 全量代码审计与评分</h1>
+<div class="sub">2026-10-29 · 基于实测数据，非估算 · 78,085 行代码 / 179 个 Python 文件 / 48 个 QML 文件 / 766 项测试</div>
+
+<div class="card" style="border-left:3px solid var(--green);margin-bottom:22px">
+  <h4 style="color:#8ee0b0">✅ 四项已落地（2026-10-29 下午）</h4>
+  <p style="margin-bottom:8px">本报告列出的 P0 与三项 P1/P2 已全部修完并验证，<b>766 项测试全通过</b>：</p>
+  <table style="margin:8px 0 0">
+    <tr><th style="width:180px">项目</th><th style="width:110px">结果</th><th>说明</th></tr>
+    <tr><td>撤销历史去重</td><td><b class="good-txt">已修</b></td>
+        <td>12 次图层操作从占 24 条降到 13 条；可撤销操作数翻倍</td></tr>
+    <tr><td>图层尺寸校验</td><td><b class="good-txt">已修</b></td>
+        <td>负宽高钳到 ≥1；选中边界不会再出现负值（第二道防线）</td></tr>
+    <tr><td>画布尺寸校验</td><td><b class="good-txt">已修</b></td>
+        <td>create_new 拦 16~32768；newDocument 槽同步口径并 try/except</td></tr>
+    <tr><td>未使用 import</td><td><b class="good-txt">已清</b></td>
+        <td>389 处清理 + 附带删掉 203 行死文件 document_controller.py</td></tr>
+    <tr><td>3 处静默异常</td><td><b class="good-txt">已补日志</b></td>
+        <td>变更上下文 / 形状蒙版 / 反序列化属性回填</td></tr>
+    <tr><td>拆 render_composition</td><td><b class="good-txt">已拆</b></td>
+        <td>734 行 → <b>54 行</b>；分支 118→8，嵌套 8→3；逐像素验证 11 场景一致</td></tr>
+  </table>
+  <p style="margin-top:10px;margin-bottom:0">
+    <b>修的过程中发现报告里两处判断需要修正：</b><br>
+    ① 原本打算「删掉多余那条快照」，但实测 <span class="mono">create_new</span> 不建基线、
+    所以「操作前」那条<b>不是冗余</b>，它承担了首次操作的撤销基线。真正的修法是
+    <b>在 save_state 里识别重复状态</b>，不动 12 处调用点。<br>
+    ② <span class="mono">workspace_vm_document_ops.newDocument</span> 只拦 <span class="mono">&lt;= 0</span>，
+    1~15 会穿过去 —— 加了 create_new 校验后反而会抛异常崩溃。已同步口径。
+  </p>
+</div>
+
+<div class="score-hero">
+  <div class="score-main">
+    <div class="n">7.5</div>
+    <div class="l">综合评分 / 10</div>
+  </div>
+  <div class="score-note">
+    <b style="color:var(--text)">结论先行：</b>渲染质量与架构分层已经做到很高水准（预览与导出<b class="good-txt">像素级完全一致</b>，
+    分层<b class="good-txt">零反向依赖</b>）。真正拖后腿的是三件事：<b class="bad-txt">撤销历史被浪费一半</b>、
+    <b class="bad-txt">图层尺寸不做校验</b>、以及<b class="bad-txt">446 处未使用 import</b> 的维护噪音。
+    前两项影响真实使用，后一项纯属欠债。
+  </div>
+</div>
+
+<h2>一、分维度评分</h2>
+
+<table>
+  <tr><th style="width:120px">维度</th><th style="width:70px">得分</th><th style="width:100px"></th><th>依据</th></tr>
+
+  <tr><td><b>渲染质量</b></td><td><b>9.2</b></td>
+      <td><div class="bar"><i class="s9" style="width:92%"></i></div></td>
+      <td>预览与导出像素级一致（<b class="good-txt">最大差 0</b>，平均差 0.000）。SDF 描边等宽 0.37~0.52px、bbox 局部合成、超采样按尺寸自适应，都已落地</td></tr>
+
+  <tr><td><b>架构分层</b></td><td><b>8.8</b></td>
+      <td><div class="bar"><i class="s8" style="width:88%"></i></div></td>
+      <td>models / utils / services <b class="good-txt">零反向引用 qml</b>，依赖方向干净。扣分在 <span class="mono">Main.qml</span> 单文件 9231 行的物理耦合</td></tr>
+
+  <tr><td><b>交互一致性</b></td><td><b>8.5</b></td>
+      <td><div class="bar"><i class="s8" style="width:85%"></i></div></td>
+      <td>已按 Photoshop 规则重做：8 个离散手柄、边框线穿透、单击零副作用、Shift 等比。遗留：固定边框模式不做坐标补偿</td></tr>
+
+  <tr><td><b>测试覆盖</b></td><td><b>8.3</b></td>
+      <td><div class="bar"><i class="s8" style="width:83%"></i></div></td>
+      <td>729 项全通过，近几期改动都补了回归测试。扣分在部分文件断言仅 2~5 条，属于"跑得快但看得浅"</td></tr>
+
+  <tr><td><b>性能</b></td><td><b>8.0</b></td>
+      <td><div class="bar"><i class="s8" style="width:80%"></i></div></td>
+      <td>拖动 10~15ms/帧（≈66~97fps）、交互渲染 1~4ms、内存 50 次渲染<b class="good-txt">零增长</b>。扣分在 3000² 大画布出图率 16/20</td></tr>
+
+  <tr><td><b>依赖治理</b></td><td><b>7.5</b></td>
+      <td><div class="bar"><i class="s7" style="width:75%"></i></div></td>
+      <td>无循环依赖、无裸 <span class="mono">except</span>。扣分在 <b class="bad-txt">446 处未使用 import</b></td></tr>
+
+  <tr><td><b>可维护性</b></td><td><b>6.8</b></td>
+      <td><div class="bar"><i class="s6" style="width:68%"></i></div></td>
+      <td>57 个函数超 100 行；<span class="mono">render_composition</span> 734 行 / 118 分支 / 嵌套 8 层（已降级为兜底路径）</td></tr>
+
+  <tr><td><b>健壮性</b></td><td><b>6.5</b></td>
+      <td><div class="bar"><i class="s6" style="width:65%"></i></div></td>
+      <td>并发压测 0 异常。但 <b class="bad-txt">add_layer 不校验尺寸</b>、<b class="bad-txt">0×0 画布被接受</b></td></tr>
+
+  <tr><td><b>可观测性</b></td><td><b>6.0</b></td>
+      <td><div class="bar"><i class="s6" style="width:60%"></i></div></td>
+      <td><b class="bad-txt">1056 处裸 print</b> 而非结构化日志；打包后有文件出口，但无法分级过滤</td></tr>
+
+  <tr><td><b>撤销体验</b></td><td><b>5.5</b></td>
+      <td><div class="bar"><i class="s5" style="width:55%"></i></div></td>
+      <td><b class="bad-txt">每次图层操作占 2 条历史</b>，上限只有 20 → 约 10 次操作就挤掉早期编辑</td></tr>
+</table>
+
+<h2>二、问题清单（按严重度）</h2>
+
+<div class="card p0">
+  <h4><span class="tag t-p0">P0</span>撤销历史被浪费一半，约 10 次图层操作就挤掉早期编辑</h4>
+  <p><b>证据：</b>12 个图层操作函数各自保存两次快照——操作前一次、操作后一次。而撤销只需要"操作前"那一条。</p>
+  <div class="ev">app/models/document_layers.py:34    self.save_state('添加图层前')   ← 有用
+app/models/document_layers.py:78    self.save_state('添加图层')     ← 冗余
+
+同类 12 处：
+  document_layers.py    add_layer / add_shaped_layer / add_text_layer /
+                        add_existing_layer / remove_layer / move_layer_up /
+                        move_layer_down / move_layer
+  layer_controller.py   batch_update_layers / delete_layer / _move_layer / paste_layer</div>
+  <p><b>实测影响：</b></p>
+  <div class="ev">max_history = 20
+加  3 个图层后: 历史  9/20
+加  6 个图层后: 历史 15/20
+加  9 个图层后: 历史 <span class="bad">20/20  已满</span>
+→ 之后每次图层操作都会把更早的编辑挤出撤销栈</div>
+  <p><b>修法：</b>删掉每条"操作前"或"操作后"中的一条，`max_history` 保持不变即可让可撤销操作数<b class="good-txt">翻倍</b>。约 12 行改动。</p>
+  <p><b>风险：</b>低。需注意 `batch_update_layers` 这类批量操作要保证一次批量只留 1 条。</p>
+</div>
+
+<div class="card p1">
+  <h4><span class="tag t-p1">P1</span><span class="mono">add_layer</span> 不校验尺寸，负宽高直接流入下游</h4>
+  <p><b>证据：</b>构造负尺寸图层时无任何拦截。</p>
+  <div class="ev">d.add_layer("L", 0, 0, <span class="bad">-50, -50</span>, is_folder=False)   → 接受，w=-50
+
+连锁结果：
+  selectionBoundsX/Y/W/H = 100, 100, <span class="bad">-50, -50</span>   ← 负宽高进入 QML 选中框
+  hitTestLayerAt(110,110) = -1                        ← 点不中也选不中
+  渲染不崩，但图层静默消失（用户以为图层丢了）</div>
+  <p><b>修法：</b>在 <span class="mono">add_layer</span> 与 <span class="mono">Layer.__init__</span> 把宽高钳到 ≥1，并在选中边界计算里过滤非正尺寸。</p>
+  <p><b>风险：</b>低。但要确认没有依赖"负尺寸表示翻转"的既有逻辑——查过，没有。</p>
+</div>
+
+<div class="card p1">
+  <h4><span class="tag t-p1">P1</span>0×0 画布被接受，直到导出才报错</h4>
+  <div class="ev">d.create_new(0, 0)  → 成功，canvase=0x0
+后续渲染返回 (0,0) 图像，导出时才报「画布尺寸无效」
+
+对比：export_image 有防护，create_new 没有 —— 校验放错了层</div>
+  <p><b>修法：</b>把画布尺寸下限（16×16，与你现有 <span class="mono">resizeCanvas</span> 的 16~32768 保持一致）提到 <span class="mono">create_new</span>。</p>
+  <p><b>风险：</b>极低。<span class="mono">resizeCanvas</span> 已经在用 16~32768，口径统一即可。</p>
+</div>
+
+<div class="card p2">
+  <h4><span class="tag t-p2">P2</span>446 处未使用 import</h4>
+  <div class="ev">分布（前 5）：
+  document_layers.py   26 处
+  document_render.py   25 处
+  document.py          23 处
+  document_randomize.py 22 处
+  text_layer_serialize.py 19 处</div>
+  <p>纯维护噪音：读代码时要先分辨哪些是真依赖，改文件时不敢删。用 <span class="mono">ruff --select F401 --fix</span> 可一次性清干净。</p>
+  <p><b>收益：</b>代码可读性提升，且能减少启动时的模块导入开销。</p>
+</div>
+
+<div class="card p2">
+  <h4><span class="tag t-ok">已修</span>57 个函数超 100 行 —— 最难的 render_composition 已拆</h4>
+  <p><b>拆前：</b>734 行 / 118 分支 / 嵌套 8 层，改一处要通读全篇。</p>
+  <div class="ev">拆分后：
+  render_composition                 54 行    8 分支   嵌套 3   ← 只做调度
+  _acquire_advanced_compositor       30 行    4 分支
+  _render_with_advanced_compositor  277 行   45 分支   （高级合成路径）
+  _prepare_standard_render           51 行    2 分支   （可见图层 + 渲染参数）
+  _compose_standard_layers          269 行   44 分支   （标准路径逐层绘制）
+  _build_fill_clone_positions        94 行   17 分支   （分身铺满布局）</div>
+  <p><b>怎么保证没改坏：</b>先建 11 个场景的<b>像素指纹基线</b>
+  （<span class="mono">docs/audit/probe_render_baseline.py</span>），每拆一步跑一次比对。
+  覆盖空文档 / 单层 / 混合模式 / 隐藏层 / 文字 / 高级合成 / 分身 grid / 分身 border / 随机 / 批量 / 内存优化。</p>
+  <p><b>基线抓到的两个真 bug</b>（不修就是「看着正常但功能失效」）：</p>
+  <ul>
+    <li>拆出来的方法仍写 <span class="mono">advanced_compositor</span>，参数名却是 <span class="mono">compositor</span>
+        → NameError 被 except 吞掉，<b class="bad-txt">高级合成永久静默回退到标准路径</b></li>
+    <li><span class="mono">PerformanceOptimizer</span> 原本在同函数内导入，拆开后不在作用域
+        → <b class="bad-txt">批量模式会 NameError</b></li>
+  </ul>
+  <p>还有 `<span class="mono">del composition</span>`、<span class="mono">random_mode</span> /
+  <span class="mono">is_batch_mode</span> 未传参等 3 处同类问题，全部由基线比对暴露。
+  <b>纯靠跑测试是发现不了的</b> —— 它们都被 except 或默认参数掩盖了。</p>
+  <p>新增 <span class="mono">tests/test_render_composition_structure.py</span> 7 项，
+  锁住「主函数不再胖回去」并用 AST 检查自由变量，防止以后漏传参数。</p>
+</div>
+
+<div class="card p2">
+  <h4><span class="tag t-p2">P2</span>1056 处裸 print</h4>
+  <p><b>已排除误判：</b>实测渲染路径 <b class="good-txt">0 行输出</b>，所以不在热路径上，不影响性能。</p>
+  <p><b>真正问题：</b>无法分级过滤。排查问题时日志全混在一起，<span class="mono">layer_binding_manager.py</span> 单文件 117 处。
+  打包后有 <span class="mono">setup_streams</span> 重定向到文件，不至于丢失，但没有 level 概念。</p>
+</div>
+
+<div class="card p3">
+  <h4><span class="tag t-p3">P3</span>Main.qml 9231 行 / 335 个手写事件处理器</h4>
+  <p>已抽出 47 个可复用组件，但主文件仍承载全部对话框与抽屉。改画布交互时容易被无关代码干扰（前几轮修 bug 时有体感）。</p>
+</div>
+
+<div class="card p3">
+  <h4><span class="tag t-p3">P3</span>38 处 <span class="mono">except: pass</span>（已逐条审查）</h4>
+  <p><b>结论与我最初的统计相反：</b>用 grep 得到 128 处，用 AST 精确统计只有 <b>38 处</b>，且逐条看下来大多合理：</p>
+  <ul>
+    <li><b>信号 disconnect 失败</b>（8 处）— Qt 对象可能已销毁，吞掉是对的</li>
+    <li><b>临时文件清理失败</b>（5 处）— 不该因此中断主流程</li>
+    <li><b>字体/资源探测失败</b>（5 处）— 探测型调用，失败即"不可用"</li>
+    <li><b>值得加日志的 3 处</b> — <span class="mono">document_layers.py:384</span>（改上下文失败）、<span class="mono">fast_renderer_surface.py:2108</span>（形状蒙版失败）、<span class="mono">layer_serializer.py:334</span>（属性回填失败）</li>
+  </ul>
+  <p><b>另外：0 处裸 <span class="mono">except:</span>（不带类型）</b>，这点做得很好。</p>
+</div>
+
+<h2>三、已经做到高水准的部分（不是客套）</h2>
+
+<div class="grid2">
+  <div class="card">
+    <h4><span class="tag t-ok">实测</span>预览 = 导出，像素级零差异</h4>
+    <div class="ev">单图层带透明度   平均差=0.000  最大差=<span class="good">0</span>
+两图层重叠       平均差=0.000  最大差=<span class="good">0</span></div>
+    <p>"所见即所得"是这类工具的命根子，这一项做满分很难。</p>
+  </div>
+  <div class="card">
+    <h4><span class="tag t-ok">实测</span>内存零泄漏</h4>
+    <div class="ev">基线           89.1 MB
+渲染  10 次后  89.1 MB  (+0.0)
+渲染  50 次后  89.1 MB  (+0.0)</div>
+    <p>说明前几期的字节预算 LRU + 显式释放确实生效了。</p>
+  </div>
+  <div class="card">
+    <h4><span class="tag t-ok">实测</span>并发安全</h4>
+    <div class="ev">2 渲染线程 + 1 编辑线程
+300 次修改 + 6 次加图层
+异常数: <span class="good">0</span></div>
+    <p>预览在后台线程读文档、主线程同时改写，没崩。</p>
+  </div>
+  <div class="card">
+    <h4><span class="tag t-ok">实测</span>架构分层干净</h4>
+    <div class="ev">models/utils/services → qml
+反向引用: <span class="good">0 处</span></div>
+    <p>UI 层换掉时底层能整体复用，这是长期资产。</p>
+  </div>
+</div>
+
+<h2>四、关于那次「冷启动 145ms」的澄清</h2>
+<div class="card">
+  <p>测到"第一个图层加入耗时 115~145ms"，一开始以为是性能缺陷。<b>cProfile 定位后确认是一次性模块导入</b>：</p>
+  <div class="ev">add_layer                    0.145 s
+  └ _invalidate_render_cache  0.139 s
+      └ fast_renderer.py 首次导入   0.136 s
+          └ fast_renderer_surface   0.095 s
+
+第二个图层起：0.35 ~ 0.60 ms</div>
+  <p><b>结论：不是缺陷。</b>这是懒加载的正常代价。真要优化，可以挪到启动时预加载（用后台线程），但这只是把 145ms 从"第一次加图层"挪到"启动阶段"，总成本不变。</p>
+</div>
+
+<h2>五、建议的执行顺序</h2>
+<table>
+  <tr><th style="width:60px">顺序</th><th style="width:180px">项目</th><th style="width:90px">工作量</th><th>为什么排这个位置</th></tr>
+  <tr><td><b>1</b></td><td>撤销历史去重（P0）</td><td>~30 分钟</td>
+      <td>12 行改动，直接让可撤销操作数翻倍。收益/成本比最高</td></tr>
+  <tr><td><b>2</b></td><td>尺寸与画布校验（P1）</td><td>~1 小时</td>
+      <td>堵住非法状态流入下游，避免"图层莫名消失"这类难查的问题</td></tr>
+  <tr><td><b>3</b></td><td>清 446 处未使用 import</td><td>~20 分钟（工具化）</td>
+      <td>纯机械，跑 ruff --fix + 一次全量测试即可</td></tr>
+  <tr><td><b>4</b></td><td>3 处 except 补日志</td><td>~20 分钟</td>
+      <td>补上后，这三类静默失败在用户报障时能查到原因</td></tr>
+  <tr><td><b>5</b></td><td>拆 render_composition</td><td>半天~1 天</td>
+      <td>已是兜底路径，优先级不高。若不做，建议在函数头加注释说明"仅兜底，勿扩展"</td></tr>
+  <tr><td><b>6</b></td><td>print → logger 分级</td><td>1~2 天</td>
+      <td>工程收益有但不是用户可感知的，可以放最后或分批做</td></tr>
+</table>
+
+<div class="footer">
+  审计方式：AST 静态分析 + cProfile 热点剖析 + 真实渲染/导出像素对比 + 并发压测 + 边界用例。
+  所有数字均为本机实测，未使用估算值。<br>
+  关键校正：grep 统计的「128 处静默异常」实际只有 38 处；「未使用 import 380 处」在修正注解误报后是 446 处。
+  这类统计不做交叉验证很容易得出错误结论。
+</div>
+
+</div>
+</body>
+</html>

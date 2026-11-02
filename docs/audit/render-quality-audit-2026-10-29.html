@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批图王 渲染与交互质量审计 · 2026-10-29</title>
+<style>
+:root{
+  --bg:#12161c; --bg2:#171d25; --bg3:#1e2630; --line:#2a3442;
+  --fg:#dfe7ef; --fg2:#9aa9ba; --fg3:#6b7a8c;
+  --red:#ef5350; --orange:#f0a04b; --yellow:#d8b13a; --green:#4caf7d;
+  --blue:#5b9bd5; --purple:#9b7bd4;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+.wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+
+header{border-bottom:2px solid var(--line);padding-bottom:28px;margin-bottom:40px}
+h1{font-size:30px;margin:0 0 10px;letter-spacing:-.4px;font-weight:650}
+.meta{color:var(--fg3);font-size:13px;font-family:var(--mono)}
+
+h2{font-size:21px;margin:56px 0 20px;padding-left:14px;border-left:3px solid var(--blue);
+   font-weight:620;letter-spacing:-.2px}
+h3{font-size:16px;margin:32px 0 12px;color:var(--fg);font-weight:600}
+h4{font-size:14px;margin:20px 0 8px;color:var(--fg2);font-weight:600;letter-spacing:.3px}
+p{margin:10px 0}
+
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:10px;
+  padding:20px 24px;margin:18px 0}
+.card.hi{border-left:3px solid var(--red)}
+.card.mid{border-left:3px solid var(--orange)}
+.card.low{border-left:3px solid var(--yellow)}
+.card.ok{border-left:3px solid var(--green)}
+
+.tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:11.5px;
+  font-family:var(--mono);font-weight:600;letter-spacing:.4px;vertical-align:2px}
+.t-red{background:rgba(239,83,80,.16);color:#ff8a87}
+.t-orange{background:rgba(240,160,75,.16);color:#f5b878}
+.t-yellow{background:rgba(216,177,58,.16);color:#e2c766}
+.t-green{background:rgba(76,175,125,.16);color:#6fd39f}
+.t-blue{background:rgba(91,155,213,.16);color:#7fb8e8}
+
+code{font-family:var(--mono);font-size:12.5px;background:var(--bg3);
+  padding:1px 6px;border-radius:4px;color:#a8c7e0}
+pre{background:var(--bg3);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;margin:12px 0}
+pre code{background:none;padding:0;font-size:12.5px;line-height:1.65;color:#c3d4e4}
+.cmt{color:#5f7185}
+.hl{color:#ff8a87}
+.gd{color:#6fd39f}
+
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.5px}
+th{text-align:left;padding:9px 12px;background:var(--bg3);color:var(--fg2);
+  font-weight:600;font-size:12px;letter-spacing:.4px;border-bottom:1px solid var(--line)}
+td{padding:9px 12px;border-bottom:1px solid rgba(42,52,66,.6);vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+
+.verdict{background:linear-gradient(135deg,rgba(239,83,80,.09),rgba(240,160,75,.05));
+  border:1px solid rgba(239,83,80,.3);border-radius:12px;padding:24px 28px;margin:24px 0}
+.verdict h3{margin-top:0;color:#ff9b98;font-size:15px}
+
+.stat{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin:22px 0}
+.stat div{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.stat b{display:block;font-size:24px;font-family:var(--mono);font-weight:650;line-height:1.2}
+.stat span{display:block;font-size:12px;color:var(--fg3);margin-top:4px;line-height:1.4}
+.bad{color:#ff8a87}.warn{color:#f5b878}.good{color:#6fd39f}
+
+ul,ol{margin:10px 0;padding-left:22px}
+li{margin:6px 0}
+li::marker{color:var(--fg3)}
+
+.fix{background:rgba(76,175,125,.06);border:1px solid rgba(76,175,125,.22);
+  border-radius:8px;padding:14px 18px;margin:14px 0}
+.fix h4{margin-top:0;color:#7fd4a8}
+.cost{font-size:12.5px;color:var(--fg3);margin-top:10px;font-family:var(--mono);line-height:1.9}
+
+.toc{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:20px 26px;margin:28px 0}
+.toc ol{margin:0;padding-left:20px;font-size:14px}
+.toc a{color:var(--fg2);text-decoration:none;border-bottom:1px dotted var(--line)}
+.toc a:hover{color:var(--blue);border-bottom-color:var(--blue)}
+
+footer{margin-top:72px;padding-top:24px;border-top:1px solid var(--line);
+  color:var(--fg3);font-size:12.5px;line-height:1.9}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>批图王 · 渲染与交互质量审计</h1>
+  <div class="meta">2026-10-29 &nbsp;·&nbsp; 审计范围：渲染管线 / 描边与圆角 / 尺寸匹配 / 批量导出 / QML 视图层 / 缓存体系<br>
+  取证方式：源码逐行核对 + 独立复算脚本（非静态推断），关键数字均为本机实测</div>
+</header>
+
+<div class="verdict">
+  <h3>结论先行</h3>
+  <p>你点名的三个问题<b>全部确认存在，但根因和你猜的不一样</b>——这决定了修法：</p>
+  <ul>
+    <li><b>描边</b>：不是"精度不够"，是<b>外描边完全不工作</b>（实测渲出 <code>0</code> 个像素），内描边与居中描边<b>结果完全相同</b>。属于逻辑错误，不是质量取舍。</li>
+    <li><b>圆角锯齿</b>：填充边缘的 10× 超采样实测<b>没有问题</b>（与 32× 无可辨差异）。真正的锯齿来自<b>预览图缩放</b>和<b>圆角处的描边</b>（径向宽度偏差 ±22%）。你看到的锯齿大概率不是渲染器的错。</li>
+    <li><b>匹配卡顿</b>：确认。但瓶颈不在孔位检测算法（用了 cv2，19ms），而在<b>随机取图时整份缓存被主动跳过</b>，以及<b>素材池全量 stat</b> 被按"每尝试每层"调用（实测单次 288ms）。</li>
+  </ul>
+  <p>另外查出 <b>5 个你没提到、但严重度更高</b>的问题：外描边失效导致的视觉错、整画布 float32 合成（196MB/层/帧）、撤销重做全文档 deepcopy、预览缓存被脏键污染、以及约 1000 行<b>永不执行的描边/圆角死代码</b>（改它等于白改）。</p>
+</div>
+
+<div class="stat">
+  <div><b class="bad">0</b><span>外描边实际像素数<br>（设定 20px，300×300）</span></div>
+  <div><b class="bad">±22%</b><span>圆角处描边宽度偏差<br>7.24~9.04px（设定 8px）</span></div>
+  <div><b class="warn">381 MB</b><span>2000×2000 图层的<br>单通道超采样蒙版</span></div>
+  <div><b class="warn">10 ms</b><span>2000×2000 图层<br>缓存命中时的纯 copy 开销</span></div>
+  <div><b class="warn">288 ms</b><span>3000 文件素材池<br>单次全量 stat</span></div>
+</div>
+
+<div class="card ok" style="margin:30px 0">
+  <h3 style="margin-top:0;color:#6fd39f;font-size:15px">第一期 7 条已落地（2026-10-29 09:20 更新）</h3>
+  <p style="color:var(--fg2);font-size:13.5px;line-height:1.8;margin-top:6px">
+    全部改在<b>真实执行路径</b>上，没有触碰那约 1000 行死代码。描边一项已用端到端脚本
+    <code>docs/audit/repro_stroke.py</code> 验收通过（退出码 0）。
+  </p>
+  <ul style="font-size:13.5px;line-height:1.95;color:var(--fg2)">
+    <li><span class="tag t-green">已修</span> <b>外描边失效</b> — <code>vector_layer_effects.py</code> 新增闭合路径外偏移：内描边不偏移、外描边外移 <code>w</code>、居中外移 <code>w/2</code>，统一朝内绘制 <code>w</code>。实测像素 <b>21320 / 22772 / 24068</b>，外描边从 <b class="bad">0</b> 变为 <b class="good">24068</b>，三种模式不再重合；三角形外偏移实测距边 <b>20.00px</b>（设定 20px），尖角保持 miter。</li>
+    <li><span class="tag t-green">已修</span> <b>safe_print 自递归</b> — 实际有 <b>3 处</b>（报告只列了 2 处）：<code>image_quality_fixer</code> / <code>enhanced_corner_renderer</code> / <code>performance_monitor</code>，三份完全相同的复制粘贴。全部改为直接 <code>print</code>。<br><span class="tag t-yellow">后续</span> 其中 <code>enhanced_corner_renderer.py</code> 是死文件（全仓零调用），第三期已整文件删除 —— 那处修复本身是不必要的，保留记录以示过程。</li>
+    <li><span class="tag t-green">已修</span> <b>预览锯齿</b> — <code>Main.qml</code> 给预览 <code>Image</code> 绑定 <code>sourceSize</code> 为屏幕实际像素数（含 devicePixelRatio），缩放停手 150ms 后换档；<code>preview_image_provider</code> 在请求尺寸不小于原图时跳过重采样。</li>
+    <li><span class="tag t-green">已修</span> <b>随机种子不可复现</b> — 新增 <code>app/utils/stable_seed.py</code>（md5 派生），替换 <code>batch_export_generation</code> 与 <code>batch_export_combination_metadata</code> 里的内置 <code>hash()</code>。实测：<code>PYTHONHASHSEED=0/1/12345</code> 下旧实现三个不同值，新实现恒为 <code>665445757</code>。</li>
+    <li><span class="tag t-green">已修</span> <b>资格判定重复 stat</b> — <code>batch_export_precomputer_v2._is_unique_use_eligible_layer</code> 按图层缓存结果，素材池重建时失效。调用点在「每组合 × 每层」循环里，改前每次都做磁盘检查。</li>
+    <li><span class="tag t-green">已修</span> <b>匹配缓存被跳过</b> — 去掉「存在文件夹源图层就整份放弃缓存」的排除，同时把当前图片纳入 <code>_get_size_match_task_context</code> 的 ctx_key（详见下方修正说明）。</li>
+    <li><span class="tag t-green">已修</span> <b>文字编辑焦点被抢</b> — <code>Main.qml</code> 的 <code>selectionChanged</code> 处理改为「正在编辑 且 选中图层真的换了」才 <code>releaseFocus</code>。</li>
+  </ul>
+</div>
+
+<div class="card ok" style="margin:18px 0">
+  <h3 style="margin-top:0;color:#6fd39f;font-size:15px">第二期 7 条已落地（2026-10-29 09:55 更新）</h3>
+  <p style="color:var(--fg2);font-size:13.5px;line-height:1.8;margin-top:6px">
+    这一期换掉了描边的底层算法，并处理内存与缓存。所有数字都是本机实测，脚本可复跑。
+  </p>
+  <ul style="font-size:13.5px;line-height:1.95;color:var(--fg2)">
+    <li><span class="tag t-green">已换</span> <b>SDF 描边</b> — 新增 <code>app/utils/vector_stroke_sdf.py</code>，用欧氏距离变换取代「超采样 + PIL 画粗线 + 路径外移」。圆弧等距线严格平行于边界，径向宽度极差从 <b class="bad">1.06~1.61px</b>（改前最差 1.80px）降到 <b class="good">0.37~0.52px</b>；内/外/中三种模式由距离符号直接决定，不再靠事后裁剪；<code>stroke_join</code> 的 miter / bevel / round 第一次真正有区别（矩形外描边实测 14977 / 14907 / 14906 像素）。<br><span style="color:var(--fg2)">代价：距离场分辨率按图层面积分档（≤70 万像素用 5×，≤180 万用 4×，≤900 万用 3×，更大用 2×）。小图精度最高，大图优先控内存。</span></li>
+    <li><span class="tag t-green">已修</span> <b>超采样封顶</b> — 原实现固定 10~16×，3000×3000 图层单张 L 蒙版就要 <b class="bad">900MB</b>。改为基准 4~6× 再按 180MB 像素预算递减：3000×3000 → 4×（137MB），4000×4000 → 3×（137MB）。实测 6× 与 10× 的输出均值差只有 0.031/255。</li>
+    <li><span class="tag t-green">已修</span> <b>合成只算 bbox</b> — <code>fast_renderer_composite._high_quality_alpha_composite</code> 原本把整张画布转 float32 再算 sRGB。4800×3200 画布 + 600×400 前景实测：<b class="bad">2137ms / 2242MB</b> → <b class="good">90ms / 48MB</b>；输出与旧实现最大像素差 1（抖动相位差异），bbox 外像素逐位相同。</li>
+    <li><span class="tag t-green">已修</span> <b>缓存键缺字段</b> — <code>intelligent_render_cache</code> 补上文字颜色 / 描边 / 背景 / 阴影 / 发光 / 渐变 / 富文本区间（14 个状态字段），以及单角圆角、自定义路径点与贝塞尔节点。同时去掉「<code>corner_radius &gt; 0</code> 才入键」「描边关闭就跳过」两个条件 —— 这两处会让「改回 0 / 关掉描边」命中旧图。11 项敏感度用例全部通过。</li>
+    <li><span class="tag t-green">已修</span> <b>撤销快照合并</b> — <code>DocumentHistory.save_state</code> 增加 <code>coalesce_key</code> + 400ms 窗口，同一图层同一批属性连续变更替换最后一条。实测拖 30 帧只留 <b>1 条</b>历史，撤销一次即回到拖动前。</li>
+    <li><span class="tag t-green">已修</span> <b>图层缓存字节预算</b> — <code>_layer_surface_cache</code> 原本只有 96 条上限，96 个 2000×2000 图层就是 1.5GB。改为 512MB 字节预算（<code>BTPW_LAYER_CACHE_MB</code> 可调），驱逐与失效时一并 <code>close()</code> 释放 PIL 图像。</li>
+    <li><span class="tag t-green">已修</span> <b>孔位兜底</b> — <code>_detect_inner_holes_fallback</code> 的两趟纯 Python BFS 换成 <code>cv2.connectedComponentsWithStats</code>，倾角搜索改用轮廓点。2000×2000 / 144 孔：<b class="bad">26 秒</b> → <b class="good">138ms</b>，孔数、面积、中心、形状分类完全一致。</li>
+  </ul>
+</div>
+
+<div class="card mid" style="margin:18px 0">
+  <h3 style="margin-top:0;color:#f5b878;font-size:15px">第二期纠正的两处判断</h3>
+  <ul style="font-size:13.5px;line-height:1.95;color:var(--fg2)">
+    <li><b>「撤销重做全文档 deepcopy 是拖参数卡的主因」—— 这条我说错了。</b>实测 12 图层的文档 <code>save_state</code> 单次只要 <b>0.46ms</b>（serialize 0.04ms + deepcopy 0.29ms），撑不起「卡」这个量级。合并的真正收益是<b>撤销栈不被一次拖动撑满</b>（原来拖一次滑块要按几十次 Ctrl+Z 才退回去一帧），属于正确性问题而非性能问题。拖动卡顿得往预览重渲染那边找，那是第三期。</li>
+    <li><b>「超采样 10~16× 是质量必需」—— 也不是。</b>原实现按 <code>8 + stroke_width//2</code> 取倍数，3000×3000 描边 20px 时是 16×，单张 L 蒙版 2.3GB。而 6× 与 10× 的平均差只有 0.031/255（肉眼不可辨），是纯粹的浪费。</li>
+  </ul>
+</div>
+
+<div class="card ok" style="margin:18px 0">
+  <h3 style="margin-top:0;color:#6fd39f;font-size:15px">第三期 结构清理（2026-10-29 10:40 更新）</h3>
+  <p style="color:var(--fg2);font-size:13.5px;line-height:1.8;margin-top:6px">
+    这一期只做减法与收敛，不改渲染结果。净删 <b class="good">6329 行</b>代码，全量测试 684 项保持通过。
+  </p>
+  <ul style="font-size:13.5px;line-height:1.95;color:var(--fg2)">
+    <li><span class="tag t-green">已删</span> <b><code>app/models/layer_effects.py</code>（991 行）</b> — 整个文件零引用。它是 <code>Layer</code> 早期拆分留下的 mixin，但 <code>Layer</code> 的基类列表里<b>没有它</b>（只有 ImageSource / Attrs / Transform / Vector / Rendering / Serialize 六个），方法早已被 <code>LayerRenderingMixin</code> 覆盖。留着会误导后续维护——我在二期就差点去改它。</li>
+    <li><span class="tag t-green">已删</span> <b><code>app/utils/enhanced_corner_renderer.py</code>（421 行）</b> — 唯一引用来自上面那个死文件，随之一起死。附带说明：二期我给这个文件修过一次 <code>safe_print</code> 自递归 bug，回头看不必要，删掉更干净。</li>
+    <li><span class="tag t-green">已删</span> <b><code>text_layer_render.py</code> 的 4 个零引用方法（352 行）</b> — <code>_draw_text_background</code>(134) / <code>_get_rendered_text_bounds</code>(122) / <code>_calculate_visual_center_y</code>(82) / <code>_iter_line_color_segments</code>(13)。全仓搜索确认每个名字只出现一次（就是 def 那一行），连 <code>getattr</code> 字符串调用都没有。</li>
+    <li><span class="tag t-green">已删</span> <b>顺手扫出的 9 个零引用模块（4565 行）</b> — 报告里没列，收尾时用「导入图 + 顶层符号引用」扫出来的：<br>
+      <code>models/layer_image</code> 1119 · <code>layer_vector</code> 819 · <code>utils/modern_style_renderer</code> 837 · <code>optimized_image_processor</code> 491 · <code>layer_attrs</code> 450 · <code>layer_transform</code> 307 · <code>utils/ui_optimizer</code> 290 · <code>document_manager</code> 135 · <code>preset_thumbnail_service</code> 117。<br>
+      都是 <code>layer_new.py</code> 拆分前的旧图层类与早期工具类，主符号在全仓只出现一次（就是定义那行）。<br>
+      <b>删前专门核了序列化兼容</b>：<code>document_serializer</code> 存的是 <b>dict + 字符串 type 标记</b>（<code>image</code> / <code>text</code> / <code>shaped</code> / <code>group</code>），不 pickle 类对象；<code>presets</code> 文件 803 字节经 <code>pickletools</code> 解析<b>零 GLOBAL 引用</b>。所以老 <code>.cmp</code> 项目打开不受影响。<br>
+      <code>utils/shortcut_contract.py</code> 看着也零引用，但 <code>tests/test_shortcut_contract.py</code> 依赖它，是快捷键的设计契约，<b>保留</b>。</li>
+    <li><span class="tag t-green">已合并</span> <b>复制图层两份实现合流</b> — 抽出 <code>_clone_layer()</code>，<code>duplicateSelectedLayer</code> 与 <code>duplicateSelectedLayers</code> 都改调它。<br>
+      <b>合流时发现两份实现已经漂移出两个真 bug</b>：单层版漏了 <code>set_parent_group_id</code>（把组内图层复制出来会脱离原组），多选版漏了连 <code>changed</code> 信号（副本改属性不触发文档级重绘）。两份各自缺了对方的一半，合流后同时具备。</li>
+    <li><span class="tag t-green">已收敛</span> <b>3 处手写收尾块并入 <code>_finish_arrangement</code></b> — 删除单层、前移/后移、置于顶层/底层。给该函数加了 <code>history</code> 开关：这三个调用方底下（<code>remove_layer</code> / <code>move_layer_up/down</code>）已在改动<b>前</b>存过 "xxx前" 快照，再存一条会把撤销栈条目翻倍。<br>
+      收敛顺带补齐了它们原本漏掉的 <code>bump_hit_test_version()</code> 与 <code>layer_changed</code> 信号。</li>
+    <li><span class="tag t-green">已改</span> <b>字体索引预热</b> — 首次 <code>get_system_fonts()</code> 要遍历字体目录 + 用 fontTools 解析 TTF/TTC 头部，本机 935 个字体实测 <b class="bad">388.6ms</b>，而它原本发生在你第一次点开文字属性面板的那一刻，整段卡在 GUI 线程。改为首屏渲染完成后 1.5s，后台线程预热一次（只碰文件系统与 fontTools，不碰有线程亲和的 <code>QFontDatabase</code>）。预热后主线程首次调用 <b class="good">0.26ms</b>。</li>
+  </ul>
+</div>
+
+<div class="card mid" style="margin:18px 0">
+  <h3 style="margin-top:0;color:#f5b878;font-size:15px">第三期纠正的四处判断</h3>
+  <ul style="font-size:13.5px;line-height:1.95;color:var(--fg2)">
+    <li><b>「<code>text_layer_render.py</code> 有 450 行无调用方法」—— 高估了，实际 352 行。</b>我用 AST 把全仓 <code>.py</code> 里的每个标识符出现次数都数了一遍，只找到 4 个真正零引用的方法。其余方法都至少被 <code>_render_text_internal</code> 或垂直排版分支调用。</li>
+    <li><b>「<code>intelligent_render_cache.py:475-482</code> 是恒 <code>False</code> 的函数」—— 现在已找不到。</b>二期改缓存键时那段代码已经重构掉了，当前文件里没有任何"函数体只有一句 <code>return 常量</code>"的函数。这条按「已不存在」结案。</li>
+    <li><b>「reset + 4 emit + preview + status 这套块复制了 9 处」—— 描述不准确。</b>这套块<b>早就抽成 <code>_finish_arrangement</code></b>，9 处是<b>调用</b>它（正确做法），真正手写重复只有 3 处，已收敛。<br>
+      另有第 4 处 <code>toggleLayerGroupExpanded</code> 看着像，但<b>故意不动</b>：它改的是"组展开/收起"这个纯 UI 状态，不该触发预览重渲染，收敛进去等于每展开一次组就白渲染一遍。</li>
+    <li><b>「预览渲染同步阻塞、需要异步化」—— 已经不成立。</b><code>workspace_vm_preview</code> 早就是 <code>QThreadPool</code> + generation 令牌 + <code>_render_pending</code> 合并 + 取消令牌的异步管线，连"渲染中来新请求"都做了合并。<br>
+      真正还卡在主线程的只有 <code>exportImageTo</code>：<code>_set_busy(True)</code> 设完属性就同步进渲染，事件循环被占住，<b>那个"忙碌"提示根本画不出来</b>，界面一直冻到导出结束。这条不是"清理"，是"给导出加进度与取消"，工作量单独算，没有混在这一期里做。</li>
+    <li><b>「<code>selectionBounds</code> 四属性合一」—— 实测后判断不值得改。</b>20 个图层时，QML 一个绑定块读 X/Y/W/H 四个属性合计 <b>0.54ms</b>（单次 <code>_selection_bounds</code> 135µs，每次都要 <code>expand_group_indices</code> + 遍历）。合成一个 <code>QRect</code> 能省 0.4ms/帧，但要改 <code>Main.qml</code> 里 20 处三元表达式，回归风险（选中框位置错位）大于收益。真要优化，该优化的是那 20 处三元表达式本身的可读性。</li>
+  </ul>
+</div>
+
+<div class="card mid" style="margin:18px 0">
+  <h3 style="margin-top:0;color:#f5b878;font-size:15px">执行中修正的三处判断（与我最初的结论有出入）</h3>
+  <ul style="font-size:13.5px;line-height:1.95;color:var(--fg2)">
+    <li><b>「素材池全量 stat」说法不准确。</b>原代码是 <code>any(...)</code> 短路，池里第一张命中就只 stat 一次。真正的问题是<b>同一个判定被重复调用</b>（每组合 × 每层），所以改成按图层缓存，而不是预建文件集合。</li>
+    <li><b>「匹配缓存被跳过」只是表层。</b>还有一层更隐蔽：<code>_get_size_match_task_context</code> 的 <code>ctx_key</code> 只含文档 id / 图层身份 / 关系哈希，<b>不含当前图片</b>。随机换图后它仍返回旧的 <code>surf_key</code>，下游缓存就会命中<b>另一张图的孔位</b>。只放开外层缓存反而会放大这个错误，必须两处一起改。</li>
+    <li><b>「圆角锯齿来自预览缩放」这一条我仍然只有间接证据。</b>已按此修复（加 <code>sourceSize</code>），但没有实机截图对比。若你在 100% 缩放下仍看到阶梯，请直接推翻我。</li>
+  </ul>
+</div>
+
+<div class="toc">
+  <b style="font-size:13px;color:var(--fg2)">目录</b>
+  <ol>
+    <li><a href="#p1">描边：外描边失效 / 内外不分 / 圆弧不等宽</a></li>
+    <li><a href="#p2">圆角锯齿：锯齿不在你以为的地方</a></li>
+    <li><a href="#p3">尺寸匹配：卡顿的真实成因</a></li>
+    <li><a href="#p4">你没发现的问题 · 高优先级</a></li>
+    <li><a href="#p5">你没发现的问题 · 中优先级</a></li>
+    <li><a href="#p6">优化方案（分三期，带成本与风险）</a></li>
+    <li><a href="#p7">验收标准</a></li>
+    <li><a href="#p8">什么条件下我改口</a></li>
+  </ol>
+</div>
+
+<h2 id="p1">一、描边：外描边失效 / 内外不分 / 圆弧不等宽</h2>
+
+<h3>1.1 先清一个坑：有 1000 行描边代码永远不会执行</h3>
+<p>项目里存在两套描边实现，一套在 <code>layer_effects.py</code> + <code>layer_rendering_mixin.py</code>（约 1000 行，含"现代样式渲染器"、增强圆角、终极圆角三级降级），另一套在 <code>utils/vector_layer_effects.py</code>。</p>
+<p>分流开关是 <code>_use_rectangle_vector_pipeline()</code>：</p>
+<pre><code><span class="cmt"># app/models/layer_vector_mixin.py:148</span>
+def _use_rectangle_vector_pipeline(self, stroke_on):
+    if self.shape_type != ShapeType.RECTANGLE:
+        return True                       <span class="cmt"># 非矩形 → 矢量管线</span>
+    return bool(self.vector_path_enabled or stroke_on or self.corner_radius &gt; 0
+                or ...)                   <span class="cmt"># 有描边/有圆角 → 矢量管线</span></code></pre>
+<p>而调用处：</p>
+<pre><code><span class="cmt"># app/models/layer_rendering_mixin.py:171-194</span>
+if use_vector_pipeline:
+    ...apply_vector_path_effects(...)
+elif stroke_enabled:                      <span class="hl">← stroke_enabled 时 use_vector_pipeline 必为 True</span>
+    if self.stroke_type == 0: self._apply_inner_stroke(...)   <span class="hl">← 永不执行</span></code></pre>
+<p><b>结论：只要开描边，就一定走矢量管线；<code>_apply_inner_stroke</code> / <code>_apply_center_stroke</code> / <code>_apply_outer_stroke</code> 三个函数、以及整套 <code>enhanced_corner_renderer.py</code> 都是死代码。</b>维护时若去改它们，改动不会出现在任何一张图上。这一条必须先确认，否则后面所有优化都会打偏。</p>
+<p style="color:var(--fg2);font-size:13.5px">顺带：这三个死函数开头还各有一句 <code>raise RuntimeError("force_legacy_stroke_pipeline")</code> 被自己的 <code>except</code> 捕获（<code>layer_effects.py:359/434/512</code>），即使将来被复活，也会每次描边抛一次异常 + 写一条带完整 traceback 的 WARNING 日志。</p>
+
+<h3>1.2 外描边（stroke_type=2）100% 失效</h3>
+<p>唯一真正执行的描边路径在 <code>vector_layer_effects.py:355-373</code>：</p>
+<pre><code>stroke_mask = draw_polygon_outline_mask(...)          <span class="cmt"># 沿路径画 stroke_w 宽的线</span>
+if params.stroke_type == 0:                            <span class="cmt"># 内描边</span>
+    stroke_mask = ImageChops.multiply(stroke_mask, base_mask)
+elif params.stroke_type == 2:                          <span class="cmt"># 外描边</span>
+    stroke_mask = ImageChops.multiply(stroke_mask, ImageChops.invert(base_mask))</code></pre>
+<p>问题在 <code>draw_polygon_outline_mask</code>（<code>:246</code>）用的是 <code>draw.polygon(..., outline=255, width=stroke_w)</code>。PIL 的 polygon outline 是<b>向路径内侧</b>画的，整圈描边都落在填充区内部。于是：</p>
+<table>
+  <thead><tr><th>描边模式</th><th class="num">描边蒙版落点（左边缘 x 坐标）</th><th class="num">最终非零像素</th><th>实际效果</th></tr></thead>
+  <tbody>
+    <tr><td>内描边 type=0</td><td class="num">x=23..42</td><td class="num">22400</td><td>正常（但见 1.3）</td></tr>
+    <tr><td>居中描边 type=1</td><td class="num">x=23..42</td><td class="num">22400</td><td><b>与内描边像素级相同</b></td></tr>
+    <tr><td>外描边 type=2</td><td class="num">x=23..42（全在填充内）</td><td class="num bad">0</td><td><b>被 invert 裁光，什么都没有</b></td></tr>
+  </tbody>
+</table>
+<p style="color:var(--fg2);font-size:13.3px">
+复现条件：300×300、描边 20px，完全按 <code>apply_vector_path_effects</code> 的 <code>outside_expand</code> 逻辑复算，见脚本 <code>docs/audit/repro_stroke.py</code>。<br>
+上表为<b>无圆角</b>数据：内描边与居中描边像素级完全相同。<b>带 40px 圆角</b>时为 21328 / 21360 / 0 —— 差 0.15%（圆角处描边略微溢出抗锯齿边缘），视觉上仍不可分辨。<b>外描边两种情况下都是 0。</b></p>
+
+<h3>1.3 内描边 = 居中描边，用户选"内"和"居中"没区别</h3>
+<p>因为描边全部落在填充内部，"内描边 ∩ 填充"几乎原样保留了整圈描边。结果：<b>无圆角时与居中描边完全等价（像素级相同），有圆角时只差 0.15%</b>。这就是你感觉"描边不准确"最直接的来源——三个选项实际只有两个结果，其中一个是空。</p>
+
+<h3>1.4 圆角处的描边不等宽（±22%）</h3>
+<p>沿折线画粗线，在圆弧段相邻线段的接头处会叠厚。实测 8px 描边、80px 圆角的径向宽度：</p>
+<pre><code>185° → 9.04px    205° → 8.74px    225° → 8.48px    245° → 8.74px    265° → 9.04px
+195° → 7.24px    215° → 8.16px    235° → 8.16px    255° → 7.24px
+                  偏差 = 7.24 ~ 9.04px，即 ±22%</code></pre>
+<p>另外 <code>stroke_join</code> 的 <code>miter</code> 与 <code>bevel</code> 在这个实现里<b>没有任何区别</b>——<code>:242-246</code> 只对 <code>round</code> 做了分支，其余都走同一个 <code>draw.polygon</code>。设置项是假的。</p>
+
+<div class="fix">
+  <h4>优化方案 A：改用有符号距离场（SDF）描边</h4>
+  <p>一次距离变换同时解决"内外不分"、"圆弧不等宽"、"锯齿"三件事，且天然抗锯齿：</p>
+  <pre><code>import cv2, numpy as np
+
+<span class="cmt"># base: 形状填充蒙版 uint8 0/255（已有）</span>
+dist_in  = cv2.distanceTransform(base, cv2.DIST_L2, 5)      <span class="cmt"># 到边界的欧氏距离</span>
+dist_out = cv2.distanceTransform(255 - base, cv2.DIST_L2, 5)
+sdf = dist_in - dist_out                                     <span class="cmt"># 正=内部，负=外部，单位 px</span>
+
+<span class="cmt"># 三种模式统一定义，宽度绝对相等</span>
+inner  = np.clip((sdf + 0) / w, 0, 1) * np.clip((w - sdf) / 1, 0, 1)   <span class="cmt"># 0 &lt;= sdf &lt;= w</span>
+outer  = np.clip((-sdf) / w, 0, 1)                                     <span class="cmt"># -w &lt;= sdf &lt;= 0</span>
+center = np.abs(sdf) &lt;= w / 2</code></pre>
+  <p>关键收益：不再需要沿折线画粗线，圆角与直边的宽度<b>由距离场保证完全一致</b>；边缘是连续值，抗锯齿不依赖超采样倍数。这也顺带解决了 1.2 的位置错误（SDF 的符号本身就区分了内外）。</p>
+  <div class="cost">
+    成本：80~120 行改动，集中在 vector_layer_effects.py<br>
+    风险：低。SDF 与现有 mask 产物格式一致，可保留旧实现做 A/B 开关<br>
+    性能：2000×2000 单次 distanceTransform ≈ 8~15ms，比当前 10× 超采样（381MB 分配）更快更省内存
+  </div>
+</div>
+
+<div class="fix">
+  <h4>优化方案 B（不想引入 SDF 时的最小修补）</h4>
+  <p>如果只想先止血、不重写几何：</p>
+  <ol>
+    <li>画 outline 时把宽度改成 <code>stroke_w * 2</code>，这样内外各 <code>stroke_w</code>，再分别按内外裁剪。内/外/居中立刻正确，圆弧宽度也随之对称。</li>
+    <li><code>stroke_join</code> 补 <code>bevel</code> 分支（<code>draw.line(..., joint="curve")</code> vs <code>draw.polygon</code>），或明确从 UI 移除这个选项——不要留一个无效设置。</li>
+    <li>修 <code>outside_expand</code>：外描边需要 <code>stroke_w</code> 的单边外扩（现在有了，但因为 1.2 全都白扩）。</li>
+  </ol>
+  <div class="cost">成本：约 20 行；风险：极低；收益：三个描边模式立刻可用，但圆弧仍偏离 ±20%，做不到"精确"</div>
+</div>
+
+<h2 id="p2">二、圆角锯齿：锯齿不在你以为的地方</h2>
+
+<h3>2.1 我原以为的问题，实测不成立</h3>
+<p>最初怀疑圆角弧段离散化不够（<code>build_rounded_rect_outline_points</code> 固定 24 段）。复算后<b>这个怀疑被否定</b>，如实说明：</p>
+<table>
+  <thead><tr><th class="num">圆角半径</th><th class="num">每段圆心角</th><th class="num">弦长</th><th class="num">弦高误差</th><th>判定</th></tr></thead>
+  <tbody>
+    <tr><td class="num">8 px</td><td class="num">3.75°</td><td class="num">0.52 px</td><td class="num">0.004 px</td><td class="good">无问题</td></tr>
+    <tr><td class="num">80 px</td><td class="num">3.75°</td><td class="num">5.24 px</td><td class="num">0.043 px</td><td class="good">无问题</td></tr>
+    <tr><td class="num">400 px</td><td class="num">3.75°</td><td class="num">26.2 px</td><td class="num">0.214 px</td><td class="good">肉眼不可见</td></tr>
+  </tbody>
+</table>
+<p>90° 圆弧用 24 段，每段只有 3.75°，误差远低于 1px。渲染成图放大 4 倍与 32× 超采样对比，<b>边缘平滑度无可辨差异</b>（半透明过渡像素 777 vs 792，边界半径偏差同量级）。10× BOX 降采样对填充边缘是够用的。</p>
+
+<h3>2.2 真正的锯齿来源（按可能性排序）</h3>
+<table>
+  <thead><tr><th>来源</th><th>位置</th><th>为什么产生锯齿</th><th class="num">优先级</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>预览图缩放</b></td>
+      <td><code>Main.qml:5706-5714</code></td>
+      <td>预览 <code>Image</code> 既没设 <code>sourceSize</code> 又 <code>cache:false</code>：全尺寸纹理（4000×4000 ≈ 64MB 显存）缩到窗口大小显示，Qt 线性采样无 mipmap，缩小比例大时圆弧出现阶梯。这是"看画布有锯齿"的最可能原因</td>
+      <td class="num bad">P0</td>
+    </tr>
+    <tr>
+      <td><b>圆角描边</b></td>
+      <td><code>vector_layer_effects.py:246</code></td>
+      <td>沿折线画粗线，圆弧接头处灰阶突变。叠在圆角外侧，视觉上就是"圆角毛边"（实测宽度偏差 ±22%）</td>
+      <td class="num bad">P0</td>
+    </tr>
+    <tr>
+      <td><b>二次量化</b></td>
+      <td><code>vector_layer_effects.py:347</code></td>
+      <td><code>putalpha(ImageChops.multiply(...))</code> 把 float 抗锯齿结果落成 uint8 再乘一次，边缘灰阶被量化两遍，损失约 1 级精度</td>
+      <td class="num warn">P2</td>
+    </tr>
+    <tr>
+      <td><b>大图降级</b></td>
+      <td><code>vector_layer_effects.py:14-18</code></td>
+      <td>超采样固定 10× 起：2000×2000 图层 = 381MB 单通道，3000×3000 = 1.45GB。到不了这个内存时进程会被系统挤压或直接失败，<b>失败后没有 fallback 到低倍率</b></td>
+      <td class="num bad">P1</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="fix">
+  <h4>优化方案</h4>
+  <ol>
+    <li><b>预览链路（收益最大、改动最小）</b>：给预览 <code>Image</code> 设 <code>sourceSize: Qt.size(width*dpr, height*dpr)</code>，让解码端直接出目标尺寸；<code>cache</code> 打开并靠 URL revision 控制失效。仅此一项就能消掉缩放假锯齿。</li>
+    <li><b>超采样自适应</b>：把固定 10× 改成按输出尺寸封顶——<code>scale = clamp(2048 // max(w,h), 2, 10)</code>，保证中间蒙版不超过 ~2048²，内存从 381MB 降到 16MB 量级，仍保留足够灰阶。</li>
+    <li><b>消掉二次量化</b>：SDF 方案下全程 float32，最后一次性落 uint8，不做 multiply 链。</li>
+  </ol>
+  <div class="cost">成本：预览 3 行 + 超采样 5 行；风险：低；收益：大图不再爆内存、预览锯齿消失</div>
+</div>
+
+<h2 id="p3">三、尺寸匹配：卡顿的真实成因</h2>
+
+<p>先说好的部分：孔位检测主路径用了 <code>cv2.findContours</code>，实测 2000×2000 带 144 个孔 = <b>19.3ms</b>，算法本身没问题。卡顿来自三处外围开销。</p>
+
+<h3>3.1 随机取图时，整份匹配缓存被主动跳过</h3>
+<pre><code><span class="cmt"># app/utils/fast_renderer_surface.py:648-664</span>
+session_key = (id(document), tuple(session_parts), relations_hash, was_just_loaded)
+<span class="hl">if not has_random_source:</span>          <span class="cmt">← 只要随机取图，整个会话缓存不查也不用</span>
+    with self._size_match_override_session_lock:
+        _cached = self._size_match_override_session_cache.get(session_key)
+        if _cached is not None:
+            return dict(_cached)</code></pre>
+<p>批量导出时随机取图是<b>常态</b>而非例外，等于这个缓存形同虚设：每张图都要把所有匹配关系（孔位 → 目标图层位置/尺寸/旋转）从头算一遍。</p>
+<p>但随机只影响<b>源图层的像素内容</b>，而孔位是几何属性。真正该做的不是放弃缓存，而是<b>把随机参数纳入 key</b>：</p>
+<div class="fix">
+  <h4>优化方案</h4>
+  <pre><code><span class="cmt"># 方案：区分「几何缓存」与「内容」</span>
+<span class="cmt"># 1) 孔位只依赖 alpha 形状 → 按 (源图层, 遮罩参数) 缓存，与随机取图无关</span>
+holes = self._get_inner_holes_cached(source_layer, document, was_just_loaded, relation)
+<span class="cmt"># 这是已有缓存，问题在于上游因 has_random_source 整段跳过，根本没走到它</span>
+
+<span class="cmt"># 2) override 的 key 里带上随机种子，而不是无条件放弃</span>
+if has_random_source:
+    session_key = session_key + (self._current_random_seed(document),)</code></pre>
+  <div class="cost">成本：约 15 行；风险：中（要确认随机种子在同一次导出内稳定）；收益：批量导出时匹配阶段开销可降一个数量级</div>
+</div>
+
+<h3>3.2 素材池全量 stat 被按"每尝试每层"调用</h3>
+<pre><code><span class="cmt"># app/utils/batch_export_precomputer_v2.py:528</span>
+any(... os.path.isfile(path) ... for path in 整个素材池)</code></pre>
+<p>实测：3000 个文件全量 <code>isfile</code> = <b>288ms</b>。被 <code>batch_export_generation.py</code> 的 471 / 748 / 1052 / 1136 四处按"每尝试每层"调用。5000 次尝试 × 5 层 = 25000 次全量扫描。<b>这是数量级错误，不是优化项。</b></p>
+<div class="fix">
+  <h4>优化方案</h4>
+  <p>素材池是只读的，扫描一次建 <code>set</code> 常驻即可；文件增删由目录监听或导出开始时一次刷新兜住。</p>
+  <pre><code>self._pool_files: set[str] = {p for p in pool if os.path.isfile(p)}   <span class="cmt"># 每个池一次</span>
+<span class="cmt"># 之后一律 self._pool_files 成员判断，O(1)</span></code></pre>
+  <div class="cost">成本：约 10 行；风险：低（需在导出开始/换目录时失效）；收益：单此一项可省数十秒到数分钟</div>
+</div>
+
+<h3>3.3 孔位 fallback 是纯 Python 逐像素 BFS</h3>
+<p><code>fast_renderer_surface.py:1209-1399</code> 的 <code>_detect_inner_holes_fallback</code> 用 <code>deque</code> 逐像素四连通 BFS，2000×2000 图要 push/pop 数百万个 tuple。虽然只在 cv2 抛异常时走，但它是<b>静默兜底</b>：一旦触发，单张就要数秒。</p>
+<div class="fix">
+  <p>用 <code>cv2.connectedComponentsWithStats</code> 一次替代（C 实现），或 <code>scipy.ndimage.label</code>。既然已有 cv2 依赖，这个 fallback 没有理由存在。</p>
+  <div class="cost">成本：约 30 行；风险：低；收益：兜底路径从"数秒"到"20ms"</div>
+</div>
+
+<h2 id="p4">四、你没发现的问题 · 高优先级</h2>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 整画布 float32 合成，单层单帧 196MB</h3>
+  <p><code>app/utils/fast_renderer_composite.py:665-666, 713, 719</code></p>
+  <p>为贴一个小图层，把<b>整张画布</b>转 float32：<code>np.array(...)/255</code> → <code>bg.copy()</code> → 全画布抖动 → 转回 uint8。4800×3200 RGBA 一次 ≈ <b>196MB/层/帧</b>，且预览模式下只要图层含半透明像素就走这条路（<code>:558-559</code>）。</p>
+  <p><b>方案</b>：只对图层 bbox 区域做 float 运算；或全程 uint8 + <code>Image.alpha_composite</code>（已高度优化，无 numpy 往返）。<b>成本</b>：40 行；<b>风险</b>：中（抖动逻辑要保留）；<b>收益</b>：合成阶段内存降 2 个数量级。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 撤销重做：每次属性变更全文档 deepcopy</h3>
+  <p><code>workspace_vm_edit_ops.py:249-273</code> → <code>document.py:254-270</code></p>
+  <p><code>save_state()</code> = <code>serialize_layer_tree</code> + 3 次 <code>deepcopy</code> 的<b>整文档快照</b>，挂在每一个属性 setter 上。只有不透明度做了合并（<code>workspace_vm_effects.py:416-481</code>），<code>setSelectedStrokeWidth</code>、<code>setSelectedTextBoxPadding</code> 等几十个连续可调值全是逐次全量快照。</p>
+  <p>拖一次描边宽度滑块 = 几十次整文档快照。这是"拖参数卡"的主因。</p>
+  <p><b>方案</b>：把已有的"连续值合并"提炼成 <code>@coalesce("stroke_width", 300ms)</code> 装饰器，覆盖所有滑块型 setter；或改为增量 command（只记 diff）。<b>成本</b>：60 行 + 逐个 setter 标注；<b>风险</b>：低；<b>收益</b>：拖参数流畅度显著提升。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 预览渲染：<code>force</code> 是死参数，没有脏检查</h3>
+  <p><code>workspace_vm_preview.py:24-25</code>：<code>del force</code> 直接丢弃。全工程 33 处 <code>requestPreview(force=True)</code> 与普通调用<b>完全等价</b>。同时 <code>_start_preview_render</code>（:86-118）不比较"上次渲染时文档是否已变"，<code>_render_pending</code>（:144-146）会对同一状态重复渲染。</p>
+  <p><b>方案</b>：<code>_last_render_key</code> 记录（文档版本号 + 视口 + 缩放），未变直接返回；<code>force</code> 真正参与判断。<b>成本</b>：25 行；<b>风险</b>：低；<b>收益</b>：消除无意义重渲染。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 预览缓存被脏键污染：改文字颜色命中旧图</h3>
+  <p><code>app/utils/intelligent_render_cache.py:280-296</code></p>
+  <p>预览缓存键只含文本 hash、字体、字号、对齐、行距、字距、边距，<b>缺</b> <code>text_color</code>、<code>text_color_ranges</code>、<code>font_size_ranges</code>、渐变、背景、阴影、发光。改文字颜色后仍命中旧图，用户会看到"改了没反应"。</p>
+  <p>同类问题：<code>render_cache_keys.py:16-31</code> 分身位置键缺 <code>clone_rows/columns/spacing</code>，改分身行列后位置永远取旧值。</p>
+  <p><b>方案</b>：缓存键改为"渲染参数对象的结构化 hash"（对参与渲染的全部字段做一次 tuple → hash），而不是手写字段清单——手写清单必然会漏。<b>成本</b>：50 行，但能一次性杜绝这类 bug；<b>风险</b>：低；<b>收益</b>：消除"改了没反应"类投诉。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 图层属性 getter 每次 O(n) 重建显示列表</h3>
+  <p><code>workspace_vm_view.py:276</code> → <code>layer_list_model.py:189/200/56-61</code></p>
+  <p>几乎每个 <code>@Property</code>（<code>selectedX/Y/Width/Height...</code>）都调 <code>_selected_layer()</code>，而它走 <code>layer_at()</code> → <code>rowCount()</code> → <code>_display_entries()</code>（重建 group_map + 遍历全部图层）。<b>读一个数字 = 一次全量扫描。</b></p>
+  <p><code>data()</code>（<code>:67</code>）每次取一个 role 都重建一次；delegate 声明了 13 个 role，等于每行 13 次构建，100 图层滚动一次 = 上万次。</p>
+  <p><b>方案</b>：<code>_display_entries()</code> 结果缓存，仅结构变更时失效；<code>_selected_layer()</code> 直接 <code>document.layers[idx]</code>。<b>成本</b>：30 行；<b>风险</b>：低；<b>收益</b>：面板滚动/选中响应数量级提升。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 两处 <code>safe_print</code> 无限递归</h3>
+  <p><code>app/utils/image_quality_fixer.py:10-21</code> 和 <code>app/utils/enhanced_corner_renderer.py:11-22</code></p>
+  <pre><code>def safe_print(message):
+    try:
+        safe_print(message)      <span class="hl">← 调用自己</span>
+    except (UnicodeEncodeError, OSError):
+        safe_print(...)           <span class="hl">← 再次调用自己</span></code></pre>
+  <p>本意是"编码失败时降级"，实际是无限递归 → <code>RecursionError</code>，把原始异常也吞掉。而这两个模块都在渲染热路径上。</p>
+  <p><b>方案</b>：改成 <code>print(message.encode('ascii','ignore').decode())</code> 或直接用项目的 <code>print_utils.safe_print</code>。<b>成本</b>：4 行；<b>风险</b>：无。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 批量导出：每层每任务重复解码图片，结果白做</h3>
+  <p><code>app/utils/obe_task_render.py:686-694</code></p>
+  <p>每层每任务手工调 <code>layer._load_and_process_image(image_path)</code>（磁盘解码 + 缩放 + 2 次全图 copy），结果只写进 <code>_cached_image</code>；而渲染器 <code>fast_renderer_composite.py:200-213</code> 的缓存检查<b>已整段注释</b>，实际走 preload + <code>_process_image</code>。这份预处理 100% 白做。</p>
+  <p><b>方案</b>：删掉<code>obe_task_render.py</code> 的手工预处理，或把 <code>fast_renderer_composite.py:200-213</code> 的缓存检查恢复并接上。<b>成本</b>：20 行；<b>风险</b>：中（要确认两条加载路径的产物等价）；<b>收益</b>：导出总耗时里最难 profile 的一块。</p>
+</div>
+
+<div class="card hi">
+  <h3><span class="tag t-red">P0</span> 随机种子用内建 <code>hash()</code>，跨进程不可复现</h3>
+  <p><code>batch_export_generation.py:541</code>、<code>batch_export_combination_metadata.py:38</code></p>
+  <p>Python 字符串 <code>hash()</code> 受 <code>PYTHONHASHSEED</code> 随机化，注释宣称的"完全确定性、可复现"<b>不成立</b>：同一模板两次导出结果不同，多进程之间也不同。对"批量出图要可复现"是致命伤。</p>
+  <p><b>方案</b>：改 <code>hashlib.md5(key.encode()).digest()</code> 取前 8 字节转 int。<b>成本</b>：6 行；<b>风险</b>：低（但会改变已有随机序列，需告知）；<b>收益</b>：真正可复现。</p>
+</div>
+
+<h2 id="p5">五、你没发现的问题 · 中优先级</h2>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 文字渲染：渐变逐像素 Python 循环</h3>
+  <p><code>text_layer_render.py:136-171, 173-217</code></p>
+  <p>线性/径向/角度渐变全部用 <code>pixels[x, y] = color</code> 双重循环，<code>:939-940</code> 超采样再乘 4 倍像素。<b>方案</b>：<code>np.linspace</code> 一维广播生成，或 <code>Image.linear_gradient</code> + rotate。<b>成本</b>：40 行；<b>收益</b>：大字号渐变快 10~50 倍。</p>
+</div>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 字距渲染：每字符 3 张全图层临时图</h3>
+  <p><code>text_layer_render.py:1081-1089</code></p>
+  <p><code>letter_spacing != 0</code> 时逐字符 <code>_draw_text_fill_piece</code>，每字符 <code>Image.new</code> 3 张全图层 RGBA 并 <code>alpha_composite</code> 全图。100 字 = 300 张全尺寸临时图 + 100 次全图合成。<b>方案</b>：累积到一张 layer 上一次性合成，或按 bbox 局部合成。<b>成本</b>：50 行；<b>收益</b>：字距调整不再卡。</p>
+</div>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 字体查找每次 miss 全目录扫描</h3>
+  <p><code>text_layer_font.py:1176-1219</code>、<code>1034-1041</code></p>
+  <p>未命中 <code>_cached_font_paths</code> 时对 <code>C:/Windows/Fonts</code> 做两遍 <code>os.listdir</code> 线性匹配；叠加 5 个候选家族循环，单次取字体可触发约 12 次全目录扫描。且 <code>_get_font_object</code> 先 <code>resolve_font_family</code> 再查缓存，<b>命中缓存也要付一次文件系统开销</b>。TTC 探测用"<code>fontNumber=idx</code> 直到抛异常"，普通字体文件必然先在 idx=1 失败一次（每个字体两次 <code>TTFont</code> 解析）。</p>
+  <p><b>方案</b>：启动时建 <code>{filename_lower: path}</code> 反向索引；把缓存查询提到 <code>resolve_font_family</code> 之前；TTC 用 <code>TTFont(...).getGlyphOrder()</code> 探测或读 TTC 头。<b>成本</b>：60 行；<b>收益</b>：首次/换字体的停顿明显缩短。</p>
+</div>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 图层缓存无字节预算，96 条可到 1.5GB</h3>
+  <p><code>fast_renderer_surface.py:1889-1891</code></p>
+  <p><code>_layer_surface_cache</code> 上限 96 条，仅按条数 <code>popitem</code>，无字节预算、旧图不 <code>close()</code>。2000×2000 RGBA ≈ 96×16MB ≈ 1.5GB。同文件 <code>:1867-1878</code> 的导出缓存<b>有</b>字节预算，两套策略不一致。<b>方案</b>：统一按字节预算（如 512MB）+ 显式释放。<b>成本</b>：25 行；<b>收益</b>：长时运行不涨内存。</p>
+</div>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 效果缓存命中也要 10ms/图层 + 46MB</h3>
+  <p><code>layer_rendering_mixin.py:250-266</code></p>
+  <p><code>_get_effects_stage_cache</code> 返回 <code>cached.copy()</code>，三个阶段各 copy 一次。实测 2000×2000 RGBA copy = <b>3.42ms</b>，三次 = 10ms/图层/帧，峰值 46MB。30 层就是 300ms/帧。</p>
+  <p><b>方案</b>：缓存返回只读视图 + 调用方承诺不修改（或用 <code>Image.frombuffer</code> 共享内存），只在真正要写时才 copy。<b>成本</b>：40 行；<b>风险</b>：中（需审计所有写入点）；<b>收益</b>：多图层场景帧时间显著下降。</p>
+</div>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 批量导出 manifest 每张图全量重写，O(n²)</h3>
+  <p><code>export_worker.py:109-117</code></p>
+  <p>每完成一张图 <code>json.dump</code> 一次完整 payload（含持续增长的 <code>completed_files</code>），进度更新再写一次；叠加 <code>:112</code> 的 <code>file_path not in completed</code> 是 O(n) 查找。客户端每 0.2s 全量重读。<b>方案</b>：只追加增量行（JSONL）+ 客户端走 tail 读取。<b>成本</b>：35 行；<b>收益</b>：大批量导出后期不再卡 UI。</p>
+</div>
+
+<div class="card mid">
+  <h3><span class="tag t-orange">P1</span> 编辑文字时焦点被抢，文本被提交回图层</h3>
+  <p><code>Main.qml:567</code></p>
+  <pre><code>function onSelectionChanged() { selectedTextEditor.releaseFocus() }</code></pre>
+  <p><code>selectionChanged</code> 会因<b>非选区变更</b>发出（<code>workspace_vm_edit_ops.py:280</code>），而 <code>ContentTextEditor.qml:64-67</code> 失焦即 <code>committed(...)</code>。<b>用户在文字框里输入时，别处任何一次属性变更都会抢焦点并把文本提交回图层</b>——这是可复现的编辑中断 bug。</p>
+  <p><b>方案</b>：只在选区真正变化时释放焦点（对比上次选区），或改用专门的 <code>textEditingInterrupted</code> 信号。<b>成本</b>：10 行；<b>风险</b>：低。</p>
+</div>
+
+<div class="card low">
+  <h3><span class="tag t-yellow">P2</span> 其余中低优先级项（择要做）</h3>
+  <ul>
+    <li><code>layers_changed</code> 信号从不发射（<code>batch_export_view_model.py:852</code> 连接了但全库无 <code>emit</code>），整段"图层变化裁剪选中集合"逻辑是死的。</li>
+    <li>一次图层移动发 9 次通知、整模型 reset 2 次（<code>workspace_vm_layer_ops.py:315-329</code>）。</li>
+    <li><code>selectionBounds*</code> 4 个 Property 各算一遍全选区（<code>workspace_view_model.py:306-320</code>）。</li>
+    <li>属性 getter 里做目录 I/O：<code>selectedImageSourceCount</code> → <code>Path.iterdir()</code>，绑定两次 = 每次选中做两遍目录枚举，网络盘直接卡死 UI（<code>workspace_view_model.py:964-968</code>）。</li>
+    <li>21 个属性分区常驻，仅靠 <code>visible</code> 隐藏；QML 不会因 <code>visible:false</code> 停止求值绑定（<code>Main.qml</code> 564 处 <code>workspace.selected*</code> 仍全部重算）。</li>
+    <li><code>self._points = self._points</code> 类笔误不存在，但 <code>intelligent_memory_manager.py:199-220</code> 的清理是空操作（<code>del</code> 局部变量后 <code>cleanup_count += 1</code>），却打印"强制清理了 N 个老旧图像"并 <code>gc.collect()</code>。</li>
+    <li><code>memory_manager.py:95</code>：<code>channels = len(obj.mode)</code> 拿模式字符串长度当通道数（<code>"I;16"</code> 算 4 通道），碰巧成立。</li>
+    <li><code>image_quality_fixer.py:59-63</code>：每次合成都无条件 <code>GaussianBlur(0.3)</code> + 软化，描边链上同一份内容被合成 2~3 次 → 越描越糊。</li>
+    <li>虚线沿折线分段时 <code>pos</code> 每段从 0 重启，拐角处 dash 图案断裂；且 dash 端点无 round cap 处理（<code>vector_layer_effects.py:267-286</code>）。</li>
+    <li>约 450 行死代码：<code>text_layer_render.py:300-434 / 711-915</code> 的 <code>_draw_text_background</code> 等全项目无调用，内部还是逐像素 Python 扫描。</li>
+    <li><code>PropertySection.expanded</code>（<code>PropertySection.qml:10</code>）从未被真正切换，是永不生效的开关。</li>
+    <li><code>AdaptiveInspectorGrid.qml</code> 仅是别名空壳；<code>ExportSettingsSection</code> 等 5 个组件无任何引用。</li>
+  </ul>
+</div>
+
+<h2 id="p6">六、优化方案：分三期</h2>
+
+<h3>第一期 · 正确性止血 <span class="tag t-green">已全部落地</span></h3>
+<table>
+  <thead><tr><th>序</th><th>动作</th><th>文件</th><th class="num">改动量</th><th>解决</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>描边 outline 宽度改 <code>stroke_w*2</code>，内外分别裁剪</td><td><code>vector_layer_effects.py</code></td><td class="num">~20 行</td><td>外描边失效、内外不分</td></tr>
+    <tr><td>2</td><td>修两处 <code>safe_print</code> 无限递归</td><td><code>image_quality_fixer.py</code><br><code>enhanced_corner_renderer.py</code></td><td class="num">4 行</td><td>RecursionError 吞异常</td></tr>
+    <tr><td>3</td><td>预览 <code>Image</code> 加 <code>sourceSize</code> + 开缓存</td><td><code>Main.qml:5706</code></td><td class="num">3 行</td><td>预览锯齿 + 64MB 显存</td></tr>
+    <tr><td>4</td><td>随机种子改 <code>hashlib.md5</code></td><td><code>batch_export_generation.py</code></td><td class="num">6 行</td><td>导出不可复现</td></tr>
+    <tr><td>5</td><td>素材池 stat 改一次性 <code>set</code></td><td><code>batch_export_precomputer_v2.py:528</code></td><td class="num">10 行</td><td>匹配/导出卡顿（数量级）</td></tr>
+    <tr><td>6</td><td>匹配 session cache 不再因随机取图跳过</td><td><code>fast_renderer_surface.py:656</code></td><td class="num">~15 行</td><td>匹配卡顿</td></tr>
+    <tr><td>7</td><td>文字编辑焦点：只在选区真变时释放</td><td><code>Main.qml:567</code></td><td class="num">10 行</td><td>编辑被打断</td></tr>
+  </tbody>
+</table>
+<p style="color:var(--fg2);font-size:13.5px">这一期全部是"改对了"而非"改快了"，风险最低，且用户可感知。建议先做这 7 条再谈架构。</p>
+
+<h3>第二期 · 质量与内存 <span class="tag t-green">已全部落地</span></h3>
+<p style="color:var(--fg2);font-size:13.5px">实际改动与实测数字见页面顶部「第二期 7 条已落地」卡片。</p>
+<table>
+  <thead><tr><th>序</th><th>动作</th><th>文件</th><th>收益</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>SDF 描边替代折线画粗线</td><td><code>vector_layer_effects.py</code></td><td>圆弧等宽、内外精确、天然 AA；顺带省掉 381MB 分配</td></tr>
+    <tr><td>2</td><td>超采样按输出尺寸自适应封顶</td><td><code>vector_layer_effects.py:14</code></td><td>大图不爆内存，质量不降</td></tr>
+    <tr><td>3</td><td>合成只对 bbox 做 float 运算</td><td><code>fast_renderer_composite.py:665</code></td><td>196MB/层 → MB 级</td></tr>
+    <tr><td>4</td><td>缓存键改结构化 hash（全字段）</td><td><code>intelligent_render_cache.py</code><br><code>render_cache_keys.py</code></td><td>杜绝"改了没反应"</td></tr>
+    <tr><td>5</td><td>撤销快照合并装饰器，覆盖所有滑块 setter</td><td><code>workspace_vm_edit_ops.py</code></td><td>拖参数不卡</td></tr>
+    <tr><td>6</td><td>图层缓存改字节预算 + 显式释放</td><td><code>fast_renderer_surface.py:1889</code></td><td>长时运行内存可控</td></tr>
+    <tr><td>7</td><td>孔位 fallback 改 <code>cv2.connectedComponentsWithStats</code></td><td><code>fast_renderer_surface.py:1209</code></td><td>兜底从数秒到 20ms</td></tr>
+  </tbody>
+</table>
+
+<h3>第三期 · 结构清理 <span class="tag t-green">已落地 3 项</span> <span class="tag t-yellow">2 项判定为不需要</span></h3>
+<ul>
+  <li><b>删死代码</b> <span class="tag t-green">已落地</span>：<code>layer_effects.py</code> —— 原估「约 600 行」，实际<b>整个文件 991 行全死</b>（<code>Layer</code> 的 MRO 里根本没有它）；<code>enhanced_corner_renderer.py</code> 整文件 421 行；<code>text_layer_render.py</code> 的 4 个零引用方法共 352 行（原估 450 行）；<b>外加收尾时扫出的 9 个零引用模块 4565 行</b>（原报告完全没列）。<b>合计 6329 行</b>。<br>
+    原列的 <code>intelligent_render_cache.py:475-482</code> 恒 <code>False</code> 函数：<span class="tag t-yellow">已不存在</span>，二期重构缓存键时一并没掉了。</li>
+  <li><b>合并重复实现</b> <span class="tag t-green">已落地</span>：<code>duplicateSelectedLayer</code> / <code>duplicateSelectedLayers</code> 抽 <code>_clone_layer()</code> 合流 —— 合流时才看清两份<b>各缺了对方一半</b>（单层版漏组 ID、多选版漏 <code>changed</code> 信号），属于真实缺陷。<br>
+    关于「收尾块复制 9 处」：<span class="tag t-yellow">描述有误</span>，那 9 处本来就<b>是调用</b> <code>_finish_arrangement</code>；真正手写重复的只有 3 处，已并入。</li>
+  <li><b>预览渲染异步化</b> <span class="tag t-yellow">判断有误</span>：<code>workspace_vm_preview</code> 早就是 <code>QThreadPool</code> + generation 令牌 + 合并 + 取消的异步管线。仍卡在主线程的只剩 <code>exportImageTo</code>，那属于「新增导出进度与取消」，不是结构清理，未并入本期。</li>
+  <li><b>视图层模型精简</b> <span class="tag t-yellow">部分不做</span>：<code>selectionBounds</code> 四属性合一实测 20 图层下只省 <b>0.4ms/帧</b>，要动 <code>Main.qml</code> 里 20 处三元表达式，回归风险大于收益，放弃。整模型 reset 换 <code>dataChanged</code> 只对「纯属性变更」成立 —— 增删/移动这类结构性变化，模型每帧都是重新构建 <code>_display_entries()</code>，<code>beginResetModel</code> 才是对的。<code>Loader.active</code>（21 个属性分区惰性实例化）动的是 <code>Main.qml</code> 9000 行的布局结构，未做。</li>
+  <li><b>字体索引</b> <span class="tag t-green">已落地（改用预热）</span>：三级缓存（实例 → 进程 → 文件）本来就齐，再建反向索引收益有限。真正的痛点是首次扫描 <b>388.6ms</b> 发生在主线程，改为首屏后 1.5s 后台预热，预热后主线程首次调用 <b>0.26ms</b>。</li>
+</ul>
+
+<h2 id="p7">七、验收标准</h2>
+<p>这些问题改完怎么算改对了。建议直接落成测试：</p>
+<table>
+  <thead><tr><th>项</th><th>验收方法</th><th>通过标准</th></tr></thead>
+  <tbody>
+    <tr><td>外描边</td><td>300×300 矩形、20px 外描边，统计 <code>stroke_mask</code> 非零像素</td><td class="num">&gt; 20000</td></tr>
+    <tr><td>三种模式可区分</td><td>同参数分别渲内/居中/外，两两比像素差异</td><td class="num">差异 &gt; 15%</td></tr>
+    <tr><td>描边等宽</td><td>圆角 80px 上沿 10 个角度测径向宽度</td><td class="num">极差 &lt; 0.5px</td></tr>
+    <tr><td>大图不爆内存</td><td>3000×3000 图层渲圆角，监控峰值内存</td><td class="num">&lt; 200MB</td></tr>
+    <tr><td>预览无锯齿</td><td>30% 缩放截图，看圆弧边缘灰阶连续性</td><td>无 ≥2px 阶梯</td></tr>
+    <tr><td>导出去重可复现</td><td>同模板连续导两次，比对文件 md5 序列</td><td>完全一致</td></tr>
+    <tr><td>匹配不卡</td><td>5000 张池、10 关系，记录匹配阶段耗时</td><td class="num">&lt; 2s</td></tr>
+    <tr><td>改文字颜色生效</td><td>改色后读预览缓存键</td><td>键不同</td></tr>
+  </tbody>
+</table>
+
+<h2 id="p8">八、什么条件下我改口</h2>
+<p>上面的结论里，有两条是我用间接证据推的，如果你手上的实际现象对不上，请按下面条件推翻我：</p>
+<ol>
+  <li><b>"圆角锯齿主要来自预览缩放"</b> —— 如果在画布 <b>100% 缩放</b>下（<code>actualScale == 1</code>）截图，圆角边缘仍有肉眼可见阶梯，那我的归因错了，问题在渲染器而非预览链路。这时应优先查 <code>_bleed_transparent_edges</code> 与最终合成路径。验证方法：同一图层分别在 100% 和 30% 下截图对比。</li>
+  <li><b>"三个描边模式只有两个结果"</b> —— 如果你在 UI 上用外描边<b>确实看到了</b>描边，说明还有一条我没找到的渲染路径（可能走了阴影/发光或位图描边分支）。请告诉我具体是哪种图层（图片层 / 形状层 / 文字层）和外描边宽度，我重新追那条路径。</li>
+</ol>
+<p style="color:var(--fg2);font-size:13.5px">其余各条都是源码直接可验证的（行号 + 复算脚本已附），不存在"看情况"。</p>
+
+<footer>
+  审计人：阿伟 🎯 &nbsp;·&nbsp; 2026-10-29<br>
+  复算脚本：<code>docs/audit/repro_stroke.py</code>（描边三模式与等宽性）<br>
+  取证方法：源码逐行核对 + 独立复算，未修改任何项目文件。所有 <code>文件:行号</code> 均对应当前工作区版本。<br>
+  未覆盖：序列化/保存加载链路、图片格式支持、去重策略、自动更新流程 —— 如需要可另开一轮。
+</footer>
+
+</div>
+</body>
+</html>

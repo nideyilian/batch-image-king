@@ -1,0 +1,90 @@
+{
+  "advanced": {
+    "md5": "38b8e990b727353812e46f3d3e6486a6",
+    "nontransparent": 67200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "batch_mode": {
+    "md5": "39012fc586db898ce10604aa237f45bb",
+    "nontransparent": 67200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "clone_border": {
+    "md5": "55554cc5bcc958d1bd40e6eeb131d7a5",
+    "nontransparent": 19200,
+    "size": [
+      600,
+      500
+    ]
+  },
+  "clone_grid": {
+    "md5": "e6684b3fe24834c20e17f10c0256df1a",
+    "nontransparent": 60000,
+    "size": [
+      600,
+      500
+    ]
+  },
+  "empty": {
+    "md5": "31c34ed33a9909b477e18a96070b3bf4",
+    "nontransparent": 0,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "hidden": {
+    "md5": "9681b1060d44fd76a826e884f0274475",
+    "nontransparent": 43200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "optimize_memory": {
+    "md5": "9681b1060d44fd76a826e884f0274475",
+    "nontransparent": 43200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "overlap_blend": {
+    "md5": "7a9594d0b5b4bf60e553a6a22ee4729f",
+    "nontransparent": 67200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "random_mode": {
+    "md5": "9681b1060d44fd76a826e884f0274475",
+    "nontransparent": 43200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "single": {
+    "md5": "1b598f37a498856f2b56c5f5f5800d20",
+    "nontransparent": 43200,
+    "size": [
+      400,
+      300
+    ]
+  },
+  "text": {
+    "md5": "16a195ae9bc03ec50a562b16cedbccdc",
+    "nontransparent": 120000,
+    "size": [
+      400,
+      300
+    ]
+  }
+}
