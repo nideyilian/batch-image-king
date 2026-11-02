@@ -18,10 +18,7 @@ from app.ui.theme.tokens import Theme
 # 避免 QSS 里再散落一套写死的取值。方向 01「墨黑极简」的核心特征
 # （中文优先字体栈、13px 正文、30px 控件高、6px 圆角）由这里统一注入。
 from app.ui.tokens_v2 import (
-    Color as _C2,
     Radius as _R2,
-    Size as _SZ2,
-    Space as _S2,
     Typography as _TY2,
 )
 

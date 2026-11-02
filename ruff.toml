@@ -1,0 +1,44 @@
+# ruff 配置（2026-11-02 引入）
+#
+# 设计原则：**只启用当前代码已经 100% 满足的规则**，让它成为"防回退"的增量防线，
+# 而不是一次性制造几百条历史欠账把 CI 变红。
+# 想加更严的规则时，先 `ruff check --select <规则> --statistics` 看真实数量，
+# 清干净再加，不要直接打开。
+#
+# 当前启用（2026-11-02 清理后实测 0 违规）：
+#   E722  裸 except                        —— 历史已清零
+#   F401  未使用 import                    —— 本次清掉 47 处（43 + 4），现为 0
+#   F811  重复定义                         —— 0
+#   F821  未定义名字                       —— 0；这类就是"safe_print 从未导入"那种 bug
+#   F823  使用前未赋值                     —— 0
+#
+# 刻意**不启用**（会一次性制造大量告警，需分批治理）：
+#   E501  行太长          —— 实测 >120 字符 219 行
+#   F841  未使用变量      —— 已人工清 20 处；剩余检测存在误报（类属性），留给 ruff 逐步收
+#   C901  函数太复杂      —— 92 个函数 >80 行，属结构性欠账，见审计报告 P1
+#   ANN   类型注解缺失    —— 2959 个函数里 1595 个有返回注解，未到可强制的比例
+
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E722",  # bare-except
+    "F401",  # unused-import
+    "F811",  # redefined-while-unused
+    "F821",  # undefined-name
+    "F823",  # undefined-local
+]
+# 不忽略任何规则；如需临时豁免请用行内 `# noqa: <code>  # 理由`
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+# 测试里允许先 import 再按需使用
+"tests/**" = ["F401"]
+# 这些是**刻意的 re-export / 命名空间聚合**文件，import 本身就是用途
+"app/controllers/__init__.py" = ["F401"]
+"app/services/__init__.py" = ["F401"]
+"app/engines/__init__.py" = ["F401"]
+"app/models/__init__.py" = ["F401"]
+"app/utils/print_utils.py" = ["F401"]
+

@@ -1259,7 +1259,7 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                     if gi in completed:
                         continue
                     layer_obj = group.layers[gi]
-                    doc_idx = group_idx_to_doc_idx[gi]
+                    # 只用于可读性核对，实际写入走 group_idx_to_doc_idx 的调用点
                     try:
                         if hasattr(layer_obj, 'get_text_lines') and callable(getattr(layer_obj, 'get_text_lines', None)):
                             lines = []

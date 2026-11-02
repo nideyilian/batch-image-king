@@ -119,7 +119,6 @@ class LayerImageSourceMixin:
 
     def get_random_image(self, force_random=False, restrict_to_bound_files=None):
         """从关联文件夹中随机选择一张图片，或加载单个图片"""
-        current_image_path = self.current_image_path
         image_source = self.image_source
         is_folder = self.is_folder
         image_source_norm = self._normalize_image_path(image_source) if image_source else image_source

@@ -7,9 +7,7 @@ import platform
 import threading
 from typing import List, Tuple, Dict, Set, Optional
 import json
-from app.models.text_layer_enums import (
-    TextAlign, FontStyle, GradientType, GradientDirection, safe_print
-)
+from app.models.text_layer_enums import FontStyle
 
 logger = logging.getLogger(__name__)
 

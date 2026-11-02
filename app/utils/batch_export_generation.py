@@ -522,10 +522,9 @@ class BatchExportGenerationMixin:
                         logger.warning("静默异常已忽略: except in utils/batch_export_precomputer_v2.py", exc_info=True)
                         pass
             
-            # 🔧 关键步骤3：生成组合的唯一标识（保持图层顺序）
-            file_names_tuple = self._build_layer_file_signature(layer_states)
-            
-            # 🔧 关键步骤4：预计算所有随机变换参数
+            # 🔧 关键步骤3：预计算所有随机变换参数
+            # 注：历史实现这里先算过一次 file signature 但从未使用；
+            # 真正的去重签名在 _dedup_should_skip 内部按需计算。
             random_transforms = {}
             layer_parameters = {}
             layer_clone_settings = {}

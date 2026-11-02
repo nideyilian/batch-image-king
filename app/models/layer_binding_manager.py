@@ -11,7 +11,6 @@ from typing import Dict, List, Tuple, Optional
 from app.utils.print_utils import safe_print as _safe_print
 from app.utils.text_layer_virtual_path import (
     is_text_layer_virtual_path,
-    build_text_layer_virtual_path,
     parse_text_layer_virtual_path,
 )
 
@@ -24,9 +23,7 @@ _BINDING_RESTRICT_CACHE_VERBOSE = os.environ.get("BTPW_BINDING_RESTRICT_CACHE", 
 # 🔧 导入100%准确绑定修复系统
 try:
     from binding_100_percent_fix import (
-        BindingIntegrityManager, ExportBindingValidator,
         validate_current_bindings, enforce_100_percent_binding_accuracy,
-        BindingValidationResult
     )
     BINDING_INTEGRITY_AVAILABLE = True
     print("[绑定管理器] 100%准确绑定修复系统已加载")
@@ -574,9 +571,6 @@ class LayerBindingManager:
             # 清除图层缓存
             if hasattr(layer, '_cached_image'):
                 layer._cached_image = None
-            
-            # 🔧 修复：增强状态同步，避免竞态条件
-            original_text = getattr(layer, 'current_text', '')
             
             # 仅更新当前显示文字，避免覆盖原有多行文案
             if hasattr(layer, 'current_text'):

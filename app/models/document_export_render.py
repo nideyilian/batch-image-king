@@ -177,9 +177,6 @@ class DocumentExportRender:
             # 应用图层特效
             layer_image = layer.apply_effects(layer_image)
 
-            # 创建图层位置框
-            box = (layer.x, layer.y, layer.x + layer.width, layer.y + layer.height)
-
             # 获取图层的透明度
             opacity = layer.opacity
 

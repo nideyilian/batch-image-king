@@ -75,7 +75,10 @@ python -m pytest tests/test_document_core.py -v
 
 `requirements-dev.txt` 会自动继承 `requirements.txt`；开发/测试环境安装 dev 文件即可，运行或打包环境只安装 runtime 文件。
 
-测试根目录为 `tests/`，当前 87 个测试文件、约 683 项，全量跑一次约 1 分钟。配置文件 `pytest.ini` + 根目录 `conftest.py` + `tests/__init__.py` 已就绪。
+测试根目录为 `tests/`。**测试文件的绝对数量请自己数**（`ls tests/test_*.py | wc -l`），
+不要在这个文件里写死 —— 实测手写的数字一定会漂：本行曾长期写「87 个文件 / 683 项」，
+而 2026-11-02 实测已是 101 个文件 / 845 项。全量跑一次约 1.5 分钟。
+配置文件 `pytest.ini` + 根目录 `conftest.py` + `tests/__init__.py` 已就绪。
 
 `conftest.py` 提供 **session 级 autouse 的 `qapp` fixture**，测试里不需要自己创建 `QApplication`；
 要显式拿到实例时把 `qapp` 写进参数即可。
@@ -92,6 +95,9 @@ python -m pytest tests/test_document_core.py -v
   `test_qml_batch_export_view_model.py`、`test_qml_multi_tab_export.py`、以及一批
   `test_qml_*.py` 的交互/像素级回归
 - 打包 — `test_packaging_modes.py`（校验 spec 与 `build_excludes.py` 的联动）
+- 日志策略 — `test_log_rotation.py`（固定 `app.log` + 轮转 + 历史清理不在主线程）
+- 并发安全 — `test_text_layer_concurrent_size.py`（超采样期间尺寸读写不串味）
+- 降级兜底 — `test_alpha_compositor_fallback.py`（兜底路径绝不返回 None）
 
 新增测试请：
 
@@ -100,6 +106,26 @@ python -m pytest tests/test_document_core.py -v
 - 需要 Qt 就声明 `qapp` 参数，不要自己 `QApplication(...)`，否则会和 autouse fixture 抢实例。
 
 修改渲染、导出、图层序列化相关代码后，至少应跑一次 `python -m pytest`，并验证新建文档、添加图层、保存/加载、预览、导出和批量导出。
+
+### 静态检查与架构约束
+
+提交前建议跑一次：
+
+```powershell
+python tools/check_architecture.py      # 零依赖，本地必跑
+ruff check --config ruff.toml app/ tests/ main.py tools/   # 需先 pip install ruff
+```
+
+`tools/check_architecture.py` 守护四件事，全部是**当前代码已满足**的约束
+（出现违规＝有回退，不是新增要求）：
+
+1. 分层方向：`models` / `utils` / `services` / `engines` / `workers` 不得 import `qml` / `ui`
+2. 禁止裸 `except:`（E722）
+3. 未使用 import（F401）
+4. 模块顶层重复定义（F811）
+
+它是纯标准库实现，**离线环境也跑得动**；CI 里另跑真 ruff 作为权威判定。
+改 `ruff.toml` 的 `select` 时必须同步 `check_architecture.py`，反之亦然。
 
 ## 入口与启动流程
 
@@ -168,7 +194,7 @@ python -m pytest tests/test_document_core.py -v
 │   ├── utils/                 # 渲染、导出、缓存、线程池、日志、预设、更新
 │   ├── ui/                    # 仅剩 QWidget 弹窗 + 主题 + 设计令牌，**没有主窗口**
 │   └── resources/             # 应用图标与内置资源
-├── tests/                     # pytest 测试（87 个文件 / 约 683 项）
+├── tests/                     # pytest 测试（数量以 ls 实测为准，勿手写）
 ├── build/                     # PyInstaller 构建产物，生成目录
 └── dist/                      # 打包输出，生成目录
 ```
@@ -177,9 +203,9 @@ python -m pytest tests/test_document_core.py -v
 
 ```text
 app/qml/
-├── Main.qml                   # 单文件主界面，约 9000 行；对话框/抽屉多为内联 component
+├── Main.qml                   # 单文件主界面，约 9300 行；对话框/抽屉多为内联 component
 ├── qml_main.py                # QML 启动器：建 engine、注册 context property、管理窗口生命周期
-├── components/                # 47 个可复用组件（Theme / AppIcon / 各类 Inspector 控件）
+├── components/                # 50 个可复用组件（Theme / AppIcon / 各类 Inspector 控件）
 ├── icons/                     # 102 个 Lucide SVG
 ├── assets/
 ├── viewmodels/                # Python 侧 QObject 视图模型

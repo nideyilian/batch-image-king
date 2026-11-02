@@ -1,24 +1,9 @@
-import os
-import random
-import json
-import pickle
-from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageChops
-from PIL.Image import Resampling, Transpose
-import numpy as np
-from PySide6.QtCore import QObject, Signal
-import re
-import glob
 import gc
-from app.models.layer_new import Layer as NewLayer
-from app.models.document_blend import BlendMode
+from PIL import Image
+import numpy as np
 from app.models.document_blend import Blender
-from typing import List, Tuple
-from app.models.binding_manager import BindingGroup
-import time
-import hashlib
-from app.utils.render_diagnostics import log_branch, log_sampling
+from typing import Tuple
 from app.utils.print_utils import safe_print as _safe_print
-from app.models.layer_size_match_manager import LayerSizeMatchManager
 import logging
 logger = logging.getLogger(__name__)
 
@@ -726,7 +711,7 @@ class DocumentRender:
         """
         # 性能优化：获取最优设置
         try:
-            from app.utils.performance_optimizer import PerformanceOptimizer, PerformanceMonitor
+            from app.utils.performance_optimizer import PerformanceOptimizer
 
             # 获取可见图层
             from app.utils.layer_tree import render_layers

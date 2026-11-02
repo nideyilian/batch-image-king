@@ -142,8 +142,7 @@ class MemoryMonitor:
             
             # 获取进程内存信息
             kernel32 = ctypes.windll.kernel32
-            process_handle = kernel32.GetCurrentProcess()
-            
+
             # 获取内存状态
             class MEMORYSTATUSEX(ctypes.Structure):
                 _fields_ = [

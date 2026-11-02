@@ -751,10 +751,6 @@ class LayerRenderingMixin:
             next_i = (i + 1) % len(vertices)
             prev_i = (i - 1) % len(vertices)
 
-            # 计算顶点处的圆角
-            prev_vertex = vertices[prev_i]
-            next_vertex = vertices[next_i]
-
             # 绘制小圆角
             small_radius = min(corner_radius, 5)  # 限制小圆角大小
             draw.ellipse((x - small_radius, y - small_radius,

@@ -182,9 +182,6 @@ class QualityEngine:
         grad_x = cv2.filter2D(gray, -1, self.sobel_x)
         grad_y = cv2.filter2D(gray, -1, self.sobel_y)
         
-        # 计算梯度幅值和方向
-        magnitude = np.sqrt(grad_x**2 + grad_y**2)
-        
         # 文字通常有较强的水平和垂直边缘
         horizontal_edges = np.sum(np.abs(grad_y) > 0.1)
         vertical_edges = np.sum(np.abs(grad_x) > 0.1)

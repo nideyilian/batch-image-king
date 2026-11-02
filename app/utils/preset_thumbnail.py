@@ -22,7 +22,6 @@ import logging
 import os
 import queue
 import threading
-import time
 from typing import Callable, Optional
 
 from PIL import Image

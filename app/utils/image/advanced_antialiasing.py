@@ -330,7 +330,7 @@ class AdvancedAntialiasing:
                                    strength: float) -> np.ndarray:
         """应用邻域混合"""
         # 使用加权平均进行邻域混合
-        kernel_size = 3
+        # 邻域半径固定为 1（等价 3×3 核），下方切片按此硬编码
         result = alpha.copy()
         h, w = alpha.shape
         

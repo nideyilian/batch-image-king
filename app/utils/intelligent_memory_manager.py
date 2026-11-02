@@ -154,7 +154,8 @@ class ImageMemoryTracker:
             return 0.0
         
         width, height = image.size
-        channels = len(image.getbands())
+        # 直接按模式取每像素字节数：比"band 数 × 假设位深"更准，
+        # 也与下面 memory_bytes 的计算口径一致。
         bytes_per_pixel = 4 if image.mode == 'RGBA' else 3
         
         # 估算内存使用（包括PIL内部开销）

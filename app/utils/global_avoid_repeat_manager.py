@@ -761,7 +761,6 @@ class GlobalAvoidRepeatManager:
         
         # 计算使用分布的均匀性
         usage_counts = list(category_usage.values())
-        total_usage = sum(usage_counts)
         max_usage = max(usage_counts)
         unique_combinations = len(usage_counts)
         

@@ -13,7 +13,6 @@ from PySide6.QtCore import QObject, Signal
 
 from app.utils.layer_tree import (
     child_indices_for_group,
-    expand_group_indices,
     is_effectively_locked,
     is_layer_group,
     set_parent_group_id,
@@ -258,7 +257,8 @@ class LayerController(QObject):
             layer_name = f"图层 {len(self.document.layers) + 1}"
 
             # 调用文档的add_layer方法，传递所需的参数
-            layer = self.document.add_layer(
+            # 返回的图层对象此处不使用：后续状态刷新由信号驱动
+            self.document.add_layer(
                 name=layer_name,
                 x=0,
                 y=0,

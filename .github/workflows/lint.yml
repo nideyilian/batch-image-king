@@ -42,6 +42,41 @@ jobs:
         shell: pwsh
         run: python -m py_compile main.py build.py
 
+  ruff:
+    name: ruff (静态检查)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 规则集定义在 ruff.toml。只启用当前代码已满足的规则（见该文件头注释），
+      # 定位是「防回退」而不是一次性补齐历史欠账。
+      - name: Install ruff
+        run: python -m pip install -q "ruff>=0.6"
+
+      - name: Ruff check
+        run: ruff check --config ruff.toml --output-format=github app/ tests/ main.py tools/
+
+  architecture:
+    name: 架构约束（分层 + 裸 except）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 纯标准库实现（tools/check_architecture.py），不依赖第三方包，离线可跑。
+      # 守护两条当前已满足的约束：底层不依赖表现层、不新增裸 except。
+      - name: Check architecture
+        run: python tools/check_architecture.py -v
+
   forbidden-patterns:
     name: forbidden patterns scan
     runs-on: windows-latest

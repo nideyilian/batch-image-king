@@ -33,7 +33,7 @@ import gc
 
 # 导入智能线程池管理器
 from .intelligent_thread_pool_manager import (
-    get_thread_pool_manager, submit_task, TaskType, TaskPriority
+    get_thread_pool_manager, TaskType, TaskPriority
 )
 from .thread_pool_config import get_config_manager
 
@@ -167,7 +167,6 @@ class PerformanceOptimizer:
         
         # 🔧 关键修复：禁用性能优化器缓存，避免重复图片问题
         # 注释掉缓存检查，确保每次都重新计算
-        cache_key = f"{image_size}_{layer_count}_{is_batch_mode}"  # 保留定义，但不使用缓存
         # if cache_key in cls._performance_cache:
         #     return cls._performance_cache[cache_key]
         

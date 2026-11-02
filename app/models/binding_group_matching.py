@@ -41,9 +41,7 @@ print = _safe_print
 # 🔧 导入100%准确绑定修复系统（保持原行为：模块顶层 try/except）
 try:
     from binding_100_percent_fix import (
-        BindingIntegrityManager, ExportBindingValidator,
         validate_current_bindings, enforce_100_percent_binding_accuracy,
-        BindingValidationResult
     )
     BINDING_INTEGRITY_AVAILABLE = True
     print("[绑定管理器] 100%准确绑定修复系统已加载")
@@ -106,8 +104,10 @@ class BindingGroupMatching:
 
                     if validation_result.accuracy < 100.0:
                         print(f"[🔍 详细日志] ⚠️ 发现绑定错误，将强制修复")
-                        corrected_states = enforce_100_percent_binding_accuracy(None, current_states)
-                        # 这里可以应用修正后的状态
+                        # 注：修正结果当前不参与后续流程（历史实现只做校验+打印）。
+                        # 保留调用是为了让 enforce 的副作用/日志照常发生，但明确丢弃返回值，
+                        # 避免读者误以为它已经生效。
+                        enforce_100_percent_binding_accuracy(None, current_states)
             except Exception as e:
                 print(f"[🔍 详细日志] 绑定验证失败: {e}")
 

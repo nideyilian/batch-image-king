@@ -52,7 +52,6 @@ class WorkspaceFontCatalogMixin:
             logger.debug("加载文字图层中文字体目录失败，回退 Qt 字体库", exc_info=True)
         if QGuiApplication.instance() is not None:
             try:
-                writing_system = QFontDatabase.WritingSystem
                 font_names = []
                 seen = set()
                 for name in QFontDatabase.families():

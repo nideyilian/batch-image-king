@@ -89,3 +89,4 @@ venv.bak/
 
 # AI 编码工具工作区（项目记忆、临时产物）
 .workbuddy/
+_test_result.xml

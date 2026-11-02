@@ -8,9 +8,8 @@ from app.models.text_layer_font import TextLayerFontMixin
 from app.models.text_layer_render import TextLayerRenderMixin
 from app.models.text_layer_serialize import TextLayerSerializeMixin
 
-class TextLayer(QObject):
-    """文字图层模型类"""
 class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixin, QObject):
+    """文字图层模型：字体 / 渲染 / 序列化三个 mixin 组合而成。"""
     # 信号定义
     changed = Signal()
     text_changed = Signal()

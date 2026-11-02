@@ -1,5 +1,4 @@
 import copy
-from PIL import Image
 from PySide6.QtCore import QObject, Signal
 # 导入新的Layer类作为主要实现
 from app.models.layer_new import Layer as NewLayer

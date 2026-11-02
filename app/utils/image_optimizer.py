@@ -57,8 +57,7 @@ class ImageOptimizer:
             return None
         
         width, height = target_size
-        cache_key = self._get_cache_key(image_path, width, height, fit_mode)
-        
+
         # 🔧 关键修复：禁用图像优化器缓存获取，避免重复图片问题
         # 注释掉缓存获取，确保每次都重新处理
         # if use_cache:

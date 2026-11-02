@@ -180,11 +180,10 @@ class SuperAntialiasing:
         luma_s = luma_padded[2:, 1:-1]    # 南
         luma_e = luma_padded[1:-1, 2:]    # 东
         luma_w = luma_padded[1:-1, 0:-2]  # 西
-        luma_ne = luma_padded[0:-2, 2:]   # 东北
-        luma_nw = luma_padded[0:-2, 0:-2] # 西北
-        luma_se = luma_padded[2:, 2:]     # 东南
-        luma_sw = luma_padded[2:, 0:-2]   # 西南
-        
+        # 注：原实现还计算了 4 个对角方向亮度（ne/nw/se/sw），但后续滤波只用到
+        # 上下左右 4 邻域。这里移除死变量；若将来要升级为真正的 8 邻域 FXAA，
+        # 再按需补回。
+
         # 计算梯度
         grad_h = np.abs(luma_e - luma_w)
         grad_v = np.abs(luma_n - luma_s)

@@ -337,7 +337,7 @@ class OptimizedBatchExecutorIoExport(object):
                         # 二分搜索质量参数
                         low, high = 40, 95
                         best_buf = None
-                        best_quality = high
+                        # best_quality 仅用于日志展示，实际质量由下方二分结果决定
                         # 确保是RGB
                         img_rgb = image
                         if img_rgb.mode == 'RGBA':
@@ -353,7 +353,6 @@ class OptimizedBatchExecutorIoExport(object):
                             size = buf.tell()
                             if size <= target_bytes:
                                 best_buf = buf
-                                best_quality = q
                                 low = q + 1
                             else:
                                 high = q - 1

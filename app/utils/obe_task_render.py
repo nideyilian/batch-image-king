@@ -18,7 +18,6 @@ from app.utils.print_utils import safe_print as print
 from app.utils.text_layer_virtual_path import (
     is_text_layer_virtual_path,
     parse_text_layer_virtual_path,
-    build_text_layer_virtual_path,
 )
 
 logger = logging.getLogger(__name__)

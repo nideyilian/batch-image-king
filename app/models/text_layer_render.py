@@ -145,7 +145,6 @@ class TextLayerRenderMixin:
 
         # 创建渐变图像
         gradient_img = Image.new('RGBA', (width, height))
-        pixels = gradient_img.load()
 
         start_r, start_g, start_b, start_a = self._gradient_start_color
         end_r, end_g, end_b, end_a = self._gradient_end_color
@@ -902,7 +901,6 @@ class TextLayerRenderMixin:
                 break
 
             line_width = line_widths[i]
-            line_height = line_heights[i] if i < len(line_heights) else max_line_height
             x_offset = line_left_offsets[i] if i < len(line_left_offsets) else 0
             y_offset = line_top_offsets[i] if i < len(line_top_offsets) else 0
             segments = line_segments[i] if i < len(line_segments) else []
