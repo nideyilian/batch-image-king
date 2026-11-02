@@ -18,6 +18,12 @@ from PIL import Image, ImageFilter
 from typing import Tuple, Optional, Union
 from enum import Enum
 
+# ⚠️ 必须最先导入：下面两个 try/except 在 ImportError 分支里就会调用 safe_print，
+# 且本模块多处降级路径也依赖它。历史版本这里既没有定义也没有导入 safe_print
+# （定义曾被误插入的函数体覆盖掉），导致所有降级分支一旦触发就抛 NameError，
+# 把"降级"变成了"崩溃"。
+from app.utils.print_utils import safe_print
+
 # 导入PNG渲染优化模块
 try:
     from .image.png_renderer_optimizer import optimize_png_image
@@ -725,8 +731,9 @@ class UnifiedAlphaCompositor:
 
             if np.any(combined_edges):
                 # 多层高斯模糊
+                # 只保留 3×3 那一档：原实现还算了 5×5（alpha_blur_2）但从未参与
+                # 混合，属于纯浪费——每帧多一次全图高斯模糊。
                 alpha_blur_1 = cv2.GaussianBlur(alpha, (3, 3), 0.5)
-                alpha_blur_2 = cv2.GaussianBlur(alpha, (5, 5), 1.0)
 
                 # 形态学操作
                 kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -1008,56 +1015,57 @@ class UnifiedAlphaCompositor:
 
     def _basic_dark_edge_fix(self, image: Image.Image,
                            background_color: Optional[Tuple[int, int, int]] = None) -> Image.Image:
-        """基础深色边缘修复"""
+        """基础深色边缘修复（PNG 优化不可用 / 优化抛异常时的兜底路径）。
+
+        ⚠️ 历史事故（2026-11-02 修复）：本方法的函数体曾被一个误插入的
+        ``def safe_print(...)`` 从中间劈开，导致
+
+          * 「有背景色」的分支只执行到 ``img_array = ...`` 就跳出函数，
+            返回 **None** —— 调用方拿到 None，导出直接崩或出空图；
+          * 后半段代码变成了 ``safe_print`` 的私有逻辑（永远不会执行，
+            因为它在 except 里 print 完就结束了）。
+
+        本方法在两条路径上都会被调用，且都是"优化失败后的最后一道防线"：
+        ``PNG_OPTIMIZATION_AVAILABLE`` 为假，或 ``fix_png_dark_edges_direct``
+        抛异常。兜底返回 None 等于把异常放大成崩溃，所以必须保证任何分支
+        都返回 PIL Image。
+        """
+        import numpy as np
+
         if image.mode != 'RGBA':
             image = image.convert('RGBA')
 
         r, g, b, a = image.split()
 
-        # 对Alpha通道进行更强的模糊以减少深色边缘
+        # 对 Alpha 通道做更强的模糊，减少深色边缘的硬接缝
         a_smooth = a.filter(ImageFilter.GaussianBlur(radius=1.2))
 
-        # 如果提供了背景色，进行简单的颜色校正
-        if background_color:
-            # 转换为numpy进行处理
-            import numpy as np
-            img_array = np.array(image, dtype=np.float64) / 255.0
+        # 没给背景色：只平滑 Alpha，不做颜色校正
+        if not background_color:
+            return Image.merge('RGBA', (r, g, b, a_smooth))
 
-def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
-    try:
-        print(message)
-    except (UnicodeEncodeError, OSError):
         try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            print(f"[DEBUG] {ascii_message}")
-        except Exception:
-            # 最后的备选方案
-            print("[DEBUG] Message encoding failed")
-
+            img_array = np.array(image, dtype=np.float64) / 255.0
             rgb = img_array[:, :, :3]
             alpha = img_array[:, :, 3]
-            bg_color = np.array(background_color) / 255.0
+            bg_color = np.array(background_color, dtype=np.float64) / 255.0
 
-            # 对半透明区域进行颜色校正
+            # 只处理半透明像素：全透明没有颜色可修，不透明本来就看不出底色
             semi_transparent = (alpha > 0.1) & (alpha < 0.9)
-
             if np.any(semi_transparent):
-                # 简单的背景色混合
                 for i in range(3):
                     channel = rgb[:, :, i]
                     corrected = channel * 0.8 + bg_color[i] * 0.2
                     rgb[semi_transparent, i] = corrected[semi_transparent]
 
-            # 转换回图像
             result_array = np.concatenate([rgb, alpha[:, :, np.newaxis]], axis=2)
             result_array = np.clip(result_array, 0, 1)
             result_8bit = (result_array * 255).astype(np.uint8)
-
             return Image.fromarray(result_8bit)
-
-        return Image.merge('RGBA', (r, g, b, a_smooth))
+        except Exception as e:
+            # 颜色校正失败时至少返回平滑过 Alpha 的图，绝不返回 None
+            safe_print(f"[Alpha合成器] 基础深色边缘修复失败，退回纯 Alpha 平滑: {e}")
+            return Image.merge('RGBA', (r, g, b, a_smooth))
 
 
 # 创建全局实例
