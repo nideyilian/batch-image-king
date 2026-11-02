@@ -3,6 +3,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -22,7 +23,10 @@ class CrashSessionStateTests(unittest.TestCase):
             "version": 1,
             "session_id": "old-session",
             "status": "running",
-            "started_at": "2026-07-01T10:00:00",
+            # 默认用「刚刚」：现在只有短命退出才提示，
+            # 固定旧日期会被判为"跑够久了，属于被强制结束"，静默处理。
+            # 需要验证"长时间运行"的用例请显式传 started_at。
+            "started_at": datetime.now().isoformat(timespec="seconds"),
             "crash_log_path": "",
             "app_log_path": "",
             "notice_consumed": False,

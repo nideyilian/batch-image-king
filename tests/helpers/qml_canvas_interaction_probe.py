@@ -118,6 +118,27 @@ def main() -> int:
             app.exit(21)
             return
 
+        # 缩放前必须等「尺寸」也稳定，而不只是位置。
+        # 竞态来源：setZoomFactor(0.4) 之后 artboard 的 scale 与图层尺寸
+        # 会在若干帧内异步重算。若此时立刻用 mapToScene 算手柄坐标，会拿到
+        # 半旧比例下的点，表现为 resize 超调（实测偶发 before=(354,94)，
+        # 而稳定后应为 (400,200)）。这里把尺寸和缩放一起纳入稳定性判据。
+        def _artboard_scale():
+            try:
+                return float(artboard.property("scale")) or 0.0
+            except (TypeError, ValueError):
+                return 0.0
+
+        if not wait_stable(
+            lambda: (int(layer.width), int(layer.height), round(_artboard_scale(), 4))
+        ):
+            print(
+                "layer size / artboard scale never stabilized before resize",
+                file=sys.stderr,
+            )
+            app.exit(22)
+            return
+
         original_width = int(layer.width)
         original_height = int(layer.height)
         resize_start = artboard.mapToScene(

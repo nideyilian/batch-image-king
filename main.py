@@ -441,6 +441,15 @@ def main() -> int:
                 logger.info("预览渲染缓存已清理")
             except Exception as cache_error:
                 logger.warning(f"预览渲染缓存清理异常: {cache_error}")
+
+            try:
+                # 预设工作台的缩略图后台线程是 daemon，但显式 stop 可以让
+                # 退出更快、且不会在解释器收尾阶段再碰渲染器。
+                from app.utils.preset_thumbnail import shutdown_thumbnail_services
+                shutdown_thumbnail_services()
+                logger.info("预设缩略图线程已停止")
+            except Exception as cache_error:
+                logger.warning(f"预设缩略图线程停止异常: {cache_error}")
             
         except Exception as cleanup_error:
             logger.warning(f"资源清理时出现异常: {cleanup_error}")
