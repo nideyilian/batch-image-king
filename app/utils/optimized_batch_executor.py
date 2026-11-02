@@ -103,6 +103,14 @@ class OptimizedBatchExportManager:
 
         if "combination_space_limited" in reasons:
             recommendations.append("可用组合空间已接近上限，建议减少约束或扩充素材池")
+        if "target_capped_by_constraints" in reasons:
+            # 2026-11-02 新增：这条此前缺失，用户只看到"目标已达成"却少拿了图。
+            requested = int(shortage.get("requested_count", 0) or 0)
+            planned = int(shortage.get("planned_count", 0) or 0)
+            recommendations.append(
+                f"请求 {requested} 张但只生成 {planned} 张："
+                f"受唯一组合/独占使用等约束限制，请扩充素材池或关闭相应约束"
+            )
         if "dedup_blocking" in reasons:
             recommendations.append("去重命中较高，建议调整去重策略或放宽阈值")
         if "category_coverage_low" in reasons:

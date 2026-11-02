@@ -285,10 +285,31 @@ class BatchExportDedupBudgetMixin:
         return int(max(low, min(high, max(1, base))))
 
     def _build_shortage_analysis(self, diagnostics: Dict[str, Any], target_count: int, planned_count: int) -> Dict[str, Any]:
-        """构建统一短缺分析，定位"为什么没凑满"。"""
+        """构建统一短缺分析，定位"为什么没凑满"。
+
+        ⚠️ 2026-11-02 修正：这里要同时回答**两个不同的问题**，此前只回答了后者，
+        导致用户看到自相矛盾的诊断。
+
+        - ``target_count`` 是**压低后**的目标（受唯一组合空间 / 独占使用等约束削减）
+        - ``requested_count`` 是用户**实际请求**的数量
+
+        实际案例：素材只有 2 张、用户请求 10 张。压低后 target=2、planned=2，
+        于是 reasons 报 ``target_reached``（"目标已达成"），但用户明明少拿了 8 张。
+        诊断面板只读本函数结果，用户完全看不到"为什么少了"。
+
+        现在改为：以 ``requested_count`` 为口径算缺口与原因，另附
+        ``target_count`` / ``target_shortage`` 供内部排查使用。
+        """
+        requested = int(max(0, diagnostics.get("requested_count", 0) or 0))
         target = int(max(0, target_count))
         planned = int(max(0, planned_count))
-        shortage = max(0, target - planned)
+
+        # 对外口径：相对用户请求的缺口；没给 requested_count 时退回 target
+        effective_target = requested if requested > 0 else target
+        shortage = max(0, effective_target - planned)
+        # 内部分析口径：相对压低后目标的缺口（用于区分"约束砍掉了"与"没凑出来"）
+        target_shortage = max(0, target - planned)
+
         attempts = int(diagnostics.get("attempts", 0) or 0)
         duplicates = int(diagnostics.get("duplicate_attempts", 0) or 0)
         dedup_hits = diagnostics.get("dedup_hits", {}) or {}
@@ -302,10 +323,18 @@ class BatchExportDedupBudgetMixin:
         else:
             combo_space = diagnostics.get("combination_space", {}) or {}
             total_possible = int(combo_space.get("precompute_total_possible", 0) or combo_space.get("total_possible_estimate", 0) or 0)
+            # 组合空间受限：生成数已触顶，是"素材池不够"而不是"效率低"
             if total_possible > 0 and planned >= total_possible:
                 reasons.append("combination_space_limited")
-            if dedup_total > 0 and dedup_total >= max(10, shortage):
-                reasons.append("dedup_blocking")
+            elif target_shortage > 0:
+                # 生成数没到（压低后的）目标，说明确实是去重/随机没凑出来
+                if dedup_total > 0 and dedup_total >= max(10, target_shortage):
+                    reasons.append("dedup_blocking")
+            # 目标被约束削减过：这是"少拿"的直接原因，必须单列
+            if target < requested and planned >= target:
+                reasons.append("target_capped_by_constraints")
+                if dedup_total > 0 and dedup_total >= max(10, target_shortage):
+                    reasons.append("dedup_blocking")
             if diagnostics.get("mode") == "binding":
                 cat_usage = diagnostics.get("category_usage", {}) or {}
                 used_categories = sum(1 for _, v in cat_usage.items() if int(v or 0) > 0)
@@ -314,13 +343,26 @@ class BatchExportDedupBudgetMixin:
                     reasons.append("category_coverage_low")
                 if diagnostics.get("force_generate_used"):
                     reasons.append("force_generate_activated")
+            # 去重原因按"外缺口"再判一次（上面的 else 只在 target_shortage>0 时进）
+            if (
+                "dedup_blocking" not in reasons
+                and dedup_total > 0
+                and dedup_total >= max(10, shortage)
+            ):
+                reasons.append("dedup_blocking")
             if not reasons:
                 reasons.append("generation_efficiency_low")
 
+        # 去重（保持顺序的前提下）
+        reasons = list(dict.fromkeys(reasons))
+
         return {
+            "requested_count": requested,
             "target_count": target,
             "planned_count": planned,
             "shortage_count": shortage,
+            "target_shortage": target_shortage,
+            "capped_by_constraints": bool(requested > 0 and target < requested),
             "attempts": attempts,
             "duplicate_attempts": duplicates,
             "success_rate": success_rate,

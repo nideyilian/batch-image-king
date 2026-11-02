@@ -392,8 +392,14 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
         if self._was_canceled:
             return 0
 
-        # 
+        # 理论组合数 = 各可见图层素材池大小的乘积。
+        #
+        # ⚠️ 2026-11-02 修正：初值用 1 作乘法单位元，但**一个池都没参与相乘**时
+        # （所有图层素材为空 / 全部为分组）会原样返回 1，对外表示"有 1 个组合"，
+        # 而实际可导出 0 张 —— 空目录被报成 1 个组合，UI 上会显示"可导出 1 张"，
+        # 点导出却是空结果。这里用参与相乘的池数量做哨兵。
         total_combinations = 1
+        contributing_pools = 0
         from app.utils.layer_tree import is_layer_group, is_effectively_visible
         for doc_layer_idx, layer in enumerate(self.document.layers):
             if cancel_callback and cancel_callback():
@@ -403,6 +409,11 @@ class BatchExportPrecomputerV2(BatchExportDedupBudgetMixin, BatchExportConstrain
                 layer_pool_size = len(self.layer_image_pools.get(doc_layer_idx, []))
                 if layer_pool_size > 0:
                     total_combinations *= layer_pool_size
+                    contributing_pools += 1
+
+        # 没有任何素材池参与 → 组合数就是 0，而不是乘法单位元 1
+        if contributing_pools == 0:
+            total_combinations = 0
 
         print(f"[V2] 理论组合总数: {total_combinations}")
         return total_combinations
