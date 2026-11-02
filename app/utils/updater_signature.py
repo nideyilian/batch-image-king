@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 # ⚠️ 这把公钥对应一把**离线保管**的私钥，私钥不在仓库里、也不在任何构建产物里。
 # 替换公钥意味着"从这一版开始，旧版客户端不再接受新清单签名"——
 # 所以要换必须先发一版把新公钥带下去，等覆盖够了再启用。
-UPDATE_PUBLIC_KEY_B64 = "REPLACE_WITH_RELEASE_PUBLIC_KEY"
+UPDATE_PUBLIC_KEY_B64 = "VgI7qCMS6/5zNOQhah1kLE5ZHUvDq9IRFQkPXN+R23A="
 
 # 签名算法标识，写进清单便于以后换算法时区分
 SIGNATURE_ALGORITHM = "ed25519"
@@ -115,9 +115,26 @@ def _decode_public_key(public_key_b64: str) -> bytes:
     return raw
 
 
-def is_public_key_configured(public_key_b64: str = "") -> bool:
-    """发布公钥是否已经正确配置（占位符不算）。"""
-    value = (public_key_b64 or UPDATE_PUBLIC_KEY_B64 or "").strip()
+def is_public_key_configured(public_key_b64: Optional[str] = None) -> bool:
+    """发布公钥是否可用。
+
+    两种调用语义要分清（2026-11-02 修两次才对）：
+
+    - ``is_public_key_configured()`` —— **不传参**，问"本客户端配好公钥了吗"，
+      此时回退到内置常量 ``UPDATE_PUBLIC_KEY_B64``。
+    - ``is_public_key_configured(some_value)`` —— 传了值，问"**这个值**是不是
+      一把可用公钥"，**不再回退**。
+
+    为什么用 ``None`` 而不是空串作"没传参"的哨兵：
+    最初写成 ``if public_key_b64:``，而 ``""`` 是假值，于是
+    ``is_public_key_configured("")`` 会掉进回退分支、返回 True ——
+    空串被当成了"有效公钥"。用 ``None`` 才能把"没传"和"传了空串"分开。
+    """
+    if public_key_b64 is None:
+        value = (UPDATE_PUBLIC_KEY_B64 or "").strip()
+    else:
+        value = public_key_b64.strip()
+
     if not value or value == "REPLACE_WITH_RELEASE_PUBLIC_KEY":
         return False
     try:

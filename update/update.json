@@ -6,5 +6,7 @@
   "required": false,
   "published_at": "2026-08-19",
   "sha256": "157cbc77bdf694d0722c89e07e7344917a7a2f81e41286e989729595b98d3c32",
-  "installer_sha256": "1a1ab4c997602bd8e09cdee58b9cfd79f1f2471e0e63251d38c7fdf1701f8b88"
+  "installer_sha256": "1a1ab4c997602bd8e09cdee58b9cfd79f1f2471e0e63251d38c7fdf1701f8b88",
+  "signature": "vIRXuFn1sSgC4IoAemDHmUsYVmTGRwEGhjUzTsZHZvnJZuBWLLrdiQO3H9f+paL8KZTB3KA9TdMBr1kic1enBQ==",
+  "signature_algorithm": "ed25519"
 }

@@ -17,6 +17,67 @@ from app.utils import updater
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# ---------------------------------------------------------------------------
+# 清单签名辅助（2026-11-02 加入签名后新增）
+# ---------------------------------------------------------------------------
+# 签名生效后，未签名的清单会被 fetch_update_info 拒绝。所以这几条原本
+# "造个假 JSON 就能测" 的用例必须真的签一下。
+#
+# 做法：现场生成一对临时密钥，并用 monkeypatch 把**内置公钥**替换成测试公钥。
+# 不依赖仓库里那把真实发布密钥 —— 否则测试会绑死在一份无法复现的私钥上。
+
+def _make_signing_keypair():
+    """现场生成 Ed25519 密钥对，返回 (private_key, public_b64)。"""
+    crypto_serialization = pytest.importorskip(
+        "cryptography.hazmat.primitives.serialization",
+        reason="清单签名依赖 cryptography",
+    )
+    pytest.importorskip("cryptography.hazmat.primitives.asymmetric.ed25519")
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    import base64 as _b64
+
+    private_key = Ed25519PrivateKey.generate()
+    public_b64 = _b64.b64encode(
+        private_key.public_key().public_bytes(
+            encoding=crypto_serialization.Encoding.Raw,
+            format=crypto_serialization.PublicFormat.Raw,
+        )
+    ).decode()
+    return private_key, public_b64
+
+
+def _write_signed_manifest(path, payload: dict, private_key) -> Path:
+    """把 payload 签名后写入 path，返回 path。"""
+    import base64 as _b64
+
+    from app.utils.updater_signature import SIGNATURE_ALGORITHM, canonical_payload
+
+    signed = dict(payload)
+    signed["signature"] = _b64.b64encode(private_key.sign(canonical_payload(signed))).decode()
+    signed["signature_algorithm"] = SIGNATURE_ALGORITHM
+    path.write_text(
+        json.dumps(signed, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def signing(monkeypatch):
+    """把内置公钥换成临时测试公钥，返回 (private_key, write_signed_manifest)。
+
+    用 fixture 而不是在每个测试里重复 monkeypatch，避免漏改导致测试
+    意外走"过渡期"分支而"假装通过"。
+    """
+    private_key, public_b64 = _make_signing_keypair()
+    from app.utils import updater_signature as sig_module
+
+    monkeypatch.setattr(sig_module, "UPDATE_PUBLIC_KEY_B64", public_b64)
+    monkeypatch.delenv("BTPW_UPDATE_ALLOW_UNSIGNED", raising=False)
+    return private_key, _write_signed_manifest
+
+
+
 
 @pytest.mark.unit
 def test_get_current_version_matches_app_version():
@@ -45,21 +106,17 @@ def test_is_newer():
 
 
 @pytest.mark.unit
-def test_fetch_update_info_from_local_file(tmp_path):
-    manifest = tmp_path / "update.json"
-    manifest.write_text(
-        json.dumps(
-            {
-                "version": "2.0.0",
-                "release_notes": "test notes",
-                "download_url": "https://example.com/app.exe",
-                "installer_url": "https://example.com/setup.exe",
-                "required": True,
-                "published_at": "2026-08-07",
-            }
-        ),
-        encoding="utf-8",
-    )
+def test_fetch_update_info_from_local_file(tmp_path, signing):
+    private_key, write_signed = signing
+    payload = {
+        "version": "2.0.0",
+        "release_notes": "test notes",
+        "download_url": "https://example.com/app.exe",
+        "installer_url": "https://example.com/setup.exe",
+        "required": True,
+        "published_at": "2026-08-07",
+    }
+    manifest = write_signed(tmp_path / "update.json", payload, private_key)
     url = manifest.as_uri()
     info = updater.fetch_update_info(url)
     assert info.version == "2.0.0"
@@ -72,9 +129,9 @@ def test_fetch_update_info_from_local_file(tmp_path):
 
 
 @pytest.mark.unit
-def test_fetch_update_info_missing_fields_default(tmp_path):
-    manifest = tmp_path / "update.json"
-    manifest.write_text(json.dumps({"version": "2.0.0"}), encoding="utf-8")
+def test_fetch_update_info_missing_fields_default(tmp_path, signing):
+    private_key, write_signed = signing
+    manifest = write_signed(tmp_path / "update.json", {"version": "2.0.0"}, private_key)
     info = updater.fetch_update_info(manifest.as_uri())
     assert info.release_notes == ""
     assert info.download_url == ""
@@ -83,11 +140,12 @@ def test_fetch_update_info_missing_fields_default(tmp_path):
 
 
 @pytest.mark.unit
-def test_check_for_update_detects_newer(tmp_path):
-    manifest = tmp_path / "update.json"
-    manifest.write_text(
-        json.dumps({"version": "1.1.0", "download_url": "https://example.com/u"}),
-        encoding="utf-8",
+def test_check_for_update_detects_newer(tmp_path, signing):
+    private_key, write_signed = signing
+    manifest = write_signed(
+        tmp_path / "update.json",
+        {"version": "1.1.0", "download_url": "https://example.com/u"},
+        private_key,
     )
     info = updater.check_for_update(manifest.as_uri(), current_version="1.0.0")
     assert info is not None
@@ -95,11 +153,11 @@ def test_check_for_update_detects_newer(tmp_path):
 
 
 @pytest.mark.unit
-def test_check_for_update_returns_none_when_same_or_older(tmp_path):
-    manifest = tmp_path / "update.json"
-    manifest.write_text(json.dumps({"version": "1.0.0"}), encoding="utf-8")
+def test_check_for_update_returns_none_when_same_or_older(tmp_path, signing):
+    private_key, write_signed = signing
+    manifest = write_signed(tmp_path / "update.json", {"version": "1.0.0"}, private_key)
     assert updater.check_for_update(manifest.as_uri(), current_version="1.0.0") is None
-    manifest.write_text(json.dumps({"version": "0.9.0"}), encoding="utf-8")
+    write_signed(manifest, {"version": "0.9.0"}, private_key)
     assert updater.check_for_update(manifest.as_uri(), current_version="1.0.0") is None
 
 
@@ -128,6 +186,41 @@ def test_committed_update_manifest_is_in_sync():
     assert payload["version"] == updater.get_current_version()
     assert payload["download_url"].startswith("https://github.com/")
     assert payload["installer_url"].startswith("https://github.com/")
+
+
+@pytest.mark.unit
+def test_committed_update_manifest_has_valid_signature():
+    """仓库里这份清单必须能被**真实发布公钥**验签通过。
+
+    这条守的是发版流程最容易漏的一步：改了 update.json 里的版本号 / 下载地址
+    却忘记重新签名。漏签的后果不是"报错"，而是所有已升级的客户端
+    **静默拒绝这次更新** —— 用户只会看到"已是最新版本"，永远收不到新版。
+
+    注意：这里刻意不 monkeypatch 公钥，用的是源码里内置的那把。
+    """
+    crypto = pytest.importorskip(
+        "cryptography", reason="清单签名依赖 cryptography"
+    )
+    from app.utils.updater_signature import (
+        ManifestSignatureError,
+        is_public_key_configured,
+        verify_manifest,
+    )
+
+    if not is_public_key_configured():
+        pytest.skip("尚未配置发布公钥（过渡期），跳过签名校验")
+
+    manifest_path = REPO_ROOT / "update" / "update.json"
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    try:
+        verify_manifest(payload, allow_unsigned=False)
+    except ManifestSignatureError as error:
+        pytest.fail(
+            f"仓库清单签名无效：{error}\n"
+            f"改过 update/update.json 后必须重新签名：\n"
+            f"  python tools/sign_update_manifest.py update/update.json"
+        )
 
 
 @pytest.mark.unit
@@ -356,11 +449,12 @@ def test_download_update_rejects_wrong_sha256(tmp_path):
 
 
 @pytest.mark.unit
-def test_check_for_update_falls_back_to_mirror(tmp_path, monkeypatch):
-    manifest = tmp_path / "update.json"
-    manifest.write_text(
-        json.dumps({"version": "2.0.0", "download_url": "https://example.com/u"}),
-        encoding="utf-8",
+def test_check_for_update_falls_back_to_mirror(tmp_path, monkeypatch, signing):
+    private_key, write_signed = signing
+    manifest = write_signed(
+        tmp_path / "update.json",
+        {"version": "2.0.0", "download_url": "https://example.com/u"},
+        private_key,
     )
     missing = (tmp_path / "missing.json").as_uri()
     monkeypatch.setattr(updater, "DEFAULT_MANIFEST_URL", missing)
@@ -486,11 +580,12 @@ def test_download_update_keeps_partial_for_resume(tmp_path, monkeypatch):
 
 
 @pytest.mark.unit
-def test_fetch_update_info_parses_installer_sha256(tmp_path):
-    manifest = tmp_path / "update.json"
-    manifest.write_text(
-        json.dumps({"version": "2.0.0", "installer_sha256": "abc123"}),
-        encoding="utf-8",
+def test_fetch_update_info_parses_installer_sha256(tmp_path, signing):
+    private_key, write_signed = signing
+    manifest = write_signed(
+        tmp_path / "update.json",
+        {"version": "2.0.0", "installer_sha256": "abc123"},
+        private_key,
     )
     info = updater.fetch_update_info(manifest.as_uri())
     assert info.installer_sha256 == "abc123"
