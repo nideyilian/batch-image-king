@@ -11,11 +11,26 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+def _launcher_source() -> str:
+    """启动器全量源码（qml_main + qml_debug_entries）。
+
+    2026-11-02 拆分：调试入口 / 窗口几何 / 初始文档准备搬进了
+    ``app/qml/qml_debug_entries.py``。这些测试关心的是"启动器具备该能力"，
+    与代码住在哪个文件无关，所以统一读全量源码，避免因为搬家误报。
+    """
+    launcher_dir = REPO_ROOT / "app" / "qml"
+    return "\n".join(
+        (launcher_dir / name).read_text(encoding="utf-8")
+        for name in ("qml_main.py", "qml_debug_entries.py")
+        if (launcher_dir / name).exists()
+    )
+
+
 
 @pytest.mark.unit
 def test_qml_export_sections_and_color_picker_debug_entry_exist():
     qml_source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
-    launcher_source = (REPO_ROOT / "app/qml/qml_main.py").read_text(encoding="utf-8")
+    launcher_source = _launcher_source()
 
     assert 'objectName: "effectColorDialog"' in qml_source
     assert "header: null" in qml_source
