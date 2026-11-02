@@ -90,3 +90,9 @@ venv.bak/
 # AI 编码工具工作区（项目记忆、临时产物）
 .workbuddy/
 _test_result.xml
+
+# 更新清单签名私钥 —— 绝不能进仓库
+update_private_key.txt
+update_public_key.txt
+*.pem
+signing_key*

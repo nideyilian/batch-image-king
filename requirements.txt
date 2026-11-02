@@ -17,6 +17,12 @@ opencv-python>=4.12.0
 # 系统监控和性能优化
 psutil>=7.0.0
 
+# 更新清单签名验证（Ed25519）
+# 用于校验 update.json 的数字签名，防止更新源被投毒把用户导向恶意安装包。
+# 见 app/utils/updater_signature.py。注意：缺失时更新功能会拒绝执行验签
+# （fail-closed），因此这是**必需依赖**而非可选依赖。
+cryptography>=41.0.0
+
 # 打包工具
 PyInstaller>=6.14.1
 

@@ -36,6 +36,13 @@ a = Analysis(
         'app.workers.export_worker',
         'cv2',
         'numpy',
+        # 更新清单签名验证（Ed25519）。必须显式列入：
+        # cryptography 是"用到才导入"的延迟依赖，PyInstaller 静态分析容易漏收，
+        # 一旦漏收，老用户升级时验签会 ImportError，更新链路直接断掉。
+        'cryptography',
+        'cryptography.hazmat.primitives.asymmetric.ed25519',
+        'cryptography.hazmat.primitives.serialization',
+        'cryptography.exceptions',
     ],
     hookspath=[],
     hooksconfig={},

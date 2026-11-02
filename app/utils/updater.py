@@ -31,6 +31,8 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib import request as url_request
 
+from app.utils.updater_signature import verify_manifest
+
 APP_NAME = "批图王"
 
 DEFAULT_MANIFEST_URL = (
@@ -105,12 +107,21 @@ def is_newer(latest: str, current: str) -> bool:
 
 
 def fetch_update_info(manifest_url: str = "") -> UpdateInfo:
-    """拉取并解析更新清单。网络/JSON 异常会向上抛出，由调用方处理。"""
+    """拉取、验签并解析更新清单。网络/JSON/签名异常会向上抛出，由调用方处理。
+
+    ⚠️ 验签在**解析后、返回前**，所以每个候选源都会被验证；
+    某个源签名不对时 ``check_for_update`` 会继续尝试下一个源，而不是接受它。
+    这样即使某个 CDN 被劫持，只要还有干净源就能拿到正确清单。
+    """
     url = manifest_url or get_manifest_url()
     timeout = float(os.environ.get("BTPW_UPDATE_TIMEOUT", "15"))
     with url_request.urlopen(url, timeout=timeout) as response:
         raw = response.read().decode("utf-8")
     payload = json.loads(raw)
+
+    # 验签：拒绝被篡改的清单（详见 app/utils/updater_signature.py 的说明）
+    verify_manifest(payload)
+
     return UpdateInfo(
         version=str(payload.get("version", "") or "").strip(),
         release_notes=str(payload.get("release_notes", "") or ""),
