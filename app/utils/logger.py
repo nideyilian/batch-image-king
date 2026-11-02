@@ -8,11 +8,12 @@
 """
 
 import contextlib
+import glob
 import logging
+import logging.handlers
 import os
 import sys
 import time
-from datetime import datetime
 
 
 __all__ = [
@@ -20,7 +21,32 @@ __all__ = [
     "Logger",
     "log_suppressed",
     "swallow",
+    "prune_legacy_log_files",
 ]
+
+# ---------------------------------------------------------------------------
+# 日志文件策略（2026-11-02）
+# ---------------------------------------------------------------------------
+# 历史问题：早期实现每次启动都新建 ``app_{timestamp}.log``，且没有任何轮转
+# 策略。实测一个开发机累积到 1627 个文件 / 12MB，用户长期使用只会更糟，
+# 排查问题时也无法按级别或时间窗口过滤。
+#
+# 现行策略（与主流桌面应用一致）：
+#   * 单一滚动词典 ``app.log``，按大小轮转（5MB × 5 份），总量封顶约 30MB；
+#   * 启动时清理历史遗留的 ``app_<timestamp>.log``（保留最近 N 个），
+#     否则老用户的日志目录永远不会瘦下来。
+# ---------------------------------------------------------------------------
+LOG_MAX_BYTES = 5 * 1024 * 1024
+LOG_BACKUP_COUNT = 5
+LOG_FILENAME = "app.log"
+# 启动时保留的历史时间戳日志个数（仅供对照上一版本，保留少量即可）
+LEGACY_LOG_KEEP = 20
+# 只清理超过该天数的历史日志，避免误删仍在排查用文件
+LEGACY_LOG_MAX_AGE_DAYS = 30
+
+# 匹配历史遗留的带时间戳日志（app_20261102_101530.log）。
+# 注意不会误伤现行的 app.log —— 后者没有下划线。
+LEGACY_LOG_GLOB = "app_*.log"
 
 # ---------------------------------------------------------------------------
 # 统一日志使用规范（P0：收敛异常 swallowing / 统一日志）
@@ -69,9 +95,66 @@ def log_suppressed(logger, context="", level=logging.WARNING):
 swallow = log_suppressed
 
 
+def prune_legacy_log_files(log_dir, keep=LEGACY_LOG_KEEP, max_age_days=LEGACY_LOG_MAX_AGE_DAYS):
+    """清理历史遗留的带时间戳日志 ``app_<timestamp>.log``。
+
+    旧实现每次启动新建一个日志文件且从不清理，实测可累积到上千个文件。
+
+    保守策略（两个条件同时满足才删除）：
+      1. 超出最近 ``keep`` 个（按修改时间倒序）；
+      2. 最后修改时间早于 ``max_age_days`` 天。
+    即"最近 20 个"和"30 天内"的文件一律保留，避免误删仍在排查用的日志。
+
+    现行的 ``app.log`` 及其轮转副本（``app.log.1`` …）不匹配该 glob，不受影响。
+
+    Args:
+        log_dir: 日志目录。
+        keep: 保留的历史日志个数（按修改时间倒序）。
+        max_age_days: 只删除超过该天数的文件。
+
+    Returns:
+        实际删除的文件数。任何失败都只记 WARNING，不影响启动。
+    """
+    try:
+        pattern = os.path.join(log_dir, LEGACY_LOG_GLOB)
+        candidates = [
+            path for path in glob.glob(pattern)
+            if os.path.basename(path) != LOG_FILENAME
+        ]
+        if len(candidates) <= keep:
+            return 0
+
+        candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        cutoff = time.time() - max_age_days * 86400
+        removed = 0
+        for path in candidates[keep:]:
+            try:
+                if os.path.getmtime(path) > cutoff:
+                    continue
+                os.remove(path)
+                removed += 1
+            except OSError:
+                # 文件被占用/权限不足：留给下次启动再试
+                continue
+        if removed:
+            logging.getLogger(__name__).info(
+                "已清理 %d 个历史日志文件（保留最近 %d 个）: %s", removed, keep, log_dir
+            )
+        return removed
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "清理历史日志文件失败: %s", log_dir, exc_info=True
+        )
+        return 0
+
+
 def get_logger(name="app", log_file="app_log.txt", level=logging.INFO):
     """
     创建并配置日志记录器（从logging_setup.py合并）
+
+    ⚠️ 兼容保留，**新代码请改用 ``Logger.init()`` / ``Logger.get_logger()``**。
+    本函数会把日志写到 ``log_file``（默认相对路径 ``app_log.txt``，随工作目录变化），
+    且不做轮转，与现行 ``app.log`` 轮转策略不一致。当前仓库内已无调用点。
 
     Args:
         name: 日志记录器名称
@@ -89,7 +172,7 @@ def get_logger(name="app", log_file="app_log.txt", level=logging.INFO):
     if logger.handlers:
         return logger
 
-    # 创建文件处理器
+    # 创建文件处理器（显式声明不做轮转，避免与 Logger.init 策略混淆）
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(level)
 
@@ -131,15 +214,21 @@ class Logger:
     _logger = None
     
     @classmethod
-    def init(cls, log_dir='logs', log_level=logging.INFO, console_output=True, logger_name='app'):
+    def init(cls, log_dir='logs', log_level=logging.INFO, console_output=True, logger_name='app',
+             max_bytes=LOG_MAX_BYTES, backup_count=LOG_BACKUP_COUNT):
         """
         初始化日志系统
+
+        日志写入单一滚动词典 ``app.log``：超过 ``max_bytes`` 自动轮转，
+        最多保留 ``backup_count`` 份，长期使用不会无限增长。
 
         Args:
             log_dir: 日志文件目录
             log_level: 日志级别
             console_output: 是否输出到控制台
             logger_name: 日志器名称
+            max_bytes: 单个日志文件上限（字节），默认 5MB
+            backup_count: 轮转保留份数，默认 5
         """
         if cls._initialized:
             return
@@ -156,10 +245,12 @@ class Logger:
             # 其他异常，使用当前目录
             log_dir = '.'
             logging.error("[警告] 创建日志目录时出错，使用当前目录: %s", e)
-        
-        # 设置日志文件名，使用当前日期和时间
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        log_file = os.path.join(log_dir, f'app_{timestamp}.log')
+
+        # 清理旧版本遗留的时间戳日志（只保留少量样本）
+        prune_legacy_log_files(log_dir)
+
+        # 固定文件名 + 大小轮转，替代「每次启动新建一个文件」
+        log_file = os.path.join(log_dir, LOG_FILENAME)
         
         # 创建日志器
         logger = logging.getLogger(logger_name)
@@ -171,7 +262,12 @@ class Logger:
         
         # 创建文件处理器，添加异常处理
         try:
-            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_file,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding='utf-8',
+            )
             file_handler.setLevel(log_level)
         except (OSError, PermissionError) as e:
             # 如果无法创建日志文件，使用备用方案

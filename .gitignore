@@ -52,6 +52,9 @@ settings.ini
 *.temp
 .DS_Store
 Thumbs.db
+
+# 根目录调试截图（点开头的临时验证图，如 .verify_click.png / .home_test.png）
+/.*.png
 tmp_*.json
 diff.txt
 _show_buckets.py
