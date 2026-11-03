@@ -46,6 +46,7 @@ QtObject {
     readonly property string unlock: "unlock-keyhole"
     readonly property string copy: "copy"
     readonly property string paste: "clipboard-paste"
+    readonly property string pencil: "pencil"
     readonly property string trash: "trash-2"
 
     readonly property string crop: "crop"

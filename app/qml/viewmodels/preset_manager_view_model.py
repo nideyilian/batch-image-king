@@ -17,6 +17,11 @@ from app.utils.preset_thumbnail import (
 
 
 class PresetManagerViewModel(QObject):
+    # ⚠️ 约定：**改了预设集合（增/删/改名/导入/复制/改元数据）就必须两个都发**。
+    # presetsChanged 供抽屉、计数、分类清单用；viewChanged 供工作台的
+    # visiblePresets（卡片网格）用。只发前者会让工作台停在旧列表上 ——
+    # 历史上 deletePreset / saveCurrent / importPreset / duplicatePreset
+    # 都漏过，症状分别是「删了还在」「存了不出现」「导入了看不到」。
     presetsChanged = Signal()
     stateChanged = Signal()
     # 工作台查询条件变化（搜索词/排序/筛选/收藏视图）后重算可见列表
@@ -341,7 +346,11 @@ class PresetManagerViewModel(QObject):
             self._set_error("保存预设失败")
             return False
         self._set_error("")
+        # 新建的卡片要立刻出现在工作台里：工作台网格挂的是 viewChanged。
+        # 只发 presetsChanged 时卡片要等下一次「恰好」发 viewChanged 才出现
+        # （实测表现为「存了预设，打开工作台是空的，翻一下筛选才冒出来」）。
         self.presetsChanged.emit()
+        self.viewChanged.emit()
         return True
 
     @Slot(str, str, result=bool)
@@ -496,7 +505,9 @@ class PresetManagerViewModel(QObject):
         self._manager.touch_preset_used(preset_id)
         self._last_load_reused = False
         self._set_error("")
+        # 使用次数/最近使用时间变了，「最近使用」排序与卡片元数据都要刷新
         self.presetsChanged.emit()
+        self.viewChanged.emit()
         return loaded
 
     def _focus_open_preset(self, preset_id: str):
@@ -536,7 +547,9 @@ class PresetManagerViewModel(QObject):
             self._set_error("复制预设失败")
             return ""
         self._set_error("")
+        # 复制出来的新卡片必须马上可见（调用方会紧接着选中它）
         self.presetsChanged.emit()
+        self.viewChanged.emit()
         return new_id
 
     @Slot(str, str, result=bool)
@@ -583,7 +596,10 @@ class PresetManagerViewModel(QObject):
             )
             return 0
         self._set_error("")
+        # 导入的卡片同理：不发 viewChanged 的话工作台列表不动，
+        # 用户会以为导入失败（而计数已经变了）。
         self.presetsChanged.emit()
+        self.viewChanged.emit()
         return imported
 
     @Slot(str, str, str, result=bool)
@@ -599,20 +615,51 @@ class PresetManagerViewModel(QObject):
         success = bool(self._manager.update_preset(preset_id, name=name, description=str(description or "").strip()))
         self._set_error("" if success else "更新预设失败")
         if success:
+            # 改名/改描述要同时发 viewChanged：工作台卡片绑的是 visiblePresets
+            # （notify=viewChanged），只发 presetsChanged 会出现「输入框改好了、
+            # 卡片标题还是旧名字」。
             self.presetsChanged.emit()
+            self.viewChanged.emit()
         return success
 
     @Slot(str, result=bool)
     def deletePreset(self, preset_id: str) -> bool:
+        """删除预设并让所有视图立刻收敛。
+
+        ⚠️ 这里必须**同时**发 ``presetsChanged`` 与 ``viewChanged``：
+        工作台的卡片网格绑定的是 ``visiblePresets``（notify=viewChanged），
+        只发 ``presetsChanged`` 的话卡片不会消失 —— 用户会遇到「已经删掉了，
+        卡片还在、还能点」的幽灵条目（2026-11-03 修复的线上问题）。
+        """
         preset_id = str(preset_id or "")
         if not self._preset_exists(preset_id):
             self._set_error("预设不存在")
             return False
-        success = bool(self._manager.delete_preset(preset_id))
-        self._set_error("" if success else "删除预设失败")
-        if success:
-            self.presetsChanged.emit()
-        return success
+        if not self._manager.delete_preset(preset_id):
+            self._set_error("删除预设失败")
+            return False
+
+        # 删掉条目后，所有挂在它身上的派生状态都要一起清：
+        # 缩略图文件（含排队中的任务）、缺失素材缓存、封面候选缓存、
+        # 撤销快照、损坏标记。漏一样就会留下「条目没了但图还在」的脏数据，
+        # 或者同名重建时直接继承上一轮的损坏判定。
+        self._drop_thumbnails(preset_id)
+        self._invalidate_preset_caches(preset_id)
+        self._undo_tokens.pop(preset_id, None)
+        self._corrupt_ids.discard(preset_id)
+        self._set_error("")
+        self.presetsChanged.emit()
+        self.viewChanged.emit()
+        return True
+
+    @Slot(str, result=bool)
+    def presetExists(self, preset_id: str) -> bool:
+        """该预设是否还在库里。QML 用它判断「当前选中项是否已被删掉」。
+
+        不能拿 ``visiblePresets`` 是否包含来判断：搜索/筛选会让未删除的项
+        暂时不可见，那种情况不该清空选中态。
+        """
+        return self._preset_exists(preset_id)
 
     # ------------------------------------------------------------------
     # 工作台查询层（搜索 / 排序 / 收藏 / 分类 / 缩略图）
@@ -673,14 +720,19 @@ class PresetManagerViewModel(QObject):
 
     @Property("QVariantList", notify=presetsChanged)
     def categories(self):
-        """左侧导航用的分类清单（含数量），按现有预设实际分类聚合。"""
-        buckets: dict[str, int] = {}
+        """左侧导航用的分类清单（含数量）。
+
+        顺序由 manager 决定：用户建过的分类按创建顺序在前（空分类也保留），
+        其余从预设聚合出来的旧分类按条数排在后面，「未分类」垫底。
+        不能只用 get_all_presets() 聚合 —— 那样「新建的空分类」会当场消失。
+        """
+        counts: dict[str, int] = {}
         for preset in self._manager.get_all_presets():
             name = str(preset.get("category") or "未分类")
-            buckets[name] = buckets.get(name, 0) + 1
+            counts[name] = counts.get(name, 0) + 1
         return [
-            {"name": name, "count": count}
-            for name, count in sorted(buckets.items(), key=lambda item: (-item[1], item[0]))
+            {"name": name, "count": counts.get(name, 0)}
+            for name in self._manager.get_category_names()
         ]
 
     @Property(int, notify=presetsChanged)
@@ -1180,17 +1232,47 @@ class PresetManagerViewModel(QObject):
         self.viewChanged.emit()
         return True
 
+    @Slot(str, result=bool)
+    def createCategory(self, name: str) -> bool:
+        """新建分类（允许空分类，之后再把预设拖/改进来）。"""
+        if not self._manager.create_category(name):
+            self._set_error(self._manager.last_error or "新建分类失败")
+            return False
+        self._set_error("")
+        self.presetsChanged.emit()
+        self.viewChanged.emit()
+        return True
+
+    @Slot(str, str, result=bool)
+    def renameCategory(self, old_name: str, new_name: str) -> bool:
+        """重命名分类，成员跟着改名。"""
+        if not self._manager.rename_category(old_name, new_name):
+            self._set_error(self._manager.last_error or "重命名分类失败")
+            return False
+        # 正停在该分类上时，筛选条件也要跟着改名，否则列表会突然空掉
+        if self._category == str(old_name or "").strip():
+            self._category = str(new_name or "").strip()
+        self._set_error("")
+        self.presetsChanged.emit()
+        self.viewChanged.emit()
+        return True
+
     @Slot(str, result=int)
     def deleteCategory(self, category: str) -> int:
-        """删除分类：成员归回「未分类」，返回受影响数量。不删预设本身。"""
+        """删除分类：成员归回「未分类」，不删预设本身。
+
+        返回值：>=0 成功（0 表示删的是空分类），-1 失败。
+        注意与旧版语义不同——旧版用 0 同时表示「失败」和「空分类」，
+        导致空分类永远删不掉。
+        """
         name = str(category or "").strip()
         if not name or name == "未分类":
             self._set_error("「未分类」不能删除")
-            return 0
-        affected = int(self._manager.delete_category(name) or 0)
-        if affected <= 0:
-            self._set_error("该分类下没有预设")
-            return 0
+            return -1
+        affected = int(self._manager.delete_category(name))
+        if affected < 0:
+            self._set_error(self._manager.last_error or "删除分类失败")
+            return -1
         # 正停在被删分类上时退回全部视图，否则会停在空列表
         if self._category == name:
             self._category = ""
@@ -1231,25 +1313,6 @@ class PresetManagerViewModel(QObject):
         self.presetsChanged.emit()
         self.viewChanged.emit()
         return True
-
-    @Slot(str, str, result=int)
-    def renameCategory(self, old_name: str, new_name: str) -> int:
-        """重命名分类，返回受影响的预设数量。"""
-        new_name = str(new_name or "").strip()
-        if not new_name:
-            self._set_error("分类名不能为空")
-            return 0
-        affected = int(self._manager.rename_category(old_name, new_name) or 0)
-        if affected <= 0:
-            self._set_error("重命名分类失败")
-            return 0
-        # 当前正停在旧分类上时，跟随改到新名字，否则左栏会突然「空掉」
-        if self._category == str(old_name or "").strip():
-            self._category = new_name
-        self._set_error("")
-        self.presetsChanged.emit()
-        self.viewChanged.emit()
-        return affected
 
     # ---- 缩略图 ----
 

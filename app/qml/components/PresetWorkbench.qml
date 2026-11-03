@@ -62,6 +62,8 @@ Item {
     property string sortModeValue: "recent"
     // 等待确认删除的分类名（空串表示没有待确认项）
     property string pendingDeleteCategory: ""
+    // 正在重命名的分类名（空串表示没有）
+    property string pendingRenameCategory: ""
     property bool editorDirty: false
     property string editorName: ""
     property string editorDescription: ""
@@ -296,10 +298,28 @@ Item {
         undoToast.open()
     }
 
+    /// 写操作失败时的统一提示。
+    ///
+    /// 之前这些入口只在成功时 toast，失败什么都不说 —— 用户看到的是
+    /// 「点了没反应」（收藏没亮、封面没换、分类没变），既不知道失败，
+    /// 也不知道原因。失败一律走这里，文案优先用视图模型的 lastError。
+    function reportFailure(fallback) {
+        requestToast((vm && vm.lastError) ? vm.lastError : (fallback || "操作失败，请重试"))
+    }
+
     /// 订阅页名变化做行级刷新（不发 presetsChanged，避免整屏卡片闪）。
     Connections {
         target: vm
         enabled: vm !== null
+        function onPresetsChanged() {
+            // 选中项被删掉时（入口可能在卡片、详情面板、右键菜单或旧抽屉），
+            // 选中态必须立刻退掉：否则右侧检查器停留在一个已不存在的预设上，
+            // 按钮全都还能点，点完只得到「预设不存在」——看起来像界面没刷新。
+            if (root.selectedId.length > 0 && root.vm
+                    && !root.vm.presetExists(root.selectedId)) {
+                root.clearSelection()
+            }
+        }
         function onDocumentTitlesChanged(presetId) {
             if (presetId === root.selectedId)
                 root.thumbnailTick++   // 触发 tabList model 重算
@@ -365,6 +385,11 @@ Item {
         editorName = ""
         editorDescription = ""
         editorDirty = false
+        // 选中项没了，页名编辑态也要一起收掉：否则编辑态还挂在旧卡片上，
+        // 下次选中别的卡片按回车，会把新卡片的页名改成旧草稿。
+        if (editingTabIndex >= 0)
+            cancelTabRename()
+        pendingCloseTabIndex = -1
     }
 
     function applyScope(scope) {
@@ -662,9 +687,11 @@ Item {
                                     count: modelData.count
                                     active: root.activeCategory === modelData.name
                                     indent: true
-                                    // 「未分类」是兜底桶，不能删
+                                    // 「未分类」是兜底桶，不能删也不能改名
+                                    renamable: modelData.name !== "未分类"
                                     deletable: modelData.name !== "未分类"
                                     onClicked: root.applyCategory(modelData.name)
+                                    onRenameRequested: root.pendingRenameCategory = modelData.name
                                     onDeleteRequested: root.pendingDeleteCategory = modelData.name
                                 }
                             }
@@ -679,10 +706,9 @@ Item {
                         color: Theme.border
                     }
 
-                    // 新建分类：输入名称后把它作为「当前分类」。
-                    // 分类本身没有独立实体，只存在于预设的 category 字段上，
-                    // 所以「新建」= 先把一个空分类置为当前筛选，用户随后把预设拖进来
-                    // 或改用检查器归类。这样避免维护一张可能悬空的分类表。
+                    // 新建分类：真的往分类清单里写一条，然后切到该分类。
+                    // 早先只是把筛选条件设成这个名字——列表里没有预设时它就
+                    // 什么也不显示，用户会以为「建了但没建上」。
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: 10
@@ -706,11 +732,14 @@ Item {
                             tooltip: "新建分类并筛选"
                             function applyNow() {
                                 var name = newCategoryField.text.trim()
-                                if (name.length === 0) return
+                                if (name.length === 0 || !root.vm) return
+                                if (!root.vm.createCategory(name)) {
+                                    root.reportFailure(root.vm.lastError || "新建分类失败")
+                                    return
+                                }
                                 newCategoryField.text = ""
-                                // 已存在的分类直接切换过去，不重复建
                                 root.applyCategory(name)
-                                root.requestToast("已筛选到分类「" + name + "」")
+                                root.requestToast("已新建分类「" + name + "」")
                             }
                             onClicked: applyNow()
                         }
@@ -721,7 +750,7 @@ Item {
                         Layout.rightMargin: 14
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
-                        text: "分类与标签在右侧检查器中编辑"
+                        text: "悬停分类可重命名或删除；预设归属在右侧检查器里改"
                         color: Theme.textMuted
                     }
                 }
@@ -787,7 +816,10 @@ Item {
                         onActivated: root.selectPreset(modelData.id)
                         onLoadRequested: root.requestLoad(modelData.id)
                         onBatchRequested: root.requestBatchCreate(modelData.id)
-                        onFavoriteToggled: root.vm ? root.vm.toggleFavorite(modelData.id) : false
+                        onFavoriteToggled: {
+                            if (root.vm && !root.vm.toggleFavorite(modelData.id))
+                                root.reportFailure("更新收藏状态失败")
+                        }
                         onDuplicateRequested: root.requestDuplicate(modelData.id)
                         onExportRequested: root.requestExport(modelData.id, modelData.name)
                         onDeleteRequested: root.requestDelete(modelData.id, modelData.name)
@@ -854,7 +886,10 @@ Item {
                             }
                             onReleased: {
                                 if (root.dragId.length > 0 && root.dragTargetIndex >= 0) {
-                                    if (root.vm) root.vm.movePreset(root.dragId, root.dragTargetIndex)
+                                    // 失败必须说一声：拖完卡片自己弹回原位，
+                                    // 不提示的话用户只会以为拖拽功能坏了。
+                                    if (root.vm && !root.vm.movePreset(root.dragId, root.dragTargetIndex))
+                                        root.reportFailure("调整顺序失败")
                                 }
                                 root.dragId = ""
                                 root.dragTargetIndex = -1
@@ -885,7 +920,10 @@ Item {
                         thumbTick: root.thumbnailTick
                         onActivated: root.selectPreset(modelData.id)
                         onLoadRequested: root.requestLoad(modelData.id)
-                        onFavoriteToggled: root.vm ? root.vm.toggleFavorite(modelData.id) : false
+                        onFavoriteToggled: {
+                            if (root.vm && !root.vm.toggleFavorite(modelData.id))
+                                root.reportFailure("更新收藏状态失败")
+                        }
                         Component.onCompleted: {
                             if (!modelData.thumbnailUrl && root.vm)
                                 root.vm.requestThumbnail(modelData.id)
@@ -925,7 +963,10 @@ Item {
                             }
                             onReleased: {
                                 if (root.dragId.length > 0 && root.dragTargetIndex >= 0) {
-                                    if (root.vm) root.vm.movePreset(root.dragId, root.dragTargetIndex)
+                                    // 失败必须说一声：拖完卡片自己弹回原位，
+                                    // 不提示的话用户只会以为拖拽功能坏了。
+                                    if (root.vm && !root.vm.movePreset(root.dragId, root.dragTargetIndex))
+                                        root.reportFailure("调整顺序失败")
                                 }
                                 root.dragId = ""
                                 root.dragTargetIndex = -1
@@ -1141,6 +1182,8 @@ Item {
                                     if (root.vm.setPresetCategory(root.selectedId,
                                                                   categoryField.text.trim()))
                                         root.requestToast("分类已更新")
+                                    else
+                                        root.reportFailure("更新分类失败")
                                 }
                                 onClicked: applyNow()
                             }
@@ -1181,7 +1224,8 @@ Item {
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
                                             if (!root.vm) return
-                                            root.vm.setPresetCategory(root.selectedId, modelData.name)
+                                            if (!root.vm.setPresetCategory(root.selectedId, modelData.name))
+                                                root.reportFailure("更新分类失败")
                                         }
                                     }
                                 }
@@ -1230,6 +1274,13 @@ Item {
                                 border.width: 1
                                 border.color: enabled ? Theme.borderStrong : Theme.border
 
+                                // 悬停探测放在这里（在 ToolTip 绑定之前声明）：
+                                // ToolTip.visible 若引用后面才声明的 MouseArea，
+                                // 构造期会拿到 undefined（"Unable to assign
+                                // [undefined] to bool"），绑定依赖注册不上，
+                                // 提示就永远不出现。
+                                HoverHandler { id: clearAllHover }
+
                                 Row {
                                     id: clearAllRow
                                     anchors.centerIn: parent
@@ -1256,7 +1307,7 @@ Item {
                                     onClicked: root.requestClearAllTabs()
                                 }
                                 ToolTip.delay: 500
-                                ToolTip.visible: clearAllMouse.hovered
+                                ToolTip.visible: clearAllHover.hovered
                                 ToolTip.text: root.vm && root.vm.busy
                                               ? root.vm.busyReason
                                               : "清空该预设的全部标签页（预设本身保留）"
@@ -1514,6 +1565,8 @@ Item {
                                             if (!root.vm) return
                                             if (root.vm.setCoverDocument(root.selectedId, modelData.index))
                                                 root.requestToast("封面已切换为第 " + (modelData.index + 1) + " 页")
+                                            else
+                                                root.reportFailure("切换封面失败")
                                         }
                                     }
                                 }
@@ -1551,6 +1604,8 @@ Item {
                                     if (!root.vm || root.selectedId.length === 0) return
                                     if (root.vm.setPresetTags(root.selectedId, tagsField.text))
                                         root.requestToast("标签已保存")
+                                    else
+                                        root.reportFailure("更新标签失败")
                                 }
                                 onClicked: applyNow()
                             }
@@ -1576,6 +1631,9 @@ Item {
                             if (root.vm.renamePreset(root.selectedId, root.editorName, root.editorDescription)) {
                                 root.editorDirty = false
                                 root.selectPreset(root.selectedId)
+                                root.requestToast("预设信息已保存")
+                            } else {
+                                root.reportFailure("保存预设信息失败")
                             }
                         }
                     }
@@ -1587,21 +1645,29 @@ Item {
                     //   这里管标签页内容（图层、画布尺寸、页名）
                     // 用户在工作区改完图后如果没有这个入口，就只能「另存为」新预设，
                     // 库里会堆出一堆重复卡片。
-                    AppButton {
+                    // 套一层 HoverHandler：按钮 disabled 时它内部的 MouseArea
+                    // 收不到悬停事件，ToolTip 就永远不出现 —— 而「为什么禁用」
+                    // 恰恰只有靠这条提示才能说清。外层是正常 Item，能收到。
+                    Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 34
-                        readonly property int openPages: root.vm && root.selectedId.length > 0
-                                                        ? root.vm.openPageCount(root.selectedId) : 0
-                        text: openPages > 0 ? "保存改动回此预设（" + openPages + " 页）"
-                                            : "保存改动回此预设"
-                        // 没打开过就无处可存：禁用而不是隐藏，让用户知道有这条路
-                        enabled: root.vm && !root.vm.busy && openPages > 0
-                        ToolTip.delay: 500
-                        ToolTip.visible: hovered
-                        ToolTip.text: openPages > 0
-                                      ? "把工作区里这 " + openPages + " 页的当前内容覆盖保存到该预设"
-                                      : "先在编辑器中打开该预设，改完再回来保存"
-                        onClicked: root.requestSaveToPreset(root.selectedId)
+                        HoverHandler { id: saveToPresetHover }
+
+                        AppButton {
+                            anchors.fill: parent
+                            readonly property int openPages: root.vm && root.selectedId.length > 0
+                                                            ? root.vm.openPageCount(root.selectedId) : 0
+                            text: openPages > 0 ? "保存改动回此预设（" + openPages + " 页）"
+                                                : "保存改动回此预设"
+                            // 没打开过就无处可存：禁用而不是隐藏，让用户知道有这条路
+                            enabled: root.vm && !root.vm.busy && openPages > 0
+                            ToolTip.delay: 500
+                            ToolTip.visible: saveToPresetHover.hovered
+                            ToolTip.text: openPages > 0
+                                          ? "把工作区里这 " + openPages + " 页的当前内容覆盖保存到该预设"
+                                          : "先在编辑器中打开该预设，改完再回来保存"
+                            onClicked: root.requestSaveToPreset(root.selectedId)
+                        }
                     }
 
                     // 次入口：卡片上的「打开」已经是一步直达的主入口，
@@ -1654,6 +1720,83 @@ Item {
 
     // ============ 内部小组件 ============
 
+    // 重命名分类：成员跟着改名，位置保持不动。
+    AppDialog {
+        id: renameCategoryDialog
+        width: 400
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+        title: "重命名分类"
+        visible: root.pendingRenameCategory.length > 0
+
+        onVisibleChanged: {
+            if (!visible) return
+            renameCategoryField.text = root.pendingRenameCategory
+            renameCategoryField.forceActiveFocus()
+            // 全选旧名字：用户多半是想整个换掉，而不是在中间插字
+            if (renameCategoryField.text.length > 0)
+                renameCategoryField.select(0, renameCategoryField.text.length)
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 12
+
+            AppTextField {
+                id: renameCategoryField
+                Layout.fillWidth: true
+                controlSize: "sm"
+                placeholderText: "分类名称"
+                color: Theme.textPrimary
+                selectByMouse: true
+                onAccepted: renameApply.applyNow()
+            }
+
+            BodyLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Theme.textMuted
+                text: "该分类下的预设会一起改用新名称，预设内容不受影响。"
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton {
+                    Layout.preferredWidth: 88
+                    label: "取消"
+                    onClicked: root.pendingRenameCategory = ""
+                }
+                ExportButton {
+                    id: renameApply
+                    Layout.preferredWidth: 88
+                    label: "重命名"
+                    primary: true
+                    enabled: renameCategoryField.text.trim().length > 0
+                    function applyNow() {
+                        var oldName = root.pendingRenameCategory
+                        var newName = renameCategoryField.text.trim()
+                        if (!root.vm || !oldName || !newName) return
+                        if (!root.vm.renameCategory(oldName, newName)) {
+                            // 失败不关弹窗：用户还要接着改名字
+                            root.reportFailure(root.vm.lastError || "重命名分类失败")
+                            return
+                        }
+                        root.pendingRenameCategory = ""
+                        // 正停在这个分类上时只换筛选值，不重走 applyCategory
+                        // （那个会顺手清空卡片选中态）
+                        if (root.activeCategory === oldName)
+                            root.activeCategory = newName
+                        root.requestToast("分类已重命名为「" + newName + "」")
+                    }
+                    onClicked: applyNow()
+                }
+            }
+        }
+    }
+
     // 删除分类确认：分类删掉只是把成员归回「未分类」，不删任何预设，
     // 但仍要确认一次——用户可能只是想改名。
     AppDialog {
@@ -1690,10 +1833,17 @@ Item {
                     label: "删除分类"
                     primary: true
                     onClicked: {
-                        var affected = root.vm ? root.vm.deleteCategory(root.pendingDeleteCategory) : 0
+                        // -1 才是失败；0 表示删的是空分类，同样算成功
+                        var affected = root.vm ? root.vm.deleteCategory(root.pendingDeleteCategory) : -1
+                        var name = root.pendingDeleteCategory
                         root.pendingDeleteCategory = ""
-                        if (affected > 0)
-                            root.requestToast(affected + " 个预设已归入「未分类」")
+                        if (affected >= 0)
+                            root.requestToast(affected > 0
+                                              ? affected + " 个预设已归入「未分类」"
+                                              : "已删除空分类「" + name + "」")
+                        else
+                            root.reportFailure(root.vm ? (root.vm.lastError || "删除分类失败")
+                                                       : "删除分类失败")
                     }
                 }
             }
@@ -1774,8 +1924,9 @@ Item {
             text: "设为卡片封面"
             enabled: root.vm && !root.vm.busy
             onTriggered: {
-                if (root.vm && root.contextTabIndex >= 0)
-                    root.vm.setCoverDocument(root.selectedId, root.contextTabIndex)
+                if (root.vm && root.contextTabIndex >= 0
+                        && !root.vm.setCoverDocument(root.selectedId, root.contextTabIndex))
+                    root.reportFailure("切换封面失败")
             }
         }
         MenuSeparator { }
@@ -2139,13 +2290,32 @@ Item {
         property int count: -1
         property bool active: false
         property bool indent: false
-        // 只有分类行可删；「未分类」是兜底桶，不能删
+        // 只有分类行可删/可改名；「未分类」是兜底桶
         property bool deletable: false
+        property bool renamable: false
         signal clicked()
+        signal renameRequested()
         signal deleteRequested()
 
         implicitHeight: 30
-        color: active ? Theme.bgSelected : (navMouse.containsMouse ? Theme.bgHover : "transparent")
+        color: active ? Theme.bgSelected : (rowHover.hovered ? Theme.bgHover : "transparent")
+
+        // 悬停判断用 HoverHandler 而不是 MouseArea.containsMouse：
+        // 行尾按钮会盖在整行 MouseArea 上面，一旦鼠标移上去，
+        // containsMouse 会翻成 false，按钮随即隐藏 → 点不到还闪。
+        // HoverHandler 只看光标是否在本项范围内，不受子项遮挡影响。
+        HoverHandler { id: rowHover }
+
+        // 整行点击必须放在最底层声明：QML 同层子项按声明顺序叠放，
+        // 后声明的 MouseArea 会盖住 RowLayout 里的重命名/删除按钮，
+        // 导致这两个按钮点了只会切换分类（实测点击无任何反应）。
+        MouseArea {
+            id: navMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: navRow.clicked()
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -2167,7 +2337,9 @@ Item {
                 elide: Text.ElideRight
             }
             Text {
-                visible: navRow.count >= 0 && !(navRow.deletable && (navMouse.containsMouse || navRow.active))
+                visible: navRow.count >= 0
+                         && !((navRow.renamable || navRow.deletable)
+                              && (rowHover.hovered || navRow.active))
                 text: navRow.count
                 color: Theme.textMuted
                 font.family: Theme.dataFont
@@ -2178,12 +2350,36 @@ Item {
                 horizontalAlignment: Text.AlignRight
             }
 
+            // 重命名分类：和删除一起只在悬停/选中时露出。
+            Item {
+                Layout.preferredWidth: 18
+                Layout.preferredHeight: 18
+                visible: navRow.renamable && (rowHover.hovered || navRow.active)
+
+                AppIcon {
+                    anchors.centerIn: parent
+                    iconName: AppIcons.pencil
+                    iconSize: 12
+                    iconColor: renameMouse.containsMouse ? Theme.accent : Theme.textMuted
+                }
+                MouseArea {
+                    id: renameMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: navRow.renameRequested()
+                    ToolTip.delay: 500
+                    ToolTip.visible: containsMouse
+                    ToolTip.text: "重命名分类"
+                }
+            }
+
             // 删除分类：默认藏起来，悬停/选中才露出，避免侧栏一片叉号。
             // 用 Item 占位保证不悬停时行宽不跳。
             Item {
                 Layout.preferredWidth: 18
                 Layout.preferredHeight: 18
-                visible: navRow.deletable && (navMouse.containsMouse || navRow.active)
+                visible: navRow.deletable && (rowHover.hovered || navRow.active)
 
                 AppIcon {
                     anchors.centerIn: parent
@@ -2199,14 +2395,6 @@ Item {
                     onClicked: navRow.deleteRequested()
                 }
             }
-        }
-
-        MouseArea {
-            id: navMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: navRow.clicked()
         }
 
         // 选中态左侧竖线（Hermes 风格：用线不用色块）

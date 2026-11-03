@@ -1620,9 +1620,22 @@ ApplicationWindow {
                     label: "删除"
                     primary: true
                     onClicked: {
-                        projectPresets.deletePreset(presetDeleteConfirm.presetId)
+                        var targetId = presetDeleteConfirm.presetId
+                        var targetName = presetDeleteConfirm.presetName
+                        if (!projectPresets.deletePreset(targetId)) {
+                            // 失败时**不能关弹窗**：关掉就等于告诉用户「删掉了」，
+                            // 而实际条目还在，下次刷新又出现，比不提示更迷惑。
+                            showToast(projectPresets.lastError || "删除预设失败")
+                            return
+                        }
                         projectPresetDrawer.clearEditor()
+                        // 工作台里若正选中这条，立刻退掉选中态：
+                        // 详情面板停留在已删除的预设上时，按钮全都还能点，
+                        // 点完只会弹「预设不存在」。
+                        if (presetWorkbench.selectedId === targetId)
+                            presetWorkbench.clearSelection()
                         presetDeleteConfirm.close()
+                        showToast("已删除预设「" + targetName + "」")
                     }
                 }
             }
@@ -2297,25 +2310,74 @@ ApplicationWindow {
                     tooltip: "更新所选自定义预设"
                     buttonSize: 36
                     enabled: canvasPresetDrawer.selectedPresetIndex >= 0
+                             && canvasPresetDrawer.selectedPresetIndex < canvasPresets.presets.length
                              && !canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex].is_builtin
                     onClicked: {
                         var selected = canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex]
-                        if (!canvasPresets.renamePreset(selected.name, presetNameInput.text, parseInt(presetWidthInput.text), parseInt(presetHeightInput.text)))
-                            showToast("无法更新预设")
+                        if (!selected) return
+                        if (canvasPresets.renamePreset(selected.name, presetNameInput.text, parseInt(presetWidthInput.text), parseInt(presetHeightInput.text)))
+                            showToast("画布预设已更新")
+                        else
+                            showToast("无法更新预设：名称可能已存在，或尺寸无效")
                     }
                 }
                 IconButton {
                     iconName: AppIcons.trash
                     tooltip: "删除所选自定义预设"
                     buttonSize: 36
+                    // 索引兜底：列表可能因为别处的增删而变短，直接下标访问会读到
+                    // undefined 并在绑定里报错（表现为按钮忽而可用忽而不可用）。
                     enabled: canvasPresetDrawer.selectedPresetIndex >= 0
+                             && canvasPresetDrawer.selectedPresetIndex < canvasPresets.presets.length
                              && !canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex].is_builtin
                     onClicked: {
+                        // 取选中行本身的名称，不能拿输入框的值：
+                        // 输入框是可编辑的，用户改过字之后按名字删除会找不到条目。
                         var selected = canvasPresets.presets[canvasPresetDrawer.selectedPresetIndex]
-                        if (canvasPresets.deletePreset(selected.name)) {
-                            canvasPresetDrawer.selectedPresetIndex = -1
-                            presetNameInput.clear()
+                        canvasPresetDeleteConfirm.presetName = selected ? selected.name : ""
+                        canvasPresetDeleteConfirm.open()
+                    }
+                }
+            }
+        }
+    }
+
+    // 画布预设删除确认。
+    // 之前这里是「点垃圾桶直接删」：没有二次确认，也没有任何结果提示，
+    // 误点一下自定义预设就没了，而且删完界面只是少一行，用户不确定删的是哪条。
+    AppDialog {
+        id: canvasPresetDeleteConfirm
+        anchors.centerIn: parent
+        width: 390
+        height: 170
+        modal: true
+        padding: 0
+        property string presetName: ""
+        background: Rectangle { color: Theme.bgPanel; border.width: 1; border.color: Theme.borderStrong; radius: Theme.radius }
+        contentItem: ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 14
+            Text { text: "删除画布预设？"; color: Theme.textPrimary; font.family: Theme.displayFont; font.pixelSize: 16; font.weight: Font.DemiBold }
+            BodyLabel { text: "“" + canvasPresetDeleteConfirm.presetName + "”将从本机移除，已用该尺寸建好的画布不受影响。"; color: Theme.textSecondary; Layout.fillWidth: true; wrapMode: Text.Wrap }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                ExportButton { Layout.preferredWidth: 80; label: "取消"; onClicked: canvasPresetDeleteConfirm.close() }
+                ExportButton {
+                    Layout.preferredWidth: 90
+                    label: "删除"
+                    primary: true
+                    onClicked: {
+                        var targetName = canvasPresetDeleteConfirm.presetName
+                        if (!canvasPresets.deletePreset(targetName)) {
+                            showToast("删除画布预设失败")
+                            return
                         }
+                        canvasPresetDrawer.selectedPresetIndex = -1
+                        presetNameInput.clear()
+                        canvasPresetDeleteConfirm.close()
+                        showToast("已删除画布预设「" + targetName + "」")
                     }
                 }
             }

@@ -12,6 +12,13 @@ import tempfile
 
 from app.utils.trusted_pickle import load_trusted_pickle
 
+# 侧栏分类（文件夹）的兜底桶与命名上限。
+# 上限是为了不让一个超长名字把 208px 的侧栏撑破——超出部分会被 elide 吃掉，
+# 但输入时不拦的话用户会以为名字存丢了。
+CATEGORY_UNSORTED = "未分类"
+CATEGORY_NAME_MAX_LEN = 24
+
+
 class PresetManager:
     """预设管理器，负责管理项目预设"""
 
@@ -30,6 +37,10 @@ class PresetManager:
         if copy_initial:
             self._copy_initial_presets()
         self._load_index()
+        # 用户显式创建的分类名单（保持用户顺序）。分类本身仍是预设上的
+        # category 字段，这份名单只多记「哪些分类是用户建的、按什么顺序排」。
+        self._category_order = []
+        self._load_categories()
     
     def _get_user_data_dir(self):
         """获取用户数据目录"""
@@ -942,9 +953,17 @@ class PresetManager:
         try:
             info = self.presets_index[preset_id]
             self._ensure_optional_metadata(info)
-            info['category'] = str(category or '').strip() or '未分类'
+            info['category'] = str(category or '').strip() or CATEGORY_UNSORTED
             info['modified_at'] = datetime.datetime.now().isoformat()
-            return self._save_index()
+            if not self._save_index():
+                return False
+            # 通过检查器新起的名字也登记进名单：否则它在侧栏里只是「派生」项，
+            # 一旦没有预设再用这个名字就会从列表里消失。
+            name = info['category']
+            if name != CATEGORY_UNSORTED and name not in self._category_order:
+                self._category_order.append(name)
+                self._save_categories()
+            return True
         except Exception as e:
             safe_print(f"更新预设分类失败: {e}")
             return False
@@ -970,31 +989,6 @@ class PresetManager:
         except Exception as e:
             safe_print(f"更新预设标签失败: {e}")
             return False
-
-    def rename_category(self, old_name, new_name):
-        """重命名分类：把所有属于 old_name 的预设改挂到 new_name。
-
-        返回受影响条数；new_name 为空或与旧名相同时不做任何改动。
-        """
-        old_name = str(old_name or '').strip()
-        new_name = str(new_name or '').strip()
-        if not old_name or not new_name or old_name == new_name:
-            return 0
-        try:
-            affected = 0
-            stamp = datetime.datetime.now().isoformat()
-            for preset_id, info in self.presets_index.items():
-                self._ensure_optional_metadata(info)
-                if info.get('category') == old_name:
-                    info['category'] = new_name
-                    info['modified_at'] = stamp
-                    affected += 1
-            if affected and not self._save_index():
-                return 0
-            return affected
-        except Exception as e:
-            safe_print(f"重命名预设分类失败: {e}")
-            return 0
 
     def set_thumbnail_path(self, preset_id, thumbnail_path):
         """记录缩略图相对路径（工作台卡片封面）。"""
@@ -1110,32 +1104,223 @@ class PresetManager:
             safe_print(f"重排预设失败: {e}")
             return False
 
-    def delete_category(self, category):
-        """删除分类：成员全部归回「未分类」，返回受影响条数。
+    # ---- 分类（侧栏文件夹） ----
+    #
+    # 历史设计：分类只存在于预设的 category 字段上，侧栏清单由预设聚合出来。
+    # 代价是「新建分类」根本建不出来——空分类没有落脚点，下一个预设没归进去，
+    # 它就从侧栏消失了；也没有地方存顺序。所以补一份很小的名单文件
+    # （categories.json），只记「用户建了哪些分类、按什么顺序排」。
+    # 成员关系仍然只看预设的 category 字段，不做双向维护，避免两份数据打架。
 
-        分类不是独立实体（只存在于预设的 category 字段上），所以"删除"
-        等于把成员改挂到未分类。不删任何预设。
-        """
-        name = str(category or '').strip()
-        if not name or name == '未分类':
-            return 0
+    def _categories_path(self):
+        return os.path.join(self.presets_dir, "categories.json")
+
+    def _load_categories(self):
+        path = self._categories_path()
+        if not os.path.exists(path):
+            return
         try:
-            affected = 0
+            with open(path, 'r', encoding='utf-8') as f:
+                raw = json.load(f)
+        except Exception as e:
+            safe_print(f"加载分类清单失败: {e}")
+            return
+        names = raw.get('names') if isinstance(raw, dict) else raw
+        if not isinstance(names, list):
+            return
+        seen = set()
+        for item in names:
+            name = str(item or '').strip()
+            if not name or name == CATEGORY_UNSORTED or name in seen:
+                continue
+            seen.add(name)
+            self._category_order.append(name)
+
+    def _save_categories(self):
+        path = self._categories_path()
+        temp_path = None
+        try:
+            fd, temp_path = tempfile.mkstemp(
+                dir=self.presets_dir,
+                prefix='.preset-categories-',
+                suffix='.json',
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump({'names': list(self._category_order)}, f,
+                          ensure_ascii=False, indent=2)
+            os.replace(temp_path, path)
+            return True
+        except Exception as e:
+            safe_print(f"保存分类清单失败: {e}")
+            return False
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+
+    def _category_counts(self):
+        """分类名 -> 预设条数。空串/缺失统一算「未分类」。"""
+        counts = {}
+        for info in self.presets_index.values():
+            if not isinstance(info, dict):
+                continue
+            name = str(info.get('category') or CATEGORY_UNSORTED).strip() or CATEGORY_UNSORTED
+            counts[name] = counts.get(name, 0) + 1
+        return counts
+
+    def get_category_names(self):
+        """侧栏要显示的分类顺序。
+
+        用户建过的分类按创建顺序排在前面（即使当前 0 个预设也保留），
+        剩下「只在预设里出现过、没进过名单」的旧分类按条数排在后面。
+        「未分类」永远压尾——它是兜底桶，不是文件夹。
+        """
+        counts = self._category_counts()
+        names = list(self._category_order)
+        extra = [(name, count) for name, count in counts.items() if name not in names]
+        extra.sort(key=lambda item: (-item[1], item[0]))
+        names.extend(name for name, _count in extra)
+        if CATEGORY_UNSORTED in names:
+            names.remove(CATEGORY_UNSORTED)
+            names.append(CATEGORY_UNSORTED)
+        return names
+
+    def _validate_category_name(self, name):
+        """通用校验，返回 (归一化名字, 错误文案)。"""
+        name = str(name or '').strip()
+        if not name:
+            return '', '分类名不能为空'
+        if name == CATEGORY_UNSORTED:
+            return '', '「未分类」是内置分类'
+        if len(name) > CATEGORY_NAME_MAX_LEN:
+            return '', f'分类名不能超过 {CATEGORY_NAME_MAX_LEN} 个字'
+        return name, ''
+
+    def category_exists(self, name):
+        name = str(name or '').strip()
+        if not name:
+            return False
+        return name in self._category_counts() or name in self._category_order
+
+    def create_category(self, name):
+        """新建一个（可以是空的）分类。重名直接拒绝，不做隐式合并。"""
+        name, error = self._validate_category_name(name)
+        if error:
+            self._set_error(error)
+            return False
+        with self._preset_write_lock:
+            if self.category_exists(name):
+                self._set_error('已存在同名分类')
+                return False
+            self._category_order.append(name)
+            if not self._save_categories():
+                self._category_order.pop()
+                self._set_error('保存分类失败')
+                return False
+        self._set_error('')
+        return True
+
+    def rename_category(self, old_name, new_name):
+        """重命名分类：成员跟着改名，名单里的位置保持不变。
+
+        重名时拒绝而不是合并——合并会悄悄吞掉一个分类，用户事后无法追溯。
+        """
+        old_name = str(old_name or '').strip()
+        if not old_name or old_name == CATEGORY_UNSORTED:
+            self._set_error('「未分类」不能重命名')
+            return False
+        new_name, error = self._validate_category_name(new_name)
+        if error:
+            self._set_error(error)
+            return False
+        if new_name == old_name:
+            self._set_error('')
+            return True
+
+        with self._preset_write_lock:
+            if not self.category_exists(old_name):
+                self._set_error('分类不存在')
+                return False
+            if self.category_exists(new_name):
+                self._set_error('已存在同名分类')
+                return False
+
+            backup_index = copy.deepcopy(self.presets_index)
+            backup_order = list(self._category_order)
+
             stamp = datetime.datetime.now().isoformat()
+            moved = 0
             for info in self.presets_index.values():
                 if not isinstance(info, dict):
                     continue
                 self._ensure_optional_metadata(info)
-                if info.get('category') == name:
-                    info['category'] = '未分类'
+                if str(info.get('category') or '').strip() == old_name:
+                    info['category'] = new_name
                     info['modified_at'] = stamp
-                    affected += 1
-            if affected and not self._save_index():
-                return 0
-            return affected
-        except Exception as e:
-            safe_print(f"删除预设分类失败: {e}")
-            return 0
+                    moved += 1
+            if moved and not self._save_index():
+                self.presets_index = backup_index
+                self._set_error('重命名分类失败')
+                return False
+
+            if old_name in self._category_order:
+                self._category_order[self._category_order.index(old_name)] = new_name
+            else:
+                # 只在预设里出现过的旧分类：重命名后登记进名单，
+                # 否则它还是「派生」状态，下次改回去就找不到了。
+                self._category_order.append(new_name)
+            if not self._save_categories():
+                self.presets_index = backup_index
+                self._category_order = backup_order
+                self._save_index()
+                self._set_error('重命名分类失败')
+                return False
+        self._set_error('')
+        return True
+
+    def delete_category(self, category):
+        """删除分类：成员归回「未分类」，不删预设。
+
+        返回受影响条数；分类不存在或不允许删除时返回 -1。
+        空分类（用户建了但没放东西）也允许删，此时返回 0。
+        """
+        name = str(category or '').strip()
+        if not name or name == CATEGORY_UNSORTED:
+            self._set_error('「未分类」不能删除')
+            return -1
+        with self._preset_write_lock:
+            try:
+                if not self.category_exists(name):
+                    self._set_error('分类不存在')
+                    return -1
+
+                affected = 0
+                stamp = datetime.datetime.now().isoformat()
+                for info in self.presets_index.values():
+                    if not isinstance(info, dict):
+                        continue
+                    self._ensure_optional_metadata(info)
+                    if str(info.get('category') or '').strip() == name:
+                        info['category'] = CATEGORY_UNSORTED
+                        info['modified_at'] = stamp
+                        affected += 1
+                if affected and not self._save_index():
+                    self._set_error('删除分类失败')
+                    return -1
+
+                if name in self._category_order:
+                    self._category_order.remove(name)
+                    if not self._save_categories():
+                        self._set_error('保存分类清单失败')
+                        return -1
+                self._set_error('')
+                return affected
+            except Exception as e:
+                safe_print(f"删除预设分类失败: {e}")
+                self._set_error('删除分类失败')
+                return -1
 
     def export_preset(self, preset_id, export_path):
         """导出单个预设"""

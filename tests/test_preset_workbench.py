@@ -248,8 +248,7 @@ def test_rename_category_moves_all_members(tmp_path: Path):
     view_model.setPresetCategory(ids[0], "女装")
     view_model.setPresetCategory(ids[1], "女装")
 
-    affected = view_model.renameCategory("女装", "夏季女装")
-    assert affected == 2
+    assert view_model.renameCategory("女装", "夏季女装") is True
 
     buckets = {item["name"]: item["count"] for item in view_model.categories}
     assert buckets.get("夏季女装") == 2
@@ -435,6 +434,7 @@ def test_delete_category_moves_members_to_uncategorized(tmp_path: Path):
 
     assert view_model.deleteCategory("临时分类") == 2
     assert view_model.count == 3, "预设不能被删除"
+    assert all(view_model.presetExists(item["id"]) for item in view_model.presets)
     assert all(item["category"] == "未分类" for item in view_model.presets)
     assert "临时分类" not in {c["name"] for c in view_model.categories}
 
@@ -444,8 +444,8 @@ def test_delete_category_rejects_uncategorized(tmp_path: Path):
     """「未分类」是兜底桶，不允许删除。"""
     view_model, _ = _build_vm(tmp_path)
     view_model.saveCurrent("甲", "")
-    assert view_model.deleteCategory("未分类") == 0
-    assert view_model.deleteCategory("") == 0
+    assert view_model.deleteCategory("未分类") == -1
+    assert view_model.deleteCategory("") == -1
 
 
 @pytest.mark.unit
@@ -535,3 +535,178 @@ def test_page_thumbs_skips_pages_not_rendered(tmp_path: Path):
 
     item = [p for p in view_model.presets if p["id"] == preset_id][0]
     assert len(item["pageThumbs"]) == 1, "只有第 0 页存在，就只返回它"
+
+
+@pytest.mark.unit
+def test_delete_preset_notifies_view_changed_and_cleans_thumb(tmp_path: Path):
+    """删除预设必须同时发 presetsChanged 与 viewChanged。
+
+    工作台卡片网格绑定的是 ``visiblePresets``（notify=viewChanged）。
+    曾经 deletePreset 只发 presetsChanged：数据删了、卡片还在，
+    还能点、还能右键，点下去只得到「预设不存在」——用户报的「删了没反应」。
+    """
+    view_model, manager = _build_vm(tmp_path)
+    assert view_model.saveCurrent("待删预设", "")
+    preset_id = view_model.presets[0]["id"]
+
+    # 造一张缩略图，删除后不能留在磁盘上（否则同名重建会闪旧图）
+    thumb = Path(thumb_path_for(manager.presets_dir, preset_id))
+    thumb.parent.mkdir(parents=True, exist_ok=True)
+    thumb.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+
+    events = []
+    view_model.presetsChanged.connect(lambda: events.append("presets"))
+    view_model.viewChanged.connect(lambda: events.append("view"))
+
+    assert view_model.deletePreset(preset_id) is True
+    assert "presets" in events, "presetsChanged 必须发（抽屉/计数依赖它）"
+    assert "view" in events, "viewChanged 必须发（工作台卡片依赖它，漏发就会残留）"
+    assert view_model.visiblePresets == [], "删除后可见列表必须为空"
+    assert view_model.presetExists(preset_id) is False
+    assert not thumb.exists(), "缩略图应随预设一起删除"
+
+
+@pytest.mark.unit
+def test_rename_preset_notifies_view_changed(tmp_path: Path):
+    """改名也要发 viewChanged，否则卡片标题停留在旧名字。"""
+    view_model, _manager = _build_vm(tmp_path)
+    assert view_model.saveCurrent("旧名字", "")
+    preset_id = view_model.presets[0]["id"]
+
+    events = []
+    view_model.viewChanged.connect(lambda: events.append("view"))
+
+    assert view_model.renamePreset(preset_id, "新名字", "描述") is True
+    assert events, "改名必须发 viewChanged（工作台卡片绑的是它）"
+    assert view_model.visiblePresets[0]["name"] == "新名字"
+
+
+@pytest.mark.unit
+def test_delete_preset_failure_keeps_entry(tmp_path: Path):
+    """删除失败时条目必须还在，且给出错误文案，不能假装成功。"""
+    view_model, _manager = _build_vm(tmp_path)
+    assert view_model.saveCurrent("保留", "")
+    assert view_model.deletePreset("missing-id") is False
+    assert "不存在" in view_model.lastError
+    assert len(view_model.visiblePresets) == 1
+
+
+# ---- 分类（侧栏文件夹）的增删改 ----
+#
+# 这组测试守的是「分类是用户的东西」：新建的空分类不能凭空消失、
+# 改名要把成员一起带走、删除只解散分类不动预设。
+
+
+@pytest.mark.unit
+def test_create_category_keeps_empty_category_and_persists(tmp_path: Path):
+    """空分类必须留在侧栏，并且重启后还在。"""
+    view_model, _manager = _build_vm(tmp_path)
+
+    assert view_model.createCategory("短视频") is True
+
+    names = [item["name"] for item in view_model.categories]
+    assert names == ["短视频"], "新建后侧栏应立刻出现该类"
+    assert view_model.categories[0]["count"] == 0, "空分类计数为 0，但不能因此隐藏"
+
+    reopened = PresetManager(app_dir=tmp_path / "data", copy_initial=False)
+    assert "短视频" in reopened.get_category_names(), "分类清单必须落盘"
+
+
+@pytest.mark.unit
+def test_create_category_rejects_blank_duplicate_and_fallback(tmp_path: Path):
+    """空名 / 重名 / 「未分类」都要明确拒绝，并把原因写进 lastError。"""
+    view_model, _manager = _build_vm(tmp_path)
+
+    assert view_model.createCategory("   ") is False
+    assert "不能为空" in view_model.lastError
+
+    assert view_model.createCategory("女装") is True
+    assert view_model.createCategory("女装") is False
+    assert "同名" in view_model.lastError
+
+    assert view_model.createCategory("未分类") is False
+    assert "内置" in view_model.lastError or "未分类" in view_model.lastError
+
+
+@pytest.mark.unit
+def test_create_category_rejects_overlong_name(tmp_path: Path):
+    """超长名字会撑坏 208px 侧栏，直接在数据层拦掉。"""
+    view_model, _manager = _build_vm(tmp_path)
+    assert view_model.createCategory("超" * 40) is False
+    assert "不能超过" in view_model.lastError
+
+
+@pytest.mark.unit
+def test_rename_category_moves_members_and_keeps_position(tmp_path: Path):
+    """改名要把该分类下的预设一起带走，且侧栏位置不变。"""
+    view_model, _manager = _build_vm(tmp_path)
+    view_model.saveCurrent("甲", "")
+    view_model.saveCurrent("乙", "")
+    ids = [item["id"] for item in view_model.presets]
+
+    assert view_model.createCategory("促销") is True
+    assert view_model.createCategory("模板") is True
+    assert view_model.setPresetCategory(ids[0], "促销") is True
+    assert view_model.setPresetCategory(ids[1], "模板") is True
+
+    before = [item["name"] for item in view_model.categories]
+    assert view_model.renameCategory("促销", "活动素材") is True
+    after = [item["name"] for item in view_model.categories]
+
+    assert "促销" not in after
+    assert "活动素材" in after
+    assert after.index("活动素材") == before.index("促销"), "重命名不应改变排序位置"
+
+    renamed = [item for item in view_model.presets if item["id"] == ids[0]][0]
+    assert renamed["category"] == "活动素材", "成员必须跟着改名"
+    untouched = [item for item in view_model.presets if item["id"] == ids[1]][0]
+    assert untouched["category"] == "模板", "别的分类不能被牵连"
+
+
+@pytest.mark.unit
+def test_rename_category_stays_selected_when_filtering(tmp_path: Path):
+    """正停在该分类上时改名，筛选条件要跟着换，否则列表会突然空掉。"""
+    view_model, _manager = _build_vm(tmp_path)
+    view_model.saveCurrent("甲", "")
+    preset_id = view_model.presets[0]["id"]
+    assert view_model.createCategory("旧名") is True
+    assert view_model.setPresetCategory(preset_id, "旧名") is True
+    view_model.setCategory("旧名")
+    assert view_model.visibleCount == 1
+
+    assert view_model.renameCategory("旧名", "新名") is True
+    assert view_model.category == "新名"
+    assert view_model.visibleCount == 1
+
+
+@pytest.mark.unit
+def test_rename_category_rejects_duplicate_and_fallback(tmp_path: Path):
+    """重名拒绝而不是静默合并；「未分类」不许改名。"""
+    view_model, _manager = _build_vm(tmp_path)
+    assert view_model.createCategory("A") is True
+    assert view_model.createCategory("B") is True
+
+    assert view_model.renameCategory("A", "B") is False
+    assert "同名" in view_model.lastError
+    assert {c["name"] for c in view_model.categories} == {"A", "B"}
+
+    assert view_model.renameCategory("未分类", "其他") is False
+
+
+@pytest.mark.unit
+def test_delete_empty_category_succeeds(tmp_path: Path):
+    """空分类（0 个预设）必须能删掉——旧版把它当成失败。"""
+    view_model, _manager = _build_vm(tmp_path)
+    assert view_model.createCategory("临时") is True
+
+    assert view_model.deleteCategory("临时") == 0
+    assert "临时" not in {c["name"] for c in view_model.categories}
+    assert view_model.lastError == "", "删空分类是成功操作，不该留错误文案"
+
+
+@pytest.mark.unit
+def test_delete_category_returns_minus_one_when_missing(tmp_path: Path):
+    """分类不存在要返回 -1（失败），不能与「空分类删除成功」混为一谈。"""
+    view_model, _manager = _build_vm(tmp_path)
+    assert view_model.deleteCategory("查无此类") == -1
+    assert "不存在" in view_model.lastError

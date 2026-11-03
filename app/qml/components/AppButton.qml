@@ -141,6 +141,13 @@ Rectangle {
         onClicked: root.clicked()
     }
 
+    /// 悬停态。AppButton 是 Rectangle 而不是 AbstractButton，
+    /// 天生没有 `hovered` 属性；调用方写 `ToolTip.visible: hovered` 会直接
+    /// ReferenceError（提示永远不出现）。这里补上，让调用方有个统一的悬停源。
+    /// 注意：按钮 disabled 时 mouseArea 不接收悬停事件，那种场景要在外层
+    /// 套 HoverHandler（见 PresetWorkbench「保存改动回此预设」）。
+    readonly property bool hovered: mouseArea.containsMouse
+
     Keys.onSpacePressed: if (!loading) clicked()
     Keys.onReturnPressed: if (!loading) clicked()
     Accessible.name: text
