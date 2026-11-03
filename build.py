@@ -131,6 +131,14 @@ def build_updater_tool(workpath: Path) -> Path:
 def write_update_manifest(version: str) -> Path:
     """刷新 update/update.json，供客户端通过 raw.githubusercontent 检测更新。"""
     manifest_path = REPO_ROOT / "update" / "update.json"
+
+    # 本地自用包不该改线上清单：清单里写的是 download_url，一改就等于
+    # 把全体用户的更新指向一个并不存在（或未签名）的版本。
+    # 设 BTPW_SKIP_UPDATE_MANIFEST=1 可完全跳过本步骤。
+    if os.environ.get("BTPW_SKIP_UPDATE_MANIFEST") == "1":
+        print("已跳过更新清单生成（BTPW_SKIP_UPDATE_MANIFEST=1），update.json 保持不变")
+        return manifest_path
+
     payload = {
         "version": version,
         "release_notes": f"批图王 v{version}\n请查看仓库更新日志了解本次更新内容。",
