@@ -17,7 +17,6 @@ CursorDarkTheme — 全局暗色主题
 """
 
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtCore import Qt
 
 from app.ui.design_tokens import Tokens
 from app.ui.tokens_v2 import Typography

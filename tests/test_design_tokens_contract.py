@@ -101,7 +101,6 @@ def test_no_off_grid_height_in_qss():
     直接搜「26px 出现」会误报，这里改成验证每条 icon 档规则
     的内高 + 边框正好等于 design_spec 的档位值。
     """
-    import re
 
     from app.ui.design_spec import Scale
     from app.ui.theme.provider import build_global_stylesheet
@@ -188,7 +187,6 @@ def test_no_hardcoded_font_size_in_qss():
     这条测试的作用是：任何人想加一个新字号，必须先在 tokens_v2 里登记。
     """
     import os
-    import re
 
     legal = set()
     from app.ui.tokens_v2 import Typography as T
@@ -252,7 +250,6 @@ def test_no_font_size_arithmetic_offsets():
     偏移出来的值不在档位上，等于绕过规范 —— 这是历史遗留的常见漂移源。
     """
     import os
-    import re
 
     # 同样注意反斜杠：见上一条测试的说明
     pattern = re.compile(r"font-size:\s*\{[^}]*[\+\-]\s*\d+[^}]*\}px")
@@ -285,7 +282,6 @@ def test_design_tokens_stylesheet_font_sizes_all_legal():
     2026-10-28 实测抓到：design_tokens.py 里有一条写死 `font-size: 18px`
     （不在档位内的 18，规范是 16/20）。
     """
-    import re
 
     from app.ui.design_tokens import Tokens
     from app.ui.tokens_v2 import Typography as T

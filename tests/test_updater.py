@@ -427,7 +427,6 @@ def test_download_update_all_fail_raises(tmp_path):
 
 @pytest.mark.unit
 def test_download_update_verifies_sha256(tmp_path):
-    import hashlib
 
     good = tmp_path / "good.bin"
     payload = b"payload" * 50

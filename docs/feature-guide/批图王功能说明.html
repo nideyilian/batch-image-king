@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>批图王 v1.2.0 功能说明</title>
+<style>
+  :root{
+    --ink:#14150f; --ink-2:#3b3d35; --ink-3:#6b6e63; --ink-4:#989b8f;
+    --paper:#fbfbf8; --paper-2:#ffffff; --line:#e2e2da; --line-2:#cfd0c6;
+    --accent:#1f4d3d; --accent-2:#2f6b55; --accent-soft:#eaf1ed;
+    --warn:#8a5a12; --warn-soft:#fbf3e2; --warn-line:#e5cfa6;
+    --code:#f2f2ec;
+    --mono:"Cascadia Mono","JetBrains Mono",Consolas,"Courier New",monospace;
+    --sans:"HarmonyOS Sans SC","MiSans","PingFang SC","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); font-size:15px; line-height:1.78;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1220px;margin:0 auto;padding:0 32px 120px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:52px}
+  /* ---------- 封面 ---------- */
+  header.cover{grid-column:1/-1;padding:72px 0 44px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-2);margin:0 0 18px}
+  h1{font-size:44px;line-height:1.18;margin:0 0 16px;font-weight:700;letter-spacing:-.02em}
+  h1 .ver{font-family:var(--mono);font-size:15px;font-weight:400;color:var(--ink-3);vertical-align:middle;margin-left:10px;letter-spacing:0}
+  .lede{font-size:17px;color:var(--ink-2);max-width:760px;margin:0 0 30px}
+  .meta{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line);margin-top:8px}
+  .meta div{padding:14px 26px 14px 0;margin-right:26px;border-right:1px solid var(--line)}
+  .meta div:last-child{border-right:0}
+  .meta dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-4);margin:0 0 3px}
+  .meta dd{margin:0;font-size:14px;font-weight:600}
+  /* ---------- 目录 ---------- */
+  nav.toc{position:sticky;top:28px;align-self:start;font-size:13px;padding-top:12px}
+  nav.toc .toc-h{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-4);margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  nav.toc a{display:block;color:var(--ink-2);text-decoration:none;padding:5px 0 5px 11px;border-left:2px solid transparent;line-height:1.5}
+  nav.toc a:hover{color:var(--accent);border-left-color:var(--accent-2);background:var(--accent-soft)}
+  nav.toc a.sub{padding-left:24px;font-size:12.5px;color:var(--ink-3)}
+  /* ---------- 正文 ---------- */
+  main{min-width:0;padding-top:44px}
+  section{margin:0 0 76px;scroll-margin-top:24px}
+  h2{font-size:27px;margin:0 0 10px;font-weight:700;letter-spacing:-.01em;padding-bottom:14px;border-bottom:2px solid var(--ink);display:flex;align-items:baseline;gap:14px}
+  h2 .num{font-family:var(--mono);font-size:13px;font-weight:400;color:var(--accent-2);letter-spacing:.06em}
+  h3{font-size:18.5px;margin:38px 0 10px;font-weight:700}
+  h4{font-size:14.5px;margin:24px 0 6px;font-weight:700;color:var(--ink)}
+  h4::before{content:"—";color:var(--ink-4);margin-right:8px;font-weight:400}
+  p{margin:0 0 14px;color:var(--ink-2)}
+  strong{color:var(--ink);font-weight:700}
+  code{font-family:var(--mono);font-size:.87em;background:var(--code);padding:1.5px 5px;border-radius:2px;color:#2b4a3c;white-space:nowrap}
+  a.ref{color:var(--accent-2);text-decoration:none;border-bottom:1px dotted var(--line-2)}
+  ul,ol{margin:0 0 16px;padding-left:22px;color:var(--ink-2)}
+  li{margin:0 0 7px}
+  li::marker{color:var(--ink-4)}
+  .sec-intro{font-size:15.5px;color:var(--ink-2);border-left:3px solid var(--accent-2);padding:2px 0 2px 16px;margin:0 0 26px}
+  /* ---------- 图 ---------- */
+  figure{margin:26px 0 30px}
+  figure img{width:100%;display:block;border:1px solid var(--line-2);border-radius:2px;background:#111}
+  figcaption{font-size:12.5px;color:var(--ink-3);margin-top:9px;line-height:1.6;padding-left:2px}
+  figcaption b{color:var(--ink-2);font-weight:600}
+  .fig-frame{border:1px solid var(--line-2);background:var(--paper-2);padding:20px 18px;border-radius:2px}
+  .fig-frame svg{display:block;width:100%;height:auto}
+  .fig-cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-4);margin:0 0 14px}
+  /* ---------- 表格 ---------- */
+  .tbl-wrap{overflow-x:auto;margin:20px 0 26px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-weight:600;font-size:11.5px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);border-bottom:1.5px solid var(--ink);padding:9px 12px 9px 0;white-space:nowrap}
+  td{padding:10px 12px 10px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+  tr:last-child td{border-bottom:0}
+  td:first-child{color:var(--ink);font-weight:600;white-space:normal}
+  td code{white-space:normal}
+  .t-num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  /* ---------- 卡片/提示 ---------- */
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:22px 0 26px}
+  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:22px 0 26px}
+  .card{background:var(--paper-2);border:1px solid var(--line);padding:16px 17px;border-radius:2px}
+  .card .c-h{font-size:13.5px;font-weight:700;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+  .card .c-h .tag{font-family:var(--mono);font-size:10px;font-weight:400;color:var(--accent-2);background:var(--accent-soft);padding:1px 6px;letter-spacing:.06em}
+  .card p{font-size:13px;margin:0;line-height:1.65;color:var(--ink-2)}
+  .note{border:1px solid var(--warn-line);background:var(--warn-soft);padding:14px 17px;margin:22px 0 26px;border-radius:2px}
+  .note .n-h{font-size:12px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--warn);margin:0 0 7px;font-weight:600}
+  .note p{margin:0 0 8px;font-size:13.5px;color:#4a3a1c}
+  .note p:last-child{margin:0}
+  .note ul{margin:6px 0 0;font-size:13.5px;color:#4a3a1c}
+  .note li{margin-bottom:5px}
+  .lede-quote{font-size:14px;color:var(--ink-3);border-top:1px solid var(--line);padding-top:14px;margin-top:30px}
+  /* 指标条 */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line-2);background:var(--paper-2);margin:26px 0 30px}
+  .stats div{padding:16px 18px;border-right:1px solid var(--line)}
+  .stats div:last-child{border-right:0}
+  .stats .v{font-family:var(--mono);font-size:24px;font-weight:600;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}
+  .stats .k{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+  /* kbd */
+  kbd{font-family:var(--mono);font-size:11px;background:var(--paper-2);border:1px solid var(--line-2);border-bottom-width:2px;border-radius:3px;padding:1px 5px;color:var(--ink-2);white-space:nowrap;display:inline-block;line-height:1.5}
+  @media (max-width:980px){
+    .wrap{grid-template-columns:1fr;gap:0;padding:0 22px 80px}
+    nav.toc{position:static;display:none}
+    h1{font-size:32px} .grid-2,.grid-3{grid-template-columns:1fr} .stats{grid-template-columns:1fr 1fr}
+    .meta div{border-right:0;padding-right:0;margin-right:0;width:50%}
+  }
+  @media print{
+    nav.toc{display:none} .wrap{grid-template-columns:1fr;max-width:100%}
+    section{page-break-inside:avoid} h2{page-break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <p class="kicker">Batch Image King · 功能说明文档</p>
+  <h1>批图王<span class="ver">v1.2.0</span></h1>
+  <p class="lede">
+    面向「批量出图」工作流的 Windows 桌面工具。用多图层拼一张模板，把素材文件夹、文案库、绑定规则和随机策略挂到图层上，
+    一次性生成成百上千张差异化结果——预览与导出走同一条渲染管线，所见即所得。
+  </p>
+  <dl class="meta">
+    <div><dt>运行平台</dt><dd>Windows 桌面端</dd></div>
+    <div><dt>界面技术</dt><dd>Qt Quick / QML</dd></div>
+    <div><dt>版本来源</dt><dd><code>app/version.py</code></dd></div>
+    <div><dt>实测依据</dt><dd>源码 + 真实运行截图</dd></div>
+  </dl>
+</header>
+
+<nav class="toc">
+  <div class="toc-h">目录</div>
+  <a href="#s1">01　产品定位与使用场景</a>
+  <a href="#s2">02　整体架构</a>
+  <a href="#s3">03　功能地图</a>
+  <a href="#s4">04　文档与画布</a>
+  <a href="#s5">05　图层体系</a>
+  <a href="#s6">06　属性检查器与图层效果</a>
+  <a href="#s7">07　素材源与随机化</a>
+  <a href="#s8">08　绑定组（核心能力）</a>
+  <a href="#s9">09　尺寸匹配与自动遮罩</a>
+  <a href="#s10">10　预设体系</a>
+  <a href="#s11">11　导出体系</a>
+  <a href="#s12">12　主流程走查</a>
+  <a href="#s13">13　模块依赖关系</a>
+  <a href="#s14">14　快捷键与文件位置</a>
+  <a href="#s15">15　已知边界与注意事项</a>
+</nav>
+
+<main>
+
+<!-- ============ 01 ============ -->
+<section id="s1">
+  <h2><span class="num">01</span>产品定位与使用场景</h2>
+
+  <p class="sec-intro">
+    批图王解决的不是「做一张好看的图」，而是「同样的版式，换素材换文案，出 500 张且每张都不一样」。
+    它的全部设计取舍都围绕这个目标：模板复用、规则前置、批量可控。
+  </p>
+
+  <h3>谁在用</h3>
+  <p>
+    第一优先用户是电商运营与批量制图人员。他们的典型动作是：在素材文件夹、文案表、模板文件和导出目录之间反复切换，
+    长时间重复「换图 → 换字 → 检查 → 导出」。批图王把这条链路上的四个环节收进同一个工作台，
+    避免在设计软件、表格脚本和批处理工具之间来回倒。
+  </p>
+
+  <h3>三个真实场景</h3>
+  <div class="grid-3">
+    <div class="card">
+      <div class="c-h">主图批量出街 <span class="tag">最常见</span></div>
+      <p>一套 1280×720 主图模板，产品图 40 张、卖点文案 30 条。要求产品图和文案按品类配对，且同一张产品图不重复出现。→ 用「绑定组 + 单次用图」。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">多尺寸铺量 <span class="tag">多标签</span></div>
+      <p>同一个活动要方形图、竖版图、横版图三套尺寸。三个标签页各改一套，导出时一次跑完，按标签分目录落盘。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">模板资产化 <span class="tag">沉淀</span></div>
+      <p>把调好的模板存成项目预设，带封面缩略图和分类标签。下次直接「打开并批量导出」，不用重建图层。</p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div><div class="v">181</div><div class="k">Python 模块 / 67.5k 行</div></div>
+    <div><div class="v">51</div><div class="k">QML 文件 / 14.4k 行</div></div>
+    <div><div class="v">102</div><div class="k">内置 Lucide 图标</div></div>
+    <div><div class="v">1088</div><div class="k">自动化测试用例</div></div>
+  </div>
+
+  <p class="lede-quote">
+    本文所有界面截图（共 14 张）由 <code>--screenshot</code> 参数从当前代码真实渲染生成，不是示意图；
+    所有参数名、取值范围、默认值均取自源码，标注了对应文件。
+  </p>
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="s2">
+  <h2><span class="num">02</span>整体架构</h2>
+
+  <p class="sec-intro">
+    单一入口 <code>main.py</code> 负责应用级基础设施，然后把窗口交给 QML 工作台。
+    QML 只做界面，所有业务状态通过 Python 侧的 ViewModel 暴露——界面重构不能碰数据格式。
+  </p>
+
+  <figure class="fig-frame">
+    <p class="fig-cap">图 2-1　分层架构与数据流</p>
+    <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="批图王分层架构图">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b6e63"/>
+        </marker>
+      </defs>
+      <!-- layer 1 -->
+      <rect x="0" y="0" width="900" height="86" fill="#f2f2ec" stroke="#cfd0c6"/>
+      <text x="18" y="26" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.5">LAYER 1 · 界面</text>
+      <text x="18" y="50" font-size="14" font-weight="700" fill="#14150f">QML 工作台</text>
+      <text x="18" y="71" font-size="11.5" fill="#6b6e63">Main.qml（单文件约 9300 行） · 50 个可复用组件 · 102 个图标</text>
+      <rect x="600" y="14" width="282" height="58" fill="#fff" stroke="#cfd0c6"/>
+      <text x="612" y="34" font-size="11" fill="#3b3d35">顶栏编号导航：画布 / 预设 / 导出 / 命令</text>
+      <text x="612" y="52" font-size="11" fill="#3b3d35">命令栏 · 文档标签 · 工具轨 · 画布 · 检查器</text>
+
+      <!-- layer 2 -->
+      <rect x="0" y="102" width="900" height="128" fill="#fff" stroke="#cfd0c6"/>
+      <text x="18" y="128" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.5">LAYER 2 · 视图模型（QML 唯一通道）</text>
+      <g font-size="11" fill="#14150f">
+        <rect x="18" y="140" width="150" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="30" y="162">workspace</text>
+        <rect x="180" y="140" width="150" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="192" y="162">workspaceSessions</text>
+        <rect x="342" y="140" width="130" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="354" y="162">layerModel</text>
+        <rect x="484" y="140" width="130" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="496" y="162">batchExport</text>
+        <rect x="626" y="140" width="120" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="638" y="162">multiTabExport</text>
+        <rect x="758" y="140" width="124" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="770" y="162">projectPresets</text>
+        <rect x="18" y="182" width="150" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="30" y="204">bindingManager</text>
+        <rect x="180" y="182" width="150" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="192" y="204">sizeMatch</text>
+        <rect x="342" y="182" width="130" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="354" y="204">canvasPresets</text>
+        <rect x="484" y="182" width="130" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="496" y="204">legacyTools</text>
+        <rect x="626" y="182" width="120" height="34" fill="#eaf1ed" stroke="#b6c9bf"/><text x="638" y="204">updateManager</text>
+      </g>
+
+      <!-- layer 3 -->
+      <rect x="0" y="246" width="440" height="118" fill="#fff" stroke="#cfd0c6"/>
+      <text x="18" y="272" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.5">LAYER 3 · 领域模型</text>
+      <text x="18" y="296" font-size="12" fill="#3b3d35">Document · Layer · TextLayer · ShapedLayer</text>
+      <text x="18" y="316" font-size="12" fill="#3b3d35">BindingGroup · LayerSizeMatchManager</text>
+      <text x="18" y="336" font-size="12" fill="#3b3d35">DocumentSerializer（.cmp / pickle v5）</text>
+
+      <rect x="460" y="246" width="440" height="118" fill="#fff" stroke="#cfd0c6"/>
+      <text x="478" y="272" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.5">LAYER 3 · 服务与引擎</text>
+      <text x="478" y="296" font-size="12" fill="#3b3d35">RenderService · PreviewRenderService · ExportService</text>
+      <text x="478" y="316" font-size="12" fill="#3b3d35">AlphaCompositor · ProfessionalBlender · QualityEngine</text>
+      <text x="478" y="336" font-size="12" fill="#3b3d35">FastRenderer（预览与导出共用）</text>
+
+      <!-- layer 4 -->
+      <rect x="0" y="380" width="640" height="74" fill="#f2f2ec" stroke="#cfd0c6"/>
+      <text x="18" y="404" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.5">LAYER 4 · 执行与基础设施</text>
+      <text x="18" y="428" font-size="12" fill="#3b3d35">线程池 / 任务队列 · 智能渲染缓存 · 内存保护 · 降级计数器 · 日志</text>
+      <text x="18" y="446" font-size="12" fill="#3b3d35">export_worker（独立进程，大批量）· updater（自升级）</text>
+
+      <rect x="660" y="380" width="240" height="74" fill="#eaf1ed" stroke="#b6c9bf"/>
+      <text x="678" y="404" font-family="monospace" font-size="10" fill="#2f6b55" letter-spacing="1.5">交付</text>
+      <text x="678" y="428" font-size="12" fill="#14150f">PyInstaller 打包</text>
+      <text x="678" y="446" font-size="12" fill="#3b3d35">安装版 onedir / 便携版 onefile</text>
+
+      <!-- arrows -->
+      <line x1="450" y1="88" x2="450" y2="100" stroke="#6b6e63" marker-end="url(#ar)"/>
+      <line x1="450" y1="232" x2="450" y2="244" stroke="#6b6e63" marker-end="url(#ar)"/>
+      <line x1="220" y1="366" x2="220" y2="378" stroke="#6b6e63" marker-end="url(#ar)"/>
+      <line x1="680" y1="366" x2="680" y2="378" stroke="#6b6e63" marker-end="url(#ar)"/>
+      <line x1="645" y1="417" x2="658" y2="417" stroke="#6b6e63" marker-end="url(#ar)"/>
+    </svg>
+  </figure>
+
+  <h3>启动链路</h3>
+  <p>
+    <code>main.py</code> 在<strong>导入阶段</strong>先做三件事，顺序不能动：重定向输出流（避免控制台编码问题拖垮后续 import）、
+    分流 <code>--export-worker</code>（批量导出独立进程）、分流 <code>--apply-update</code>（自升级替换进程）。
+    之后才进 <code>main()</code>：建日志 → 崩溃会话 → 依赖检查 → 建 <code>QApplication</code> → 启动画面 →
+    交给 <code>app/qml/qml_main.py</code> 加载 <code>Main.qml</code>。
+  </p>
+  <p>
+    「经典 Qt Widgets 主界面」已于 2026-10-28 下线，但 <code>setup_fixed_theme()</code> 这套 QSS 保留着——
+    QML 里嵌的 QWidget 弹窗（颜色选择器、新建画布）靠它上色，删掉标题栏会变纯白。这类「名字带历史包袱但不能删」
+    的地方在 <code>AGENTS.md</code> 里都留了说明。
+  </p>
+
+  <div class="note">
+    <p class="n-h">架构约束</p>
+    <p><code>tools/check_architecture.py</code> 守着四件事：<code>models/utils/services/engines/workers</code> 不得反向 import <code>qml/ui</code>；禁止裸 <code>except:</code>；禁止未使用 import；禁止模块顶层重复定义。它是纯标准库实现，离线可跑。</p>
+  </div>
+</section>
+
+<!-- ============ 03 ============ -->
+<section id="s3">
+  <h2><span class="num">03</span>功能地图</h2>
+  <p class="sec-intro">
+    程序能力可以切成九块。前四块是「造模板」，中间三块是「配规则」，最后两块是「出图」与「交付」。
+  </p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:15%">模块</th><th style="width:26%">解决什么</th><th style="width:36%">主要入口</th><th style="width:23%">关键实现</th></tr></thead>
+    <tbody>
+      <tr><td>文档与画布</td><td>一屏多稿、尺寸与分区对齐</td><td>顶栏「画布」· <kbd>Ctrl+N</kbd> · 画布右键</td><td><code>Document</code> / <code>WorkspaceSessionViewModel</code></td></tr>
+      <tr><td>图层体系</td><td>图片、文字、异形、分组四类结构</td><td>命令栏「新建图层」· 图层列表右键</td><td><code>Layer</code> / <code>TextLayer</code> / <code>ShapedLayer</code> / <code>LayerGroup</code></td></tr>
+      <tr><td>属性与效果</td><td>变换、混合、描边、圆角、叠加、文字排版</td><td>右侧检查器（基本参数 / 更多参数）</td><td><code>WorkspaceViewModel</code> 212 个属性</td></tr>
+      <tr><td>素材源与随机</td><td>文件夹取图、按行取文案、随机变换</td><td>检查器「图像源」「随机变换」「图层分身」</td><td><code>layer_image_source_mixin</code> / <code>document_randomize</code></td></tr>
+      <tr><td>绑定组</td><td>多图层成套出现，同批次不串类、不重样</td><td>命令栏「图层绑定管理」</td><td><code>BindingGroup</code>（4 个 mixin）</td></tr>
+      <tr><td>尺寸匹配</td><td>镂空源图层的位置尺寸驱动目标图层</td><td>命令栏「图层尺寸匹配」</td><td><code>LayerSizeMatchManager</code></td></tr>
+      <tr><td>预设体系</td><td>模板资产化、可检索可复用</td><td>顶栏「预设」· <kbd>Ctrl+Shift+P</kbd></td><td><code>PresetManager</code> + 缩略图服务</td></tr>
+      <tr><td>导出体系</td><td>单图、单文档批量、多标签批量</td><td><kbd>Ctrl+Shift+X</kbd> / <kbd>F12</kbd> / <kbd>Ctrl+Alt+Shift+X</kbd></td><td><code>BatchExportViewModel</code> / <code>DocumentExportBatch</code></td></tr>
+      <tr><td>更新与打包</td><td>静默检查更新、双形态发布</td><td>命令栏「检查更新」· <code>build.py</code></td><td><code>updater.py</code>（ed25519 签名校验）</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="s4">
+  <h2><span class="num">04</span>文档与画布</h2>
+
+  <p class="sec-intro">
+    启动后第一屏不是一张白纸，而是<strong>预设工作台</strong>。用户是奔着「用现有模板出图」来的，
+    只有明确要求新建（<code>--blank</code>）、打开文件或演示时，才直接进编辑器。
+  </p>
+
+  <figure>
+    <img src="shots/00-home-presets.jpg" alt="预设工作台首页：左侧范围与分类导航，中间缩略图卡片网格，顶部搜索与排序">
+    <figcaption>
+      <b>图 4-1　首页 = 预设工作台。</b>三栏结构：左侧「全部预设 / 最近使用 / 收藏」与分类树（促销卡片、平台素材、保险金融…），
+      中间是带封面的卡片网格，每张卡片常驻「打开 / 更多」操作条，右上角显示页数、尺寸、图层数与分类标签。
+      顶部有搜索、手动排序、卡片尺寸滑杆、网格/列表视图切换。
+    </figcaption>
+  </figure>
+
+  <h3>多标签文档</h3>
+  <p>
+    每个标签页是一份独立的 <code>Document</code>，有独立的画布尺寸、图层栈和撤销历史。
+    标签上出现琥珀色圆点表示「有未保存修改」；右键标签可以复制、左右移动、关闭其他、恢复导出面板。
+    关闭前会走统一的未保存确认，避免手滑丢稿。
+  </p>
+
+  <h3>新建画布</h3>
+  <figure>
+    <img src="shots/06-new-canvas.jpg" alt="新建画布弹窗：常尺寸三档预设与自定义宽高">
+    <figcaption>
+      <b>图 4-2　新建画布。</b>「常尺寸」放了三档高频预设并显示比例（方形图 800×800 / 横版 16:9 1280×720 / 竖版 9:16 1080×1920），
+      这三档也可以在画布预设管理里替换；下方自定义宽高，单位 px。
+    </figcaption>
+  </figure>
+
+  <h3>画布预设</h3>
+  <p>
+    内置 10 档标准尺寸，按「标准 / 高清 / 超高清 / 竖屏 / 正方形」分组：
+    640×480、800×600、1024×768、1280×720、1920×1080、2560×1440、3840×2160、720×1280、1080×1920、1000×1000、2000×2000。
+    用户新增的预设存在 <code>~/.config/批图王/canvas_presets.json</code>，可改名、改尺寸、删除。
+  </p>
+  <p>
+    画布尺寸可以随时改（<kbd>Alt+Ctrl+C</kbd>），三种处理策略：<strong>比例缩放</strong>（内容跟着缩放）、
+    <strong>居中保留</strong>、<strong>左上保留</strong>——选错策略会让整版元素飞出画面，这是改尺寸时最容易出的事故。
+  </p>
+
+  <h3>标尺、参考线与吸附</h3>
+  <figure>
+    <img src="shots/13-guides.jpg" alt="画布上显示标尺刻度与横竖参考线">
+    <figcaption>
+      <b>图 4-3　标尺与参考线。</b>顶边与左边显示像素刻度，可以拖出横竖参考线；开启吸附后图层移动会贴到参考线与画布边缘。
+      <kbd>Ctrl+R</kbd> 切标尺，<kbd>;</kbd> 切参考线，右键「清空参考线」一次性清干净。
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="s5">
+  <h2><span class="num">05</span>图层体系</h2>
+
+  <p class="sec-intro">
+    四类结构共用一套变换与效果基座，但各自的「内容来源」完全不同：图片图层取文件，文字图层取文案行，
+    异形图层取裁剪形状，图层组不参与渲染只做组织。
+  </p>
+
+  <figure>
+    <img src="shots/01-editor.jpg" alt="编辑器主界面：左侧图层列表、中央画布、右侧属性检查器">
+    <figcaption>
+      <b>图 5-1　编辑器三区布局。</b>左：图层列表（眼睛/锁/缩略图/名称/类型，支持拖拽排序与分组层级）。
+      中：画布（带标尺、选中框、浮动工具条）。右：属性检查器，固定 320px，分「基本参数 / 更多参数」两页。
+      底部状态栏实时显示渲染耗时、画布尺寸、色彩模式与当前缩放。
+    </figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:14%">类型</th><th style="width:30%">内容来源</th><th style="width:30%">特有配置</th><th style="width:26%">批量时的行为</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>图片图层</td>
+        <td>单张图片，或整个素材文件夹</td>
+        <td>适配模式（填满裁剪 / 完整显示 / 原始尺寸）、裁剪方向、自由裁剪、去透明边</td>
+        <td>文件夹图层每张随机取图；可被「单次用图」约束为一次性消耗</td>
+      </tr>
+      <tr>
+        <td>文字图层</td>
+        <td>一段文案，或按行拆分的文案库</td>
+        <td>字体/字重/字距/行距、按行绑定、局部颜色与字号区间、描边、背景、阴影、发光、渐变填充</td>
+        <td>按行随机抽一行；绑定模式下只抽命中分类关键词的行</td>
+      </tr>
+      <tr>
+        <td>异形图层</td>
+        <td>一张图片 + 一个裁剪形状</td>
+        <td>矩形 / 直角梯形 / 圆形 / 正五边形 / 正六边形，多边形可转角度与圆角</td>
+        <td>同图片图层，额外套形状蒙版</td>
+      </tr>
+      <tr>
+        <td>图层组</td>
+        <td>不渲染，仅组织</td>
+        <td>展开/折叠、组内显示与锁定联动</td>
+        <td>不参与组合计算，但影响可见性判定</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>通用操作</h3>
+  <ul>
+    <li><strong>变换</strong>：位置、尺寸、旋转、水平/垂直翻转、等比锁定；<kbd>Ctrl+T</kbd> 进自由变换。</li>
+    <li><strong>排列</strong>：六个对齐（左/水平居中/右/顶/垂直居中/底）+ 两个等距分布（需 ≥3 个图层）+ 完全居中 + 匹配画板大小。</li>
+    <li><strong>层级</strong>：上移/下移一层、置顶/置底，<kbd>Ctrl+]</kbd> / <kbd>Ctrl+[</kbd> 与 <kbd>Ctrl+Shift+]</kbd> / <kbd>Ctrl+Shift+[</kbd>。</li>
+    <li><strong>编组</strong>：<kbd>Ctrl+G</kbd> 编组、<kbd>Ctrl+Shift+G</kbd> 取消；组内图层按相邻关系收纳。</li>
+    <li><strong>样式复用</strong>：<kbd>Ctrl+Shift+C</kbd> 复制图层样式、<kbd>Ctrl+Shift+V</kbd> 粘贴——批量调参时比逐个改快得多。</li>
+    <li><strong>复制</strong>：<kbd>Ctrl+J</kbd> 复制选中图层到新图层，<kbd>Ctrl+C</kbd> / <kbd>Ctrl+V</kbd> 跨文档粘贴。</li>
+  </ul>
+
+  <h3>异形图层的形状从哪来</h3>
+  <figure>
+    <img src="shots/09-shaped.jpg" alt="添加异形图层弹窗：形状九宫格、位置尺寸、内容源">
+    <figcaption>
+      <b>图 5-2　添加异形图层。</b>五个形状以卡片形式平铺，矩形下方注明「可拖角点圆角」，正五边形/正六边形注明「可独立圆角」。
+      下方可立刻指定内容源（单图或文件夹）与裁剪模式，也可以先建空壳后补。
+    </figcaption>
+  </figure>
+  <p>
+    形状之外还有一层<strong>矢量路径</strong>：开启路径编辑后，矩形/多边形可以被拆成顶点与贝塞尔控制点，
+    逐点拖动，控制点连接方式支持镜像、共线、自由三种。这层几何由 <code>vector_layer_geometry.py</code> 计算，
+    描边则走 <code>vector_stroke_sdf.py</code> 的 SDF 采样，所以细描边在放大时不会糊。
+  </p>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="s6">
+  <h2><span class="num">06</span>属性检查器与图层效果</h2>
+
+  <p class="sec-intro">
+    检查器是「改参数」的唯一入口，分两页：<strong>基本参数</strong>放高频项（名称、位置、尺寸、内容）；
+    <strong>更多参数</strong>放变换、随机、分身、混合与各类效果。所有区块按选中图层类型动态显隐，不会出现无关字段。
+  </p>
+
+  <h3>图片图层：基本参数</h3>
+  <figure>
+    <img src="shots/07-random.jpg" alt="图片图层的更多参数页：随机变换、图层分身、描边、颜色叠加、圆角">
+    <figcaption>
+      <b>图 6-1　图片图层「更多参数」。</b>可见区块自上而下：随机变换（位置偏移 24px、缩放 85–115%、旋转 ±8°，并实时显示本次抽样结果「位置 +3/+23 px、缩放 89%、旋转 4.2°」）、
+      图层分身（2×2）、描边、颜色叠加、圆角。右侧开关全部就位，未启用时区块折叠为一行，不占视线。
+    </figcaption>
+  </figure>
+
+  <h3>文字图层：排版与外观</h3>
+  <figure>
+    <img src="shots/08-text.jpg" alt="文字图层检查器：字体、样式、字距、排版对齐、行距、文本框、不透明度、混合">
+    <figcaption>
+      <b>图 6-2　文字排版区。</b>字体下拉带可用性校验（找不到字体时会给出回退提示）、样式支持加粗/斜体与字重选择、
+      字距按千分比、对齐四档、行距按百分比、文本框支持自动贴合与内边距。
+    </figcaption>
+  </figure>
+  <p>
+    文字能力比一般批量工具厚：支持<strong>按行绑定</strong>（一行一条文案，随机抽一行）、
+    <strong>局部颜色与字号区间</strong>（同一段落里不同字符不同色/不同号）、<strong>竖排</strong>、
+    渐变填充（线性/径向/角度）、背景块、投影、发光。这些效果在 <code>text_layer_render.py</code> 里按「先算内容蒙版 → 再套效果 → 最后合成」的顺序出图，
+    和导出用的是同一套代码。
+  </p>
+
+  <h3>图层分身：一次排版，阵列成 N 份</h3>
+  <figure>
+    <img src="shots/12-effects.jpg" alt="图层分身区块：启用开关、固定行列/填充画布两种布局、镜像、尺寸、排列与铺排参数">
+    <figcaption>
+      <b>图 6-3　图层分身。</b>标题右侧直接显示当前规模「2 × 2」。启用后有两套布局：
+      <b>固定行列</b>（自己填行列数与间距）与<b>填充画布</b>（自动算满整个画板）。
+      镜像支持无 / 左右 / 上下；排列支持常规网格、错位排列、边框排列，并可整体旋转角度。
+      做重复纹样、促销条带、九宫格商品墙时，比手工复制快一个量级。
+    </figcaption>
+  </figure>
+
+  <h3>可用的图层效果一览</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:18%">效果</th><th style="width:38%">参数</th><th style="width:44%">说明</th></tr></thead>
+    <tbody>
+      <tr><td>混合模式</td><td>16 种</td><td>正常、正片叠底、滤色、叠加、柔光、强光、颜色减淡/加深、变暗/变亮、差值、排除、色相、饱和度、颜色、明度</td></tr>
+      <tr><td>描边</td><td>宽度、颜色、类型、拐角、端点、虚线长/间隙</td><td>类型分内/居中/外；拐角分斜接/圆角/斜切；端点分平头/圆头/方头</td></tr>
+      <tr><td>圆角</td><td>统一半径，或四角独立</td><td>上限随图层尺寸变化（界面会显示「最大 540」这类实际上限）</td></tr>
+      <tr><td>颜色叠加</td><td>颜色 + 不透明度</td><td>给图层整体染色，常用于批量改主色</td></tr>
+      <tr><td>渐变叠加</td><td>起止色 + 角度 + 不透明度</td><td>线性渐变，角度以度为单位</td></tr>
+      <tr><td>随机变换</td><td>位置偏移、缩放区间、旋转区间</td><td>每次出图重新抽样，让同一模板的成品不雷同</td></tr>
+      <tr><td>图层分身</td><td>行列数、间距、镜像、自定义尺寸、填充画布</td><td>一个图层阵列成 N 份；填充画布支持常规网格 / 错位排列 / 边框排列，可整体旋转</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note">
+    <p class="n-h">关于 Ctrl+E「向下合并」</p>
+    <p>当前实现等价于「把上下两个图层编组为合并容器」，<strong>没有做像素级扁平化</strong>。源码注释写得很明确（<code>workspace_vm_layer_ops.py</code>），状态栏也会提示「已编组为合并容器」。需要真合并时，导出成图后再导入。</p>
+  </div>
+</section>
+
+<!-- ============ 07 ============ -->
+<section id="s7">
+  <h2><span class="num">07</span>素材源与随机化</h2>
+
+  <p class="sec-intro">
+    这一层是「批量」的发动机。规则很简单：图层指向一个候选池，每次出图从池里抽一个。
+    复杂的是怎么保证抽得<strong>不重复、不串类、符合业务约束</strong>——这部分规则在绑定组里。
+  </p>
+
+  <h3>三种候选池</h3>
+  <div class="grid-3">
+    <div class="card">
+      <div class="c-h">单图</div>
+      <p>指向一个文件。批量时不变，适合 logo、固定底板。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">文件夹 <span class="tag">主力</span></div>
+      <p>指向目录，扫描全部受支持图片（png/jpg/jpeg/gif/bmp/tif/tiff/webp）。每次抽一张。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">文案库</div>
+      <p>文字图层按行拆分，一行一条。可切换「按行随机」与「整段排版」两种模式。</p>
+    </div>
+  </div>
+
+  <h3>随机化怎么执行</h3>
+  <p>
+    预览里的「随机一批」和批量导出走的是两条入口，但规则一致。<code>Document.randomize_all_layers()</code> 的实际顺序是：
+  </p>
+  <ol>
+    <li>筛出<strong>有效可见</strong>图层（图层组不算，父组隐藏的子层也不算）。</li>
+    <li>若绑定管理器启用：先跑 <code>analyze_and_restrict_layer_files()</code>，把每个图层的可用文件限制在绑定组公共分类内；再 <code>randomize_bound_layers()</code> 一次性为所有绑定组选定成套组合。</li>
+    <li>未被绑定覆盖的图层各自随机：文字抽行，图片抽图；非绑定图层会遵守文件限制，<strong>不会抢占绑定图层已占用的素材</strong>。</li>
+    <li>最后为所有可见图层重新生成随机变换参数（位置/缩放/旋转）。</li>
+  </ol>
+  <p>
+    随机之后不粗暴清全部缓存，只打 <code>_needs_cache_refresh</code> 标记——图层 surface 缓存的 key 里带了图片路径和变换参数，
+    换图的自动失效、没换的直接命中，避免每次随机都全量重解码导致几秒卡顿。同时置 <code>_quick_first_frame</code>，
+    先出低质量快图再后台补全质量，点一下立刻有反馈。
+  </p>
+
+  <div class="card" style="margin:22px 0 26px">
+    <div class="c-h">设计取舍：为什么不给"错误结果"</div>
+    <p>绑定链路一旦抛异常，会回退到基础随机化并打印警告，而不是静默出图。宁可让用户看到「绑定未生效」的提示，也不要让他拿到 500 张串类图才发现问题。</p>
+  </div>
+</section>
+
+<!-- ============ 08 ============ -->
+<section id="s8">
+  <h2><span class="num">08</span>绑定组（核心能力）</h2>
+
+  <p class="sec-intro">
+    绑定组解决的问题：一张主图里，产品图、卖点文案、促销标签必须「成套」。产品是蓝牙音箱，配的文案就得是音箱的；
+    不能出现音箱图配抽纸文案。绑定组把这些图层绑成一个决策单元，每张图只抽一套。
+  </p>
+
+  <figure>
+    <img src="shots/04-binding.jpg" alt="数据关系抽屉：绑定组标签页、全局绑定开关、预览下一组、绑定组名输入">
+    <figcaption>
+      <b>图 8-1　数据关系 · 绑定组。</b>顶部「全局绑定」总开关，关掉即退回各图层独立随机；
+      「预览下一组」用来在出图前抽一组看看效果；底部按当前选中的图层建立绑定组。
+      少于 2 个图层时给出空状态提示，并直接告诉用户怎么多选。
+    </figcaption>
+  </figure>
+
+  <h3>决策流程</h3>
+  <figure class="fig-frame">
+    <p class="fig-cap">图 8-2　绑定组选材决策链</p>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="绑定组选材决策流程图">
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b6e63"/>
+        </marker>
+      </defs>
+      <g font-size="11.5">
+        <!-- step 1 -->
+        <rect x="18" y="20" width="196" height="66" fill="#fff" stroke="#cfd0c6"/>
+        <text x="32" y="42" font-weight="700" fill="#14150f">① 分析图层</text>
+        <text x="32" y="60" fill="#3b3d35">图片：文件名核心名</text>
+        <text x="32" y="76" fill="#3b3d35">文字：关键词 + 品类词典</text>
+
+        <!-- step 2 -->
+        <rect x="246" y="20" width="196" height="66" fill="#fff" stroke="#cfd0c6"/>
+        <text x="260" y="42" font-weight="700" fill="#14150f">② 归类到分类</text>
+        <text x="260" y="60" fill="#3b3d35">文件夹名 / 文件名前缀</text>
+        <text x="260" y="76" fill="#3b3d35">建立"分类 → 文件"索引</text>
+
+        <!-- step 3 -->
+        <rect x="474" y="20" width="196" height="66" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="488" y="42" font-weight="700" fill="#14150f">③ 求公共分类</text>
+        <text x="488" y="60" fill="#3b3d35">所有图层分类的交集</text>
+        <text x="488" y="76" fill="#3b3d35">= 本组唯一合法选材范围</text>
+
+        <!-- step 4 -->
+        <rect x="702" y="20" width="180" height="66" fill="#fff" stroke="#cfd0c6"/>
+        <text x="716" y="42" font-weight="700" fill="#14150f">④ 生成组合</text>
+        <text x="716" y="60" fill="#3b3d35">各层候选做笛卡尔积</text>
+        <text x="716" y="76" fill="#3b3d35">（组合爆炸时有上限）</text>
+
+        <line x1="216" y1="53" x2="244" y2="53" stroke="#6b6e63" marker-end="url(#ar2)"/>
+        <line x1="444" y1="53" x2="472" y2="53" stroke="#6b6e63" marker-end="url(#ar2)"/>
+        <line x1="672" y1="53" x2="700" y2="53" stroke="#6b6e63" marker-end="url(#ar2)"/>
+
+        <!-- step 5-7 -->
+        <rect x="18" y="140" width="280" height="86" fill="#fff" stroke="#cfd0c6"/>
+        <text x="32" y="162" font-weight="700" fill="#14150f">⑤ 全局避重</text>
+        <text x="32" y="180" fill="#3b3d35">组合哈希查历史用量</text>
+        <text x="32" y="197" fill="#3b3d35">优先选从未用过的组合</text>
+        <text x="32" y="214" fill="#3b3d35">分类使用次数也参与打分</text>
+
+        <rect x="318" y="140" width="280" height="86" fill="#fff" stroke="#cfd0c6"/>
+        <text x="332" y="162" font-weight="700" fill="#14150f">⑥ 多样性兜底</text>
+        <text x="332" y="180" fill="#3b3d35">组合耗尽 → 多样性增强随机</text>
+        <text x="332" y="197" fill="#3b3d35">跨分类混合模式可放宽</text>
+        <text x="332" y="214" fill="#3b3d35">避免连续两张撞同一套</text>
+
+        <rect x="618" y="140" width="264" height="86" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="632" y="162" font-weight="700" fill="#14150f">⑦ 写回图层</text>
+        <text x="632" y="180" fill="#3b3d35">图片层换 current_image_path</text>
+        <text x="632" y="197" fill="#3b3d35">文字层换 current_text</text>
+        <text x="632" y="214" fill="#3b3d35">记录本次组合到历史</text>
+
+        <line x1="158" y1="88" x2="158" y2="138" stroke="#6b6e63" marker-end="url(#ar2)"/>
+        <line x1="300" y1="183" x2="316" y2="183" stroke="#6b6e63" marker-end="url(#ar2)"/>
+        <line x1="600" y1="183" x2="616" y2="183" stroke="#6b6e63" marker-end="url(#ar2)"/>
+
+        <!-- result -->
+        <rect x="18" y="272" width="864" height="96" fill="#f2f2ec" stroke="#cfd0c6"/>
+        <text x="34" y="296" font-size="11" font-family="monospace" fill="#989b8f" letter-spacing="1.2">输出保证</text>
+        <text x="34" y="320" font-size="12.5" fill="#14150f">同一张图里：产品图与文案属于同一分类，不会「音箱配抽纸」。</text>
+        <text x="34" y="342" font-size="12.5" fill="#14150f">跨图片之间：组合不重复使用，直到候选空间耗尽（启用避重时）。</text>
+        <text x="34" y="362" font-size="12.5" fill="#14150f">异常情况：分类交集为空或索引缺失 → 回退基础随机并明确告警，不静默出错图。</text>
+      </g>
+    </svg>
+  </figure>
+
+  <h3>分类是怎么被识别出来的</h3>
+  <p>
+    没有让用户手工打标，而是从既有命名里推断，两条线索：
+  </p>
+  <ul>
+    <li><strong>文件夹 / 文件名</strong>：<code>product_category_extractor.py</code> 维护一份中文+英文关键词表（蓝牙音箱、抽纸、服装、食品、美妆、家居、数码、运动、母婴、汽车），
+      外加品牌映射（心相印/维达 → 抽纸，索尼/JBL/Bose → 蓝牙音箱，小米/华为/苹果 → 数码）。命中即归类。</li>
+    <li><strong>文案内容</strong>：文字图层的每一行也过同一套词典，提取品类标签。所以「买音箱送支架」这类文案会被识别成音箱类。</li>
+  </ul>
+  <p>
+    分类索引会持久化到 <code>~/.config/批图王/cache/binding_folder_category_index_v1.json</code>，
+    按目录 mtime 判断是否需要重扫——素材文件夹几万张图时，这个缓存直接把每次开面板的几十秒降到几乎无感。
+  </p>
+
+  <h3>三个容易混淆的开关</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:18%">开关</th><th style="width:16%">位置</th><th style="width:66%">真实语义</th></tr></thead>
+    <tbody>
+      <tr><td>全局绑定</td><td>数据关系 · 绑定组</td><td>总闸。关掉后所有图层各自独立随机，绑定组配置保留但不起作用</td></tr>
+      <tr><td>避免重复</td><td>批量导出 · 组合策略「智能采样」</td><td>启用跨图片的组合避重；开启且组合空间足够时走确定性枚举，保证「不重复也不漏图」</td></tr>
+      <tr><td>单次用图</td><td>批量导出 · 组合策略「单次用图」</td><td>指定图层里的每个文件在整批中<strong>只用一次</strong>；素材耗尽时跳过该次生成，而不是回头重复用</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============ 09 ============ -->
+<section id="s9">
+  <h2><span class="num">09</span>尺寸匹配与自动遮罩</h2>
+
+  <p class="sec-intro">
+    绑定组管「内容配对」，尺寸匹配管「位置对齐」。典型用法：模板上有个白色镂空框（源图层），
+    产品图（目标图层）要自动填进这个框、尺寸角度都跟着框走。
+  </p>
+
+  <figure>
+    <img src="shots/10-size-match.jpg" alt="数据关系抽屉的尺寸匹配页：全局尺寸匹配开关、源图层/目标图层选择、一对多与自动旋转">
+    <figcaption>
+      <b>图 9-1　数据关系 · 尺寸匹配。</b>开关说明写得很直白：「根据源图层镂空位置调整目标图层，预览和导出结果保持一致」。
+      下拉选择源图层与目标图层，可指定一对多数量，并可选「自动旋转 / 自动遮罩」。
+    </figcaption>
+  </figure>
+
+  <h3>关系参数</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:22%">参数</th><th style="width:14%">默认</th><th style="width:64%">作用</th></tr></thead>
+    <tbody>
+      <tr><td><code>padding</code> 内缩</td><td>1 px</td><td>目标图层相对镂空区域的内缩量，避免压到边框</td></tr>
+      <tr><td><code>one_to_many</code> 一对多</td><td>关</td><td>一个源区域驱动多个目标图层</td></tr>
+      <tr><td><code>auto_rotate</code> 自动旋转</td><td>关</td><td>小于 4° 的倾斜视为不倾斜，减少误判抖动</td></tr>
+      <tr><td><code>auto_mask</code> 自动遮罩</td><td><strong>关</strong></td><td>按阈值在源图上检测内孔并生成遮罩；面积比限定 0.2%–75%，可保留边框、边缘细化</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    自动遮罩默认关闭是刻意的：旧模板加载后如果突然开始自动抠孔，等于把历史成品的观感改掉了。
+    所以 <code>AUTO_MASK_DEFAULTS</code> 里 <code>auto_mask_enabled=False</code>，需要时手动开。
+  </p>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="s10">
+  <h2><span class="num">10</span>预设体系</h2>
+
+  <p class="sec-intro">
+    预设是「模板资产化」的载体：把调好的多标签文档存起来，带封面缩略图、分类、标签、收藏，下次一键召回。
+    首页就是预设工作台，说明这是程序的主入口而非附属功能。
+  </p>
+
+  <h3>预设能做什么</h3>
+  <div class="grid-2">
+    <div class="card">
+      <div class="c-h">保存与召回</div>
+      <p>「保存当前」存当前标签，「保存全部」存整个会话。加载时按原有标签结构还原，不是压成一张图。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">组织与检索</div>
+      <p>分类树、标签、收藏、搜索（名称/描述/标签）、四种排序：手动、最近使用、最近创建、名称 A→Z。手动排序下可拖拽重排。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">封面与缩略图</div>
+      <p>封面可以指定用第几页；缩略图由后台线程池异步渲染，不阻塞界面，渲染完成后逐个回填卡片。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">导入导出</div>
+      <p>单个预设或全部预设导出成 <code>.preset</code> 文件，用于跨机器、跨人交接模板。</p>
+    </div>
+  </div>
+
+  <h3>卡片上的三个动作</h3>
+  <p>
+    每张卡片常驻「打开」和「更多」，更多里是复制预设、导出预设、删除预设。
+    卡片右上角还会直接标出素材缺失（如「素材缺失 1」），打开前就知道这个模板能不能用——
+    这是最实用的一个提示，省掉「打开 → 发现图全丢了 → 逐个找」的来回。
+  </p>
+
+  <h3>存储位置</h3>
+  <p>
+    预设数据在 <code>%APPDATA%\批图王\presets\</code>，索引文件是 <code>presets_index.json</code>，
+    缩略图单独缓存。首次启动会把仓库自带的初始预设复制到用户目录，之后只读用户目录。
+  </p>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="s11">
+  <h2><span class="num">11</span>导出体系</h2>
+
+  <p class="sec-intro">
+    三条通道，复杂度递增：单图导出最简，单文档批量最常用，多标签批量用于一次交付多尺寸。
+    三条通道共用同一套渲染器与编码策略，所以<strong>预览看到什么，导出就是什么</strong>。
+  </p>
+
+  <figure class="fig-frame">
+    <p class="fig-cap">图 11-1　三条导出通道的差异</p>
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="单图、单文档批量、多标签批量三条导出通道对比">
+      <g font-size="12">
+        <rect x="0" y="0" width="288" height="300" fill="#fff" stroke="#cfd0c6"/>
+        <text x="18" y="30" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.4">通道 A</text>
+        <text x="18" y="56" font-size="15" font-weight="700" fill="#14150f">单图导出</text>
+        <text x="18" y="80" fill="#6b6e63">Ctrl+Shift+X</text>
+        <line x1="18" y1="96" x2="270" y2="96" stroke="#e2e2da"/>
+        <text x="18" y="120" fill="#3b3d35">当前标签页 · 当前画面</text>
+        <text x="18" y="142" fill="#3b3d35">格式：PNG / JPG / WebP</text>
+        <text x="18" y="164" fill="#3b3d35">每次一个文件，手动指定路径</text>
+        <text x="18" y="196" fill="#989b8f">用途：定稿检查、单张交付</text>
+        <text x="18" y="230" fill="#3b3d35" font-size="11">不随机 · 不避重 · 不带命名模板</text>
+
+        <rect x="306" y="0" width="288" height="300" fill="#fff" stroke="#cfd0c6"/>
+        <text x="324" y="30" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.4">通道 B · 主力</text>
+        <text x="324" y="56" font-size="15" font-weight="700" fill="#14150f">单文档批量</text>
+        <text x="324" y="80" fill="#6b6e63">F12</text>
+        <line x1="324" y1="96" x2="576" y2="96" stroke="#e2e2da"/>
+        <text x="324" y="120" fill="#3b3d35">当前标签页 · N 张</text>
+        <text x="324" y="142" fill="#3b3d35">格式：PNG / JPG + 体积上限</text>
+        <text x="324" y="164" fill="#3b3d35">命名模板、日期、序号、起始号</text>
+        <text x="324" y="186" fill="#3b3d35">三种组合策略 + 高级策略</text>
+        <text x="324" y="208" fill="#3b3d35">进度 / 取消 / 失败重试</text>
+        <text x="324" y="240" fill="#989b8f">用途：一次交付一整批主图</text>
+
+        <rect x="612" y="0" width="288" height="300" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="630" y="30" font-family="monospace" font-size="10" fill="#2f6b55" letter-spacing="1.4">通道 C</text>
+        <text x="630" y="56" font-size="15" font-weight="700" fill="#14150f">多标签批量</text>
+        <text x="630" y="80" fill="#6b6e63">Ctrl+Alt+Shift+X</text>
+        <line x1="630" y1="96" x2="882" y2="96" stroke="#b6c9bf"/>
+        <text x="630" y="120" fill="#3b3d35">跨标签页，逐个配置</text>
+        <text x="630" y="142" fill="#3b3d35">每标签独立：数量 / 起始 / 子目录</text>
+        <text x="630" y="164" fill="#3b3d35">全局：格式、命名、组合策略</text>
+        <text x="630" y="186" fill="#3b3d35">按标签分目录落盘</text>
+        <text x="630" y="218" fill="#989b8f">用途：一活动多尺寸一次跑完</text>
+      </g>
+    </svg>
+  </figure>
+
+  <h3>批量导出面板</h3>
+  <figure>
+    <img src="shots/02-batch-export.jpg" alt="批量导出抽屉：导出任务、文件命名、输出格式、组合策略、高级策略">
+    <figcaption>
+      <b>图 11-2　批量导出。</b>右侧抽屉，五个可折叠区块（导出任务 / 文件命名 / 输出格式 / 组合策略 / 高级策略），
+      顶部常驻「10 张 · PNG」的实时摘要，底部显示预估耗时（如「预计 10 张 · 约 7 秒」）与三个动作：
+      保存配置、打开目录、开始导出。整个表单在运行期间置灰，避免中途改参数。
+    </figcaption>
+  </figure>
+
+  <h4>导出任务</h4>
+  <ul>
+    <li><strong>输出目录</strong>：可选「日期自动创建」——勾选后按当天日期建子目录，历史批次不混在一起。</li>
+    <li><strong>生成数量</strong>：默认 10。遍历组合模式下这个输入被组合数接管。</li>
+    <li><strong>起始序号</strong>：默认 1，续跑历史批次时改成上次的末尾值即可。</li>
+  </ul>
+
+  <h4>文件命名</h4>
+  <p>
+    命名由「添加日期 + 文件前缀 + 序号格式」三部分组成，可组合。日期三档：<code>YYYYMMDD</code> / <code>YYYY-MM-DD</code> / <code>YYMMDD</code>；
+    序号四档：<code>0001</code> / <code>001</code> / <code>01</code> / <code>1</code>。
+    实际落到模板层还支持更多占位符：
+  </p>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:26%">占位符</th><th style="width:74%">含义</th></tr></thead>
+    <tbody>
+      <tr><td><code>{number}</code> / <code>{number:04d}</code></td><td>当前序号，带格式化补零</td></tr>
+      <tr><td><code>{index}</code> / <code>{count}</code></td><td>序号别名 / 本次总数</td></tr>
+      <tr><td><code>{layer}</code> / <code>{layers}</code></td><td>主图层素材名 / 多个素材名拼接（最多 3 个）</td></tr>
+      <tr><td><code>{layer:0}</code> / <code>{layer:1}</code></td><td>按索引取指定图层的素材名</td></tr>
+      <tr><td><code>{combo}</code> / <code>{combination_hash}</code></td><td>本组素材组合的短哈希，用于去重核对</td></tr>
+      <tr><td><code>{image_name}</code> / <code>{layer_name}</code></td><td>图片名 / 图层名</td></tr>
+      <tr><td><code>{binding_info}</code></td><td>绑定分类信息</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    生成的文件名会再过一遍清洗：Unicode 归一化、替换 Windows 非法字符、去控制字符、合并重复分隔符、
+    按字节截断到 200 以内。中文不会被吃掉。
+  </p>
+
+  <h4>输出格式</h4>
+  <p>
+    批量面板当前暴露 PNG 与 JPG 两档，另有一个「大小 KB」上限输入框（0 = 不限制）。
+    填了上限且格式是 JPG 时，编码器会找「能塞进限制的最高 4:4:4 质量」再一次性写出，而不是反复重压。
+  </p>
+
+  <h4>组合策略（三选）</h4>
+  <div class="grid-3">
+    <div class="card">
+      <div class="c-h">智能采样</div>
+      <p>跨图片均衡组合，降低重复。开得越多，越倾向于选「没用过」的素材与分类。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">单次用图</div>
+      <p>指定图层在每个文件上只用一次。素材耗尽时跳过该次，保证绝不重复用图。</p>
+    </div>
+    <div class="card">
+      <div class="c-h">遍历组合</div>
+      <p>按组合顺序穷举，数量自动等于理论组合数。超过 1000 / 10000 会给出数量提醒。</p>
+    </div>
+  </div>
+
+  <figure>
+    <img src="shots/14-unique-layers.jpg" alt="组合策略区展开：智能采样与单次用图两个开关，下方显示限制图层选项">
+    <figcaption>
+      <b>图 11-3　组合策略的实际操作。</b>三个策略以分段按钮并排，可同时开启。选中「单次用图」后，
+      下方展开「限制图层」选择器——只有勾选的图层才会被约束为一次性消耗，其余图层不受影响。
+      没有符合条件（如全是单图图层）时会直接提示「没有可用的图片图层」，不会让你选了个空设置。
+    </figcaption>
+  </figure>
+
+  <h4>高级策略</h4>
+  <figure>
+    <img src="shots/11-batch-advanced.jpg" alt="高级策略弹窗：质量策略四档、性能策略三个开关、内存保护与失败阈值">
+    <figcaption>
+      <b>图 11-4　高级策略。</b>上半是质量四选一（高质量 / 均衡 / 速度优先 / 体积优先），
+      下半是三个可叠加的性能开关（高性能管线、预读素材、独立 Worker），
+      以及内存保护模式与三个安全阈值：连续失败上限 8、失败率上限 45%、单图停滞超时 180 秒。
+    </figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:16%">质量档</th><th style="width:14%">JPEG 质量</th><th style="width:14%">PNG 压缩级</th><th style="width:56%">取舍</th></tr></thead>
+    <tbody>
+      <tr><td>高质量（默认）</td><td class="t-num">96</td><td class="t-num">6</td><td>LANCZOS 重采样，优先保细节，文件偏大</td></tr>
+      <tr><td>均衡</td><td class="t-num">94</td><td class="t-num">4</td><td>画质几乎无损，速度与体积折中</td></tr>
+      <tr><td>速度优先</td><td class="t-num">90</td><td class="t-num">1</td><td>BICUBIC 重采样 + 低压缩，赶时间时用</td></tr>
+      <tr><td>体积优先</td><td class="t-num">92</td><td class="t-num">9</td><td>最大压缩；仅此档允许 PNG 有损量化</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>独立导出进程</h3>
+  <p>
+    数量达到阈值时，批量导出会自动切换到独立进程执行，主界面保持响应：默认 <code>count ≥ 200</code>
+    或「≥200 且可见图层 ≥8」触发。子进程通过快照文件接收文档，用 manifest 文件回传进度，
+    取消靠一个标记文件。环境变量 <code>BTPW_FORCE_EXPORT_WORKER</code> / <code>BTPW_DISABLE_EXPORT_WORKER</code> 可强制开或强制关。
+  </p>
+
+  <h3>多标签批量导出</h3>
+  <figure>
+    <img src="shots/05-multitab.jpg" alt="多标签批量导出抽屉：总输出目录、命名与格式、两个策略、标签页任务列表">
+    <figcaption>
+      <b>图 11-5　多标签批量导出。</b>顶部一个总输出目录 + 全局命名模板与格式，中间两个策略开关，
+      下方「标签页任务」逐个列出每个标签：左边是启用开关，右边显示画布尺寸，下面一行是该标签的
+      数量 / 起始序号 / 子目录，进度条单独一行。整批共用一个进度（右下角显示「0 / 10 张」）。
+    </figcaption>
+  </figure>
+  <p>
+    每个标签可以单独设数量和起始序号，还能指定子目录——这是多尺寸交付的关键，
+    三套尺寸落盘时自然分开，不用导出后再手工挪文件。
+  </p>
+
+  <h3>异常与降级</h3>
+  <p>
+    导出过程里「降级」和「失败」是两件事，界面分开表达：失败会计数（连续 8 次或失败率过 45% 就中止），
+    降级则是在结果面板里单独提示一句——比如素材目录丢失、分类筛选为空、去重失效，
+    这些情况照样能出图，但图「不对」。把它藏进日志是最容易挨骂的设计，所以这里显式暴露。
+  </p>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="s12">
+  <h2><span class="num">12</span>主流程走查</h2>
+
+  <p class="sec-intro">
+    把上面九块能力串起来，一个完整任务是这样跑通的。左侧是用户动作，右侧是程序内部发生的事。
+  </p>
+
+  <figure class="fig-frame">
+    <p class="fig-cap">图 12-1　从模板到成图的完整链路</p>
+    <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="从模板到成图的完整流程图">
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b6e63"/>
+        </marker>
+      </defs>
+      <g font-size="11.5">
+        <!-- column headers -->
+        <text x="18" y="16" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.4">用户动作</text>
+        <text x="330" y="16" font-family="monospace" font-size="10" fill="#989b8f" letter-spacing="1.4">程序内部</text>
+
+        <!-- rows -->
+        <g>
+          <rect x="18" y="26" width="280" height="46" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="46" font-weight="700" fill="#14150f">1　打开或新建模板</text>
+          <text x="32" y="63" fill="#6b6e63">预设工作台「打开」/ Ctrl+N</text>
+          <line x1="298" y1="49" x2="326" y2="49" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="26" width="552" height="46" fill="#f2f2ec" stroke="#cfd0c6"/>
+          <text x="344" y="46" fill="#3b3d35">反序列化 .cmp → 重建 Document、图层栈、绑定关系、视图设置</text>
+          <text x="344" y="63" fill="#989b8f">多标签时每个标签独立的 Document 实例</text>
+        </g>
+
+        <g>
+          <rect x="18" y="84" width="280" height="46" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="104" font-weight="700" fill="#14150f">2　组织图层</text>
+          <text x="32" y="121" fill="#6b6e63">新建图片/文字/异形图层，调位置与层序</text>
+          <line x1="298" y1="107" x2="326" y2="107" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="84" width="552" height="46" fill="#f2f2ec" stroke="#cfd0c6"/>
+          <text x="344" y="104" fill="#3b3d35">每次结构性改动 → 存历史快照 → 失效渲染缓存 → 递增命中测试版本</text>
+          <text x="344" y="121" fill="#989b8f">历史栈 20 条（图层操作约等于 10 步可撤销）</text>
+        </g>
+
+        <g>
+          <rect x="18" y="142" width="280" height="46" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="162" font-weight="700" fill="#14150f">3　挂素材源</text>
+          <text x="32" y="179" fill="#6b6e63">图层指向素材文件夹 / 文案库</text>
+          <line x1="298" y1="165" x2="326" y2="165" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="142" width="552" height="46" fill="#f2f2ec" stroke="#cfd0c6"/>
+          <text x="344" y="162" fill="#3b3d35">扫描目录 → 建"分类 → 文件"索引 → 写盘缓存（按 mtime 失效）</text>
+          <text x="344" y="179" fill="#989b8f">支持 png/jpg/jpeg/gif/bmp/tif/tiff/webp</text>
+        </g>
+
+        <g>
+          <rect x="18" y="200" width="280" height="46" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="220" font-weight="700" fill="#14150f">4　建绑定组</text>
+          <text x="32" y="237" fill="#6b6e63">多选图层 → 命名 → 建立绑定</text>
+          <line x1="298" y1="223" x2="326" y2="223" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="200" width="552" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+          <text x="344" y="220" fill="#3b3d35">分析各层分类 → 求公共分类 → 预生成组合空间</text>
+          <text x="344" y="237" fill="#989b8f">可用「预览下一组」先生成一组看效果</text>
+        </g>
+
+        <g>
+          <rect x="18" y="258" width="280" height="46" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="278" font-weight="700" fill="#14150f">5　随便机与效果</text>
+          <text x="32" y="295" fill="#6b6e63">随机变换区间、描边、圆角、叠加</text>
+          <line x1="298" y1="281" x2="326" y2="281" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="258" width="552" height="46" fill="#f2f2ec" stroke="#cfd0c6"/>
+          <text x="344" y="278" fill="#3b3d35">参数写入图层属性 → 触发预览重渲染（先快帧后全质量）</text>
+          <text x="344" y="295" fill="#989b8f">随机预览与导出共用同一渲染器，所见即所得</text>
+        </g>
+
+        <g>
+          <rect x="18" y="316" width="280" height="46" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="336" font-weight="700" fill="#14150f">6　配置导出</text>
+          <text x="32" y="353" fill="#6b6e63">F12 → 数量、命名、格式、策略</text>
+          <line x1="298" y1="339" x2="326" y2="339" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="316" width="552" height="46" fill="#f2f2ec" stroke="#cfd0c6"/>
+          <text x="344" y="336" fill="#3b3d35">预分析文档 → 估算组合数 → 计算预估耗时</text>
+          <text x="344" y="353" fill="#989b8f">参数校验不通过时在面板上直接拦住</text>
+        </g>
+
+        <g>
+          <rect x="18" y="374" width="280" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+          <text x="32" y="394" font-weight="700" fill="#14150f">7　开始导出</text>
+          <text x="32" y="411" fill="#6b6e63">可中断、可重试</text>
+          <line x1="298" y1="397" x2="326" y2="397" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="374" width="552" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+          <text x="344" y="394" fill="#3b3d35">预计算组合计划 → 逐张换素材 → 渲染 → 编码 → 落盘 → 回传进度</text>
+          <text x="344" y="411" fill="#989b8f">数量大时切独立进程；失败与降级分别计数并展示</text>
+        </g>
+
+        <g>
+          <rect x="18" y="432" width="280" height="30" fill="#fff" stroke="#cfd0c6"/>
+          <text x="32" y="452" font-weight="700" fill="#14150f">8　存为预设（可选）</text>
+          <line x1="298" y1="447" x2="326" y2="447" stroke="#6b6e63" marker-end="url(#ar3)"/>
+          <rect x="330" y="432" width="552" height="30" fill="#f2f2ec" stroke="#cfd0c6"/>
+          <text x="344" y="452" fill="#3b3d35">序列化文档 + 生成封面缩略图 + 写索引，进入预设工作台</text>
+        </g>
+      </g>
+    </svg>
+  </figure>
+
+  <h3>两个高频细节</h3>
+  <p>
+    <strong>第一次打开文字属性面板会卡 390ms。</strong>原因是首次要遍历系统字体目录、用 fontTools 解析几百个字体头部。
+    现在改成首屏渲染完 1.5–2 秒后，在后台线程预热字体索引——只走 <code>os.walk</code> 与 fontTools，不碰绑定 GUI 线程的 <code>QFontDatabase</code>，
+    之后进面板直接命中缓存。这类「一次性等待挪到空闲时」的处理在项目里是固定套路。
+  </p>
+  <p>
+    <strong>批量导出卡住不动。</strong>先看是不是单图太大或组合爆炸。安全阈值在高级策略里：单图停滞超时默认 180 秒，
+    超时会被判失败而不是无限等；连续失败 8 次或失败率过 45% 会主动中止整批，避免跑一晚上全是废图。
+  </p>
+</section>
+
+<!-- ============ 13 ============ -->
+<section id="s13">
+  <h2><span class="num">13</span>模块依赖关系</h2>
+
+  <p class="sec-intro">
+    依赖是单向的：界面依赖视图模型，视图模型依赖领域模型与服务，领域模型依赖工具层。
+    反过来不行，<code>check_architecture.py</code> 会拦住。
+  </p>
+
+  <figure class="fig-frame">
+    <p class="fig-cap">图 13-1　核心模块依赖图</p>
+    <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="核心模块依赖关系图">
+      <defs>
+        <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#989b8f"/>
+        </marker>
+      </defs>
+      <g font-size="11">
+        <!-- nodes -->
+        <rect x="330" y="10" width="240" height="40" fill="#f2f2ec" stroke="#cfd0c6"/>
+        <text x="344" y="27" font-weight="700" font-size="12" fill="#14150f">Main.qml</text>
+        <text x="344" y="43" fill="#6b6e63">界面与交互</text>
+
+        <rect x="60" y="82" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="72" y="100" font-weight="700" fill="#14150f">Workspace VM</text>
+        <text x="72" y="117" fill="#6b6e63">文档 / 图层 / 预览</text>
+
+        <rect x="248" y="82" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="260" y="100" font-weight="700" fill="#14150f">BatchExport VM</text>
+        <text x="260" y="117" fill="#6b6e63">批量导出状态机</text>
+
+        <rect x="436" y="82" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="448" y="100" font-weight="700" fill="#14150f">Session VM</text>
+        <text x="448" y="117" fill="#6b6e63">多标签生命周期</text>
+
+        <rect x="624" y="82" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="636" y="100" font-weight="700" fill="#14150f">Preset VM</text>
+        <text x="636" y="117" fill="#6b6e63">预设读写与缩略图</text>
+
+        <rect x="60" y="170" width="170" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="72" y="188" font-weight="700" fill="#14150f">Document</text>
+        <text x="72" y="205" fill="#6b6e63">画布 + 图层 + 历史</text>
+
+        <rect x="248" y="170" width="170" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="260" y="188" font-weight="700" fill="#14150f">BindingGroup</text>
+        <text x="260" y="205" fill="#6b6e63">分类 / 组合 / 避重</text>
+
+        <rect x="436" y="170" width="170" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="448" y="188" font-weight="700" fill="#14150f">SizeMatch</text>
+        <text x="448" y="205" fill="#6b6e63">源→目标几何映射</text>
+
+        <rect x="624" y="170" width="170" height="46" fill="#eaf1ed" stroke="#b6c9bf"/>
+        <text x="636" y="188" font-weight="700" fill="#14150f">Serializer</text>
+        <text x="636" y="205" fill="#6b6e63">.cmp / 预设序列化</text>
+
+        <rect x="60" y="258" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="72" y="276" font-weight="700" fill="#14150f">FastRenderer</text>
+        <text x="72" y="293" fill="#6b6e63">预览与导出共用</text>
+
+        <rect x="248" y="258" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="260" y="276" font-weight="700" fill="#14150f">ExportService</text>
+        <text x="260" y="293" fill="#6b6e63">编码质量策略</text>
+
+        <rect x="436" y="258" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="448" y="276" font-weight="700" fill="#14150f">Compositors</text>
+        <text x="448" y="293" fill="#6b6e63">Alpha / 混合模式</text>
+
+        <rect x="624" y="258" width="170" height="46" fill="#fff" stroke="#cfd0c6"/>
+        <text x="636" y="276" font-weight="700" fill="#14150f">export_worker</text>
+        <text x="636" y="293" fill="#6b6e63">独立导出进程</text>
+
+        <rect x="60" y="340" width="734" height="42" fill="#f2f2ec" stroke="#cfd0c6"/>
+        <text x="74" y="358" font-weight="700" fill="#14150f">工具层</text>
+        <text x="74" y="374" fill="#3b3d35">线程池 · 渲染缓存 · 内存管理 · 降级计数 · 日志 · pickle 安全加载 · 文件命名清洗</text>
+
+        <!-- edges -->
+        <line x1="450" y1="50" x2="150" y2="80" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="450" y1="50" x2="330" y2="80" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="450" y1="50" x2="520" y2="80" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="450" y1="50" x2="700" y2="80" stroke="#989b8f" marker-end="url(#ar4)"/>
+
+        <line x1="145" y1="128" x2="145" y2="168" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="280" y1="128" x2="330" y2="168" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="500" y1="128" x2="505" y2="168" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="700" y1="128" x2="700" y2="168" stroke="#989b8f" marker-end="url(#ar4)"/>
+
+        <line x1="145" y1="216" x2="145" y2="256" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="320" y1="216" x2="300" y2="256" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="500" y1="216" x2="500" y2="256" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="700" y1="216" x2="700" y2="256" stroke="#989b8f" marker-end="url(#ar4)"/>
+
+        <line x1="145" y1="304" x2="145" y2="338" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="330" y1="304" x2="330" y2="338" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="520" y1="304" x2="520" y2="338" stroke="#989b8f" marker-end="url(#ar4)"/>
+        <line x1="700" y1="304" x2="700" y2="338" stroke="#989b8f" marker-end="url(#ar4)"/>
+      </g>
+    </svg>
+  </figure>
+
+  <h3>几处关键依赖说明</h3>
+  <ul>
+    <li><strong>预览与导出共用渲染器</strong>：<code>FastRenderer</code> 同时服务 <code>PreviewRenderService</code> 和导出路径，这是「所见即所得」的技术前提。<code>render_quality.py</code> 再把质量策略集中到一处，避免单图导出和批量导出悄悄分叉。</li>
+    <li><strong>批量导出的两段式</strong>：<code>BatchExportPrecomputerV2</code> 先算出「第几张用哪套素材、叫什么文件名」的完整计划，再执行渲染。计划与执行分离，才能做去重、断点、进度预估。</li>
+    <li><strong>绑定组被三方共享</strong>：预览随机、批量导出、分类索引缓存都读它，所以它的状态一致性最敏感——改坏一次，三处一起错。</li>
+    <li><strong>序列化是格式契约</strong>：<code>.cmp</code> 与预设都是 pickle 二进制（文档格式版本 5），前端重构不得改变格式，老文件必须能打开。</li>
+  </ul>
+</section>
+
+<!-- ============ 14 ============ -->
+<section id="s14">
+  <h2><span class="num">14</span>快捷键与文件位置</h2>
+
+  <h3>常用快捷键</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:26%">操作</th><th style="width:26%">快捷键</th><th style="width:48%">备注</th></tr></thead>
+    <tbody>
+      <tr><td>新建画布</td><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>打开新建画布弹窗</td></tr>
+      <tr><td>打开 / 保存 / 另存为</td><td><kbd>Ctrl</kbd>+<kbd>O</kbd> / <kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>保存走当前路径，无路径时弹另存</td></tr>
+      <tr><td>撤销 / 重做</td><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td><kbd>Ctrl</kbd>+<kbd>Y</kbd>、<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Z</kbd> 为兼容别名</td></tr>
+      <tr><td>复制 / 粘贴图层</td><td><kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>跨文档可用</td></tr>
+      <tr><td>复制 / 粘贴图层样式</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd></td><td>批量调参主力</td></tr>
+      <tr><td>复制图层到新层</td><td><kbd>Ctrl</kbd>+<kbd>J</kbd></td><td>类似 PS</td></tr>
+      <tr><td>自由变换</td><td><kbd>Ctrl</kbd>+<kbd>T</kbd></td><td></td></tr>
+      <tr><td>编组 / 取消编组</td><td><kbd>Ctrl</kbd>+<kbd>G</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></td><td></td></tr>
+      <tr><td>层序调整</td><td><kbd>Ctrl</kbd>+<kbd>[</kbd> / <kbd>]</kbd>，加 <kbd>Shift</kbd> 到底/顶</td><td></td></tr>
+      <tr><td>删除图层</td><td><kbd>Delete</kbd></td><td>重命名用 <kbd>F2</kbd></td></tr>
+      <tr><td>裁剪工具</td><td><kbd>C</kbd></td><td>进自由裁剪，拖框后确认应用</td></tr>
+      <tr><td>标尺 / 参考线</td><td><kbd>Ctrl</kbd>+<kbd>R</kbd> / <kbd>;</kbd></td><td></td></tr>
+      <tr><td>缩放</td><td><kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td><td><kbd>0</kbd> 回 100%</td></tr>
+      <tr><td>导出当前画面</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></td><td>PNG / JPG / WebP</td></tr>
+      <tr><td>批量导出</td><td><kbd>F12</kbd></td><td>最常用的一条</td></tr>
+      <tr><td>多标签批量导出</td><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>X</kbd></td><td></td></tr>
+      <tr><td>预设中心</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>打开整页预设工作台</td></tr>
+      <tr><td>修改画布尺寸</td><td><kbd>Alt</kbd>+<kbd>Ctrl</kbd>+<kbd>C</kbd></td><td>对齐 PS 的 Canvas Size</td></tr>
+      <tr><td>检查更新</td><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></td><td>启动 4 秒后也会静默查一次</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>文件都存哪儿</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:32%">内容</th><th style="width:68%">路径</th></tr></thead>
+    <tbody>
+      <tr><td>项目文件</td><td>用户自选，扩展名 <code>.cmp</code>（pickle，格式版本 5）</td></tr>
+      <tr><td>项目预设</td><td><code>%APPDATA%\批图王\presets\</code>（含 <code>presets_index.json</code> 与缩略图）</td></tr>
+      <tr><td>画布预设</td><td><code>~\.config\批图王\canvas_presets.json</code></td></tr>
+      <tr><td>绑定分类索引缓存</td><td><code>~\.config\批图王\cache\binding_folder_category_index_v1.json</code></td></tr>
+      <tr><td>运行日志</td><td><code>~\.config\批图王\logs\</code>（固定 <code>app.log</code> + 轮转）</td></tr>
+      <tr><td>界面偏好</td><td>QSettings（主题、窗口几何、侧栏宽度、新建画布默认值）</td></tr>
+      <tr><td>更新清单</td><td>仓库 <code>update/update.json</code>；客户端另有 jsDelivr 与 5 个 GitHub 代理兜底</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    注意日志目录和数据目录不是同一处：日志在 <code>~/.config/批图王/logs</code>，预设数据在 <code>%APPDATA%\批图王\presets</code>。
+    这是历史遗留的不一致，找日志别去 AppData 翻。
+  </p>
+
+  <h3>开发者入口</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th style="width:34%">命令</th><th style="width:66%">用途</th></tr></thead>
+    <tbody>
+      <tr><td><code>python main.py</code></td><td>正常启动</td></tr>
+      <tr><td><code>python -m app.qml.qml_main</code></td><td>只调 QML 时绕过整套初始化</td></tr>
+      <tr><td><code>python -m app.qml.qml_main --screenshot out.png --demo</code></td><td>无头截图，本文所有截图都由它生成</td></tr>
+      <tr><td><code>python -m pytest</code></td><td>全量测试（109 个测试文件、1088 个用例；纯单元部分约 38 秒）</td></tr>
+      <tr><td><code>python tools/check_architecture.py</code></td><td>架构约束自检，零依赖</td></tr>
+      <tr><td><code>python build.py</code></td><td>打包安装版 onedir + 便携版 onefile + NSIS + 更新清单</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============ 15 ============ -->
+<section id="s15">
+  <h2><span class="num">15</span>已知边界与注意事项</h2>
+
+  <p class="sec-intro">
+    下面这些是读代码时对照真实界面确认过的差异与限制。写出来不是为了挑刺，
+    是为了让人第一次用的时候不在这些地方浪费时间去猜。
+  </p>
+
+  <div class="note">
+    <p class="n-h">工具轨与实际生效的工具</p>
+    <p>左侧工具轨只有<strong>选择</strong>和<strong>抓手</strong>两个按钮。键盘上 <kbd>Z</kbd> / <kbd>Shift</kbd>+<kbd>T</kbd> / <kbd>P</kbd> / <kbd>G</kbd> / <kbd>I</kbd> / <kbd>U</kbd> / <kbd>A</kbd> 会切换 <code>activeTool</code> 的值，
+    但画布只对「抓手（值 1）」作出响应——其余是预留位，按下不会有任何行为。真正可用的是 <kbd>V</kbd>（选择）、<kbd>H</kbd>（抓手/空格临时切换）、<kbd>C</kbd>（裁剪，直接进裁剪流程）。</p>
+  </div>
+
+  <h4>其他需要注意的</h4>
+  <ul>
+    <li><strong>Ctrl+E 不是像素合并</strong>：等价于编组为合并容器，不会真的把两张图拍平。要拍平就导出再导入。</li>
+    <li><strong>撤销栈 20 条</strong>：<code>DocumentHistory(max_history=20)</code>。一次图层操作大约吃掉 2 条，实际可回退约 10 步。深层连续调整请及时保存。</li>
+    <li><strong>批量面板只暴露 PNG / JPG</strong>：代码层对 WebP / BMP / TIFF 有分支，但批量界面的分段控件目前只有两档；单图导出提供了 WebP。</li>
+    <li><strong>自动遮罩默认关闭</strong>：为兼容旧模板。<code>AUTO_MASK_DEFAULTS.auto_mask_enabled=False</code>，需要时在尺寸匹配关系里手动打开。</li>
+    <li><strong>.cmp 是 pickle 格式</strong>：程序加载时会打印安全提示。只打开自己或可信来源的项目文件，不要双击来历不明的 .cmp。</li>
+    <li><strong>组合数是硬约束</strong>：「单次用图」在素材耗尽时会跳过本次生成而不是重复用图，所以实际出图数可能少于填写的数量——这是设计意图，不是 bug。</li>
+    <li><strong>遍历组合会覆盖数量</strong>：切到遍历模式后，数量输入框的含义变成「理论组合数」，界面会提示「将导出 N 个组合」，超过 1000 / 10000 各有一次数量提醒。</li>
+  </ul>
+
+  <h3>一句话总结</h3>
+  <p style="font-size:16px;color:var(--ink);border-top:2px solid var(--ink);padding-top:18px;margin-top:34px">
+    批图王的价值不在单个功能多花哨，而在<strong>把「模板 → 素材 → 规则 → 批量 → 交付」压进一条不中断的链路</strong>，
+    并且让每一步的错误都能在出图前被发现，而不是在几百张成品里被发现。
+  </p>
+  <p class="lede-quote">
+    文档依据：<code>app/</code> 源码（181 个 Python 模块 / 67,499 行）、<code>app/qml/</code>（51 个 QML / 14,390 行）、
+    <code>AGENTS.md</code>、<code>DESIGN.md</code>、<code>PRODUCT.md</code>，以及 2026-11-02 从当前代码真实渲染的 14 张界面截图。
+    与源码或界面不符之处，以代码为准。
+  </p>
+</section>
+
+</main>
+</div>
+</body>
+</html>

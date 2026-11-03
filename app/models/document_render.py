@@ -1,4 +1,3 @@
-import gc
 from PIL import Image
 import numpy as np
 from app.models.document_blend import Blender
@@ -314,7 +313,11 @@ class DocumentRender:
             # 检查是否有有效的图层数据
             if not layer_data:
                 print("[WARNING] 没有有效的图层数据，使用空画布")
-                return True, composition
+                # 此时 composition 尚未创建（首次赋值在下方 composite_layers），
+                # 直接 return composition 会抛 NameError。与标准路径保持一致，返回透明空画布。
+                return True, Image.new(
+                    'RGBA', (self.canvas_width, self.canvas_height), (0, 0, 0, 0)
+                )
 
             print(f"[DEBUG] 准备合成 {len(layer_data)} 个图层")
 
@@ -821,7 +824,6 @@ class DocumentRender:
         """
         改进的图层合成方法 - 解决半透明和边缘问题的后备方案
         """
-        import numpy as np
 
         # 确保图像格式
         if background.mode != 'RGBA':

@@ -837,12 +837,15 @@ class FastRendererSurface(object):
                     f"旋转={rotation}"
                 )
 
-        if not has_random_source:
-            with self._size_match_override_session_lock:
-                self._size_match_override_session_cache[session_key] = dict(overrides)
-                self._size_match_override_session_cache.move_to_end(session_key)
-                while len(self._size_match_override_session_cache) > self._max_size_match_override_session_entries:
-                    self._size_match_override_session_cache.popitem(last=False)
+        # 无条件写入会话缓存：session_key 里的 surf_key 已包含 current:<当前图片路径>，
+        # 随机取图后 key 会自然变化，因此不需要再按「是否存在文件夹源图层」整体放弃缓存。
+        # （原 `if not has_random_source` 判断在 3cf0dee 重构中已随变量定义一起移除，
+        #   此处残留会导致 NameError 且缓存只读不写。）
+        with self._size_match_override_session_lock:
+            self._size_match_override_session_cache[session_key] = dict(overrides)
+            self._size_match_override_session_cache.move_to_end(session_key)
+            while len(self._size_match_override_session_cache) > self._max_size_match_override_session_entries:
+                self._size_match_override_session_cache.popitem(last=False)
         return overrides
 
     def _hash_size_match_relations(self, active_relations):

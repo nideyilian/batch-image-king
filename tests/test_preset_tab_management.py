@@ -399,87 +399,6 @@ def test_tab_titles_marks_cover(qapp, manager, view_model, preset_id):
     assert [t["isCover"] for t in titles] == [False, True, False]
 
 
-# ---------------------------------------------------------------- 单页关闭
-
-
-@pytest.mark.unit
-def test_close_document_returns_removed_payload(manager, preset_id):
-    """必须带回被删页的完整 payload，否则撤销只能还原空壳。"""
-    ok, remaining, reason, removed = manager.close_document(preset_id, 1)
-    assert (ok, remaining, reason) == (True, 2, "")
-    assert isinstance(removed, dict)
-    assert removed["name"] == "第二页"
-    # 图层内容必须一起带回来
-    assert isinstance(removed["layers"], list)
-    assert len(removed["layers"]) == 1
-
-
-@pytest.mark.unit
-def test_close_document_keeps_order_of_remaining(manager, preset_id):
-    manager.close_document(preset_id, 1)
-    data = manager.load_preset(preset_id)
-    assert [d["name"] for d in data["documents"]] == ["第一页", "第三页"]
-
-
-@pytest.mark.unit
-def test_view_model_close_document_syncs_card(qapp, view_model, preset_id):
-    result = view_model.closeDocument(preset_id, 1)
-    assert result["ok"] is True
-    assert result["remaining"] == 2
-    assert result["title"] == "第二页"
-    card = next(item for item in view_model.presets if item["id"] == preset_id)
-    assert card["documentCount"] == 2
-    assert len(card["tabTitles"]) == 2
-
-
-@pytest.mark.unit
-def test_close_last_document_enters_empty_state(qapp, manager, view_model, preset_id):
-    view_model.closeDocument(preset_id, 2)
-    view_model.closeDocument(preset_id, 1)
-    result = view_model.closeDocument(preset_id, 0)
-    assert result["ok"] is True
-    assert result["remaining"] == 0
-    # 预设本身保留
-    assert manager.load_preset(preset_id)["documents"] == []
-    card = next(item for item in view_model.presets if item["id"] == preset_id)
-    assert card["documentCount"] == 0
-
-
-@pytest.mark.unit
-def test_close_document_undo_restores_real_layers(qapp, manager, view_model, preset_id):
-    """撤销必须还原真实图层，而不只是一个同名空页。"""
-    view_model.closeDocument(preset_id, 1)
-    undo = view_model.undoClearDocuments(preset_id)
-    assert undo["ok"] is True
-    page = manager.load_preset(preset_id)["documents"][1]
-    assert page["name"] == "第二页"
-    assert len(page["layers"]) == 1
-    assert page["layers"][0]["name"] == "L0"
-
-
-@pytest.mark.unit
-def test_close_document_out_of_range(qapp, view_model, preset_id):
-    assert view_model.closeDocument(preset_id, 9)["reason"] == "page_missing"
-    assert view_model.closeDocument(preset_id, -1)["reason"] == "page_missing"
-
-
-@pytest.mark.unit
-def test_close_document_missing_preset(qapp, view_model):
-    assert view_model.closeDocument("nope", 0)["reason"] == "preset_missing"
-
-
-@pytest.mark.unit
-def test_close_document_blocked_by_busy(qapp, view_model, preset_id):
-    view_model._set_busy(True, "正在处理")
-    result = view_model.closeDocument(preset_id, 0)
-    assert result["ok"] is False
-    assert result["reason"] == "busy"
-    view_model._set_busy(False)
-
-
-# ---------------------------------------------------------------- 单页关闭
-
-
 @pytest.mark.unit
 def test_close_document_returns_removed_payload(manager, preset_id):
     """必须带回被删页的完整 payload，否则撤销只能还原空壳。"""
@@ -574,20 +493,3 @@ def test_close_document_undo_uses_full_snapshot_not_removed_payload(
     assert [doc["name"] for doc in after] == [doc["name"] for doc in before]
 
 
-@pytest.mark.unit
-def test_close_document_undo_uses_full_snapshot_not_removed_payload(
-    qapp, manager, view_model, preset_id
-):
-    """撤销用的是「关闭前的完整 documents」而非 PM 返回的 removed。
-
-    这是刻意的双保险：即使 PM 层将来改了 removed 的结构（或只返回部分字段），
-    撤销仍然能还原全部内容。这条测试锁住「撤销不依赖 removed」这一点。
-    """
-    before = manager.load_preset(preset_id)["documents"]
-    before_layers = [len(doc["layers"]) for doc in before]
-    view_model.closeDocument(preset_id, 0)
-    undo = view_model.undoClearDocuments(preset_id)
-    assert undo["ok"] is True
-    after = manager.load_preset(preset_id)["documents"]
-    assert [len(doc["layers"]) for doc in after] == before_layers
-    assert [doc["name"] for doc in after] == [doc["name"] for doc in before]

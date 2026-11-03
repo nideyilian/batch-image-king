@@ -33,7 +33,7 @@ import gc
 
 # 导入智能线程池管理器
 from .intelligent_thread_pool_manager import (
-    get_thread_pool_manager, TaskType, TaskPriority
+    get_thread_pool_manager
 )
 from .thread_pool_config import get_config_manager
 
@@ -331,7 +331,7 @@ class PerformanceOptimizer:
         
         try:
             # 尝试使用智能线程池管理器
-            from .intelligent_thread_pool_manager import get_thread_pool_manager, TaskType, TaskPriority
+            from .intelligent_thread_pool_manager import get_thread_pool_manager
             
             thread_pool_manager = get_thread_pool_manager()
             

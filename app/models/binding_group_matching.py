@@ -76,10 +76,7 @@ class BindingGroupMatching:
 
         🔧 关键修复：避重机制改为可选，修复"启用绑定组时所有图层都变成只使用一次"的问题
         """
-        import time
         import random
-        import hashlib
-        import traceback
 
         # 🔍 超详细日志 - 开始
         print(f"\n{'='*80}")
@@ -353,7 +350,6 @@ class BindingGroupMatching:
         🔧 关键修复：必须包含图层索引信息！
         否则[L0:img1,L1:img2]和[L0:img2,L1:img1]会被误认为相同组合
         """
-        import hashlib
         # 🔧 修复：按图层索引顺序拼接，不要二次排序文件名
         # 格式：L0:filename|L1:filename|L2:filename
         parts = []

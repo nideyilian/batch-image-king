@@ -447,7 +447,6 @@ def test_incremental_drag_takes_dirty_rect_path(tmp_path):
     （实测踩过：空图层 + 同文档基准，注入退化后 15 项测试全部通过）。
     """
     from PIL import Image
-    import app.utils.fast_renderer_preview as preview_module
     from app.utils.fast_renderer import get_global_fast_renderer
 
     image_path = tmp_path / "layer.png"

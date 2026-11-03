@@ -119,7 +119,6 @@ def qss(t) -> str:
 def build_ui(t):
     from PySide6.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
-        QFrame,
     )
     from PySide6.QtCore import Qt
 

@@ -13,10 +13,8 @@ from __future__ import annotations
 
 import argparse
 import ast
-import io
 import os
 import re
-import sys
 
 
 def collect_imports(tree: ast.Module):

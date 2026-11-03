@@ -2,7 +2,6 @@ import os
 import random
 from PIL import Image
 from PIL.Image import Resampling
-import gc
 from typing import List
 from app.utils.print_utils import safe_print as _safe_print
 import logging

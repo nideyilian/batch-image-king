@@ -433,7 +433,6 @@ class LayerBindingManager:
             
             # 随机选择一个分类作为绑定组的统一分类
             import time
-            import hashlib
 
             category_seed_factors = [
                 time.time_ns() % 1000000000,

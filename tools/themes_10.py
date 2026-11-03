@@ -180,7 +180,7 @@ def sheet_qss(t) -> str:
 def build_sheet(t):
     from PySide6.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-        QLineEdit, QListWidget, QFrame,
+        QLineEdit, QListWidget,
     )
 
     w = QWidget()

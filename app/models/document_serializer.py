@@ -126,7 +126,6 @@ class DocumentSerializer(QObject):
         Returns:
             文档数据字典
         """
-        from app.models.layer_new import Layer
         
         # 构建文档数据字典
         document_data = {
@@ -258,7 +257,6 @@ class DocumentSerializer(QObject):
             成功返回True，失败返回False
         """
         try:
-            from app.models.layer_new import Layer
             
             # 恢复画布尺寸
             document.canvas_width = document_data.get('canvas_width', 800)

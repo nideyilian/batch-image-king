@@ -13,7 +13,6 @@ from collections import OrderedDict
 from functools import wraps
 from typing import Optional
 from PIL import Image
-import gc
 
 # 默认关闭快速渲染器调试输出，避免预览阶段高频 I/O 导致掉帧
 _FAST_RENDERER_DEBUG = os.environ.get("BTPW_FAST_RENDERER_DEBUG", "0") == "1"

@@ -750,18 +750,3 @@ class TextLayer(TextLayerFontMixin, TextLayerRenderMixin, TextLayerSerializeMixi
         self._update_text_box_size_if_needed()
         self.text_changed.emit()
         self.changed.emit()
-
-def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
-    if not _TEXT_LAYER_DEBUG:
-        return
-    try:
-        print(message)
-    except (UnicodeEncodeError, OSError):
-        try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            print(f"[DEBUG] {ascii_message}")
-        except Exception:
-            # 最后的备选方案
-            print("[DEBUG] Message encoding failed")

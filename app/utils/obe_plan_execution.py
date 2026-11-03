@@ -7,7 +7,6 @@ import os as os_module  # 避免局部变量遮蔽
 import time
 import threading
 from typing import Dict, Optional, Callable
-import gc
 import logging
 from app.utils.print_utils import safe_print as print
 

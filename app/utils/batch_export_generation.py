@@ -104,7 +104,6 @@ class BatchExportGenerationMixin:
         print(f"[预计算强化V2] 避重模式: {'开启' if avoid_duplicates else '关闭'}")
 
         combinations = []
-        import random
         import time
         
         # 全局避重管理器
@@ -621,7 +620,9 @@ class BatchExportGenerationMixin:
                         layer_clone_settings[layer_idx] = clone_settings
             
             # 🔧 关键步骤5：生成包含所有参数的完整哈希
-            import hashlib
+            # 注意：不要在此处写 `import hashlib`。函数内出现该语句会让 hashlib
+            # 在整个 _generate_binding_combinations_v2 内变成局部变量，导致第 276 行
+            # （本语句之前）访问时抛 UnboundLocalError。模块顶部已导入，直接用。
             hash_parts = []
             for layer_idx in sorted(layer_states.keys()):
                 file_path = layer_states[layer_idx]
@@ -828,7 +829,6 @@ class BatchExportGenerationMixin:
         print(f"[V2] 开始生成组合，请求数量: {count} ")
 
         combinations = []
-        import random
         
         #  
         global_avoid_manager = self._get_avoid_repeat_manager()

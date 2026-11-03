@@ -7,7 +7,6 @@ import time
 import threading
 from collections import OrderedDict
 from typing import Dict, Optional, Callable
-import io
 
 from app.utils.obe_memory_guard import OptimizedBatchExecutorMemoryGuard
 from app.utils.obe_runtime_snapshot import OptimizedBatchExecutorRuntimeSnapshot

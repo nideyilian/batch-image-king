@@ -22,7 +22,6 @@ def print(*args, **kwargs):
         __builtins__["print"](*args, **kwargs)
 
 import gc
-import os
 import time
 import psutil
 import threading

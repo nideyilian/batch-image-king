@@ -17,6 +17,25 @@ from enum import Enum
 import time
 import gc
 
+
+def safe_print(message: str):
+    """安全的打印函数，避免编码问题。
+
+    注意：本函数必须定义在模块级 try/except 导入块**之前**。
+    except ImportError 分支里会调用它做降级提示，若定义在其后，
+    一旦高级引擎导入失败就会抛 NameError，把「优雅降级」变成「启动崩溃」。
+    """
+    try:
+        print(message)
+    except (UnicodeEncodeError, OSError):
+        try:
+            # 尝试使用ASCII编码
+            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
+            print(f"[DEBUG] {ascii_message}")
+        except Exception:
+            print("[DEBUG] Message encoding failed")
+
+
 # 导入我们的高级引擎
 try:
     from .photoshop_compositor import PhotoshopCompositor, BlendMode as PSBlendMode
@@ -37,19 +56,6 @@ try:
     LEGACY_BLENDER_AVAILABLE = True
 except ImportError:
     LEGACY_BLENDER_AVAILABLE = False
-
-
-def safe_print(message: str):
-    """安全的打印函数，避免编码问题"""
-    try:
-        print(message)
-    except (UnicodeEncodeError, OSError):
-        try:
-            # 尝试使用ASCII编码
-            ascii_message = message.encode('ascii', 'ignore').decode('ascii')
-            print(f"[DEBUG] {ascii_message}")
-        except Exception:
-            print("[DEBUG] Message encoding failed")
 
 
 class CompositeQuality(Enum):

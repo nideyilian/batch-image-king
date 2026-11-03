@@ -176,14 +176,14 @@ def show_dependency_status():
 
     # 检查psutil
     try:
-        import psutil
+        import psutil  # noqa: F401  # 导入即探测：只需判断能否导入，不用其名字
         dependencies.append("性能监控")
     except ImportError:
         pass
 
     # 检查OpenCV
     try:
-        import cv2
+        import cv2  # noqa: F401  # 同上，可用性探测
         dependencies.append("高级图像处理")
     except ImportError:
         pass

@@ -304,7 +304,6 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         self.bump_hit_test_version()
 
         # 恢复图层
-        from app.models.layer_new import Layer as NewLayer
         import logging
         logger = logging.getLogger(__name__)
         restored = []
