@@ -1727,7 +1727,9 @@ ApplicationWindow {
                             onClicked: {
                                 var loaded = projectPresets.loadPreset(modelData.id)
                                 if (loaded > 0) {
-                                    showToast("已加载 " + loaded + " 个标签页")
+                                    showToast(projectPresets.lastLoadReused
+                                              ? "已切换到该预设的标签页"
+                                              : "已加载 " + loaded + " 个标签页")
                                     projectPresetDrawer.close()
                                 } else showToast(projectPresets.lastError)
                             }
@@ -5838,8 +5840,14 @@ ApplicationWindow {
                             source: workspace.previewSource
                             fillMode: Image.PreserveAspectFit
                             asynchronous: true
-                            cache: false
                             smooth: true
+                            // 必须保持 false：source 每帧带新 revision，等于每帧一个新 URL，
+                            // 开缓存会让每个 revision 各留一份纹理，拖几秒就攒出上百张。
+                            cache: false
+                            // 换源到新 revision 时保留上一帧，直到新帧就绪。
+                            // Qt 默认 false，过渡帧没有内容可画；拖动时每帧都换源，
+                            // 这些过渡帧叠起来就是「一闪一闪」。置 true 后过渡期间继续显示旧帧。
+                            retainWhileLoading: true
 
                             // 纹理按「屏幕实际像素」申请。此前不设 sourceSize，4000x4000 全尺寸纹理
                             // 被 GPU 线性缩到窗口尺寸（无 mipmap），圆弧和细斜线因此出现阶梯状锯齿。
@@ -9256,7 +9264,11 @@ ApplicationWindow {
         onRequestLoad: function(presetId) {
             var loaded = projectPresets.loadPreset(presetId)
             if (loaded > 0) {
-                showToast("已加载 " + loaded + " 个标签页")
+                // lastLoadReused 为真表示「该预设已经在工作区里，只是切了过去」。
+                // 这时不能说"已加载 N 个标签页" —— 一个都没新建，用户会以为又开了 N 个。
+                showToast(projectPresets.lastLoadReused
+                          ? "已切换到该预设的标签页"
+                          : "已加载 " + loaded + " 个标签页")
                 window.closeProjectPresetWorkbench()
             } else showToast(projectPresets.lastError)
         }

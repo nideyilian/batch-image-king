@@ -4,6 +4,7 @@ import shutil
 import pickle
 import json
 import datetime
+import threading
 import uuid
 import re
 import copy
@@ -22,6 +23,9 @@ class PresetManager:
         # 预设索引文件，用于管理预设元数据
         self.index_file = os.path.join(self.presets_dir, "presets_index.json")
         self.last_error = ""
+        # 「读—改—写」整段必须持锁：缩略图后台线程、导出线程、UI 三方都会读同一个 .cmp。
+        # 只锁写不锁读，会出现两个入口各自读到旧副本、后写的覆盖先写的。
+        self._preset_write_lock = threading.RLock()
         self._ensure_presets_dir()
         if copy_initial:
             self._copy_initial_presets()
@@ -211,6 +215,254 @@ class PresetManager:
                     os.remove(temp_path)
                 except OSError:
                     pass
+
+    # ------------------------------------------------------------------
+    # 原地改写已有预设（卡片内标签页管理）
+    #
+    # 全仓此前 4 处 pickle.dump 全是「新建」：save_preset / save_preset_from_document /
+    # save_preset_documents / import_preset。没有任何路径能改写**已存在**预设的
+    # documents[]，所以「重命名标签页 / 清空标签页」无处落盘。
+    # 下面几个方法补上这条路，全部走同一套约束：
+    #   1. 读—改—写整段持 self._preset_write_lock
+    #   2. 写前用 mtime 做乐观锁，防止覆盖别的入口刚做的修改
+    #   3. 原子写（复用 _dump_pickle_atomic：mkstemp + os.replace）
+    #   4. 写成功后同步索引里的 document_count / total_layers / canvas_sizes / type
+    # ------------------------------------------------------------------
+
+    def _preset_file_path(self, preset_id):
+        return os.path.join(self.presets_dir, f"{preset_id}.cmp")
+
+    def _read_preset_for_write(self, preset_id):
+        """读取预设用于改写，返回 (preset_data, mtime) 或 (None, reason)。
+
+        reason 取值：``preset_missing``（文件不存在）/ ``preset_corrupt``（格式不合法）。
+        **不**在此处加锁，由调用方在外层持锁，保证「读到的就是将要改的那份」。
+        """
+        preset_id = str(preset_id or "").strip()
+        if not preset_id:
+            return None, "preset_missing"
+        path = self._preset_file_path(preset_id)
+        if not os.path.isfile(path):
+            return None, "preset_missing"
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            return None, "preset_missing"
+        try:
+            with open(path, "rb") as f:
+                data = load_trusted_pickle(f, path)
+        except Exception as e:
+            safe_print(f"读取预设失败（可能已损坏）: {e}")
+            return None, "preset_corrupt"
+        if not isinstance(data, dict):
+            return None, "preset_corrupt"
+        # 兼容旧格式：单文档预设没有 documents 键，包成一层
+        if not isinstance(data.get("documents"), list):
+            if self._is_valid_document_data(data):
+                data = dict(data)
+                data["documents"] = [dict(data)]
+            else:
+                return None, "preset_corrupt"
+        return data, mtime
+
+    def _commit_preset_write(self, preset_id, preset_data, expected_mtime):
+        """把改好的 preset_data 写回磁盘并同步索引。
+
+        返回 (ok, reason)。reason 取值：``stale`` / ``io_failed`` / ``preset_missing``。
+        """
+        path = self._preset_file_path(preset_id)
+        # 乐观锁：写前再取一次 mtime，与读时不一致说明别人改过，不能覆盖
+        if expected_mtime is not None:
+            try:
+                if os.path.getmtime(path) != expected_mtime:
+                    return False, "stale"
+            except OSError:
+                return False, "preset_missing"
+        preset_data["modified_at"] = datetime.datetime.now().isoformat()
+        try:
+            self._dump_pickle_atomic(preset_data, path)
+        except Exception as e:
+            safe_print(f"写回预设失败: {e}")
+            return False, "io_failed"
+        # 索引是卡片的数据源，必须同步，否则卡片页数/图层数还是旧的
+        info = self.presets_index.get(preset_id)
+        if isinstance(info, dict):
+            try:
+                self._ensure_optional_metadata(info)
+                info.update(self._metadata_from_preset_data(preset_data))
+                info["modified_at"] = preset_data["modified_at"]
+                # 页数变少后 cover_index 可能越界，这里钳到最后一页而非归零。
+                # 归零会把 close_document 精心算好的「后一页接上来」覆盖掉
+                # （删第 3 页时 cover 已被置为 1，若这里再归 0 就变成跳回首图）。
+                count = int(info.get("document_count") or 0)
+                cover = int(info.get("cover_index") or 0)
+                if count <= 0:
+                    info["cover_index"] = 0
+                else:
+                    info["cover_index"] = max(0, min(cover, count - 1))
+                self._save_index()
+            except Exception as e:
+                # 索引写失败不回滚 .cmp：内容已正确落盘，索引下次启动会重建，
+                # 而回滚 .cmp 反而会把用户刚做的修改丢掉。只记日志。
+                safe_print(f"预设索引同步失败（内容已保存）: {e}")
+        return True, ""
+
+    def rename_document(self, preset_id, page_index, title):
+        """重命名单个标签页，返回 (ok, reason)。
+
+        ⚠️ 必须同时写 ``name`` 与 ``original_tab_name``：
+        ``get_preset_summary()`` 取页名的表达式是
+        ``original_tab_name or tab_name or name``（本文件 321 行附近）。
+        只改 name 而 original_tab_name 还是旧值，卡片读到的永远是旧名 ——
+        这是本功能最容易出现「改了没生效」的地方。
+        """
+        preset_id = str(preset_id or "").strip()
+        title = str(title or "").strip()
+        with self._preset_write_lock:
+            data, mtime = self._read_preset_for_write(preset_id)
+            if data is None:
+                return False, mtime  # mtime 位此时是 reason
+            documents = data["documents"]
+            try:
+                index = int(page_index)
+            except (TypeError, ValueError):
+                return False, "page_missing"
+            if index < 0 or index >= len(documents):
+                return False, "page_missing"
+            document = documents[index]
+            if not isinstance(document, dict):
+                return False, "page_missing"
+            document["name"] = title
+            document["original_tab_name"] = title
+            return self._commit_preset_write(preset_id, data, mtime)
+
+    def clear_preset_documents(self, preset_id):
+        """清空预设的全部标签页（保留预设本身、分类、标签、封面、使用次数）。
+
+        返回 (ok, reason)。
+        """
+        preset_id = str(preset_id or "").strip()
+        with self._preset_write_lock:
+            data, mtime = self._read_preset_for_write(preset_id)
+            if data is None:
+                return False, mtime
+            data["documents"] = []
+            return self._commit_preset_write(preset_id, data, mtime)
+
+    def close_document(self, preset_id, page_index):
+        """关闭（删除）单个标签页，返回 (ok, remaining, reason, removed_payload)。
+
+        ``removed_payload`` 是被删页的完整 dict（含 layers），供调用方做撤销。
+        漏掉它会导致「关掉最后一页后无法恢复内容」—— 只恢复一个空页壳
+        比不给撤销更糟（用户以为救回来了，实际图层全丢）。
+
+        剩余页数为 0 时**不自动删除预设** —— 与「关闭全部」保持同一套语义：
+        清空内容 ≠ 删除条目。
+        """
+        preset_id = str(preset_id or "").strip()
+        with self._preset_write_lock:
+            data, mtime = self._read_preset_for_write(preset_id)
+            if data is None:
+                return False, 0, mtime, None
+            documents = data["documents"]
+            try:
+                index = int(page_index)
+            except (TypeError, ValueError):
+                return False, len(documents), "page_missing", None
+            if index < 0 or index >= len(documents):
+                return False, len(documents), "page_missing", None
+            removed = copy.deepcopy(documents.pop(index))
+            # 封面让位规则（与浏览器关标签页的心智一致）：
+            # - 删的是封面页：让**后一页接上来**（下标不变），已经是最后一页则退一格
+            # - 删的是封面页之前的页：封面下标整体前移一格
+            # - 删的是封面页之后的页：封面不动
+            info = self.presets_index.get(preset_id)
+            if isinstance(info, dict):
+                cover = int(info.get("cover_index") or 0)
+                if cover > index:
+                    info["cover_index"] = cover - 1
+                elif cover == index:
+                    info["cover_index"] = max(0, min(index, len(documents) - 1))
+            ok, reason = self._commit_preset_write(preset_id, data, mtime)
+            if not ok:
+                return False, len(documents) + 1, reason, None
+            return True, len(documents), "", removed
+
+    def restore_document_payloads(self, preset_id, documents):
+        """把一批 documents 快照原样写回（供「清空全部」的 30s 撤销使用）。
+
+        返回 (ok, reason)。documents 必须是纯 dict 列表（即 load 时拿到的原始结构），
+        不接受 Document 对象 —— 后者需要走 prepare_document_data，属于保存新预设的路径。
+        """
+        preset_id = str(preset_id or "").strip()
+        if not isinstance(documents, list):
+            return False, "invalid_payload"
+        with self._preset_write_lock:
+            data, mtime = self._read_preset_for_write(preset_id)
+            if data is None:
+                return False, mtime
+            data["documents"] = [copy.deepcopy(item) for item in documents]
+            return self._commit_preset_write(preset_id, data, mtime)
+
+    def update_preset_documents(self, preset_id, documents):
+        """把**编辑后的 Document 对象**覆盖写回已有预设，返回 (ok, reason)。
+
+        与 ``restore_document_payloads`` 的区别，两者不能合并：
+        - ``restore_document_payloads`` 写回的是**原样快照**（撤销用，不做任何转换）
+        - 本方法写回的是**用户编辑过的文档**，必须走 ``prepare_document_data``
+          把图层树序列化一遍，否则存进去的只是旧 data 的深拷贝
+
+        为什么不能再用 ``save_preset_documents``：那个方法每次都生成新 id、
+        新建 .cmp，语义是"另存为"。用户在工作区改完内容后想存回**同一张卡片**，
+        另存为会留下一堆重复预设。
+
+        封面下标按「总页数」重新钳位：用户可能删了几页，旧 ``cover_index`` 会越界。
+        """
+        preset_id = str(preset_id or "").strip()
+        if not preset_id:
+            return False, "preset_missing"
+        valid = [document for document in list(documents or []) if document is not None]
+        if not valid:
+            return False, "no_documents"
+
+        from app.models.document_serializer import DocumentSerializer
+
+        payloads = []
+        for index, document in enumerate(valid):
+            payload = DocumentSerializer.prepare_document_data(document)
+            payload.update({
+                'index': index,
+                # 页名优先用运行时改名后的 tab_name，保证「改了名再保存」能存住
+                'name': str(
+                    getattr(document, 'tab_name', '')
+                    or getattr(document, 'original_tab_name', '')
+                    or f"标签页 {index + 1}"
+                ),
+                'original_tab_name': str(
+                    getattr(document, 'original_tab_name', '')
+                    or getattr(document, 'tab_name', '')
+                    or f"标签页 {index + 1}"
+                ),
+                'version': 5,
+            })
+            payloads.append(payload)
+
+        with self._preset_write_lock:
+            data, mtime = self._read_preset_for_write(preset_id)
+            if data is None:
+                return False, mtime
+            data["documents"] = payloads
+            data["modified_at"] = datetime.datetime.now().isoformat()
+            ok, reason = self._commit_preset_write(preset_id, data, mtime)
+            if not ok:
+                return False, reason
+            # 页数可能变了，封面下标跟着钳位
+            info = self.presets_index.get(preset_id)
+            if isinstance(info, dict):
+                count = len(payloads)
+                cover = int(info.get("cover_index") or 0)
+                info["cover_index"] = 0 if count <= 0 else max(0, min(cover, count - 1))
+            return True, ""
 
     def _next_import_name(self, requested_name, reserved_names):
         base_name = str(requested_name or '导入的预设').strip() or '导入的预设'

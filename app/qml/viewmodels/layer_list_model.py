@@ -39,6 +39,9 @@ class LayerListModel(QAbstractListModel):
     def __init__(self, document=None, parent=None) -> None:
         super().__init__(parent)
         self._document = None
+        # 上一次同步时的「行结构指纹」：((layer_index, depth), ...)。
+        # 用来区分「只是属性变了」和「行数/顺序变了」—— 前者不该重建 delegate。
+        self._last_structure: tuple = ()
         self.set_document(document)
 
     @property
@@ -145,6 +148,7 @@ class LayerListModel(QAbstractListModel):
         self._disconnect_document()
         self.beginResetModel()
         self._document = document
+        self._last_structure = self._structure_signature()
         self.endResetModel()
         self._connect_document()
 
@@ -167,9 +171,53 @@ class LayerListModel(QAbstractListModel):
                 except (RuntimeError, TypeError):
                     pass
 
+    def _structure_signature(self) -> tuple:
+        """当前行结构指纹：(稳定图层 ID, 层级深度) 序列。
+
+        ⚠️ 必须用 ``_layer_id`` 而不是文档里的索引。
+        索引是「枚举位置」：把第 3 层移到顶层后，顶层那条记录的索引仍然是 0..N-1
+        的一个值，用 (index, depth) 做指纹会认为「什么都没变」——
+        实测正是如此（上移一层没触发任何刷新，面板显示与实际顺序脱节）。
+        ``_layer_id`` 是图层自己的 uuid，跟着图层走，顺序变化必然反映到序列上。
+
+        也不含名字/可见性/锁定/选中态：这些改了只需要 dataChanged，不需要重建 delegate。
+        """
+        try:
+            return tuple(
+                (str(getattr(layer, "_layer_id", id(layer))), depth)
+                for _index, layer, depth in self._display_entries()
+            )
+        except Exception:
+            return ()
+
     @Slot()
     def reset_from_document(self) -> None:
+        """文档结构变化时同步模型。
+
+        🔴 历史行为（已修）：无脑 ``beginResetModel/endResetModel``。
+        ``_connect_document`` 把它挂在了 ``layer_changed`` 上，而
+        ``_finish_arrangement``（每一次图层增删/排序/对齐/编组都会走）既发
+        ``layer_changed`` 又自己调了一次 ``reset_from_document`` —— 等于一次排序
+        触发两轮全表重建。QML 会把所有 delegate 销毁重建，
+        用户看到的就是图层面板整块闪一下，滚动位置也会被打断。
+
+        现在按结构指纹分流：
+        - 行数/顺序/层级没变（改名、显隐、锁定、选中、透明度…）→ 只发 dataChanged，
+          delegate 原地更新，不动其它行；
+        - 结构真的变了 → 才 reset。
+        """
+        structure = self._structure_signature()
+        if structure == self._last_structure:
+            row_count = len(structure)
+            if row_count:
+                self.dataChanged.emit(
+                    self.index(0, 0),
+                    self.index(row_count - 1, 0),
+                    list(self._ROLE_NAMES),
+                )
+            return
         self.beginResetModel()
+        self._last_structure = structure
         self.endResetModel()
 
     def notify_row(self, row: int) -> None:

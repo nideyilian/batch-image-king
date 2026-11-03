@@ -94,6 +94,15 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         # 当前文件路径
         self.current_file_path = None
 
+        # 来源标记：由预设打开的文档会带上「哪张卡片、第几页」。
+        # 用途是「同一张预设卡片只对应一套标签页」的去重判定
+        # （见 PresetManagerViewModel.loadPreset）。
+        # 空串 = 不是从预设打开的（新建 / 打开 .cmp / 复制出来的副本）。
+        # ⚠️ 这两个字段**不进序列化**（DocumentSerializer 用显式键名），
+        # 否则预设文件会被运行时状态污染。
+        self.source_preset_id = ""
+        self.source_preset_page = -1
+
         # 导出设置
         self.export_settings = self._build_default_export_settings()
 
@@ -299,13 +308,29 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
         import logging
         logger = logging.getLogger(__name__)
         restored = []
+        # ⚠️ 这里**不能**传 ``parent=self``。
+        #
+        # 正常创建路径 ``add_layer`` 是不传 parent 的（见 document_layers.py）：
+        # 图层只由 ``self.layers`` 这个 Python 列表持有，C++ 侧不是 Document 的子对象。
+        # 而旧版 ``_restore_state`` 传了 ``parent=self``，于是撤销恢复出来的图层
+        # 被挂进了 Document 的 C++ 子对象树 —— 与创建路径形成两套所有权模型：
+        #
+        #   创建：Python 列表持有 → 从列表移除即可回收
+        #   恢复：C++ 树持有    → 从列表移除后仍被 Document 攥着，永不释放
+        #
+        # 实测（docs/audit/_probe_undo_leak.py，5 图层文档「改属性 + 撤销」20 轮）：
+        # Layer 对象 5 → 100，doc.children() 4 → 104，95 个孤儿图层的 parent() 仍是 Document。
+        # 用户侧就是「操作多几下就卡死」——每轮撤销常驻一份图层 + 图像缓存。
+        #
+        # 改为不传 parent，与创建路径对齐后：40 轮撤销仍是 5 个 Layer、0 孤儿，
+        # children 稳定在「4 个管理器 + 当前图层数」。
         try:
             from app.utils.layer_tree import deserialize_layer_tree
 
             restored = deserialize_layer_tree(
                 state.get('layers', []),
-                lambda layer_data, parent=None: NewLayer.from_dict(layer_data, parent=parent),
-                parent=self,
+                lambda layer_data, parent=None: NewLayer.from_dict(layer_data, parent=None),
+                parent=None,
             )
         except Exception as error:
             logger.warning("撤销/重做恢复图层树失败，回退到扁平恢复: %s", error)
@@ -314,12 +339,17 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
                     logger.warning("撤销/重做恢复时第 %d 个图层数据为空，已跳过", idx)
                     continue
                 try:
-                    layer = NewLayer.from_dict(layer_data)
+                    layer = NewLayer.from_dict(layer_data, parent=None)
                 except Exception as e:
                     logger.warning("撤销/重做恢复时第 %d 个图层反序列化失败，已跳过: %s", idx, e)
                     continue
                 restored.append(layer)
+        old_layers = list(self.layers)
         self.layers = restored
+        # 旧图层若曾被挂到树上（老版本存的历史、或别处传了 parent），这里兜底摘干净。
+        self._release_layers(old_layers)
+        # 恢复出来的图层必须接回 document_changed，否则撤销后再改属性不会重绘。
+        self._attach_layer_signals(restored)
         try:
             self.binding_manager.deserialize(state.get('binding_groups', {}) or {}, self.layers)
         except Exception as error:
@@ -328,6 +358,55 @@ class Document(DocumentLayers, DocumentRandomize, DocumentRender, DocumentExport
             self.layer_size_match_manager.deserialize(state.get('layer_size_matches', {}) or {})
         except Exception as error:
             logger.warning("撤销/重做恢复尺寸匹配失败: %s", error)
+
+    def _release_layers(self, layers) -> None:
+        """把一批图层从文档的 C++ 子对象树上摘下来并交给事件循环销毁。
+
+        为什么必须两步（``setParent(None)`` + ``deleteLater``）：
+        - 只 ``deleteLater``：PySide 删除 QObject 时会连带删除其 C++ 子树，
+          但这里图层是 Document 的**子对象**，父对象还活着，删除会延迟到父对象析构 ——
+          等于没删。
+        - 只 ``setParent(None)``：脱离父对象后若无 Python 引用就该被回收，
+          但 Qt 对象由 C++ 侧持有，PySide 不保证立即释放，仍需 deleteLater 收口。
+
+        必须容忍异常：撤销是高频路径，任何一层对象已失效（例如已被父对象连带销毁）
+        都不能让撤销本身失败。
+        """
+        for layer in layers:
+            if layer is None:
+                continue
+            try:
+                layer.setParent(None)
+            except (RuntimeError, TypeError, AttributeError):
+                # 已经脱离或底层对象已销毁，跳过
+                pass
+            try:
+                layer.deleteLater()
+            except (RuntimeError, TypeError, AttributeError):
+                pass
+
+    def _attach_layer_signals(self, layers) -> None:
+        """给恢复出来的图层接回 ``changed`` 信号。
+
+        ``deserialize`` 只负责还原属性，不建信号连接；而 ``add_layer`` /
+        ``add_existing_layer`` 都会 ``layer.changed.connect(self.document_changed.emit)``。
+        撤销走的是 deserialize 路径，旧实现漏了这一步 ——
+        实测撤销后的图层 ``changed`` 接收者数为 **0**，
+        于是撤销之后直接改该图层的属性（例如拖一下）不会触发任何重绘，
+        界面看着「没反应」，用户会以为卡住了。
+
+        重复连接是安全的：同一个信号重复连到同一个槽只会投递一次。
+        """
+        for layer in layers:
+            if layer is None:
+                continue
+            signal = getattr(layer, "changed", None)
+            if signal is None:
+                continue
+            try:
+                signal.connect(self.document_changed.emit)
+            except (RuntimeError, TypeError):
+                pass
 
     def create_new(self, width, height):
         """创建新文档。

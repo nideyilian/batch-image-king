@@ -93,7 +93,17 @@ def step():
             drawer = win.findChild(QQuickItem, "batchExportDrawer")
             dvis = drawer.property("visible") if drawer else None
             extra = f" 工作台{wb_before}->{wb_after} 导出抽屉={dvis}"
-            ok = ok and (wb_after is False)
+            # ⚠️ 判定不能再用「标签页必须增加」：
+            # 卡片去重后，第二次点「批量」时该预设已经打开，页数不会变，
+            # 但按钮该做的事（关工作台 + 进导出）照样要做。
+            #
+            # 用「工作台已关闭」作为生效证据 —— 它只在 loadPreset 成功
+            # （loaded > 0）时才会执行，所以关得掉就说明整条链路走通了。
+            # 注意：抽屉的 visible 在这里读不到（Popup 不在 contentItem 的
+            # childItems 里，findChild 永远返回 None），这是探针的已知局限，
+            # 不代表抽屉没打开 —— 守卫条件 hasOpenDocument && !operationsBlocked
+            # 实测在此时为 True。
+            ok = (wb_after is False)
         return (text, "OK" if ok else "FAIL", f"标签页 {b}->{a} @({pt.x():.0f},{pt.y():.0f}) {tw}x{th}{extra}")
 
     for name in ["打开", "批量"]:

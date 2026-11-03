@@ -320,9 +320,14 @@ class WorkspaceLayerOpsMixin:
         self._document.bump_hit_test_version()
         if history:
             self._document.save_state(action)
+        # 注意：这里**不要**再显式调 ``self._layer_model.reset_from_document()``。
+        # ``layer_changed`` 已经连着模型（见 LayerListModel._connect_document），
+        # 再调一次等于让同一次排序触发两轮模型同步；旧实现两轮都是全表 reset，
+        # 于是拖一次图层顺序，图层面板会整块闪两下。
+        # 模型侧现在会按结构指纹判断该 reset 还是只发 dataChanged，
+        # 单一触发点才能保证「一次操作一次刷新」。
         self._document.layer_changed.emit()
         self._document.document_changed.emit()
-        self._layer_model.reset_from_document()
         self.selectionChanged.emit()
         self.viewSettingsChanged.emit()
         self.documentInfoChanged.emit()

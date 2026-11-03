@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import os
 import re
 import threading
@@ -13,12 +14,40 @@ from PySide6.QtGui import QDesktopServices
 
 from app.models.document import Document
 
+logger = logging.getLogger(__name__)
+
 
 class _BatchExportTaskSignals(QObject):
     finished = Signal(bool, str, bool)
 
 
 class _BatchExportTask(QRunnable):
+    """批量导出的后台任务。
+
+    🔴 历史缺陷（已修）：原先 ``run()`` 是
+    ``with self.document_lock: self.runner(self.document, ...)``
+    —— 也就是把**整段批量导出**包在文档锁里。而 ``document_lock`` 正是主线程
+    ``previewLiveGeometry`` / ``_set_layer_attrs`` / ``save_state`` 用的同一把 RLock
+    （见 ``workspace_vm_view.documentLock``）。
+
+    实测（``docs/audit/_probe_export_lock.py``）：8 层 1080×1350 导 6 张即持锁 1003ms，
+    这期间主线程任何拖拽/改属性都被阻塞 —— 用户感知就是「卡死」。
+    而真实批量导出动辄几十上百张，持锁会到分钟级；导出期间界面虽然锁住了操作入口，
+    但窗口重绘、滚动、状态栏刷新仍然要拿这把锁。
+
+    现在改成：**主线程只在一帧内做一次快照**（``serialize_document_data``，实测 0.7ms），
+    导出全程跑在文档副本上。共享文档只读一次，不再被长时间占用。
+
+    为什么要副本而不是「缩小锁范围」：``batch_export`` 内部会大量改写文档状态
+    （随机取图的 ``_current_image_path``、图层临时缓存、``_invalidate_render_cache``、
+    ``_cleanup_layers_after_export``）。让它在共享文档上无锁跑，等于把主线程正在读的
+    对象交给后台线程随手改 —— 那是数据竞争，比卡顿更糟。
+
+    为什么快照在 ``__init__``（主线程）里做而不是 ``run()``（工作线程）里做：
+    序列化要遍历图层读属性，必须在主线程、且必须在启动导出的那一刻取，
+    才能保证「导出的就是用户按下按钮时看到的画面」。
+    """
+
     def __init__(
         self,
         document: Document,
@@ -26,6 +55,8 @@ class _BatchExportTask(QRunnable):
         runner: Callable,
         parameters: dict,
         cancel_event: threading.Event,
+        snapshot_data: Optional[dict] = None,
+        snapshot_error: str = "",
     ) -> None:
         super().__init__()
         self.document = document
@@ -33,23 +64,95 @@ class _BatchExportTask(QRunnable):
         self.runner = runner
         self.parameters = parameters
         self.cancel_event = cancel_event
+        self.snapshot_data = snapshot_data
+        self.snapshot_error = snapshot_error
         self.signals = _BatchExportTaskSignals()
+
+    def _resolve_document(self) -> Optional[Document]:
+        """返回本次导出要操作的文档：优先副本，快照失败才退回共享文档。"""
+        if not isinstance(self.snapshot_data, dict):
+            return self.document
+        from app.models.document_serializer import DocumentSerializer
+
+        clone = Document(parent=None)
+        if not DocumentSerializer.restore_document_data(clone, self.snapshot_data):
+            return None
+        # 导出运行态必须显式复位，否则副本会继承快照里的「正在导出」标记，
+        # 预览冻结逻辑（_is_export_preview_frozen）会误判而不再重渲染。
+        clone._is_batch_export_running = False
+        clone._export_canceled = False
+        clone._needs_cache_refresh = True
+        # 进度/阶段信号仍要能被主线程的 ViewModel 收到，接到文档实例上转发。
+        clone.export_progress_updated.connect(self.document.export_progress_updated.emit)
+        clone.file_exported.connect(self.document.file_exported.emit)
+        clone.export_stage_updated.connect(self.document.export_stage_updated.emit)
+        return clone
 
     def run(self) -> None:
         try:
-            with self.document_lock:
+            if self.snapshot_error:
+                self.signals.finished.emit(False, self.snapshot_error, self.cancel_event.is_set())
+                return
+            target = self._resolve_document()
+            if target is None:
+                self.signals.finished.emit(False, "无法创建导出快照，请重试", self.cancel_event.is_set())
+                return
+
+            shared_document = target is self.document
+            if shared_document:
+                # 快照不可用（极端情况）才退回旧行为：仍然持锁，保证安全优先于流畅。
+                with self.document_lock:
+                    success = bool(
+                        self.runner(
+                            target,
+                            **self.parameters,
+                            cancel_callback=self.cancel_event.is_set,
+                        )
+                    )
+            else:
+                # 副本独立，无需持锁 —— 主线程全程可拖动。
                 success = bool(
                     self.runner(
-                        self.document,
+                        target,
                         **self.parameters,
                         cancel_callback=self.cancel_event.is_set,
                     )
                 )
+
+            error = str(getattr(target, "_last_export_error", "") or "")
+            self._publish_export_reports(target, success)
             canceled = self.cancel_event.is_set()
-            error = str(getattr(self.document, "_last_export_error", "") or "")
             self.signals.finished.emit(success, error, canceled)
         except Exception as error:
             self.signals.finished.emit(False, str(error), self.cancel_event.is_set())
+
+    def _publish_export_reports(self, target: Document, success: bool) -> None:
+        """把副本上的导出报告搬回共享文档。
+
+        主线程的 ``_on_finished`` 读的是 ``self._document`` 上的
+        ``_last_export_report`` / ``_last_precompute_diagnostics`` /
+        ``_last_export_adjustment``，不搬回来「降级提示」「数量调整提示」会全丢。
+        这些是只读快照，一次性赋值，不需要持锁。
+        """
+        if target is self.document:
+            return
+        for attribute in (
+            "_last_export_report",
+            "_last_export_perf_stats",
+            "_last_precompute_diagnostics",
+            "_last_export_adjustment",
+            "_last_export_error",
+        ):
+            if hasattr(target, attribute):
+                try:
+                    setattr(self.document, attribute, getattr(target, attribute))
+                except Exception:
+                    pass
+        if success:
+            try:
+                self.document._needs_cache_refresh = True
+            except Exception:
+                pass
 
 
 class BatchExportViewModel(QObject):
@@ -1085,17 +1188,44 @@ class BatchExportViewModel(QObject):
             "traverse_mode": self._traverse_mode,
             "use_smart_sampling": self._avoid_duplicates,
         }
+        # 导出跑在文档副本上，所以「按下按钮那一刻」必须在主线程取一次快照。
+        # 这里持锁的时间只够做一次序列化（实测 0.7ms / 12 图层），
+        # 换来的收益是整段导出期间主线程不再被阻塞。
+        snapshot_data, snapshot_error = self._capture_export_snapshot()
         task = _BatchExportTask(
             self._document,
             self._workspace.documentLock,
             self._runner,
             parameters,
             self._cancel_event,
+            snapshot_data=snapshot_data,
+            snapshot_error=snapshot_error,
         )
         task.signals.finished.connect(self._on_finished)
         self._active_task = task
         QThreadPool.globalInstance().start(task)
         return True
+
+    def _capture_export_snapshot(self) -> tuple[Optional[dict], str]:
+        """在主线程取一份导出用文档快照。
+
+        快照失败不直接中止导出：返回空数据，``_BatchExportTask`` 会退回
+        「持共享文档锁」的旧行为 —— 慢，但不会给出错误结果。
+        只有连旧路径都不该跑的场景才返回错误（目前没有，保留位便于后续加校验）。
+        """
+        if self._document is None:
+            return None, ""
+        try:
+            from app.models.document_serializer import DocumentSerializer
+
+            with self._workspace.documentLock:
+                data = DocumentSerializer.serialize_document_data(self._document)
+            if not isinstance(data, dict):
+                return None, ""
+            return data, ""
+        except Exception as error:
+            logger.warning("导出快照创建失败，回退到持锁导出：%s", error, exc_info=True)
+            return None, ""
 
     @Slot(result=bool)
     def retryExport(self) -> bool:

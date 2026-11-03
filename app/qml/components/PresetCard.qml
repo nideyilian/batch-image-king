@@ -42,6 +42,8 @@ Rectangle {
     signal duplicateRequested()
     signal exportRequested()
     signal deleteRequested()
+    // 右键菜单：携带卡片自身的 modelData，避免外层还要再查一次
+    signal contextMenuRequested(var presetData, real sceneX, real sceneY)
 
     readonly property bool thumbReady: presetData && presetData.thumbnailUrl.length > 0
     // 悬停态用 HoverHandler 提供，点击用 TapHandler。
@@ -72,9 +74,22 @@ Rectangle {
     }
 
     TapHandler {
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
-        onTapped: card.activated()
+        onTapped: (eventPoint, button) => {
+            if (button === Qt.RightButton) {
+                // 右键先选中（与画布/图层面板一致的心智）：菜单里的操作
+                // 都作用在「刚才右键的那张卡」上，不选中会导致
+                // 用户右键 A、菜单却作用于之前选中的 B。
+                card.activated()
+                var point = card.mapToItem(null, 0, 0)
+                card.contextMenuRequested(card.presetData,
+                                          point.x + eventPoint.position.x,
+                                          point.y + eventPoint.position.y)
+                return
+            }
+            card.activated()
+        }
     }
 
     ColumnLayout {

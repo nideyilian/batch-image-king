@@ -222,6 +222,59 @@ class WorkspaceSessionViewModel(QAbstractListModel):
             return self._sessions[index].document
         return None
 
+    def open_preset_pages(self, preset_id: str, documents, action="加载预设") -> dict:
+        """把某个预设的标签页全部打开并激活第一页，返回 ``{opened, active_index}``。
+
+        调用方（``PresetManagerViewModel.loadPreset``）已保证「该预设尚未打开」
+        —— 已打开的情况在它那边就短路成「激活已有页」了，不会走到这里。
+
+        这里仍按 ``source_preset_id`` + 页号做一次去重作为防御：如果将来有别的
+        入口直接调本方法，也不会造出重复页。去重按**页号**而非标题，因为不同
+        预设可以有同名页（两个预设都叫「主图」）。
+        """
+        preset_id = str(preset_id or "").strip()
+        valid = [document for document in list(documents or []) if isinstance(document, Document)]
+        if not preset_id or not valid or self._workspace.operationsBlocked:
+            return {"opened": 0, "active_index": -1}
+
+        # 已存在的页号（正常情况为空，防御性保留）
+        existing_pages: dict[int, int] = {}
+        for index, session in enumerate(self._sessions):
+            document = session.document
+            if str(getattr(document, "source_preset_id", "") or "") != preset_id:
+                continue
+            try:
+                page = int(getattr(document, "source_preset_page", -1))
+            except (TypeError, ValueError):
+                continue
+            if page >= 0 and page not in existing_pages:
+                existing_pages[page] = index
+
+        appended = 0
+        first_index = existing_pages.get(0, -1)
+        for page, document in enumerate(valid):
+            if page in existing_pages:
+                continue
+            document.current_file_path = None
+            document.is_modified = False
+            self._prepare_history(document, action)
+            index = self._append_document(document)
+            existing_pages[page] = index
+            if first_index < 0:
+                first_index = index
+            appended += 1
+
+        if first_index < 0:
+            return {"opened": 0, "active_index": -1}
+        self.activateDocument(first_index)
+        # opened 语义是「本次真正新建的页数」，但调用方用它判断「成功了没有」。
+        # 全部页已存在（防御分支命中）时 opened=0，若直接返回 0，
+        # 上层会弹「无法将预设加入工作区」—— 明明激活成功了却报错。
+        # 所以同时给出 total（该预设当前在工作区里的总页数），
+        # 让调用方用 total 判断成功、用 opened 决定要不要刷新列表。
+        total = len(existing_pages)
+        return {"opened": appended, "total": total, "active_index": int(first_index)}
+
     def appendDocuments(self, documents, action="加载预设") -> int:
         valid = [document for document in list(documents or []) if isinstance(document, Document)]
         if not valid or self._workspace.operationsBlocked:

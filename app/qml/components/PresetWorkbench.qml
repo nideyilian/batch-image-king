@@ -66,6 +66,260 @@ Item {
     property string editorName: ""
     property string editorDescription: ""
 
+    // ---- 标签页（页列表）状态 ----
+    // 当前处于编辑态的页下标，-1 表示没有。同一时刻只允许一页在编辑：
+    // 切到另一页时前一页按「失焦=提交」处理。
+    property int editingTabIndex: -1
+    // 编辑态的草稿文本（与输入框双向同步）
+    property string editingTabDraft: ""
+    // 编辑态的错误提示
+    property string tabRenameError: ""
+    // 行尾 ⋮ 菜单作用的页下标
+    property int contextTabIndex: -1
+    // 「清空全部」的待确认预设 id（空串表示没有待确认项）
+    property string pendingClearTabsId: ""
+    // 镜像「同时关闭工作区」开关状态（可读写）。
+    //
+    // 为什么要有这个镜像：Popup 是独立窗口，不在 item 树里，外部（含自动化
+    // 测试）既 findChild 不到对话框，也读不到它内部的 alsoCloseWorkspace。
+    // 上一轮就是因为这条链路无法验证，把「勾了也等于没勾」的缺陷漏了出去。
+    // 真值仍在 clearTabsDialog 里，这里双向同步。
+    property bool alsoCloseWorkspaceOnClear: false
+    onAlsoCloseWorkspaceOnClearChanged: {
+        if (clearTabsDialog.alsoCloseWorkspace !== alsoCloseWorkspaceOnClear)
+            clearTabsDialog.alsoCloseWorkspace = alsoCloseWorkspaceOnClear
+    }
+    // 「关闭本页」的待确认页下标，-1 表示没有
+    property int pendingCloseTabIndex: -1
+    // 卡片右键菜单作用的目标预设 id（空串表示菜单未打开）
+    property string contextMenuPresetId: ""
+
+    // ---- 外部/调试驱动入口 ----
+    // QML 根对象上的普通 function 无法被 QMetaObject.invokeMethod 找到（实测），
+    // 所以暴露几个可写属性作为桥：写属性即触发对应动作，测试与调试脚本用。
+    // 这也是 qml_debug_entries 里 selectPresetIndex 的同一套路子。
+    property int requestTabRenameIndex: -1
+    onRequestTabRenameIndexChanged: {
+        if (requestTabRenameIndex < 0) return
+        var idx = requestTabRenameIndex
+        requestTabRenameIndex = -1
+        beginTabRename(idx)
+    }
+    property bool requestSubmitTabRename: false
+    onRequestSubmitTabRenameChanged: {
+        if (!requestSubmitTabRename) return
+        requestSubmitTabRename = false
+        submitTabRename()
+    }
+    property bool requestCancelTabRename: false
+    onRequestCancelTabRenameChanged: {
+        if (!requestCancelTabRename) return
+        requestCancelTabRename = false
+        cancelTabRename()
+    }
+    property bool requestClearTabsDialog: false
+    onRequestClearTabsDialogChanged: {
+        if (!requestClearTabsDialog) return
+        requestClearTabsDialog = false
+        requestClearAllTabs()
+    }
+    property bool requestConfirmClearTabs: false
+    onRequestConfirmClearTabsChanged: {
+        if (!requestConfirmClearTabs) return
+        requestConfirmClearTabs = false
+        // ⚠️ 不能写死 false：对话框里的「同时关闭工作区」开关必须传下去，
+        // 否则用户勾了也等于没勾（卡片清空了，工作区标签页还在）。
+        performClearAllTabs(clearTabsDialog.alsoCloseWorkspace)
+    }
+    // 供调试/自动化触发「保存改动回此预设」（QMetaObject 找不到普通 function）
+    property bool requestSaveToPresetNow: false
+    onRequestSaveToPresetNowChanged: {
+        if (!requestSaveToPresetNow) return
+        requestSaveToPresetNow = false
+        requestSaveToPreset(selectedId)
+    }
+    property int requestCloseTabIndex: -1
+    onRequestCloseTabIndexChanged: {
+        if (requestCloseTabIndex < 0) return
+        var idx = requestCloseTabIndex
+        requestCloseTabIndex = -1
+        requestCloseTab(idx)
+    }
+    property bool requestConfirmCloseTab: false
+    onRequestConfirmCloseTabChanged: {
+        if (!requestConfirmCloseTab) return
+        requestConfirmCloseTab = false
+        performCloseTab()
+    }
+
+    /// 进入某页的编辑态。原文预填并全选（参考 Figma 图层改名）。
+    function beginTabRename(pageIndex) {
+        if (!vm || selectedId.length === 0) return
+        if (vm.busy) {
+            requestToast(vm.busyReason || "正在处理其它操作，请稍候")
+            return
+        }
+        var item = presetById(selectedId)
+        if (!item || item.corrupt) return
+        if (pageIndex < 0 || pageIndex >= item.tabTitles.length) return
+        // 已有另一页在编辑：先提交它，再切过来
+        if (editingTabIndex >= 0 && editingTabIndex !== pageIndex)
+            submitTabRename()
+        tabRenameError = ""
+        editingTabDraft = item.tabTitles[pageIndex].title
+        editingTabIndex = pageIndex
+    }
+
+    /// 提交改名。校验失败留在编辑态并显示红字；成功则退出编辑态。
+    function submitTabRename() {
+        if (!vm || editingTabIndex < 0) return
+        var pageIndex = editingTabIndex
+        var result = vm.renameDocument(selectedId, pageIndex, editingTabDraft)
+        if (result && result.ok) {
+            editingTabIndex = -1
+            editingTabDraft = ""
+            tabRenameError = ""
+            if (result.changed)
+                requestToast("已重命名为「" + result.title + "」")
+            return
+        }
+        // 校验 / 写盘失败：保持编辑态，保留用户输入，红字提示
+        tabRenameError = (result && result.message) || "重命名失败"
+    }
+
+    /// 取消改名（Esc）：还原原文，零写入。
+    function cancelTabRename() {
+        editingTabIndex = -1
+        editingTabDraft = ""
+        tabRenameError = ""
+    }
+
+    /// 打开「关闭本页」确认弹窗。
+    /// 关闭会删掉该页的图层内容且写盘，属不可逆操作，必须确认。
+    function requestCloseTab(pageIndex) {
+        if (!vm || selectedId.length === 0) return
+        if (vm.busy) {
+            requestToast(vm.busyReason || "正在处理其它操作，请稍候")
+            return
+        }
+        var item = presetById(selectedId)
+        if (!item || item.corrupt) return
+        if (pageIndex < 0 || pageIndex >= item.tabTitles.length) return
+        // 关闭前先落地当前编辑态，避免用户刚打的字被一起删掉
+        if (editingTabIndex >= 0)
+            submitTabRename()
+        pendingCloseTabIndex = pageIndex
+        closeTabDialog.open()
+    }
+
+    /// 执行关闭单页。
+    function performCloseTab() {
+        if (!vm || pendingCloseTabIndex < 0) return
+        var pageIndex = pendingCloseTabIndex
+        var result = vm.closeDocument(selectedId, pageIndex)
+        if (result && result.ok) {
+            pendingCloseTabIndex = -1
+            if (editingTabIndex === pageIndex)
+                cancelTabRename()
+            closeTabDialog.close()
+            if (result.remaining <= 0) {
+                // 关到空：等同清空，给撤销入口
+                requestToastWithUndo("已关闭最后一页（" + result.title + "）", result.undo_token)
+            } else {
+                requestToast("已关闭「" + result.title + "」，剩余 " + result.remaining + " 页")
+            }
+            return
+        }
+        closeTabDialog.errorMessage = (result && result.message) || "关闭失败"
+    }
+
+    /// 把工作区里该预设的标签页内容覆盖保存回卡片。
+    function requestSaveToPreset(presetId) {
+        if (!vm) return
+        var targetId = String(presetId || "")
+        if (targetId.length === 0) return
+        if (vm.busy) {
+            requestToast(vm.busyReason || "正在处理其它操作，请稍候")
+            return
+        }
+        // 保存前先落地页名编辑态：否则刚改的页名不会被写进 .cmp
+        if (editingTabIndex >= 0)
+            submitTabRename()
+        var result = vm.savePresetFromWorkspace(targetId)
+        if (result && result.ok) {
+            requestToast("已保存 " + result.saved + " 页到预设")
+            return
+        }
+        requestToast((result && result.message) || "保存失败")
+    }
+
+    /// 打开「清空全部」确认弹窗。
+    function requestClearAllTabs() {
+        var item = presetById(selectedId)
+        if (!item) return
+        if (item.documentCount <= 0) return
+        if (vm && vm.busy) {
+            requestToast(vm.busyReason || "正在处理其它操作，请稍候")
+            return
+        }
+        // 清空前先落地当前编辑态，否则用户刚打的字会静默丢失
+        if (editingTabIndex >= 0)
+            submitTabRename()
+        clearTabsDialog.openFor(selectedId)
+    }
+
+    /// 执行清空（确认后调用）。
+    function performClearAllTabs(alsoCloseInWorkspace) {
+        if (!vm || pendingClearTabsId.length === 0) return
+        var targetId = pendingClearTabsId
+        var result = vm.closeAllDocuments(targetId, alsoCloseInWorkspace)
+        if (result && result.ok) {
+            editingTabIndex = -1
+            editingTabDraft = ""
+            tabRenameError = ""
+            pendingClearTabsId = ""
+            clearTabsDialog.close()
+            var extra = (result.workspace_closed || 0) > 0
+                        ? "，并关闭了工作区 " + result.workspace_closed + " 个标签页" : ""
+            requestToastWithUndo("已清空 " + result.cleared + " 个标签页" + extra, targetId)
+            return
+        }
+        // 失败：弹窗不关闭，改为显示错误并提供重试
+        clearTabsDialog.errorMessage = (result && result.message) || "清空失败"
+    }
+
+    /// Toast 带「撤销」按钮（仅清空全部用）。
+    signal undoClearRequested(string presetId)
+    function requestToastWithUndo(message, presetId) {
+        undoToast.message = message
+        undoToast.presetId = presetId
+        undoToast.open()
+    }
+
+    /// 订阅页名变化做行级刷新（不发 presetsChanged，避免整屏卡片闪）。
+    Connections {
+        target: vm
+        enabled: vm !== null
+        function onDocumentTitlesChanged(presetId) {
+            if (presetId === root.selectedId)
+                root.thumbnailTick++   // 触发 tabList model 重算
+        }
+        function onDocumentsCleared(presetId) {
+            if (presetId === root.selectedId) {
+                root.editingTabIndex = -1
+                root.editingTabDraft = ""
+                root.tabRenameError = ""
+                root.pendingCloseTabIndex = -1
+                root.thumbnailTick++
+            }
+        }
+        function onBusyChanged() {
+            // 进入 busy 时强制结束编辑态，避免输入框在写盘期间还能改
+            if (vm && vm.busy && root.editingTabIndex >= 0)
+                root.cancelTabRename()
+        }
+    }
+
     readonly property var visibleItems: vm ? vm.visiblePresets : []
     readonly property int totalCount: vm ? vm.count : 0
 
@@ -94,6 +348,16 @@ Item {
         var items = visibleItems
         if (selectPresetIndex < items.length)
             selectPreset(items[selectPresetIndex].id)
+    }
+
+    /// 把焦点移到右侧详情的「名称」输入框并全选。
+    ///
+    /// 卡片右键的「重命名预设」用这个，而不是另开弹窗：
+    /// 卡片名与页名只差两个字，两个弹窗并存时用户很容易改错对象。
+    /// 走「选中卡片 + 聚焦名称框」这条路，改的一定是卡片名。
+    function requestFocusPresetName() {
+        presetNameField.forceActiveFocus()
+        presetNameField.selectAll()
     }
 
     function clearSelection() {
@@ -527,6 +791,12 @@ Item {
                         onDuplicateRequested: root.requestDuplicate(modelData.id)
                         onExportRequested: root.requestExport(modelData.id, modelData.name)
                         onDeleteRequested: root.requestDelete(modelData.id, modelData.name)
+                        // 右键菜单：与详情面板页列表同一套操作，
+                        // 只是把入口搬到卡片上（卡片操作条已满，加不下按钮）
+                        onContextMenuRequested: (presetData, sceneX, sceneY) => {
+                            root.contextMenuPresetId = presetData.id
+                            cardContextMenu.popup(sceneX, sceneY)
+                        }
                         // 懒加载：只有真正进入视口的卡片才请求缩略图，
                         // 避免一进工作台就排 14 个渲染任务、把首屏拖慢。
                         Component.onCompleted: {
@@ -752,6 +1022,7 @@ Item {
                         spacing: 4
                         TinyLabel { text: "名称" }
                         AppTextField {
+                            id: presetNameField
                             Layout.fillWidth: true
                             controlSize: "sm"
                             text: root.editorName
@@ -918,6 +1189,284 @@ Item {
                         }
                     }
 
+                    // ---- 标签页列表（可改名 / 可清空）----
+                    //
+                    // 卡片封面只有 200×110，塞不下 3 行列表，所以页列表放这里：
+                    // 卡片负责「认出是哪个」，详情面板负责「改它」。
+                    // 行高 28 是双击热区的下限值（再矮就难点中），
+                    // 超过 3 行内部滚动，不无限撑高面板。
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        visible: {
+                            var item = root.presetById(root.selectedId)
+                            return item && !item.corrupt
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            TinyLabel {
+                                text: "标签页"
+                                Layout.fillWidth: true
+                            }
+                            // 关闭全部：文字 + 图标的小按钮。
+                            // 不用 CompactActionButton：它宽度写死 94、且不支持图标，
+                            // 改公共组件会影响别处，所以这里就地做一个轻量版。
+                            // documentCount <= 1 时**隐藏**（不是禁用）：
+                            // 只有一页时说"关闭全部"等于清空整卡，
+                            // 与「删除预设」语义混淆，不给这个入口。
+                            Rectangle {
+                                id: clearAllTabsButton
+                                readonly property var currentItem: root.presetById(root.selectedId)
+                                visible: currentItem && currentItem.documentCount > 1
+                                enabled: root.vm && !root.vm.busy
+                                implicitWidth: clearAllRow.implicitWidth + 14
+                                implicitHeight: 22
+                                radius: Theme.radiusSmall
+                                color: !enabled ? Theme.bgControl
+                                                : (clearAllMouse.containsMouse ? Theme.bgHover
+                                                                               : "transparent")
+                                border.width: 1
+                                border.color: enabled ? Theme.borderStrong : Theme.border
+
+                                Row {
+                                    id: clearAllRow
+                                    anchors.centerIn: parent
+                                    spacing: 3
+                                    AppIcon {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        iconName: AppIcons.trash
+                                        iconSize: 11
+                                        iconColor: enabled ? Theme.textSecondary : Theme.textDisabled
+                                    }
+                                    Text {
+                                        text: "清空全部"
+                                        color: enabled ? Theme.textSecondary : Theme.textDisabled
+                                        font.family: Theme.bodyFont
+                                        font.pixelSize: 10
+                                    }
+                                }
+                                MouseArea {
+                                    id: clearAllMouse
+                                    anchors.fill: parent
+                                    enabled: parent.enabled
+                                    hoverEnabled: true
+                                    cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                    onClicked: root.requestClearAllTabs()
+                                }
+                                ToolTip.delay: 500
+                                ToolTip.visible: clearAllMouse.hovered
+                                ToolTip.text: root.vm && root.vm.busy
+                                              ? root.vm.busyReason
+                                              : "清空该预设的全部标签页（预设本身保留）"
+                                Accessible.name: "清空全部标签页"
+                                Accessible.role: Accessible.Button
+                            }
+                        }
+
+                        // 空态：没有标签页时给出明确说明，不显示一个空框
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: emptyTabsRow.implicitHeight + 16
+                            visible: {
+                                var item = root.presetById(root.selectedId)
+                                return item && item.documentCount === 0
+                            }
+                            color: "transparent"
+                            border.width: 1
+                            border.color: Theme.border
+                            radius: Theme.radiusSmall
+
+                            ColumnLayout {
+                                id: emptyTabsRow
+                                anchors.centerIn: parent
+                                spacing: 2
+                                AppIcon {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    // 用 trash 而不是虚构的 file-x：图标集是随代码分发的
+                                    // Lucide 子集（app/qml/icons/ 只有 102 个），
+                                    // 引用不存在的名字会渲染成空白。
+                                    iconName: AppIcons.trash
+                                    iconSize: 14
+                                    iconColor: Theme.textMuted
+                                }
+                                TinyLabel {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    text: "没有标签页"
+                                    color: Theme.textMuted
+                                }
+                            }
+                        }
+
+                        ListView {
+                            id: tabList
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: {
+                                var item = root.presetById(root.selectedId)
+                                var n = item ? item.tabTitles.length : 0
+                                // 超过 3 页时多留 4px：底部要放得下「还有 N 页」的指示，
+                                // 否则用户看到「标签页 4 个」但只数出 3 行，会以为丢了一页。
+                                return Math.min(3, n) * 28 + (n > 3 ? 6 : 2)
+                            }
+                            visible: {
+                                var item = root.presetById(root.selectedId)
+                                return item && item.documentCount > 0
+                            }
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            model: {
+                                var tick = root.thumbnailTick
+                                var item = root.presetById(root.selectedId)
+                                return item ? item.tabTitles : []
+                            }
+
+                            delegate: Rectangle {
+                                id: tabRow
+                                required property var modelData
+                                width: tabList.width
+                                height: 28
+                                color: tabMouse.containsMouse ? Theme.bgHover : "transparent"
+                                radius: Theme.radiusSmall
+
+                                readonly property bool editing: root.editingTabIndex === modelData.index
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 4
+                                    spacing: 6
+
+                                    // 页序号徽标（不用缩略图：面板约 300px，图会挤掉名字）
+                                    Rectangle {
+                                        Layout.preferredWidth: 16
+                                        Layout.preferredHeight: 16
+                                        radius: 3
+                                        color: modelData.isCover ? Theme.accentSoft : Theme.bgControl
+                                        border.width: 1
+                                        border.color: modelData.isCover ? Theme.accent : Theme.border
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: String(modelData.index + 1)
+                                            color: modelData.isCover ? Theme.accent : Theme.textMuted
+                                            font.family: Theme.bodyFont
+                                            font.pixelSize: 9
+                                        }
+                                    }
+
+                                    // 非编辑态：显示页名
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: !tabRow.editing
+                                        text: modelData.title
+                                        color: Theme.textPrimary
+                                        font.family: Theme.bodyFont
+                                        font.pixelSize: 11
+                                        elide: Text.ElideRight
+                                        maximumLineCount: 1
+                                        ToolTip.delay: 600
+                                        ToolTip.visible: tabNameHover.hovered && truncated
+                                        ToolTip.text: modelData.title
+                                        readonly property bool truncated: contentWidth > width
+
+                                        HoverHandler { id: tabNameHover }
+                                    }
+
+                                    // 编辑态：内联输入框，预填并全选原文
+                                    AppTextField {
+                                        id: tabTitleField
+                                        Layout.fillWidth: true
+                                        visible: tabRow.editing
+                                        controlSize: "sm"
+                                        text: root.editingTabDraft
+                                        selectByMouse: true
+                                        onTextChanged: root.editingTabDraft = text
+                                        onAccepted: root.submitTabRename()
+                                        Keys.onEscapePressed: root.cancelTabRename()
+                                        Keys.onReturnPressed: root.submitTabRename()
+
+                                        Component.onCompleted: {
+                                            if (visible) {
+                                                forceActiveFocus()
+                                                selectAll()
+                                            }
+                                        }
+                                        onVisibleChanged: {
+                                            if (visible) {
+                                                forceActiveFocus()
+                                                selectAll()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 行尾 ⋮ 菜单（重命名 / 设为封面 / 关闭本页）
+                                IconButton {
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 2
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: !tabRow.editing
+                                    iconName: AppIcons.more
+                                    buttonSize: 20
+                                    tooltip: "标签页操作"
+                                    onClicked: {
+                                        root.contextTabIndex = modelData.index
+                                        tabRowMenu.popup()
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: tabMouse
+                                    // 避开右侧 ⋮ 按钮的点击区，否则点菜单会先触发双击改名
+                                    anchors.fill: parent
+                                    anchors.rightMargin: 22
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    enabled: !tabRow.editing
+                                    cursorShape: Qt.IBeamCursor
+                                    onDoubleClicked: root.beginTabRename(modelData.index)
+                                    onClicked: mouse => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            root.contextTabIndex = modelData.index
+                                            tabRowMenu.popup()
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // 「还有 N 页」提示：超过 3 页时列表内部滚动，
+                        // 不给提示的话用户看到「标签页 4 个」却只数出 3 行，会以为丢了一页。
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 12
+                            visible: {
+                                var item = root.presetById(root.selectedId)
+                                return item && item.tabTitles.length > 3
+                            }
+                            TinyLabel {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: {
+                                    var item = root.presetById(root.selectedId)
+                                    var n = item ? item.tabTitles.length : 0
+                                    return "还有 " + Math.max(0, n - 3) + " 页，滚动查看"
+                                }
+                                color: Theme.textMuted
+                            }
+                        }
+
+                        // 编辑态的错误提示（红字，不退出编辑态）
+                        TinyLabel {
+                            Layout.fillWidth: true
+                            visible: text.length > 0
+                            text: root.tabRenameError
+                            color: Theme.coral
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
                     // ---- 封面选择（仅多标签预设）----
                     // 单文档预设没有可选项，不显示这块，避免占位浪费。
                     ColumnLayout {
@@ -1031,6 +1580,30 @@ Item {
                         }
                     }
 
+                    // 把工作区里这张卡片的标签页内容存回来。
+                    //
+                    // 与上面「保存修改」分工不同，两个都不能省：
+                    //   上面那管名称/描述（卡片元数据）
+                    //   这里管标签页内容（图层、画布尺寸、页名）
+                    // 用户在工作区改完图后如果没有这个入口，就只能「另存为」新预设，
+                    // 库里会堆出一堆重复卡片。
+                    AppButton {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 34
+                        readonly property int openPages: root.vm && root.selectedId.length > 0
+                                                        ? root.vm.openPageCount(root.selectedId) : 0
+                        text: openPages > 0 ? "保存改动回此预设（" + openPages + " 页）"
+                                            : "保存改动回此预设"
+                        // 没打开过就无处可存：禁用而不是隐藏，让用户知道有这条路
+                        enabled: root.vm && !root.vm.busy && openPages > 0
+                        ToolTip.delay: 500
+                        ToolTip.visible: hovered
+                        ToolTip.text: openPages > 0
+                                      ? "把工作区里这 " + openPages + " 页的当前内容覆盖保存到该预设"
+                                      : "先在编辑器中打开该预设，改完再回来保存"
+                        onClicked: root.requestSaveToPreset(root.selectedId)
+                    }
+
                     // 次入口：卡片上的「打开」已经是一步直达的主入口，
                     // 这里保留一份是为了"先看清楚再打开"的场景（比如逐页翻封面）。
                     // 所以不再用 primary 样式抢主视觉。
@@ -1121,6 +1694,361 @@ Item {
                         root.pendingDeleteCategory = ""
                         if (affected > 0)
                             root.requestToast(affected + " 个预设已归入「未分类」")
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- 卡片右键菜单 ----
+    //
+    // 为什么加在卡片上：卡片操作条已经有 5 个按钮（打开/批量/收藏/复制/删除），
+    // 再把「清空标签页」塞进去会挤掉视觉呼吸空间。右键菜单不占版面。
+    //
+    // 菜单项刻意**与详情面板页列表保持一致**：同一功能不在两处用不同名字，
+    // 否则用户会以为是两回事。
+    AppMenu {
+        id: cardContextMenu
+
+        ShapeMenuItem {
+            text: "打开"
+            enabled: root.contextMenuPresetId.length > 0 && !root.vm?.busy
+            onTriggered: root.requestLoad(root.contextMenuPresetId)
+        }
+        MenuSeparator { }
+
+        ShapeMenuItem {
+            text: "重命名预设"
+            enabled: root.contextMenuPresetId.length > 0 && !root.vm?.busy
+            onTriggered: {
+                // 复用右侧详情的名称输入框：选中卡片后聚焦并全选，
+                // 不另开一个重命名弹窗（卡片名与页名容易混）。
+                root.selectedId = root.contextMenuPresetId
+                root.requestFocusPresetName()
+            }
+        }
+        ShapeMenuItem {
+            text: "复制预设"
+            enabled: root.contextMenuPresetId.length > 0 && !root.vm?.busy
+            onTriggered: root.requestDuplicate(root.contextMenuPresetId)
+        }
+        MenuSeparator { }
+
+        ShapeMenuItem {
+            // 需要至少 2 页：只有一页时「清空全部」等同删除整卡内容，
+            // 与「删除预设」语义混淆（详见设计文档 1.3）
+            text: "清空全部标签页…"
+            enabled: {
+                if (!root.vm || root.vm.busy) return false
+                var item = root.presetById(root.contextMenuPresetId)
+                return item && item.documentCount > 1
+            }
+            onTriggered: {
+                root.selectedId = root.contextMenuPresetId
+                root.requestClearAllTabs()
+            }
+        }
+        MenuSeparator { }
+
+        ShapeMenuItem {
+            text: "删除预设…"
+            enabled: root.contextMenuPresetId.length > 0 && !root.vm?.busy
+            onTriggered: {
+                var item = root.presetById(root.contextMenuPresetId)
+                if (item)
+                    root.requestDelete(item.id, item.name)
+            }
+        }
+    }
+
+    // ---- 页行尾 ⋮ 菜单 ----
+    AppMenu {
+        id: tabRowMenu
+
+        ShapeMenuItem {
+            text: "重命名标签页"
+            enabled: root.vm && !root.vm.busy
+            onTriggered: root.beginTabRename(root.contextTabIndex)
+        }
+        ShapeMenuItem {
+            text: "设为卡片封面"
+            enabled: root.vm && !root.vm.busy
+            onTriggered: {
+                if (root.vm && root.contextTabIndex >= 0)
+                    root.vm.setCoverDocument(root.selectedId, root.contextTabIndex)
+            }
+        }
+        MenuSeparator { }
+        ShapeMenuItem {
+            // 危险操作，与「清空全部」之间加分隔线，避免误点
+            text: "关闭本页"
+            enabled: root.vm && !root.vm.busy
+            onTriggered: root.requestCloseTab(root.contextTabIndex)
+        }
+    }
+
+    // ---- 关闭单个标签页确认 ----
+    //
+    // 关闭 = 删掉这一页的图层内容并写盘，不可逆。必须二次确认。
+    // 关的是最后一页时文案要变——那种情况下卡片会进入空态，
+    // 用户需要知道「不是删了预设」。
+    AppDialog {
+        id: closeTabDialog
+        property string errorMessage: ""
+
+        width: 420
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+        title: "关闭这个标签页？"
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 10
+
+            BodyLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Theme.textPrimary
+                text: {
+                    var item = root.presetById(root.selectedId)
+                    var idx = root.pendingCloseTabIndex
+                    var name = (item && idx >= 0 && idx < item.tabTitles.length)
+                               ? item.tabTitles[idx].title : ""
+                    return "「" + name + "」的图层内容将被删除，无法恢复。"
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Theme.textMuted
+                text: {
+                    var item = root.presetById(root.selectedId)
+                    // 最后一页：说明会变成空预设，且预设本身保留
+                    if (item && item.documentCount <= 1)
+                        return "这是该预设的最后一页。关闭后预设会变为空状态，但预设本身、分类与标签都会保留。"
+                    return "其余标签页与预设本身不受影响。"
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                visible: closeTabDialog.errorMessage.length > 0
+                text: closeTabDialog.errorMessage
+                color: Theme.coral
+                wrapMode: Text.Wrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton {
+                    Layout.preferredWidth: 88
+                    label: "取消"
+                    onClicked: {
+                        root.pendingCloseTabIndex = -1
+                        closeTabDialog.close()
+                    }
+                }
+                ExportButton {
+                    Layout.preferredWidth: 112
+                    label: closeTabDialog.errorMessage.length > 0 ? "重试" : "关闭标签页"
+                    primary: true
+                    onClicked: root.performCloseTab()
+                }
+            }
+        }
+    }
+
+    // ---- 清空全部标签页确认 ----
+    //
+    // 一次性清空 N 页，误点代价高（.cmp 被覆盖后没有系统级回收站），
+    // 所以必须二次确认，且明确写出「预设本身保留」「工作区不受影响」。
+    AppDialog {
+        id: clearTabsDialog
+        // Popup 不在 contentItem 的 childItems 里，findChild 只能靠 objectName 找到。
+        // 没有它，自动化测试无法验证「勾选开关 → 真的关掉工作区标签」这条链路，
+        // 上一轮就是这么漏掉的（后端单测过了，界面链路从没验过）。
+        objectName: "presetClearTabsDialog"
+        property string errorMessage: ""
+        property bool alsoCloseWorkspace: false
+        // 开关真实状态回写到根对象镜像，外部才读得到
+        onAlsoCloseWorkspaceChanged: {
+            if (root.alsoCloseWorkspaceOnClear !== alsoCloseWorkspace)
+                root.alsoCloseWorkspaceOnClear = alsoCloseWorkspace
+        }
+
+        width: 440
+        modal: true
+        closePolicy: Popup.CloseOnEscape
+        title: "关闭全部标签页？"
+
+        function openFor(presetId) {
+            errorMessage = ""
+            alsoCloseWorkspace = false
+            root.pendingClearTabsId = presetId
+            open()
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 10
+
+            BodyLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Theme.textPrimary
+                text: {
+                    var item = root.presetById(root.pendingClearTabsId)
+                    var n = item ? item.documentCount : 0
+                    return "将清空「" + (item ? item.name : "") + "」中的 " + n
+                           + " 个标签页，此操作不可撤销。"
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: "预设本身、分类与标签会保留。已打开到工作区的标签页不受影响。"
+                color: Theme.textMuted
+            }
+
+            // 可选：同时关闭工作区里来自该预设的标签页。
+            // 默认不勾——用户想清的是卡片内容，不该顺手关掉正在编辑的东西。
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: {
+                    var item = root.presetById(root.pendingClearTabsId)
+                    return item && item.documentCount > 0
+                }
+                ToggleSwitch {
+                    id: alsoCloseSwitch
+                    checked: clearTabsDialog.alsoCloseWorkspace
+                    // 注意：toggled 带 bool 参数。这里显式用形参 value，
+                    // 不要写 `checked = !checked` —— 那会解析到开关自身的属性。
+                    onToggled: value => clearTabsDialog.alsoCloseWorkspace = value
+                }
+                TinyLabel {
+                    Layout.fillWidth: true
+                    text: "同时关闭工作区中来自此预设的标签页"
+                    color: Theme.textSecondary
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            TinyLabel {
+                Layout.fillWidth: true
+                visible: clearTabsDialog.errorMessage.length > 0
+                text: clearTabsDialog.errorMessage
+                color: Theme.coral
+                wrapMode: Text.Wrap
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                ExportButton {
+                    Layout.preferredWidth: 88
+                    label: "取消"
+                    onClicked: {
+                        root.pendingClearTabsId = ""
+                        clearTabsDialog.alsoCloseWorkspace = false
+                        clearTabsDialog.close()
+                    }
+                }
+                ExportButton {
+                    Layout.preferredWidth: 128
+                    label: clearTabsDialog.errorMessage.length > 0 ? "重试" : "清空标签页"
+                    primary: true
+                    onClicked: root.performClearAllTabs(clearTabsDialog.alsoCloseWorkspace)
+                }
+            }
+        }
+    }
+
+    // ---- 清空后的「撤销」Toast（30s 内有效）----
+    // 独立于普通 Toast：带一个撤销按钮。放在底部居中，不遮详情面板。
+    Rectangle {
+        id: undoToast
+        property string message: ""
+        property string presetId: ""
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 24
+        width: undoToastRow.implicitWidth + 28
+        height: 40
+        radius: Theme.radiusSmall
+        color: Theme.bgRaised
+        border.width: 1
+        border.color: Theme.borderStrong
+        visible: opacity > 0
+        opacity: 0
+        z: 400
+
+        Behavior on opacity { NumberAnimation { duration: 140 } }
+
+        function open() {
+            opacity = 1
+            hideTimer.restart()
+        }
+        function dismiss() {
+            opacity = 0
+            presetId = ""
+        }
+
+        Timer {
+            id: hideTimer
+            interval: 8000
+            onTriggered: undoToast.dismiss()
+        }
+
+        Row {
+            id: undoToastRow
+            anchors.centerIn: parent
+            spacing: 10
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: undoToast.message
+                color: Theme.textPrimary
+                font.family: Theme.bodyFont
+                font.pixelSize: 11
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 56
+                height: 24
+                radius: Theme.radiusSmall
+                color: undoMouse.containsMouse ? Theme.accentSoft : "transparent"
+                border.width: 1
+                border.color: Theme.accent
+                Text {
+                    anchors.centerIn: parent
+                    text: "撤销"
+                    color: Theme.accent
+                    font.family: Theme.bodyFont
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                }
+                MouseArea {
+                    id: undoMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        var targetId = undoToast.presetId
+                        undoToast.dismiss()
+                        if (!root.vm || targetId.length === 0) return
+                        var result = root.vm.undoClearDocuments(targetId)
+                        if (result && result.ok)
+                            root.requestToast("已恢复 " + result.restored + " 个标签页")
+                        else
+                            root.requestToast((result && result.message) || "撤销失败")
                     }
                 }
             }

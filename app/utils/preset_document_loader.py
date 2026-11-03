@@ -21,20 +21,39 @@ def create_document_from_preset_data(doc_data, parent=None):
 
     document.tab_name = doc_data.get('tab_name') or doc_data.get('original_tab_name') or doc_data.get('name', '预设标签页')
     document.original_tab_name = doc_data.get('original_tab_name') or document.tab_name
+    # 来源标记：由 documents_from_preset_data 填，用于「同一卡片不重复开标签」判定。
+    # 注意**不能**写进 doc_data —— 序列化用显式键名白名单，这个字段不会落盘，
+    # 否则预设文件会被运行时状态污染。
+    document.source_preset_id = ""
+    document.source_preset_page = -1
     document.is_modified = False
     return document
 
 
-def documents_from_preset_data(preset_data, parent=None):
-    """Return a list of Documents from single-document or multi-document preset data."""
+def documents_from_preset_data(preset_data, parent=None, preset_id: str = ""):
+    """Return a list of Documents from single-document or multi-document preset data.
+
+    ``preset_id`` 非空时会给每个 Document 打上来源标记
+    （``source_preset_id`` + ``source_preset_page``），
+    供 ``PresetManagerViewModel.loadPreset`` 判断「这张卡片是否已经开过标签页」。
+
+    为什么要标记到**文档对象**上而不是靠标题匹配：不同预设可以有同名页
+    （两个预设都有「主图」），按标题匹配会把别的预设的标签页当成自己的，
+    清空时误关、或打开时误判「已存在」。
+    """
+    preset_id = str(preset_id or "").strip()
+    documents = []
     if isinstance(preset_data, dict) and isinstance(preset_data.get('documents'), list):
-        return [
+        documents = [
             create_document_from_preset_data(doc_data, parent=parent)
             for doc_data in preset_data.get('documents', [])
             if isinstance(doc_data, dict)
         ]
+    elif isinstance(preset_data, dict):
+        documents = [create_document_from_preset_data(preset_data, parent=parent)]
 
-    if isinstance(preset_data, dict):
-        return [create_document_from_preset_data(preset_data, parent=parent)]
-
-    return []
+    if preset_id:
+        for page, document in enumerate(documents):
+            document.source_preset_id = preset_id
+            document.source_preset_page = page
+    return documents

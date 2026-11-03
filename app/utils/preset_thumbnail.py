@@ -114,6 +114,7 @@ def render_preset_thumbnails(
     source_path: Optional[str] = None,
     cover_index: int = 0,
     max_pages: int = 0,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """渲染预设各页的缩略图，返回 ``{页号: 路径}``。
 
@@ -123,6 +124,14 @@ def render_preset_thumbnails(
 
     ``max_pages`` 限制渲染页数（0 表示不限）。多标签预设最多 9 页，
     全渲染的代价可接受（实测单页约 0.3s）。
+
+    ``should_cancel`` 是**逐页**取消检查钩子，返回真则立刻放弃整批
+    （返回 ``{}``，已渲染的页也不返回）。用它而不是「渲染完再丢弃结果」，
+    是因为取消场景（清空标签页 / 删除预设）紧接着就会删掉缩略图文件，
+    若渲染完再落盘，会把刚删掉的文件又写回来 —— 于是下次读到的是
+    「旧内容的缩略图」，表现为「清空后卡片还显示原来的图」。
+
+    已落盘的历史页不会被清理（那是调用方 ``_drop_thumbnails`` 的职责）。
     """
     preset_id = str(preset_id or "").strip()
     if not preset_id:
@@ -181,6 +190,10 @@ def render_preset_thumbnails(
 
         _ensure_thumb_dir(presets_dir)
         for page in pending:
+            # 每页开始前检查一次：取消后不再白跑后续页（每页约 0.3s）。
+            if should_cancel is not None and should_cancel():
+                logger.debug("预设缩略图渲染已取消 %s（第 %d 页前）", preset_id, page)
+                return {}
             document = documents[page]
             page_path = thumb_path_for(presets_dir, preset_id, page)
             try:
@@ -210,6 +223,13 @@ def render_preset_thumbnails(
                         max(1, round(thumb.height * scale)),
                     )
                     thumb = thumb.resize(new_size, Image.LANCZOS)
+
+                # 落盘前再检查一次。渲染一页要几百毫秒，这段时间里很可能
+                # 正好发生「清空标签页」——文件已被调用方删掉，此时写回
+                # 会让卡片继续显示旧图。这是本函数唯一必须守住的窗口。
+                if should_cancel is not None and should_cancel():
+                    logger.debug("预设缩略图渲染已取消 %s（第 %d 页落盘前）", preset_id, page)
+                    return {}
 
                 # 先写临时文件再原子替换，避免并发读到半张图
                 tmp_path = f"{page_path}.{os.getpid()}.{threading.get_ident()}.tmp"
@@ -274,12 +294,21 @@ class PresetThumbnailService:
     def __init__(self, presets_dir: str, max_edge: int = DEFAULT_THUMB_MAX_EDGE) -> None:
         self._presets_dir = presets_dir
         self._max_edge = int(max_edge)
-        self._queue: "queue.Queue[tuple[str, str, int]]" = queue.Queue()
+        self._queue: "queue.Queue[tuple[str, str, int, int]]" = queue.Queue()
         self._workers: list[threading.Thread] = []
         self._stop = threading.Event()
         self._lock = threading.RLock()
         self._pending: set[str] = set()
         self._listeners: list[Callable[[str, str], None]] = []
+        # preset_id -> 代数。每次 cancel 递增，队列项带着入队时的代数进工作线程，
+        # 代数对不上即视为「已被取消」。
+        #
+        # 为什么不用一个 cancelled 布尔集合：取消后用户往往会立刻重新请求
+        # （比如清空后又点撤销）。旧队列项还会被消费一次，若用布尔集合判断，
+        # 新请求也会被这个集合误伤（表现为「撤销后缩略图再也不出来」）。
+        # 布尔集合也无法区分「这个旧任务」和「同 id 的新任务」，
+        # 旧任务结束时会把新任务的 _pending 一起 discard 掉。
+        self._epochs: dict[str, int] = {}
 
     # ---- 生命周期 ----
 
@@ -350,8 +379,9 @@ class PresetThumbnailService:
             if preset_id in self._pending:
                 return None
             self._pending.add(preset_id)
+            epoch = self._epochs.get(preset_id, 0)
         self.start()
-        self._queue.put((preset_id, source_path, int(cover_index or 0)))
+        self._queue.put((preset_id, source_path, int(cover_index or 0), epoch))
         return None
 
     def request_many(self, preset_ids, *, force: bool = False) -> int:
@@ -370,15 +400,53 @@ class PresetThumbnailService:
         with self._lock:
             return len(self._pending)
 
+    def cancel(self, preset_id: str) -> bool:
+        """取消该预设尚未完成的缩略图任务，返回是否确实有待处理任务。
+
+        幂等：没有待处理任务时也安全（只递增代数，让可能正在跑的旧任务失效）。
+
+        调用方（清空标签页 / 删除预设）在删完缩略图文件后必须调它，否则
+        几百毫秒后工作线程会把旧图重新写回磁盘 —— 卡片于是继续显示
+        已经不存在的内容。
+
+        已出队并正在渲染的那一页无法从外部打断（渲染是单个同步调用），
+        但它会在下一个检查点看到代数变化而停下，不会把结果写回。
+        """
+        preset_id = str(preset_id or "").strip()
+        if not preset_id:
+            return False
+        with self._lock:
+            self._epochs[preset_id] = self._epochs.get(preset_id, 0) + 1
+            was_pending = preset_id in self._pending
+            self._pending.discard(preset_id)
+        return was_pending
+
+    def cancel_all(self) -> int:
+        """取消所有待处理任务，返回取消数量。"""
+        with self._lock:
+            ids = list(self._pending)
+        for preset_id in ids:
+            self.cancel(preset_id)
+        return len(ids)
+
     # ---- 工作线程 ----
+
+    def _is_stale(self, preset_id: str, epoch: int) -> bool:
+        """该任务是否已被取消（代数对不上）。"""
+        with self._lock:
+            return self._epochs.get(preset_id, 0) != epoch
 
     def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                preset_id, source_path, cover_index = self._queue.get(timeout=0.25)
+                preset_id, source_path, cover_index, epoch = self._queue.get(timeout=0.25)
             except queue.Empty:
                 continue
             try:
+                # 出队后先看一眼是不是已被取消。取消的任务往往还有好几页，
+                # 全渲染一遍要 1-2 秒，纯属浪费 CPU（会挤占画布预览）。
+                if self._is_stale(preset_id, epoch):
+                    continue
                 # 一次把该预设各页都渲染好：卡片悬停轮播切页时就不必再排队，
                 # 否则每次切页都要等 0.3s，体验上就是"卡一下"。
                 page_paths = render_preset_thumbnails(
@@ -387,16 +455,23 @@ class PresetThumbnailService:
                     self._max_edge,
                     source_path=source_path,
                     cover_index=cover_index,
+                    should_cancel=lambda: self._is_stale(preset_id, epoch),
                 )
-                if page_paths:
+                # 渲染途中被取消时不通知 UI：否则界面会拿到一个刚被删掉的路径。
+                if page_paths and not self._is_stale(preset_id, epoch):
                     primary = page_paths.get(cover_index) or page_paths.get(0)
                     if primary:
                         self._notify(preset_id, primary)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("缩略图后台任务异常 %s: %s", preset_id, exc)
             finally:
+                # ⚠️ 只有代数仍是自己的那一代才清 _pending。
+                # 旧任务结束时若直接 discard，会把「取消后重新请求」的新任务
+                # 状态一起清掉 —— 新任务还在队列里，pending 却是空，
+                # 界面就此永远等不到通知。
                 with self._lock:
-                    self._pending.discard(preset_id)
+                    if self._epochs.get(preset_id, 0) == epoch:
+                        self._pending.discard(preset_id)
                 self._queue.task_done()
 
     def _notify(self, preset_id: str, thumb_path: str) -> None:
