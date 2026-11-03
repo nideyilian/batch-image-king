@@ -98,6 +98,13 @@ class DocumentExportBatch:
         try:
             from app.utils.export_worker_client import export_with_worker, should_use_export_worker
             if should_use_export_worker(self, int(count or 0)):
+                # 独立进程的启动税约 1.2s（纯 python 399ms + PySide6 389ms +
+                # 业务栈 388ms，2026-11-03 实测）。这段时间子进程还没写 manifest，
+                # 所以下方基于 manifest 的阶段回调全是空的 —— 用户会看到「准备导出」
+                # 卡住不动。这里先主动推一条更具体的阶段，让等待有解释。
+                if hasattr(self, 'export_stage_updated'):
+                    self.export_stage_updated.emit("启动导出进程（首次约 1 秒）")
+
                 def worker_progress_wrapper(current_count):
                     if hasattr(self, 'export_progress_updated'):
                         self.export_progress_updated.emit(int(current_count or 0))

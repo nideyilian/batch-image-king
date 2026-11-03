@@ -143,6 +143,34 @@ class ManifestWriter:
             return False
 
 
+def warmup() -> int:
+    """预热入口：把导出真正要用的重型依赖全部导入一遍，然后退出。
+
+    为什么需要：独立导出进程的启动税约 1.2s（2026-11-03 实测拆解：
+    纯 python 399ms + PySide6 389ms + 业务栈 388ms）。用户点「开始导出」后
+    要干等这段，期间子进程还没写 manifest，界面停在「准备导出」不动。
+
+    这里在**应用启动后空闲时**先把这段做完（进程随即退出，不常驻），
+    之后真正的导出进程走 OS 的文件缓存，import 会快很多。
+
+    只做导入、不建 QApplication、不碰任何文档状态 —— 预热进程与导出进程
+    之间没有任何共享状态，不会引入状态污染。
+    """
+    try:
+        # 与 --export-worker 真实路径一致的依赖：Document 会连带
+        # PySide6.QtCore 与 numpy，这两个是启动税的大头。
+        # 用 import 模块而不是 from-import 具体名字：这里只为触发导入，
+        # 不需要绑定符号（from-import 会被 F401 判成未使用导入）。
+        import app.models.document  # noqa: F401
+        import app.models.document_serializer  # noqa: F401
+        import app.utils.optimized_batch_executor  # noqa: F401
+        import app.services.export_service  # noqa: F401
+    except Exception as exc:
+        print(f"warmup failed: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:

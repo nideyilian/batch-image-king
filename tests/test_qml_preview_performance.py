@@ -406,3 +406,61 @@ def test_preview_service_uses_without_layer_renderer_for_text_edit(monkeypatch):
     assert calls[0][0] == "without"
     assert calls[0][2]["active_layer_index"] == 2
     assert calls[0][2]["interactive_low_quality"] is True
+
+
+# ---------------------------------------------------------------- 导出期预览降级
+
+
+@pytest.mark.unit
+def test_export_running_forces_interactive_preview_quality():
+    """导出进行中，预览必须降级为交互质量。
+
+    导出默认会占 75% CPU（N 个线程）。此时再跑一帧全质量预览会让两边都变慢，
+    而用户看的是导出进度条，画质细节到不了眼睛。
+    """
+    workspace = _text_workspace()
+    workspace._document._is_batch_export_running = True
+
+    workspace._pending_preview_quality = "final"
+    workspace._start_preview_render()
+
+    task = workspace._active_render_task
+    assert task is not None, "预览任务没有启动"
+    assert task.interactive_low_quality is True, (
+        "导出进行中仍按全质量渲染，会和导出线程抢 CPU"
+    )
+
+
+@pytest.mark.unit
+def test_export_finish_requests_a_final_quality_frame():
+    """导出结束后必须主动补一帧全质量。
+
+    导出期间 final 帧被跳过、预览被压成交互质量。若不补这一帧，
+    画面会一直停在低清状态 —— 这是降级换来的必要代价。
+    """
+    workspace = _text_workspace()
+    workspace._document._is_batch_export_running = True
+    workspace.setExportRunning(True)
+
+    # 导出结束：文档标志与 VM 状态一起复位
+    workspace._document._is_batch_export_running = False
+    workspace._pending_preview_quality = None
+    workspace.setExportRunning(False)
+
+    assert workspace._pending_preview_quality == "final", (
+        "导出结束后没有排 final 帧，画面会停在低清"
+    )
+
+
+@pytest.mark.unit
+def test_stationary_final_frame_is_skipped_during_export():
+    """导出进行中，静止 220ms 后的全质量帧应被跳过（纯浪费 CPU）。"""
+    workspace = _text_workspace()
+    workspace._document._is_batch_export_running = True
+    workspace._pending_preview_quality = None
+
+    workspace._queue_final_preview()
+
+    assert workspace._pending_preview_quality != "final", (
+        "导出期间仍然排队了全质量帧"
+    )

@@ -158,6 +158,74 @@ def _schedule_font_warmup(delay_ms: int = 1500) -> None:
     QTimer.singleShot(delay_ms, _spawn)
 
 
+def _schedule_export_warmup() -> None:
+    """应用空闲时预热「独立导出进程」的依赖导入。
+
+    背景：用户点「开始导出」后要等约 1.2 秒子进程启动（纯 python 399ms +
+    PySide6 389ms + 业务栈 388ms，2026-11-03 实测）。这段时间界面停在
+    「准备导出」，没有进度变化。
+
+    做法：后台起一个 `--warmup-export` 子进程，它只 import 那套依赖就退出
+    （不常驻、不建 QApplication、不碰任何文档状态）。目的是让 OS 把相关
+    .pyc / .pyd 读进文件缓存，后续真实导出进程的 import 明显更快。
+
+    几个刻意的取舍：
+    - **不常驻**：常驻 worker 会让 `_worker_renderers` 之类的实例级累积状态
+      跨批次残留（已排查到该风险），换来的收益不值。
+    - **延迟 8 秒**：躲开首屏渲染与字体预热，避免和启动抢 CPU / 磁盘。
+    - **失败完全静默**：预热只是优化，失败时真实导出照常走原路径。
+    - **默认关闭**：实测预热后子进程从 1191ms 只降到 ~1100ms（4 次中位 1098ms），
+      因为瓶颈是 Python 模块初始化本身，不是磁盘读不到文件。
+      收益 ~90ms 不值得在每次启动后都白起一个进程，故默认关。
+      需要时 `BTPW_ENABLE_EXPORT_WARMUP=1` 打开（低配机械盘上可能收益更明显）。
+    """
+    if os.environ.get("BTPW_ENABLE_EXPORT_WARMUP", "0") != "1":
+        return
+    if os.environ.get("BTPW_DISABLE_EXPORT_WARMUP", "0") == "1":
+        return
+
+    try:
+        delay_ms = int(os.environ.get("BTPW_EXPORT_WARMUP_DELAY_MS", "8000") or 8000)
+    except (TypeError, ValueError):
+        delay_ms = 8000
+
+    def _spawn() -> None:
+        def _run() -> None:
+            try:
+                import subprocess
+                import sys
+                from pathlib import Path
+
+                if getattr(sys, "frozen", False):
+                    cmd = [sys.executable, "--warmup-export"]
+                    cwd = str(Path(sys.executable).parent)
+                else:
+                    repo_root = Path(__file__).resolve().parents[2]
+                    cmd = [sys.executable, str(repo_root / "main.py"), "--warmup-export"]
+                    cwd = str(repo_root)
+
+                creationflags = 0
+                if os.name == "nt":
+                    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                subprocess.run(
+                    cmd,
+                    cwd=cwd,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=creationflags,
+                    timeout=60,
+                    check=False,
+                )
+            except Exception:
+                logger.debug("导出依赖预热失败，首次导出会走原有的冷启动路径", exc_info=True)
+
+        threading.Thread(target=_run, name="export-warmup", daemon=True).start()
+
+    from PySide6.QtCore import QTimer
+
+    QTimer.singleShot(delay_ms, _spawn)
+
+
 def main(app=None, on_ready=None) -> int:
     """启动 QML 工作台。
 
@@ -367,6 +435,10 @@ def main(app=None, on_ready=None) -> int:
             _schedule_font_warmup()
         except Exception:
             logger.debug("字体预热调度失败", exc_info=True)
+        try:
+            _schedule_export_warmup()
+        except Exception:
+            logger.debug("导出依赖预热调度失败", exc_info=True)
     # 截图/验收模式：固定用参数尺寸，且不读写窗口几何（否则验收图会被上次尺寸顶掉）
     apply_window_geometry(window, args, debug)
     open_debug_overlays(args, window, workspace, workspace_sessions, debug)

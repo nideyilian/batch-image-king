@@ -14,6 +14,12 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--export-worker":
     from app.workers.export_worker import main as export_worker_main
     sys.exit(export_worker_main(sys.argv[2:]))
 
+if len(sys.argv) >= 2 and sys.argv[1] == "--warmup-export":
+    # 导出依赖预热：只做 import 后退出，供主进程在启动后空闲时拉起。
+    # 必须排在 --export-worker 之后、其它业务导入之前，避免自己又走完整启动流程。
+    from app.workers.export_worker import warmup as export_warmup
+    sys.exit(export_warmup())
+
 if len(sys.argv) >= 2 and sys.argv[1] == "--apply-update":
     from app.utils.updater import apply_update, parse_apply_update_args
     new_exe, wait_pid, relaunch = parse_apply_update_args(sys.argv[1:])

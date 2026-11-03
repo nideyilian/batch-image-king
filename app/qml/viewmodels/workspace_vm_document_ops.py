@@ -27,6 +27,25 @@ class WorkspaceDocumentOpsMixin:
         if running != self._export_running:
             self._export_running = running
             self.exportStateChanged.emit()
+            # 导出期间预览被压到「交互质量」，且静止后的全质量帧被跳过
+            # （见 workspace_vm_preview._queue_final_preview）。
+            # 导出结束必须主动补一帧全质量，否则画面会一直停在低清帧上
+            # —— 这是为降级付出的必要代价，不能省。
+            if not running:
+                try:
+                    # 直接进 final 质量。不走 requestPreview()：那条会先设
+                    # interactive 再靠 220ms 定时器等到 final，等于多渲染一帧低清。
+                    self._pending_preview_generation = self._preview_generation
+                    self._pending_preview_quality = "final"
+                    self._preview_token_source.cancel()
+                    if self._render_running:
+                        self._render_pending = True
+                    else:
+                        self._preview_timer.start(0)
+                except Exception:
+                    from app.utils.logger import get_logger
+
+                    get_logger(__name__).debug("导出结束后补渲染失败", exc_info=True)
 
     def _ensure_operations_available(self) -> bool:
         if not self._export_running:

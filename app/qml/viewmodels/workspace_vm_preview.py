@@ -168,6 +168,12 @@ class WorkspacePreviewMixin:
     def _queue_final_preview(self) -> None:
         if not self._auto_render:
             return
+        # 导出进行中不排队「静止后的全质量帧」：
+        # 这一帧是 220ms 无操作后自动触发的，用户此时多半在看导出进度，
+        # 画质细节到不了眼睛，却要和 N 个导出线程抢 CPU。
+        # 导出结束后第一次真实交互会自然产生新请求，画面不会停在低质量上。
+        if bool(getattr(self._document, "_is_batch_export_running", False)):
+            return
         self._pending_preview_generation = self._preview_generation
         self._pending_preview_quality = "final"
         self._preview_token_source.cancel()
@@ -203,6 +209,12 @@ class WorkspacePreviewMixin:
             self._render_pending = True
             return
         quality = self._pending_preview_quality or "interactive"
+        # 导出进行中强制降到交互质量：此时有 N 个导出线程在抢 CPU
+        # （默认 75% 利用率），再跑一帧全质量预览会两头变慢。
+        # 用户此时看的是「导出进度」，画质细节不是重点；
+        # 导出结束后的第一次预览会自然回到全质量。
+        if bool(getattr(self._document, "_is_batch_export_running", False)):
+            quality = "interactive"
         generation = self._pending_preview_generation or self._preview_generation
         self._pending_preview_quality = None
         self._pending_preview_generation = generation
