@@ -24,7 +24,7 @@ psutil>=7.0.0
 cryptography>=41.0.0
 
 # 打包工具
-PyInstaller>=6.14.1
+PyInstaller>=6.22.2
 
 # === 可选依赖（不影响安装与运行，缺失时自动回退）===
 # pyvips：**当前默认不启用编码加速**。
