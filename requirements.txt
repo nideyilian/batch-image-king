@@ -1,6 +1,6 @@
 # 批图王应用程序依赖包
 # 核心GUI框架
-PySide6>=6.9.0
+PySide6>=6.11.2
 
 # 图标：app/qml/icons/*.svg（Lucide，随代码分发），无需第三方图标包
 
