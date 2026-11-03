@@ -17,6 +17,21 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PROBE = REPO_ROOT / "tests" / "helpers" / "preset_card_button_probe.py"
 
 
+def _has_interactive_desktop() -> bool:
+    """判断当前是否有可用桌面会话（能起 windows 平台）。
+
+    CI（GitHub Actions Windows runner）是无头会话，`QT_QPA_PLATFORM=windows`
+    无法创建窗口，探针进程直接非 0 退出——那不是「按钮点不动」，是环境不具备
+    条件。必须跳过，否则 CI 会长期红着，掩盖真正的回归。
+    """
+    if sys.platform != "win32":
+        return False
+    # GitHub Actions 等无头环境会注入 CI=true，此时无法创建真实窗口
+    if os.environ.get("CI", "").lower() in {"true", "1"}:
+        return False
+    return True
+
+
 @pytest.mark.integration
 def test_preset_card_buttons_are_clickable():
     """在真实窗口里点「打开」「批量」「收藏」「更多」，都必须有响应。
@@ -24,6 +39,9 @@ def test_preset_card_buttons_are_clickable():
     用 windows 平台而非 offscreen：offscreen 下 mapToItem 坐标会偏，
     实测偏差 200+ 像素，会得到假失败（踩过一次）。
     """
+    if not _has_interactive_desktop():
+        pytest.skip("无交互桌面会话（如 CI 无头 runner），windows 平台起不来")
+
     env = os.environ.copy()
     env["QT_QPA_PLATFORM"] = "windows"
 
