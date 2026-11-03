@@ -248,6 +248,21 @@ def main(app=None, on_ready=None) -> int:
             output = output.encode(encoding, errors="backslashreplace").decode(encoding)
             print(output, flush=True)
 
+    def _emit(message: str, *, stderr: bool = False) -> None:
+        """输出不因控制台编码而抛异常的文本。
+
+        CI（英文 Windows runner）的控制台是 cp1252，直接 print 中文会抛
+        UnicodeEncodeError。这种打印常出现在**错误处理路径**上（如截图保存失败），
+        一旦它自己崩掉，真正的失败原因就被彻底吞掉，只看到一个莫名的 returncode。
+        """
+        stream = sys.stderr if stderr else sys.stdout
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        try:
+            text = message.encode(encoding, errors="backslashreplace").decode(encoding)
+        except (LookupError, UnicodeError):
+            text = message.encode("ascii", errors="backslashreplace").decode("ascii")
+        print(text, file=stream, flush=True)
+
     if args.screenshot:
         os.environ.setdefault("QT_QUICK_BACKEND", "software")
         windows_dir = Path(os.environ.get("WINDIR", r"C:\Windows"))
@@ -455,10 +470,10 @@ def main(app=None, on_ready=None) -> int:
                     image = window.grabWindow()
                     saved = not image.isNull() and image.save(str(output_path), "PNG")
                     if saved:
-                        print(f"截图已保存：{output_path}")
+                        _emit(f"截图已保存：{output_path}")
                         app.exit(0)
                     else:
-                        print(f"截图保存失败：{output_path}", file=sys.stderr)
+                        _emit(f"截图保存失败：{output_path}", stderr=True)
                         app.exit(3)
                     return
                 # 工作台是 captureRoot 的兄弟节点（浮层），grabToImage 抓不到它。
@@ -467,10 +482,10 @@ def main(app=None, on_ready=None) -> int:
                     image = window.grabWindow()
                     saved = not image.isNull() and image.save(str(output_path), "PNG")
                     if saved:
-                        print(f"截图已保存：{output_path}")
+                        _emit(f"截图已保存：{output_path}")
                         app.exit(0)
                     else:
-                        print(f"截图保存失败：{output_path}", file=sys.stderr)
+                        _emit(f"截图保存失败：{output_path}", stderr=True)
                         app.exit(3)
                     return
 
@@ -485,15 +500,15 @@ def main(app=None, on_ready=None) -> int:
                     image = grab_result.image()
                     saved = not image.isNull() and image.save(str(output_path), "PNG")
                     if saved:
-                        print(f"截图已保存：{output_path}")
+                        _emit(f"截图已保存：{output_path}")
                         app.exit(0)
                     else:
-                        print(f"截图保存失败：{output_path}", file=sys.stderr)
+                        _emit(f"截图保存失败：{output_path}", stderr=True)
                         app.exit(3)
 
                 grab_result.ready.connect(save_capture)
             except Exception as error:
-                print(f"截图保存失败：{error}", file=sys.stderr)
+                _emit(f"截图保存失败：{error}", stderr=True)
                 app.exit(3)
 
         QTimer.singleShot(1800, capture)

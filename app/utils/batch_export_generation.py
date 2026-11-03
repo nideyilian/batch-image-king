@@ -472,7 +472,9 @@ class BatchExportGenerationMixin:
                             pool = self.layer_image_pools.get(doc_layer_idx, [])
                             candidates = [p for p in pool if p not in used]
                             if candidates:
-                                import random
+                                # 不要在此写 `import random`：模块顶部已导入，
+                                # 函数内出现该语句会把 random 变成整个函数的局部变量，
+                                # 导致第 542 行（之前）`random.Random(...)` 抛 UnboundLocalError。
                                 layer_states[doc_layer_idx] = random.choice(candidates)
                             else:
                                 # 无可用文件，跳过本次生成尝试
