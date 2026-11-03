@@ -12,6 +12,13 @@ from build_excludes import EXCLUDES, _strip_binaries, dedupe
 BUILD_MODE = os.environ.get("BTK_BUILD_MODE", "onedir")
 ONEFILE = BUILD_MODE == "onefile"
 
+# 版本信息资源：优先用 build.py 按 app/version.py 实时生成的那份。
+# 历史问题：这里原先写死 version='version_info.txt'（仓库内提交的旧文件，
+# 版本号恒为 1.0.0.0），而 build.py 生成的是 build/version_info_generated.txt，
+# 两者从未接上 —— 导致打出来的 exe 属性里永远是 1.0.0.0。
+_generated = os.path.join('build', 'version_info_generated.txt')
+VERSION_FILE = _generated if os.path.exists(_generated) else 'version_info.txt'
+
 
 a = Analysis(
     ['main.py'],
@@ -79,7 +86,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version='version_info.txt',
+    version=VERSION_FILE,
     icon=['app\\resources\\app_icon.ico'],
     exclude_binaries=not ONEFILE,
 )
