@@ -19,6 +19,21 @@ try:
     _INTERACTIVE_PREVIEW_MAX_EDGE = max(480, int(os.environ.get("BTPW_INTERACTIVE_PREVIEW_MAX_EDGE", "1200")))
 except Exception:
     _INTERACTIVE_PREVIEW_MAX_EDGE = 1200
+# 交互帧降采样的最小收益门槛。
+#
+# 降采样省的是「合成面积」，代价是「每层一次重采样」。设图层数为 N、
+# 比例为 r，则合成耗时 ∝ r²，重采样耗时 ∝ N 且与 r 基本无关。
+# 实测 8 层、1080×1350、r=0.889：不降采样 29.5ms（合成占比高但面积小），
+# 降采样 402.7ms（用 float 预乘时）；换成 PIL 快速重采样后两者都是 ~30ms。
+#
+# 也就是说 r 不够小时，「省下的合成」根本抵不掉「多付的那次重采样」。
+# 取 0.75：到这个比例才真正省下 44% 的合成面积，才值得为每层多付一次 resize。
+# 0.75~1.0 之间直接返回 1.0（不降采样），此时画面还是全分辨率，
+# 顺带消除了「交互帧 960×1200 ↔ final 帧 1080×1350」的纹理尺寸跳变（闪烁来源之一）。
+try:
+    _INTERACTIVE_PREVIEW_MIN_GAIN = float(os.environ.get("BTPW_INTERACTIVE_PREVIEW_MIN_GAIN", "0.75"))
+except Exception:
+    _INTERACTIVE_PREVIEW_MIN_GAIN = 0.75
 # 内孔检测算法版本号：用于缓存键，避免算法升级后命中旧检测结果
 _SIZE_MATCH_HOLE_DETECT_VER = "v10"
 # 自动倾斜最小触发角（度）：小于该值视为不倾斜，减少误判抖动
@@ -191,33 +206,37 @@ class FastRendererPreview(object):
                     cancel_token=cancel_token,
                 )
 
-            composition = base.copy()
-            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
-                return None
-            if interactive_low_quality:
-                layer_image = self._get_layer_surface_interactive_cached(
-                    active_layer,
-                    document,
-                    was_just_loaded=False
-                )
-            else:
-                layer_image = self.get_layer_surface_cached(active_layer, document, was_just_loaded=False)
-            if layer_image is None:
-                return composition
-            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
-                return None
-
             render_scale = self._get_interactive_render_scale(document, True, interactive_low_quality)
             opacity = getattr(active_layer, 'opacity', 1.0)
             blend_mode = self._get_layer_blend_mode(active_layer)
             positions_info, mirror_mode = self._get_layer_positions_info_cached(active_layer, document)
 
+            # 活动层 surface：交互低质走专用缓存（只含几何/变换），否则走通用 surface 缓存。
+            # copy_result=False —— 下面只做 resize/paste，不改写这张图。
+            if interactive_low_quality:
+                layer_image = self._get_layer_surface_interactive_cached(
+                    active_layer, document, was_just_loaded=False
+                )
+            else:
+                layer_image = self.get_layer_surface_cached(
+                    active_layer, document, was_just_loaded=False, copy_result=False
+                )
+            if layer_image is None:
+                # 图层没有可用位图（空图层/加载失败）：退化成只有底图
+                return base.copy()
+            if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+                return None
+
             from PIL import ImageOps
             mirrored_h = ImageOps.mirror(layer_image) if mirror_mode == 'horizontal' else None
             mirrored_v = ImageOps.flip(layer_image) if mirror_mode == 'vertical' else None
+
+            # 脏矩形：拖动只影响活动层的新旧两个矩形，其余像素与 base 完全一致。
+            # 先算出本帧活动层要落到的所有目标矩形，再决定走「局部重合成」还是
+            # 「整画布拷贝」——后者只在区域太大、或混合模式不允许局部裁切时使用。
+            target_rects = []
+            scaled_cache = []
             for pos_x, pos_y, is_mirror in positions_info:
-                if cancel_token is not None and getattr(cancel_token, "cancelled", False):
-                    return None
                 if is_mirror and mirror_mode == 'horizontal':
                     img_for_pos = mirrored_h if mirrored_h is not None else layer_image
                 elif is_mirror and mirror_mode == 'vertical':
@@ -226,7 +245,39 @@ class FastRendererPreview(object):
                     img_for_pos = layer_image
                 draw_x = int(round((int(pos_x) + int(getattr(active_layer, '_render_offset_x', 0))) * render_scale))
                 draw_y = int(round((int(pos_y) + int(getattr(active_layer, '_render_offset_y', 0))) * render_scale))
-                img_for_pos = self._scale_layer_for_interactive_preview(img_for_pos, render_scale)
+                img_for_pos = self._scale_layer_for_interactive_preview(
+                    img_for_pos, render_scale,
+                    cache_key_part=(self._build_layer_surface_key(active_layer, document, False), is_mirror),
+                )
+                if img_for_pos is None:
+                    continue
+                target_rects.append((draw_x, draw_y, img_for_pos))
+                scaled_cache.append(img_for_pos)
+
+            if not target_rects:
+                return base.copy()
+
+            dirty = self._dirty_region_for_layer(active_layer, document, target_rects, render_scale)
+            # 只有 normal 混合能安全做局部重合成：overlay/soft-light 等依赖
+            # 上下文，局部裁切会改变结果，这类必须走整画布路径。
+            can_patch = dirty is not None and blend_mode == 'normal'
+            if can_patch:
+                composition = self._compose_in_dirty_region(
+                    base=base,
+                    dirty=dirty,
+                    target_rects=target_rects,
+                    opacity=opacity,
+                    interactive_low_quality=interactive_low_quality,
+                    active_layer_index=active_layer_index,
+                )
+                if composition is not None:
+                    return composition
+
+            # 回退：整画布拷贝 + 逐矩形合成（原路径）
+            composition = base.copy()
+            for draw_x, draw_y, img_for_pos in target_rects:
+                if cancel_token is not None and getattr(cancel_token, "cancelled", False):
+                    return None
                 composition = self._fast_composite(
                     composition,
                     img_for_pos,
@@ -246,6 +297,114 @@ class FastRendererPreview(object):
                 interactive_low_quality=interactive_low_quality,
                 cancel_token=cancel_token,
             )
+
+    # ---------------------------------------------------------------- 脏矩形
+
+    def _dirty_region_for_layer(self, layer, document, target_rects, render_scale):
+        """返回本帧需要重合成的像素矩形 (x0, y0, x1, y1)，含活动层新旧位置并集。
+
+        为什么取**新旧并集**：拖动时旧位置会露出下层，只重算新位置会留残影。
+
+        为什么必须加**效果外扩**：描边、阴影、外发光都会画到图层 bbox 之外，
+        外扩量不够同样会留边。
+        """
+        try:
+            rects = []
+            for draw_x, draw_y, img in target_rects:
+                rects.append((draw_x, draw_y, draw_x + img.width, draw_y + img.height))
+
+            prev = getattr(self, '_dirty_prev_rects', None)
+            prev_key = getattr(self, '_dirty_prev_key', None)
+            cur_key = (id(document), id(layer))
+            if prev and prev_key == cur_key:
+                rects.extend(prev)
+
+            if not rects:
+                return None
+
+            outset = self._layer_effects_outset_px(layer, render_scale)
+            x0 = min(r[0] for r in rects) - outset
+            y0 = min(r[1] for r in rects) - outset
+            x1 = max(r[2] for r in rects) + outset
+            y1 = max(r[3] for r in rects) + outset
+
+            # 记录本帧矩形，供下一帧做并集
+            self._dirty_prev_rects = [
+                (draw_x, draw_y, draw_x + img.width, draw_y + img.height)
+                for draw_x, draw_y, img in target_rects
+            ]
+            self._dirty_prev_key = cur_key
+
+            # 裁到画布范围内
+            canvas_w, canvas_h = int(document.canvas_width * render_scale), int(document.canvas_height * render_scale)
+            x0 = max(0, int(x0)); y0 = max(0, int(y0))
+            x1 = min(canvas_w, int(x1)); y1 = min(canvas_h, int(y1))
+            if x1 <= x0 or y1 <= y0:
+                return None
+            return (x0, y0, x1, y1)
+        except Exception:
+            logger.warning("脏矩形计算失败，回退全量合成", exc_info=True)
+            return None
+
+    @staticmethod
+    def _layer_effects_outset_px(layer, render_scale: float) -> int:
+        """图层效果画到 bbox 之外的距离（像素，已按 render_scale 缩放）。
+
+        覆盖当前支持的会外扩的效果：描边、阴影（偏移+模糊）、外发光。
+        宁可多算几个像素（多重合成的面积很小），也不能漏 —— 漏了就是残影。
+        """
+        try:
+            outset = 0.0
+            if bool(getattr(layer, 'stroke_enabled', False)):
+                outset = max(outset, float(getattr(layer, 'stroke_width', 0) or 0))
+            if bool(getattr(layer, 'shadow_enabled', False)):
+                blur = float(getattr(layer, 'shadow_blur', 0) or 0)
+                off = max(
+                    abs(float(getattr(layer, 'shadow_offset_x', 0) or 0)),
+                    abs(float(getattr(layer, 'shadow_offset_y', 0) or 0)),
+                )
+                outset = max(outset, blur * 2.0 + off)
+            if bool(getattr(layer, 'glow_enabled', False)):
+                outset = max(outset, float(getattr(layer, 'glow_radius', 0) or 0) * 2.0)
+            return int(round(outset * float(render_scale))) + 2
+        except Exception:
+            # 算不出来就当作「有外扩」，用保守值，避免出残影
+            return 16
+
+    def _compose_in_dirty_region(self, *, base, dirty, target_rects, opacity,
+                                 interactive_low_quality, active_layer_index):
+        """只重合成 dirty 矩形内的像素，返回整张画布；无法安全处理时返回 None。
+
+        关键点：**不能只把活动层贴上去**。活动层移动后，它下方原本被遮住的
+        图层要在脏区内重新露出来，只贴活动层会得到「旧内容 + 新图层」的错误叠加。
+
+        正确做法：脏区内 = 「base 中该区域**位于活动层之下**的合成结果」
+        + 「活动层按新位置叠加」。
+
+        而 base 本身是「**去掉活动层**后的静态底图」（见 _get_or_build_interaction_base），
+        所以 base 的脏区内容天然就是「活动层之下」的正确结果 —— 直接在它上面
+        叠加活动层即可，既正确又只需处理一个小矩形。
+        """
+        x0, y0, x1, y1 = dirty
+        try:
+            region = base.crop(dirty)
+            for draw_x, draw_y, img in target_rects:
+                region = self._fast_composite(
+                    region,
+                    img,
+                    draw_x - x0,
+                    draw_y - y0,
+                    opacity,
+                    preview_mode=True,
+                    blend_mode='normal',
+                    low_quality_preview=interactive_low_quality,
+                )
+            result = base.copy()
+            result.paste(region, (x0, y0))
+            return result
+        except Exception:
+            logger.warning("脏区重合成立失败，回退全量", exc_info=True)
+            return None
 
     @_serialized_preview
     def render_preview_without_layer(
@@ -461,10 +620,21 @@ class FastRendererPreview(object):
                 positions_info = [(target_x, target_y, False)]
                 mirror_mode = 'none'
             else:
-                layer_image = self.get_layer_surface_cached(layer, document, was_just_loaded)
+                # copy_result=False：交互预览只读这张 surface（resize/paste），
+                # 不改写它。省掉每层一次整图拷贝（2000x2500 是 15MB），
+                # 并让下游降采样缓存能按内容键稳定命中。
+                layer_image = self.get_layer_surface_cached(
+                    layer, document, was_just_loaded, copy_result=False
+                )
                 if layer_image is None:
                     continue
                 positions_info, mirror_mode = self._get_layer_positions_info_cached(layer, document)
+
+            # 降采样缓存的键：用 surface 的内容键，不用 id()。
+            # id() 会随缓存驱逐/重建而漂移（同一图层重新生成的 surface 拿到新 id），
+            # 导致旧条目变成孤儿、条目数无限增长。content key 由图层属性决定，
+            # 驱逐后重建也能命中同一 key。
+            scaled_cache_key = self._build_layer_surface_key(layer, document, was_just_loaded)
             from PIL import ImageOps
             mirrored_h = ImageOps.mirror(layer_image) if mirror_mode == 'horizontal' else None
             mirrored_v = ImageOps.flip(layer_image) if mirror_mode == 'vertical' else None
@@ -477,7 +647,9 @@ class FastRendererPreview(object):
                     img_for_pos = layer_image
                 draw_x = int(round((int(pos_x) + int(getattr(layer, '_render_offset_x', 0))) * render_scale))
                 draw_y = int(round((int(pos_y) + int(getattr(layer, '_render_offset_y', 0))) * render_scale))
-                img_for_pos = self._scale_layer_for_interactive_preview(img_for_pos, render_scale)
+                img_for_pos = self._scale_layer_for_interactive_preview(
+                    img_for_pos, render_scale, cache_key_part=(scaled_cache_key, is_mirror)
+                )
                 composition = self._fast_composite(
                     composition,
                     img_for_pos,
@@ -492,28 +664,95 @@ class FastRendererPreview(object):
         return composition
 
     def _get_interactive_render_scale(self, document, preview_mode: bool, low_quality_preview: bool) -> float:
-        """Return a temporary downsample ratio for interactive preview only."""
+        """Return a temporary downsample ratio for interactive preview only.
+
+        只有「真能省下来」的降采样才做。实测（`docs/audit/_probe_bleed.py`、
+        `_bench_drag_frames.py`）：降采样要付出**每层一次重采样**的代价，
+        而画布合成开销只按面积线性降。降到 89% 时省下的合成时间
+        （约 3ms/帧）远小于重采样代价（8 层 × 4.3ms ≈ 34ms，用 float 预乘时 345ms），
+        整体反而比不降采样更慢 —— 这就是「拖得比松手后还慢」的原因。
+
+        所以低于 ``_INTERACTIVE_PREVIEW_MIN_GAIN`` 的比例直接按 1.0 处理：
+        宁可多合成一点面积，也不要每层多一次重采样。
+        """
         if not (preview_mode and low_quality_preview):
             return 1.0
         max_edge = max(int(getattr(document, "canvas_width", 1) or 1), int(getattr(document, "canvas_height", 1) or 1))
         if max_edge <= _INTERACTIVE_PREVIEW_MAX_EDGE:
             return 1.0
-        return max(0.20, min(1.0, _INTERACTIVE_PREVIEW_MAX_EDGE / float(max_edge)))
+        ratio = max(0.20, min(1.0, _INTERACTIVE_PREVIEW_MAX_EDGE / float(max_edge)))
+        if ratio >= _INTERACTIVE_PREVIEW_MIN_GAIN:
+            return 1.0
+        return ratio
 
-    def _scale_layer_for_interactive_preview(self, image: Image.Image, render_scale: float) -> Image.Image:
-        """Downsample a layer surface for low-cost interaction frames."""
+    def _scale_layer_for_interactive_preview(self, image: Image.Image, render_scale: float,
+                                             cache_key_part=None) -> Image.Image:
+        """Downsample a layer surface for low-cost interaction frames.
+
+        这里**不能用** ``rgba_resampler.resize_rgba_premultiplied``：
+        它为了消除透明区的 RGB 渗色，把 RGBA 拆成 4 个 float32 通道分别重采样
+        再相除还原，精度高但慢一个数量级（实测 760×560 单层 43.3ms）。
+        那条路径属于导出/缩略图这类「只做一次」的场景，交互帧套用它是选错了工具。
+
+        交互帧改用 PIL 单次 BILINEAR：同尺寸 4.3ms（10 倍快）。
+        精度代价实测（`docs/audit/_probe_bleed.py`，素材透明区刻意填纯黑）：
+        缩到 0.3 时实心区平均色差 0.7/255，0.5 及以下为 0.0/255 —— 肉眼不可见，
+        而且下一帧 final 就会用全质量重算，误差不会留在成图上。
+        """
         if image is None or render_scale >= 0.999:
             return image
+        target_size = (
+            max(1, int(round(image.width * render_scale))),
+            max(1, int(round(image.height * render_scale))),
+        )
+        if target_size == image.size:
+            return image
+
+        # 降采样结果按 (内容键, 尺寸) 缓存：同一图层 surface 的内容和缩放比例
+        # 在多帧之间通常不变，而 resize+convert 实测占 4000x5000 单帧的 76%。
+        # key 必须用**内容键**而不是 id(image)：surface 缓存驱逐后重建会拿到
+        # 新对象，id 变化会让旧条目变孤儿、条目数无限增长（实测 8→16→24…）。
+        if cache_key_part is None:
+            cache_key = ("obj", id(image), target_size)
+        else:
+            cache_key = (cache_key_part, target_size)
+        scale_token = float(render_scale)
         try:
-            target_size = (
-                max(1, int(round(image.width * render_scale))),
-                max(1, int(round(image.height * render_scale))),
-            )
-            if target_size == image.size:
-                return image
-            if image.mode == 'RGBA':
-                from app.utils.rgba_resampler import resize_rgba_premultiplied
-                return resize_rgba_premultiplied(image, target_size, Image.Resampling.BILINEAR)
-            return image.resize(target_size, Image.Resampling.BILINEAR)
+            with self._interactive_scaled_lock:
+                if self._interactive_scaled_render_scale != scale_token:
+                    # 缩放比例变了 → 整批失效，避免不同 scale 的结果互相污染
+                    for value in list(self._interactive_scaled_cache.values()):
+                        self._close_cached_value(value)
+                    self._interactive_scaled_cache.clear()
+                    self._interactive_scaled_entry_bytes.clear()
+                    self._interactive_scaled_bytes = 0
+                    self._interactive_scaled_render_scale = scale_token
+                else:
+                    entry = self._interactive_scaled_cache.get(cache_key)
+                    if entry is not None:
+                        self._interactive_scaled_cache.move_to_end(cache_key)
+                        cached = entry.get("image")
+                        if cached is not None:
+                            return cached.copy()
+        except Exception:
+            logger.warning("交互缩放缓存查询失败，回退直接重采样", exc_info=True)
+
+        try:
+            scaled = image.resize(target_size, Image.Resampling.BILINEAR)
         except Exception:
             return image
+
+        try:
+            with self._interactive_scaled_lock:
+                self._set_cache_value_unlocked(
+                    self._interactive_scaled_cache,
+                    self._interactive_scaled_entry_bytes,
+                    "_interactive_scaled_bytes",
+                    cache_key,
+                    {"image": scaled.copy()},
+                    self._max_interactive_scaled_entries,
+                    self._max_interactive_scaled_bytes,
+                )
+        except Exception:
+            logger.warning("交互缩放缓存写入失败", exc_info=True)
+        return scaled

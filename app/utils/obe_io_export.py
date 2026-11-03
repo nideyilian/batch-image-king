@@ -428,16 +428,19 @@ class OptimizedBatchExecutorIoExport(object):
         shaped_layer_count = sum(1 for layer in self.document.layers if layer.visible and hasattr(layer, '_shape_type'))
 
         # 基础规则：根据画布大小和图层数量调整（更积极的并发上限）
+        # 档位上限从 4/6 提到 5/8：真实管线 4 线程实测 1.72× 加速，
+        # 8 线程受 GIL 与内存带宽限制边际递减，但仍有正收益。
+        # 最终值仍由 _apply_worker_hard_cap（默认 0.75 利用率）收紧。
         if canvas_size > 4000000 or layer_count > 10:  # 大图或复杂项目
             if has_shaped_layers:
                 optimal_workers = min(3, max(1, cpu_count // 2))
             else:
-                optimal_workers = min(4, max(1, cpu_count // 2))
+                optimal_workers = min(5, max(1, cpu_count // 2))
         elif canvas_size > 1000000 or layer_count > 5:  # 中等大小
             if has_shaped_layers:
                 optimal_workers = min(4, max(1, cpu_count // 2 + 1))
             else:
-                optimal_workers = min(cpu_count, 6)
+                optimal_workers = min(cpu_count, 8)
         else:  # 小项目
             if has_shaped_layers:
                 optimal_workers = min(5, cpu_count)

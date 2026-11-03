@@ -265,23 +265,32 @@ class OptimizedBatchExecutorMemoryGuard(object):
             return max(1, int(current_limit))
 
     def _apply_worker_hard_cap(self, workers: int, cpu_count: Optional[int] = None) -> int:
-        """对并发数应用硬上限，保证 UI 和系统可响应。"""
+        """对并发数应用硬上限，保证 UI 和系统可响应。
+
+        利用率上限默认 0.75（可用 BTPW_BATCH_CPU_CAP 覆盖）：导出是用户主动
+        发起的批处理，不像预览那样必须给 UI 留 60% 余量。若导出与编辑并发，
+        调用方应把 _cpu_utilization_cap 显式压回 0.6。
+
+        实测参考（24 张 8 层 PNG，真实导出管线）：串行 5.51s → 4 线程 3.19s
+        = 1.72×。注意这不是纯 PIL resize 的 6.22× —— Python 层占 35% 受 GIL
+        串行，并发收益按 1.7× 量级预期，不要按线性核数外推。
+        """
         try:
             cores = int(cpu_count or (os_module.cpu_count() or 4))
+            default_cap = 0.75
+            try:
+                env_cap = os_module.environ.get("BTPW_BATCH_CPU_CAP", "").strip()
+                if env_cap:
+                    default_cap = max(0.10, min(1.0, float(env_cap)))
+            except (TypeError, ValueError):
+                pass
+            util_cap = float(getattr(self, '_cpu_utilization_cap', default_cap))
             cap_by_reserve = max(1, cores - int(getattr(self, '_reserve_cpu_cores', 1)))
-            cap_by_util = max(1, int(math.floor(float(cores) * float(getattr(self, '_cpu_utilization_cap', 0.60)))))
+            cap_by_util = max(1, int(math.floor(float(cores) * util_cap)))
             hard_cap = max(1, min(cap_by_reserve, cap_by_util))
             return max(1, min(int(workers), hard_cap))
         except Exception:
             return max(1, int(workers))
-        if not self._export_trace_file:
-            return
-        try:
-            with open(self._export_trace_file, 'a', encoding='utf-8') as f:
-                f.write(line + "\n")
-        except Exception:
-            logger.warning("静默异常已忽略: except in utils/obe_memory_guard.py", exc_info=True)
-            pass
 
     def _optimize_memory_usage(self):
         """优化内存使用 - 清理各种缓存"""

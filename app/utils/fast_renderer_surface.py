@@ -248,14 +248,19 @@ class FastRendererSurface(object):
                 layer_image = self._resize_cover_from_content(layer_image, target_w, target_h)
         if layer_image is not None:
             with self._size_override_surface_lock:
-                self._size_override_surface_cache[override_cache_key] = {
-                    "image": layer_image.copy(),
-                    "offset_x": int(getattr(layer, "_render_offset_x", 0)),
-                    "offset_y": int(getattr(layer, "_render_offset_y", 0)),
-                }
-                self._size_override_surface_cache.move_to_end(override_cache_key)
-                while len(self._size_override_surface_cache) > self._max_size_override_surface_entries:
-                    self._size_override_surface_cache.popitem(last=False)
+                self._set_cache_value_unlocked(
+                    self._size_override_surface_cache,
+                    self._size_override_surface_entry_bytes,
+                    "_size_override_surface_bytes",
+                    override_cache_key,
+                    {
+                        "image": layer_image.copy(),
+                        "offset_x": int(getattr(layer, "_render_offset_x", 0)),
+                        "offset_y": int(getattr(layer, "_render_offset_y", 0)),
+                    },
+                    self._max_size_override_surface_entries,
+                    self._max_size_override_surface_bytes,
+                )
         return layer_image
 
     def _resize_cover_keep_ratio(self, image: Image.Image, target_w: int, target_h: int) -> Image.Image:
@@ -1459,10 +1464,15 @@ class FastRendererSurface(object):
                 return cached.copy()
         masked = self.apply_auto_mask(source_image, relation)
         with self._size_match_auto_mask_lock:
-            self._size_match_auto_mask_cache[mask_key] = masked.copy()
-            self._size_match_auto_mask_cache.move_to_end(mask_key)
-            while len(self._size_match_auto_mask_cache) > self._max_size_match_auto_mask_entries:
-                self._size_match_auto_mask_cache.popitem(last=False)
+            self._set_cache_value_unlocked(
+                self._size_match_auto_mask_cache,
+                self._size_match_auto_mask_entry_bytes,
+                "_size_match_auto_mask_bytes",
+                mask_key,
+                masked.copy(),
+                self._max_size_match_auto_mask_entries,
+                self._max_size_match_auto_mask_bytes,
+            )
         return masked
 
     def apply_auto_mask(self, image: Image.Image, relation) -> Image.Image:
@@ -1817,8 +1827,15 @@ class FastRendererSurface(object):
             f"glow:{int(bool(getattr(layer, 'glow_enabled', False)))}:{getattr(layer, 'glow_strength', '')}:{getattr(layer, 'glow_radius', '')}:{getattr(layer, 'glow_color', '')}",
         ])
 
-    def get_layer_surface_cached(self, layer, document, was_just_loaded: bool = False) -> Optional[Image.Image]:
-        """获取图层surface缓存；未命中时重新生成并缓存"""
+    def get_layer_surface_cached(self, layer, document, was_just_loaded: bool = False,
+                                 copy_result: bool = True) -> Optional[Image.Image]:
+        """获取图层surface缓存；未命中时重新生成并缓存
+
+        copy_result=False 时直接返回缓存内的 PIL 对象（不拷贝）。
+        仅供**只读**消费方使用：交互预览里 surface 只被 resize/paste 读取，
+        不会被修改。省掉每层一次整图拷贝（2000x2500 是 15MB），
+        同时让调用方可按 ``id(surface)`` 做下游缓存键（对象身份稳定）。
+        """
         cache_key = self._build_layer_surface_key(layer, document, was_just_loaded)
         is_batch_session = bool(getattr(document, '_is_batch_export_running', False))
         entry_key = f"{id(document)}:{id(layer)}"
@@ -1834,7 +1851,7 @@ class FastRendererSurface(object):
                         setattr(layer, "_render_offset_x", int(export_entry.get("offset_x", 0)))
                         setattr(layer, "_render_offset_y", int(export_entry.get("offset_y", 0)))
                         self._inc_batch_metric("export_layer_cache_hits")
-                        return export_image.copy()
+                        return export_image if not copy_result else export_image.copy()
             self._inc_batch_metric("export_layer_cache_misses")
 
         with self._layer_surface_lock:
@@ -1847,7 +1864,7 @@ class FastRendererSurface(object):
                     setattr(layer, "_render_offset_y", int(entry.get("offset_y", 0)))
                     if is_batch_session:
                         self._inc_batch_metric("layer_surface_cache_hits")
-                    return image.copy()
+                    return image if not copy_result else image.copy()
         if is_batch_session:
             self._inc_batch_metric("layer_surface_cache_misses")
 
@@ -2135,13 +2152,18 @@ class FastRendererSurface(object):
             return None
 
         with self._interactive_layer_surface_lock:
-            self._interactive_layer_surface_cache[entry_key] = {
-                "cache_key": cache_key,
-                "image": surface.copy()
-            }
-            self._interactive_layer_surface_cache.move_to_end(entry_key)
-            while len(self._interactive_layer_surface_cache) > self._max_interactive_layer_surface_entries:
-                self._interactive_layer_surface_cache.popitem(last=False)
+            self._set_cache_value_unlocked(
+                self._interactive_layer_surface_cache,
+                self._interactive_layer_surface_entry_bytes,
+                "_interactive_layer_surface_bytes",
+                entry_key,
+                {
+                    "cache_key": cache_key,
+                    "image": surface.copy()
+                },
+                self._max_interactive_layer_surface_entries,
+                self._max_interactive_layer_surface_bytes,
+            )
 
         return surface
 
@@ -2234,13 +2256,18 @@ class FastRendererSurface(object):
             return None
 
         with self._interactive_base_lock:
-            self._interactive_base_cache[entry_key] = {
-                "cache_key": cache_key,
-                "image": image.copy()
-            }
-            self._interactive_base_cache.move_to_end(entry_key)
-            while len(self._interactive_base_cache) > self._max_interactive_base_entries:
-                self._interactive_base_cache.popitem(last=False)
+            self._set_cache_value_unlocked(
+                self._interactive_base_cache,
+                self._interactive_base_entry_bytes,
+                "_interactive_base_bytes",
+                entry_key,
+                {
+                    "cache_key": cache_key,
+                    "image": image.copy()
+                },
+                self._max_interactive_base_entries,
+                self._max_interactive_base_bytes,
+            )
         return image
 
     def _invalidate_layer_surfaces_for_document(self, document):

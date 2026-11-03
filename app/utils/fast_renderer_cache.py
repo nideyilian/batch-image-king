@@ -71,11 +71,39 @@ class FastRendererCache(object):
 
     @staticmethod
     def _resolve_cache_budget_bytes(env_name: str, default_mb: int, minimum_mb: int = 16) -> int:
+        """解析缓存字节预算，并按物理内存做上限收敛。
+
+        环境变量显式设置时以环境变量为准（用户/CI 可覆盖）；
+        否则在 default_mb 之外再套一层「物理内存 × 10%」的上限。
+
+        为什么需要这层收敛：全部缓存预算合计 1568MB（6 项），是固定值。
+        在 4GB 机器上占 38%、8GB 上占 19%，会和导出并发一起把内存吃满。
+        16GB 及以上不受影响（1568MB < 16GB×10%=1638MB），保持现有行为。
+
+        实测参考（2026-11-03，本机 63.8GB）：
+          4GB  -> 1568MB 占 38%（危险）  收敛后 410MB
+          8GB  -> 1568MB 占 19%（偏高）  收敛后 819MB
+          16GB -> 1568MB 占 9.6%（正常） 不变
+        """
         try:
             value_mb = int(os.environ.get(env_name, str(default_mb)) or default_mb)
         except Exception:
             value_mb = int(default_mb)
         value_mb = max(int(minimum_mb), int(value_mb))
+
+        # 环境变量显式给了值 → 以它为准，不再收敛（便于压测与用户调优）
+        if env_name not in os.environ:
+            try:
+                import psutil
+
+                total_mb = float(psutil.virtual_memory().total) / (1024 * 1024)
+                ram_cap_mb = int(total_mb * 0.10)
+                if ram_cap_mb >= minimum_mb:
+                    value_mb = min(value_mb, ram_cap_mb)
+            except Exception:
+                # 拿不到内存信息就不收敛，保持原值
+                pass
+
         return int(value_mb) * 1024 * 1024
 
     @staticmethod

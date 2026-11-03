@@ -269,10 +269,35 @@ class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, 
         self._interactive_base_cache = OrderedDict()
         self._interactive_base_lock = threading.RLock()
         self._max_interactive_base_entries = 16
+        # 条数上限管不住内存（4000x5000 单帧 76MB × 16 = 1.2GB），补字节预算。
+        # 实测：4000x5000/12 层连续 20 次预览，RSS 从 72MB 涨到 1087MB。
+        self._interactive_base_bytes = 0
+        self._interactive_base_entry_bytes = {}
+        self._max_interactive_base_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_INTERACTIVE_BASE_MB", 192, minimum_mb=48
+        )
         # 交互增量预览活动图层缓存（仅几何/变换，不含复杂特效）
         self._interactive_layer_surface_cache = OrderedDict()
         self._interactive_layer_surface_lock = threading.RLock()
         self._max_interactive_layer_surface_entries = 64
+        self._interactive_layer_surface_bytes = 0
+        self._interactive_layer_surface_entry_bytes = {}
+        self._max_interactive_layer_surface_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_INTERACTIVE_LAYER_MB", 128, minimum_mb=32
+        )
+        # 交互帧降采样结果缓存：key 含 render_scale，scale 一变整体作废。
+        # 4000x5000 画布 render_scale=0.24 时，2000x2500 的 surface 每帧都要
+        # resize 一次（实测 resize+convert 占单帧 76%），而同一图层的内容和
+        # 缩放比例在多帧之间通常不变，缓存后可直接复用。
+        self._interactive_scaled_cache = OrderedDict()
+        self._interactive_scaled_lock = threading.RLock()
+        self._max_interactive_scaled_entries = 48
+        self._interactive_scaled_bytes = 0
+        self._interactive_scaled_entry_bytes = {}
+        self._max_interactive_scaled_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_INTERACTIVE_SCALED_MB", 160, minimum_mb=32
+        )
+        self._interactive_scaled_render_scale = None
         # 大小匹配相关缓存：内孔检测缓存 + 指定尺寸surface缓存
         self._size_match_holes_cache = OrderedDict()
         self._size_match_holes_lock = threading.RLock()
@@ -281,9 +306,24 @@ class FastRenderer(FastRendererCache, FastRendererPreview, FastRendererSurface, 
         self._size_match_auto_mask_cache = OrderedDict()
         self._size_match_auto_mask_lock = threading.RLock()
         self._max_size_match_auto_mask_entries = 96
+        # 这一项存的是**完整的 PIL 图像**（masked.copy()），不是元数据。
+        # 96 条无预算时：2000x2500 素材最坏 1831MB、4000x5000 最坏 7324MB。
+        # 之前只按条数淘汰，是本次审计里最后发现的一处真漏洞，补字节预算。
+        self._size_match_auto_mask_bytes = 0
+        self._size_match_auto_mask_entry_bytes = {}
+        self._max_size_match_auto_mask_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_AUTO_MASK_MB", 192, minimum_mb=32
+        )
         self._size_override_surface_cache = OrderedDict()
         self._size_override_surface_lock = threading.RLock()
         self._max_size_override_surface_entries = 192
+        # 尺寸匹配后的是「按目标尺寸缩放好的大图」（可能 2000x2500 级），
+        # 192 条无预算时理论峰值可达数 GB，补字节预算。
+        self._size_override_surface_bytes = 0
+        self._size_override_surface_entry_bytes = {}
+        self._max_size_override_surface_bytes = self._resolve_cache_budget_bytes(
+            "BTPW_SIZE_OVERRIDE_MB", 192, minimum_mb=48
+        )
         # 大小匹配公共参数缓存：预解析图层名字典与源图层 surface/position 键，避免每张图重复解析
         self._size_match_task_ctx_cache = OrderedDict()
         self._size_match_task_ctx_lock = threading.RLock()

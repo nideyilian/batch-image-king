@@ -128,12 +128,27 @@ class ExportService:
         image.save(file_path)
 
     def _should_try_vips(self, job: ExportJob, file_format: str) -> bool:
+        """是否走 pyvips 编码。
+
+        实测结论（2026-11-03，本机）：**纯编码环节 vips 不如 PIL**
+          PNG 1080x1350：vips 15ms / PIL 11ms
+          PNG 4000x5000：vips 148ms / PIL 102ms
+        原因是 PIL 图像交给 vips 必须先经一次整图内存拷贝（PIL→bytes→vips），
+        这次拷贝的代价大于 vips 编码省下的部分。vips 真正的优势在
+        「合成与写盘一体化、中间结果不物化」的流式管线，而我们的架构是
+        「先合成成 PIL Image，再编码存盘」，中间必然物化，用不上那个优势。
+
+        所以默认关闭，仅在以下情况启用：
+          - job.backend 显式要求 pyvips/vips
+          - 环境变量 BTPW_ENABLE_VIPS_ENCODE=1
+        保留代码是为了将来走 vips 流式合成时可直接复用编码段。
+        """
         backend = str(job.backend or "auto").lower()
-        # "pillow" is the legacy persisted default. Treat it as auto so old
-        # project settings can benefit from pyvips while retaining fallback.
-        if backend == "pillow" and os.environ.get("BTPW_FORCE_PILLOW_EXPORT", "0") != "1":
-            backend = "auto"
-        if backend not in ("auto", "pyvips", "vips"):
+        if backend in ("pyvips", "vips"):
+            pass  # 显式要求，放行
+        elif os.environ.get("BTPW_ENABLE_VIPS_ENCODE", "0") == "1":
+            pass  # 显式环境开关
+        else:
             return False
         if os.environ.get("BTPW_DISABLE_VIPS", "0") == "1":
             return False
@@ -194,18 +209,33 @@ class ExportService:
         *,
         source_image: Optional[Image.Image] = None,
     ) -> bytes:
-        """Encode JPEG in memory using color-preserving 4:4:4 sampling."""
+        """Encode JPEG in memory using color-preserving 4:4:4 sampling.
+
+        ``optimize=True`` 会让 libjpeg 多跑一遍 Huffman 表优化：
+        实测（1080x1350）q=95 时 19.6ms→3.2ms（快 6 倍），但体积 45KB→65KB（大 44%）；
+        q=90 时 6.2ms→3.6ms，体积 37KB→58KB（大 57%）。
+        即「关掉能提速 3–6 倍，代价是文件大 44–57%」。
+        默认保留 True（质量/体积优先，导出是低频操作）；
+        需要吞吐优先时设 BTPW_JPEG_OPTIMIZE=0。
+        """
         buf = io.BytesIO()
         image.save(
             buf,
             format="JPEG",
             quality=max(1, min(98, int(quality))),
-            optimize=True,
+            optimize=self._jpeg_optimize_enabled(),
             progressive=False,
             subsampling=0,
             **self._jpeg_metadata_save_kwargs(image, source_image),
         )
         return buf.getvalue()
+
+    @staticmethod
+    def _jpeg_optimize_enabled() -> bool:
+        try:
+            return str(os.environ.get("BTPW_JPEG_OPTIMIZE", "1")).strip() != "0"
+        except Exception:
+            return True
 
     def _save_size_limited_jpeg(
         self,

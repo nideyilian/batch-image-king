@@ -649,7 +649,10 @@ class DocumentRender:
                                 position=(pos_x, pos_y),
                                 opacity=getattr(layer, 'opacity', 1.0),
                                 blend_mode=auto_blend,
-                                settings=perf_settings
+                                settings=perf_settings,
+                                # composition 是本函数独占的累加器（逐层叠加），
+                                # 就地合成省掉每层一次整画布拷贝。
+                                in_place=True
                             )
                         else:
                             # 非批量模式也使用稳定的合成方法，启用边缘增强以匹配Photoshop效果
@@ -663,7 +666,8 @@ class DocumentRender:
                                 blend_mode=auto_blend,
                                 edge_enhancement=False,
                                 subpixel_precision=True,
-                                use_srgb_blending=True  # 启用 Photoshop 风格混合
+                                use_srgb_blending=True,  # 启用 Photoshop 风格混合
+                                in_place=True
                             )
                     except Exception as composite_e:
                         print(f"[渲染] 高级合成失败: {composite_e}，使用简单合成")

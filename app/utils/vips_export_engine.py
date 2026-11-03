@@ -35,6 +35,14 @@ class VipsExportEngine:
 
     @classmethod
     def _pil_to_vips(cls, image: Image.Image):
+        """PIL → vips。
+
+        尝试过用 memoryview 省掉两次整图拷贝（88ms → 58ms），但
+        ``new_from_memory`` 不接管 buffer 所有权，4000x5000 上实测稳定段错误
+        （exit 139），即使把 bytes 存进局部变量 + copy_memory 也不行。
+        为了 30ms 冒崩进程的风险不值得，保留 numpy 路径：所有权明确，
+        大图上稳定。
+        """
         if not cls.is_available():
             raise RuntimeError("pyvips 不可用")
 

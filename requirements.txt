@@ -27,6 +27,13 @@ cryptography>=41.0.0
 PyInstaller>=6.14.1
 
 # === 可选依赖（不影响安装与运行，缺失时自动回退）===
-# pyvips：加速大图编码/写盘，需系统已安装 libvips。
-# 代码见 app/utils/vips_export_engine.py，不可用时自动回退 Pillow。
-# 安装方式：pip install pyvips>=2.2.3 （并需系统 libvips 运行时）
+# pyvips：**当前默认不启用编码加速**。
+# 2026-11-03 实测（本机）：纯编码环节 vips 比 PIL 慢 35–45%
+#   PNG 1080x1350：vips 15ms / PIL 11ms
+#   PNG 4000x5000：vips 148ms / PIL 102ms
+# 原因是 PIL→vips 必须整图拷贝一次，该开销大于 vips 编码省下的部分。
+# 真正能体现 vips 优势的是「合成+写盘一体化、中间不物化」的流式管线，
+# 当前架构是「先合成为 PIL Image 再编码」，用不上。
+# 代码保留在 app/utils/vips_export_engine.py，需要时用
+# BTPW_ENABLE_VIPS_ENCODE=1 或 job.backend="vips" 显式启用。
+# 安装：pip install pyvips-binary  （自带 libvips 运行时，Windows 上最省事）

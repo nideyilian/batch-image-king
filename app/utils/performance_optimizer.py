@@ -230,9 +230,13 @@ class PerformanceOptimizer:
     @classmethod
     def optimize_composite_layer(cls, background: Image.Image, foreground: Image.Image,
                                 position: Tuple[int, int], opacity: float,
-                                blend_mode: str, settings: Dict[str, Any]) -> Image.Image:
+                                blend_mode: str, settings: Dict[str, Any],
+                                in_place: bool = False) -> Image.Image:
         """
         优化的图层合成 - 修复版本，使用更稳定的合成方法
+
+        in_place=True 时跳过整画布 copy。仅当 background 是本次渲染独占的
+        累加器（逐层叠加、旧结果必被覆盖）时才可传 True。
         """
         try:
             # 根据设置调整参数
@@ -241,7 +245,7 @@ class PerformanceOptimizer:
             # 修复：对于批量模式，使用更稳定的合成方法
             if quality_level == 'fast':
                 # 快速模式：使用最简单的合成
-                return cls._simple_composite(background, foreground, position, opacity)
+                return cls._simple_composite(background, foreground, position, opacity, in_place=in_place)
             else:
                 # 其他模式：尝试使用统一合成器，但有更好的错误处理
                 try:
@@ -254,7 +258,8 @@ class PerformanceOptimizer:
                         position=position,
                         opacity=opacity,
                         blend_mode=blend_mode,
-                        use_srgb_blending=True  # 启用 Photoshop 风格混合
+                        use_srgb_blending=True,  # 启用 Photoshop 风格混合
+                        in_place=in_place
                     )
 
                 except Exception as compositor_e:
@@ -269,10 +274,12 @@ class PerformanceOptimizer:
     
     @classmethod
     def _simple_composite(cls, background: Image.Image, foreground: Image.Image,
-                         position: Tuple[int, int], opacity: float) -> Image.Image:
+                         position: Tuple[int, int], opacity: float,
+                         in_place: bool = False) -> Image.Image:
         """简单稳定的合成方案"""
         try:
-            result = background.copy()
+            # in_place=True 时省掉整画布 copy（原地 paste 结果与 copy 后 paste 逐字节相同）
+            result = background if in_place else background.copy()
 
             # 确保图像格式
             if foreground.mode != 'RGBA':
@@ -401,7 +408,10 @@ class PerformanceOptimizer:
                 position=layer_data['position'],
                 opacity=layer_data['opacity'],
                 blend_mode=layer_data['blend_mode'],
-                settings=settings
+                settings=settings,
+                # composition 是本次调用独占的累加器（起点是 background.copy()），
+                # 逐层就地叠加，省掉每层一次整画布拷贝。
+                in_place=True
             )
             
             # 内存优化
