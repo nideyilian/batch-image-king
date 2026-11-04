@@ -1,13 +1,17 @@
 """顶部导航栏的命令入口契约（2026-11-04）。
 
 背景：顶栏曾有 01 画布 / 02 预设 / 03 导出 / 04 命令 四个带编号的项，
-它们与第二行 commandBar、commandMenu 里指向同一函数，且编号没有 active 联动，
-会被误读成「必须依次完成的步骤」。本文件锁住收敛后的结构：
+编号没有 active 联动，会被误读成「必须依次完成的步骤」。本文件锁住修订后的结构：
 
-1. 顶栏不再展示编号，也不再重复 commandBar 里的动作。
-2. 一个函数只有一个可见主入口；菜单里只允许保留带快捷键的文本别名。
-3. 三个导出入口按作用域命名、图标互不相同。
-4. tooltip 里出现的快捷键必须是 Main.qml 里真实注册过的 Shortcut。
+1. 顶栏保留 4 个一点直达的并列入口，不折叠成「更多操作」菜单——折叠会让
+   常用动作多一次点击，不符合既有操作习惯。
+2. 编号默认关闭（`showIndex: false`），只用于有先后顺序且有当前步骤反馈的流程。
+3. 命令菜单保留完整清单，菜单里的文本别名带上真实注册的快捷键。
+4. 三个导出入口按作用域命名、图标互不相同；工具栏内部同一动作不重复放按钮。
+5. tooltip 里出现的快捷键必须是 Main.qml 里真实注册过的 Shortcut。
+
+注：顶栏 / 命令菜单 / 工具栏指向同一函数是既有习惯，跨区重复不在本文件禁止；
+这里只锁「顶栏必须直达」和「工具栏内部不重复」。
 """
 
 from __future__ import annotations
@@ -52,21 +56,26 @@ def _actions(section: str) -> list[str]:
 
 
 @pytest.mark.unit
-def test_title_bar_has_no_numbered_items_and_no_duplicate_actions():
+def test_title_bar_keeps_direct_one_click_entries_without_index():
     source = _main_source()
-    sections = _command_sections(source)
-    title = sections["titleBar"]
+    title = _command_sections(source)["titleBar"]
 
-    assert title.count("HermesNavItem {") == 1
+    assert title.count("HermesNavItem {") == 4
     assert "HermesNavItem { index:" not in title
-    assert 'text: "更多操作"' in title
+    assert 'text: "更多操作"' not in title
 
-    for action in (
-        "window.openNewCanvasDialog",
-        "window.openProjectPresetDrawer",
-        "window.openBatchExportDrawer",
+    # 三个高频动作必须一点即达，不能先展开菜单再选。
+    for label, action in (
+        ("画布", "window.openNewCanvasDialog"),
+        ("预设", "window.openProjectPresetDrawer"),
+        ("导出", "window.openBatchExportDrawer"),
     ):
-        assert action not in title, f"{action} 是 commandBar 的动作，不该出现在顶栏"
+        assert f'text: "{label}"' in title
+        assert f"onClicked: {action}()" in title
+
+    assert 'text: "命令"' in title
+    assert "onClicked: commandMenu.popup()" in title
+    assert title.count("description:") == 4
 
 
 @pytest.mark.unit
@@ -82,26 +91,11 @@ def test_nav_item_index_is_opt_in_and_tooltip_is_descriptive():
 
 
 @pytest.mark.unit
-def test_each_command_has_one_visible_home():
+def test_toolbar_buttons_are_unique_within_command_bar():
     source = _main_source()
     sections = _command_sections(source)
-    places_by_action: dict[str, set[str]] = {}
-    for region, section in sections.items():
-        for action in _actions(section):
-            places_by_action.setdefault(action, set()).add(region)
 
-    duplicated = {
-        action: sorted(places)
-        for action, places in places_by_action.items()
-        if len(places) > 1
-    }
-    # 唯一允许的是「检查更新」：commandBar 图标是主入口，菜单里是带快捷键的文本别名。
-    assert set(duplicated) <= {"window.openUpdateDialog"}, duplicated
-    if duplicated:
-        assert 'text: "检查更新\\tCtrl+Shift+U"' in sections["commandMenu"]
-        assert "commandBar" in duplicated["window.openUpdateDialog"]
-
-    # 四个高频动作在 commandBar 里各只有一个入口。
+    # 工具栏内部同一动作只有一个按钮。
     bar_counts = Counter(_actions(sections["commandBar"]))
     for action in (
         "window.openProjectPresetDrawer",
@@ -111,11 +105,24 @@ def test_each_command_has_one_visible_home():
     ):
         assert bar_counts[action] == 1, (action, bar_counts[action])
 
-    # 新建画布的按钮归空工作区首页所有，工具栏不放第二个；
-    # 有文档时通过「更多操作」菜单里带快捷键的文本别名 + Ctrl+N 到达。
+    # 新建画布的按钮归空工作区首页所有，工具栏不放第二个。
     assert bar_counts["window.openNewCanvasDialog"] == 0
     assert "iconName: AppIcons.fileNew" not in source
-    assert 'text: "新建画布\\tCtrl+N"' in sections["commandMenu"]
+
+    # 命令菜单保留完整清单；「新建画布」带真实快捷键作为文本别名。
+    menu = sections["commandMenu"]
+    assert 'text: "新建画布\\tCtrl+N"' in menu
+    for label in (
+        "打开项目",
+        "保存当前项目",
+        "添加文字图层",
+        "添加异形图层",
+        "项目预设",
+        "批量导出",
+        "检查更新\\tCtrl+Shift+U",
+        "关于批图王",
+    ):
+        assert f'text: "{label}"' in menu
 
 
 @pytest.mark.unit
@@ -153,3 +160,4 @@ def test_design_system_documents_the_index_rule():
     assert "并列导航与动作按钮不显示编号" in doc
     assert "`showIndex: true`" in doc
     assert "默认不显示编号" in doc
+    assert "并列入口保持一点直达" in doc

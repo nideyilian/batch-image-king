@@ -4796,12 +4796,30 @@ ApplicationWindow {
                     spacing: 4
                     Layout.fillWidth: true
 
-                    // 顶栏只放全局导航与低频菜单；「新建画布 / 项目预设 / 批量导出」
-                    // 都是动作，统一收敛到下面的 commandBar，避免同一函数三处入口。
+                    // 并列入口保持一点直达：折叠成菜单会让常用动作多一次点击。
+                    // 不显示 01/02/03 编号（见 docs/hermes-desktop-design-system.md 6.2）。
                     HermesNavItem {
-                        text: "更多操作"
+                        text: "画布"
+                        iconName: AppIcons.image
+                        description: "新建画布：设置尺寸并打开空白文档"
+                        onClicked: window.openNewCanvasDialog()
+                    }
+                    HermesNavItem {
+                        text: "预设"
+                        iconName: AppIcons.fileText
+                        description: "打开项目预设中心"
+                        onClicked: window.openProjectPresetDrawer()
+                    }
+                    HermesNavItem {
+                        text: "导出"
+                        iconName: AppIcons.exportAction
+                        description: "批量导出当前文档 F12"
+                        onClicked: window.openBatchExportDrawer()
+                    }
+                    HermesNavItem {
+                        text: "命令"
                         iconName: AppIcons.more
-                        description: "低频命令与快捷键：新建画布、检查更新、关于"
+                        description: "打开命令菜单：项目、图层、检查更新、关于"
                         onClicked: commandMenu.popup()
                     }
                 }
@@ -4819,12 +4837,20 @@ ApplicationWindow {
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
         }
 
-        // 低频菜单只放 commandBar 里没有的主入口，以及带快捷键的文本别名
-        // （菜单是学习快捷键的地方）。其余 8 项与 commandBar / fileMenu 重复，已移除。
+        // 命令菜单保留完整命令清单：它是顶栏「命令」的展开内容，也是学习快捷键的地方，
+        // 不为了去重砍掉用户已有的路径。
         AppMenu {
             id: commandMenu
             width: 250
-            ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
+            ShapeMenuItem { text: "打开项目"; onTriggered: openDialog.open() }
+            ShapeMenuItem { text: "保存当前项目"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+            MenuSeparator { }
+            ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: window.openNewCanvasDialog() }
+            ShapeMenuItem { text: "添加文字图层"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
+            ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
+            MenuSeparator { }
+            ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
+            ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
             MenuSeparator { }
             ShapeMenuItem { text: "检查更新\tCtrl+Shift+U"; onTriggered: window.openUpdateDialog() }
             ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
@@ -4843,7 +4869,7 @@ ApplicationWindow {
                 spacing: 6
 
                 // 新建画布按钮归空工作区首页所有（见 test_qml_button_entry_dedup.py），
-                // 工具栏不重复放置；有文档时走「更多操作」菜单别名或 Ctrl+N。
+                // 工具栏不重复放置；有文档时走顶栏「画布」、命令菜单别名或 Ctrl+N。
                 IconButton {
                     iconName: AppIcons.folderOpen
                     tooltip: "打开项目 Ctrl+O"

@@ -197,11 +197,16 @@ Cascadia Mono -> Consolas -> monospace
 （TDesign / Ant Design 的 Steps 都限定在有先后关系的任务流程）。`description` 用于 tooltip，
 必须写清「点了会发生什么」，不要复读 `text`。
 
+并列入口保持一点直达：高频动作不折叠到「更多操作」之类的一级菜单里，否则每次操作都要
+多一次展开点击；顶层只收纳真正的低频命令。`HermesNavItem` 的 `onClicked` 直接绑定动作，
+不再套一层菜单。
+
 ```qml
 HermesNavItem {
-    text: "更多操作"
-    iconName: AppIcons.more
-    description: "低频命令：关于批图王、检查更新"
+    text: "画布"
+    iconName: AppIcons.image
+    description: "新建画布：设置尺寸并打开空白文档"
+    onClicked: window.openNewCanvasDialog()
 }
 ```
 
