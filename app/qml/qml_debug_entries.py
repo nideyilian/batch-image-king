@@ -418,6 +418,18 @@ def open_debug_dialogs(args, window, workspace, workspace_sessions, debug) -> No
 
         QTimer.singleShot(80, open_rename_document)
 
+    if args.show_rename_category:
+        def open_rename_category() -> None:
+            # 工作台里 4 个分类/标签页弹窗都靠 pendingXxx 属性驱动 visible，
+            # 这里直接置一个非空分类名即可复现，不必真的去点分类行的「重命名」。
+            workbench = window.findChild(QObject, "presetWorkbench")
+            if workbench is None:
+                debug("preset workbench item not found")
+                return
+            workbench.setProperty("pendingRenameCategory", "促销卡券")
+
+        QTimer.singleShot(220, open_rename_category)
+
     if args.show_text_layer_dialog:
         def open_text_layer_dialog() -> None:
             dialog = window.findChild(QObject, "textLayerDialog")
@@ -473,6 +485,7 @@ def panels_need_window_grab(args) -> bool:
         or args.show_close_confirm
         or args.show_canvas_presets
         or args.show_project_presets
+        or args.show_rename_category
         or args.show_data_relations
         or args.show_size_match
     )

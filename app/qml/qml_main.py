@@ -46,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--show-new-canvas", action="store_true", help="启动后打开新建画布弹窗")
     parser.add_argument("--show-resize-canvas", action="store_true", help="展示原生画布尺寸弹窗")
     parser.add_argument("--show-rename-document", action="store_true", help="展示原生标签页重命名弹窗")
+    parser.add_argument("--show-rename-category", action="store_true", help="展示预设工作台的分类重命名弹窗")
     parser.add_argument("--show-text-layer-dialog", action="store_true", help="展示原生文字图层创建弹窗")
     parser.add_argument("--show-shaped-layer-dialog", action="store_true", help="展示原生异形图层创建弹窗")
     parser.add_argument("--show-close-confirm", action="store_true", help="启动后打开未保存文档关闭确认")

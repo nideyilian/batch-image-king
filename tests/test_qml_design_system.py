@@ -137,6 +137,49 @@ def test_main_qml_uses_shared_controls_for_inputs_and_overlays():
 
 
 @pytest.mark.unit
+def test_app_dialogs_have_deterministic_geometry_and_content_item():
+    """AppDialog 必须居中，且每个实例都要显式给出高度与 contentItem。
+
+    Popup 默认定位在父项左上角。2026-11-04 预设工作台 4 个弹窗三样都漏了：
+    贴在窗口左上角；默认 contentItem 的隐式高度与 ColumnLayout 的
+    ``anchors.fill: parent`` 互相依赖导致尺寸塌缩，背景边框都没画出来，
+    输入框/说明/按钮各按自己的坐标系散开、按钮垂直也不对齐。
+
+    居中在 AppDialog 组件层统一兜底，调用点就不必各自记得写；但尺寸与
+    内容容器必须由每个实例显式给出，没法在组件层代劳。
+    """
+    dialog_source = (QML_ROOT / "components" / "AppDialog.qml").read_text(encoding="utf-8")
+    assert "anchors.centerIn: parent" in dialog_source
+
+    for relative in ("Main.qml", "components/PresetWorkbench.qml"):
+        source = (QML_ROOT / relative).read_text(encoding="utf-8")
+        blocks = _qml_component_blocks(source, "AppDialog")
+        assert blocks, f"{relative} 里没有 AppDialog 实例"
+        for index, block in enumerate(blocks, start=1):
+            assert "contentItem:" in block, (
+                f"{relative} 第 {index} 个 AppDialog 缺显式 contentItem"
+            )
+            # 只检查属性声明区，避免把内部控件的 height: 误算成弹窗自身高度
+            header = block.split("contentItem:", 1)[0]
+            lines = [line.strip() for line in header.splitlines()]
+            assert any(line.startswith("height:") for line in lines), (
+                f"{relative} 第 {index} 个 AppDialog 缺显式 height"
+            )
+
+
+@pytest.mark.unit
+def test_rename_category_dialog_has_a_reproducible_debug_entry():
+    """漂移必须能用一条命令复现，否则回归测试只能靠肉眼看。"""
+    launcher = "\n".join(
+        (QML_ROOT / name).read_text(encoding="utf-8")
+        for name in ("qml_main.py", "qml_debug_entries.py")
+    )
+    assert '"--show-rename-category"' in launcher
+    assert 'setProperty("pendingRenameCategory", "促销卡券")' in launcher
+    assert "args.show_rename_category" in launcher
+
+
+@pytest.mark.unit
 def test_layer_model_exposes_semantic_icon_name_and_keeps_legacy_glyph():
     source = (QML_ROOT / "viewmodels" / "layer_list_model.py").read_text(encoding="utf-8")
 

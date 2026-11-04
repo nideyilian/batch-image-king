@@ -74,6 +74,7 @@ class _Args:
             "show_new_canvas",
             "show_resize_canvas",
             "show_rename_document",
+            "show_rename_category",
         ):
             setattr(self, name, False)
         for key, value in overrides.items():

@@ -1724,6 +1724,7 @@ Item {
     AppDialog {
         id: renameCategoryDialog
         width: 400
+        height: 176
         modal: true
         closePolicy: Popup.CloseOnEscape
         title: "重命名分类"
@@ -1738,7 +1739,7 @@ Item {
                 renameCategoryField.select(0, renameCategoryField.text.length)
         }
 
-        ColumnLayout {
+        contentItem: ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
             spacing: 12
@@ -1802,12 +1803,13 @@ Item {
     AppDialog {
         id: deleteCategoryConfirm
         width: 400
+        height: 160
         modal: true
         closePolicy: Popup.CloseOnEscape
         title: "删除分类？"
         visible: root.pendingDeleteCategory.length > 0
 
-        ColumnLayout {
+        contentItem: ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
             spacing: 12
@@ -1948,11 +1950,12 @@ Item {
         property string errorMessage: ""
 
         width: 420
+        height: 200
         modal: true
         closePolicy: Popup.CloseOnEscape
         title: "关闭这个标签页？"
 
-        ColumnLayout {
+        contentItem: ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
             spacing: 10
@@ -2032,6 +2035,7 @@ Item {
         }
 
         width: 440
+        height: 248
         modal: true
         closePolicy: Popup.CloseOnEscape
         title: "关闭全部标签页？"
@@ -2043,7 +2047,7 @@ Item {
             open()
         }
 
-        ColumnLayout {
+        contentItem: ColumnLayout {
             anchors.fill: parent
             anchors.margins: 18
             spacing: 10
