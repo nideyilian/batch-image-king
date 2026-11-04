@@ -2885,16 +2885,27 @@ ApplicationWindow {
         }
     }
 
+    // 标签页右键菜单：分两块，避免「复制」一词被误读成同一件事。
+    //   上半 = 标签页操作：作用于这个标签（重命名 / 复制整个标签 / 移动 / 关闭）
+    //   下半 = 编辑操作：作用于当前文档内部的图层，与编辑菜单同源
+    // 文案上区分「复制标签页」（复制整个文档）与「复制图层」（复制选中的图层）。
     AppMenu {
         id: documentTabMenu
-        ShapeMenuItem { text: "复制标签页"; onTriggered: workspaceSessions.duplicateDocument(contextDocumentIndex) }
-        ShapeMenuItem {
-            text: "重命名标签页"
-            onTriggered: window.openRenameDocumentDialog(contextDocumentIndex)
-        }
+        // 供自动化探针按 objectName 定位（Popup 不在 childItems 里，只能按名字找）。
+        objectName: "documentTabMenu"
+        // 文案比默认 250 宽一点（「重命名标签页（也可双击标签）」），加宽避免省略。
+        width: 280
+        // 「双击」不是键位，不放在 \t 后面冒充快捷键，直接写进文案更诚实。
+        ShapeMenuItem { text: "重命名标签页（也可双击标签）"; onTriggered: window.openRenameDocumentDialog(contextDocumentIndex) }
+        ShapeMenuItem { text: "复制标签页"; enabled: contextDocumentIndex >= 0; onTriggered: workspaceSessions.duplicateDocument(contextDocumentIndex) }
         MenuSeparator { }
         ShapeMenuItem { text: "向左移动"; enabled: contextDocumentIndex > 0; onTriggered: workspaceSessions.moveDocument(contextDocumentIndex, contextDocumentIndex - 1) }
         ShapeMenuItem { text: "向右移动"; enabled: contextDocumentIndex >= 0 && contextDocumentIndex < workspaceSessions.count - 1; onTriggered: workspaceSessions.moveDocument(contextDocumentIndex, contextDocumentIndex + 1) }
+        MenuSeparator { }
+        // ---- 编辑：与编辑菜单同源，作用于当前文档内部的图层 ----
+        ShapeMenuItem { text: "复制图层\tCtrl+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.copySelectedLayers() }
+        ShapeMenuItem { text: "粘贴图层\tCtrl+V"; enabled: window.hasOpenDocument && legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
+        ShapeMenuItem { text: "全选图层\tCtrl+A"; enabled: window.hasOpenDocument; onTriggered: legacyTools.selectAllLayers() }
         MenuSeparator { }
         ShapeMenuItem { text: "关闭其他标签页"; enabled: workspaceSessions.count > 1; onTriggered: workspaceSessions.closeOtherDocuments(contextDocumentIndex) }
         ShapeMenuItem { text: "关闭标签页"; onTriggered: workspaceSessions.requestClose(contextDocumentIndex) }
@@ -5090,6 +5101,16 @@ ApplicationWindow {
                             onClicked: function(mouse) {
                                 if (mouse.button === Qt.LeftButton)
                                     workspaceSessions.activateDocument(documentTab.index)
+                            }
+                            // 双击重命名：与浏览器/编辑器标签页一致。
+                            // 双击前先激活该标签，否则重命名的是后台标签，用户看不到结果。
+                            onDoubleClicked: function(mouse) {
+                                if (mouse.button !== Qt.LeftButton)
+                                    return
+                                if (workspace.operationsBlocked)
+                                    return
+                                workspaceSessions.activateDocument(documentTab.index)
+                                window.openRenameDocumentDialog(documentTab.index)
                             }
                         }
                     }

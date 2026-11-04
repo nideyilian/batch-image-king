@@ -297,6 +297,48 @@ def test_ambiguous_toolbar_actions_carry_labels():
 
 
 @pytest.mark.unit
+def test_tab_supports_double_click_rename_and_edit_actions():
+    """标签页：双击重命名 + 右键基础编辑（复制/粘贴/全选图层）。
+
+    必须守住的两个坑：
+    1. 双击前先激活标签，否则重命名的是后台标签（用户看不到结果）。
+    2. 「复制标签页」是复制整个文档，「复制图层」是复制选中的图层，
+       两者同名会让用户改错对象——文案必须能区分。
+    """
+
+    source = _main_source()
+
+    # 双击重命名
+    assert "onDoubleClicked: function(mouse)" in source
+    assert "window.openRenameDocumentDialog(documentTab.index)" in source
+    # 双击先激活
+    dbl = source.split("onDoubleClicked: function(mouse)", 1)[1].split("}", 1)[0]
+    assert "activateDocument(documentTab.index)" in dbl, "双击重命名前必须激活该标签"
+    assert "operationsBlocked" in dbl, "批量导出期间不应允许重命名"
+
+    # 右键菜单：标签页操作 + 编辑操作分块
+    tab_menu = source.split("id: documentTabMenu", 1)[1].split("FolderDialog", 1)[0]
+    for item in ("复制图层", "粘贴图层", "全选图层"):
+        assert item in tab_menu, f"标签页右键菜单缺少「{item}」"
+
+    # 两个「复制」必须能区分：标签页 vs 图层
+    assert "复制标签页" in tab_menu
+    assert "复制图层" in tab_menu
+    assert tab_menu.index("复制标签页") < tab_menu.index("复制图层")
+
+    # 编辑项与编辑菜单同源（同一组 action），不能另写一套实现
+    assert "legacyTools.copySelectedLayers()" in tab_menu
+    assert "legacyTools.pasteLayers()" in tab_menu
+    assert "legacyTools.selectAllLayers()" in tab_menu
+
+    # 粘贴要有可用性判断，否则空剪贴板点下去无声失败
+    assert "legacyTools.hasLayerClipboard" in tab_menu
+
+    # 「双击」不是键位，不能塞进 \t 冒充快捷键
+    assert "重命名标签页\\t双击" not in source
+
+
+@pytest.mark.unit
 def test_logo_acts_as_home_button_in_editor_mode():
     """LOGO 兼作「回到工作台首页」，行为是打开预设工作台而不是关闭文档。
 
