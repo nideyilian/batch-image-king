@@ -4796,10 +4796,14 @@ ApplicationWindow {
                     spacing: 4
                     Layout.fillWidth: true
 
-                    HermesNavItem { index: "01"; text: "画布"; iconName: AppIcons.image; onClicked: window.openNewCanvasDialog() }
-                    HermesNavItem { index: "02"; text: "预设"; iconName: AppIcons.fileText; onClicked: window.openProjectPresetDrawer() }
-                    HermesNavItem { index: "03"; text: "导出"; iconName: AppIcons.exportAction; onClicked: window.openBatchExportDrawer() }
-                    HermesNavItem { index: "04"; text: "命令"; iconName: AppIcons.more; onClicked: commandMenu.popup() }
+                    // 顶栏只放全局导航与低频菜单；「新建画布 / 项目预设 / 批量导出」
+                    // 都是动作，统一收敛到下面的 commandBar，避免同一函数三处入口。
+                    HermesNavItem {
+                        text: "更多操作"
+                        iconName: AppIcons.more
+                        description: "低频命令与快捷键：新建画布、检查更新、关于"
+                        onClicked: commandMenu.popup()
+                    }
                 }
 
                 IconButton {
@@ -4815,18 +4819,12 @@ ApplicationWindow {
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
         }
 
+        // 低频菜单只放 commandBar 里没有的主入口，以及带快捷键的文本别名
+        // （菜单是学习快捷键的地方）。其余 8 项与 commandBar / fileMenu 重复，已移除。
         AppMenu {
             id: commandMenu
             width: 250
-            ShapeMenuItem { text: "打开项目"; onTriggered: openDialog.open() }
-            ShapeMenuItem { text: "保存当前项目"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-            MenuSeparator { }
-            ShapeMenuItem { text: "新建画布"; onTriggered: window.openNewCanvasDialog() }
-            ShapeMenuItem { text: "添加文字图层"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
-            ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
-            MenuSeparator { }
-            ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
-            ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
+            ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
             MenuSeparator { }
             ShapeMenuItem { text: "检查更新\tCtrl+Shift+U"; onTriggered: window.openUpdateDialog() }
             ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
@@ -4844,22 +4842,24 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
+                // 新建画布按钮归空工作区首页所有（见 test_qml_button_entry_dedup.py），
+                // 工具栏不重复放置；有文档时走「更多操作」菜单别名或 Ctrl+N。
                 IconButton {
                     iconName: AppIcons.folderOpen
-                    tooltip: "打开项目"
+                    tooltip: "打开项目 Ctrl+O"
                     visible: window.hasOpenDocument
                     enabled: !workspace.operationsBlocked
                     onClicked: openDialog.open()
                 }
                 IconButton {
                     iconName: AppIcons.save
-                    tooltip: "保存"
+                    tooltip: "保存 Ctrl+S"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
                 }
                 IconButton {
                     iconName: AppIcons.fileText
-                    tooltip: "项目预设"
+                    tooltip: "打开项目预设 Ctrl+Shift+P"
                     enabled: !workspace.operationsBlocked
                     onClicked: window.openProjectPresetDrawer()
                 }
@@ -4876,8 +4876,8 @@ ApplicationWindow {
                     onClicked: window.openDataRelations(1)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
-                IconButton { iconName: AppIcons.undo; tooltip: "撤销"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
-                IconButton { iconName: AppIcons.redo; tooltip: "重做"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
+                IconButton { iconName: AppIcons.undo; tooltip: "撤销 Ctrl+Z"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
+                IconButton { iconName: AppIcons.redo; tooltip: "重做 Ctrl+Shift+Z"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
                 AppButton {
@@ -4888,7 +4888,7 @@ ApplicationWindow {
                     onClicked: workspace.addEmptyImageLayer()
                 }
 
-                IconButton { iconName: AppIcons.type; tooltip: "添加文字"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
+                IconButton { iconName: AppIcons.type; tooltip: "添加文字图层 Shift+F8"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
                 IconButton {
                     iconName: AppIcons.shapes
                     tooltip: "添加异形图层"
@@ -4938,9 +4938,11 @@ ApplicationWindow {
                     onClicked: workspace.renderPreviewNow()
                 }
 
+                // 三个导出入口按作用域区分，并且各用不同图标：
+                // 单张=folder-output、跨标签=list-checks、当前文档批量=send-to-back。
                 IconButton {
-                    iconName: AppIcons.exportAction
-                    tooltip: "导出当前画面"
+                    iconName: AppIcons.folderOutput
+                    tooltip: "导出当前画面（单张）Ctrl+Shift+X"
                     buttonSize: 32
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: exportDialog.open()
@@ -4948,7 +4950,7 @@ ApplicationWindow {
 
                 IconButton {
                     iconName: AppIcons.listChecks
-                    tooltip: "多标签批量导出"
+                    tooltip: "多标签批量导出（跨标签页）Ctrl+Alt+Shift+X"
                     buttonSize: 32
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running)
                     onClicked: window.openMultiTabExportDrawer()
@@ -4961,11 +4963,14 @@ ApplicationWindow {
                     variant: "primary"
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running)
                     onClicked: window.openBatchExportDrawer()
+                    ToolTip.visible: hovered
+                    ToolTip.text: "批量导出当前文档 F12"
+                    ToolTip.delay: 420
                 }
 
                 IconButton {
                     iconName: AppIcons.refresh
-                    tooltip: "检查更新"
+                    tooltip: "检查更新 Ctrl+Shift+U"
                     buttonSize: 32
                     onClicked: window.openUpdateDialog()
                 }

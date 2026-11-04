@@ -5,11 +5,17 @@ import QtQuick.Layouts
 Rectangle {
     id: root
 
+    // 编号只在「存在先后顺序且有当前步骤反馈的流程」里显示（见
+    // docs/hermes-desktop-design-system.md 6.2）。并列导航和动作按钮默认关闭，
+    // 否则 01/02/03 会被误读成必须依次完成的步骤。
+    property bool showIndex: false
     property string index: ""
     property string text: ""
     property string iconName: ""
     property bool active: false
     property string badge: ""
+    // tooltip 要说清「点了会发生什么」，不能只是复读标签文字。
+    property string description: ""
     signal clicked()
 
     implicitWidth: 112
@@ -29,13 +35,13 @@ Rectangle {
         spacing: 8
 
         Text {
-            visible: root.index.length > 0
+            visible: root.showIndex && root.index.length > 0
             text: root.index
             color: !root.enabled
                    ? Theme.textDisabled
                    : (root.active ? Theme.accentForeground : Theme.textMuted)
             font.family: Theme.dataFont
-            font.pixelSize: 10
+            font.pixelSize: 11
         }
 
         AppIcon {
@@ -66,7 +72,7 @@ Rectangle {
                    ? Theme.textDisabled
                    : (root.active ? Theme.accentForeground : Theme.textMuted)
             font.family: Theme.dataFont
-            font.pixelSize: 9
+            font.pixelSize: 11
         }
     }
 
@@ -83,7 +89,7 @@ Rectangle {
     Keys.onSpacePressed: clicked()
     Keys.onReturnPressed: clicked()
     ToolTip.visible: mouse.containsMouse && root.text.length > 0
-    ToolTip.text: root.text
+    ToolTip.text: root.description.length > 0 ? root.description : root.text
     ToolTip.delay: 420
     Accessible.name: root.text
     Accessible.role: Accessible.Button

@@ -118,15 +118,14 @@ def test_qml_theme_button_persists_and_toggles_the_selected_mode():
 def test_title_bar_only_keeps_real_navigation_actions():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
-    for marker in (
-        'HermesNavItem { index: "01"; text: "画布"',
-        'HermesNavItem { index: "02"; text: "预设"',
-        'HermesNavItem { index: "03"; text: "导出"',
-        'HermesNavItem { index: "04"; text: "命令"',
-    ):
-        assert marker in source
+    # 顶栏只保留一个低频菜单入口；「新建画布 / 项目预设 / 批量导出」是动作，
+    # 已下沉到 commandBar，不再在顶栏重复出现，也不再带 01/02/03 编号。
+    assert source.count("HermesNavItem {") == 1
+    assert 'text: "更多操作"' in source
+    assert 'description: "低频命令与快捷键：新建画布、检查更新、关于"' in source
 
     for removed_marker in (
+        "HermesNavItem { index:",
         'Hermes-style desktop workspace',
         'text: "工作台"',
         'text: "图层"; iconName: AppIcons.layers; onClicked: showToast',
