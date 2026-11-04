@@ -22,18 +22,37 @@ Unicode true
 Name "${APP_NAME} v${APP_VERSION}"
 OutFile "..\dist\${INSTALLER_NAME}"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
+; 覆盖安装时沿用注册表记录的旧位置。否则目录页每次都跳回上面的默认路径，
+; 而原生单行输入框不响应 Ctrl+A，用户很难改回去，容易装出第二份副本。
+; 命令行 /D= 优先级更高，自动更新的静默安装不受影响。
+InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
 Icon "..\app\resources\app_icon.ico"
 UninstallIcon "..\app\resources\app_icon.ico"
 
 ; 页面
+DirText "选择 ${APP_NAME} 的安装目录。已装过旧版本时会自动填入原位置；如需更改，请点「浏览」按钮，或在输入框中三击全选后输入（不支持 Ctrl+A）。"
 Page directory
 Page instfiles
 UninstPage uninstConfirm
 UninstPage instfiles
 
 Section "MainSection" SEC01
+    ; 本段会在 RMDir /r _internal 之后用 File /r 覆盖整个目录。主程序仍在运行时，
+    ; 正在执行的 exe 会被 Windows 锁住，NSIS 弹出「中止/重试/忽略」；用户一旦点
+    ; 「忽略」，就会留下新旧文件混用、注册表也没更新的半装目录。
+    ; 因此在动任何文件之前先确认主 exe 可写：被占用就直接中止，绝不做半套。
+    IfFileExists "$INSTDIR\${APP_EXE}" 0 _main_exe_ready
+    ClearErrors
+    FileOpen $9 "$INSTDIR\${APP_EXE}" "a"
+    IfErrors 0 _main_exe_open_ok
+        MessageBox MB_OK|MB_ICONSTOP "检测到 ${APP_NAME} 仍在运行（主程序文件被占用）。请先完全退出程序，再重新运行安装包。"
+        Abort
+    _main_exe_open_ok:
+    FileClose $9
+    _main_exe_ready:
+
     ; 已安装版本比较：本机版本高于安装包版本时中止，防止误装旧版导致降级
     ; VersionCompare 返回值：0=相等，1=第一个(本机)更高，2=第二个(安装包)更高
     ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "DisplayVersion"

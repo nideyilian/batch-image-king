@@ -37,6 +37,48 @@ def test_nsis_installs_the_onedir_tree():
 
 
 @pytest.mark.unit
+def test_nsis_reuses_registered_install_dir():
+    """覆盖安装必须沿用注册表里的 InstallLocation。
+
+    否则目录页每次跳回 $LOCALAPPDATA 默认值，而 NSIS 原生单行输入框不响应
+    Ctrl+A，用户很难改回原路径，结果装出第二份副本、注册表指向新目录。
+    /D= 命令行优先级更高，自动更新的静默安装不受影响。
+    """
+    source = (REPO_ROOT / "installer" / "批图王.nsi").read_text(encoding="utf-8-sig")
+
+    assert 'InstallDir "$LOCALAPPDATA\\Programs\\${APP_NAME}"' in source
+    assert 'InstallDirRegKey HKCU "${UNINSTALL_KEY}" "InstallLocation"' in source
+    assert source.index('InstallDir "$LOCALAPPDATA') < source.index("InstallDirRegKey")
+
+
+@pytest.mark.unit
+def test_nsis_aborts_before_touching_files_when_app_is_running():
+    """运行中安装会在 RMDir/File 中途失败，留下新旧混用的半装目录。
+
+    占用检测必须排在任何文件操作之前，失败时 Abort，而不是让用户点「忽略」。
+    """
+    source = (REPO_ROOT / "installer" / "批图王.nsi").read_text(encoding="utf-8-sig")
+    body = source[source.index('Section "MainSection"'):]
+    guard = body[body.index('IfFileExists "$INSTDIR\\${APP_EXE}"'):body.index("SetOutPath")]
+
+    assert 'FileOpen $9 "$INSTDIR\\${APP_EXE}" "a"' in guard
+    assert "IfErrors 0 _main_exe_open_ok" in guard
+    assert "MessageBox MB_OK|MB_ICONSTOP" in guard
+    assert "Abort" in guard
+    assert "FileClose $9" in guard
+    assert "RMDir" not in guard
+
+
+@pytest.mark.unit
+def test_nsis_build_output_is_decoded_as_gbk():
+    """中文 Windows 下 NSIS 走 ANSI/GBK，按 UTF-8 解码会抛 UnicodeDecodeError。"""
+    source = (REPO_ROOT / "build.py").read_text(encoding="utf-8")
+
+    assert 'encoding="gbk"' in source
+    assert 'errors="replace"' in source
+
+
+@pytest.mark.unit
 def test_checked_in_spec_uses_onedir_collect_layout():
     """spec 必须同时支持 onedir（COLLECT）与 onefile，默认 onedir。
 

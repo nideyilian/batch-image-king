@@ -214,7 +214,6 @@ def _sign_manifest_payload(payload: dict) -> dict:
     try:
         import base64
 
-        from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
         from app.utils.updater_signature import SIGNATURE_ALGORITHM, canonical_payload
@@ -252,7 +251,17 @@ def build_installer(version: str) -> bool:
     print(f"正在构建安装包 (NSIS)...")
     cmd = [makensis, f"/DAPP_VERSION={version}", f"/DAPP_NAME={APP_NAME}", str(script)]
     try:
-        result = subprocess.run(cmd, cwd=str(script.parent), capture_output=True, text=True)
+        # NSIS 在中文 Windows 上按 ANSI/GBK 输出，用默认 UTF-8 解码会在读线程里
+        # 抛 UnicodeDecodeError（不影响产物，但会污染构建日志）。errors=replace
+        # 保证任何代码页下都能读全输出，失败时还能看到真实报错。
+        result = subprocess.run(
+            cmd,
+            cwd=str(script.parent),
+            capture_output=True,
+            text=True,
+            encoding="gbk",
+            errors="replace",
+        )
     except OSError as e:
         print(f"Warning: NSIS 编译失败: {e}")
         return False
