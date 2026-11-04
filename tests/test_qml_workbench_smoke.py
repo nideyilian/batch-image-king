@@ -165,7 +165,12 @@ def test_qml_workbench_can_render_offscreen(tmp_path: Path):
     assert 'text: workspace.selectedTextFontWarning' in qml_source
     assert 'property bool randomTransformEnabled' not in qml_source
     assert 'enabled: index === 0' not in qml_source
-    assert 'id: fileMenu' in qml_source
+    # 2026-11-04：fileMenu 等 6 个 AppMenu 全项目 0 处 popup，是死代码，已删除。
+    # 其中 3 个孤儿命令（导入素材文件夹 / 适合窗口 / 高级图层属性）已迁到 commandMenu。
+    assert 'id: fileMenu' not in qml_source
+    assert 'id: commandMenu' in qml_source
+    assert 'text: "导入素材文件夹"' in qml_source
+    assert 'text: "适合窗口\\tCtrl+1"' in qml_source
     assert 'legacyTools.open' not in qml_source
     assert 'legacyTools.openAdvancedLayerProperties()' not in qml_source
     assert 'function revealAdvancedProperties()' in qml_source

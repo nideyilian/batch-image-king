@@ -682,6 +682,8 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl++";        enabled: window.hasOpenDocument;                                   onActivated: workspace.setZoomFactor(workspace.zoomFactor * 1.1) }
     Shortcut { sequence: "Ctrl+-";        enabled: window.hasOpenDocument;                                   onActivated: workspace.setZoomFactor(workspace.zoomFactor / 1.1) }
     Shortcut { sequence: "Ctrl+0";        enabled: window.hasOpenDocument;                                   onActivated: workspace.resetView() }
+    // 适合窗口：原先只有死菜单里能点到，现在补上键位（Ctrl+1 与 PS「适合屏幕」一致）
+    Shortcut { sequence: "Ctrl+1";        enabled: window.hasOpenDocument;                                   onActivated: workspace.setZoomFactor(canvasWorkspace.fitScale) }
 
     // --- 4. 工具切换（单字母 —— 非文字编辑且非输入框焦点时生效） -----
     Shortcut { sequence: "V"; enabled: window.toolShortcutsEnabled; onActivated: activeTool = 0 }   // 移动/选择
@@ -2613,95 +2615,10 @@ ApplicationWindow {
         ShapeMenuItem { text: "清空参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.clearGuides() }
     }
 
-    AppMenu {
-        id: fileMenu
-        ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
-        ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "保存\tCtrl+S"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
-        ShapeMenuItem { text: "另存为\tCtrl+Shift+S"; enabled: window.hasOpenDocument; onTriggered: saveDialog.open() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "关闭当前标签\tCtrl+W"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.requestClose(workspaceSessions.activeIndex) }
-        ShapeMenuItem { text: "复制当前标签\tAlt+Shift+D"; enabled: window.hasOpenDocument; onTriggered: workspaceSessions.duplicateDocument(workspaceSessions.activeIndex) }
-        MenuSeparator { }
-        ShapeMenuItem { text: "导出当前画面\tCtrl+Shift+X"; enabled: window.hasOpenDocument; onTriggered: exportDialog.open() }
-        ShapeMenuItem { text: "完整批量导出\tF12"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || batchExport.running); onTriggered: window.openBatchExportDrawer() }
-        ShapeMenuItem { text: "多标签高级导出\tCtrl+Alt+Shift+X"; enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running); onTriggered: window.openMultiTabExportDrawer() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "退出"; onTriggered: window.close() }
-    }
-
-    AppMenu {
-        id: editMenu
-        ShapeMenuItem { text: "撤销\tCtrl+Z"; enabled: workspace.canUndo; onTriggered: workspace.undo() }
-        ShapeMenuItem { text: "重做\tCtrl+Shift+Z"; enabled: workspace.canRedo; onTriggered: workspace.redo() }
-        ShapeMenuItem { text: "后退一步\tCtrl+Alt+Z"; enabled: workspace.canUndo; onTriggered: workspace.undo() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "复制图层\tCtrl+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: legacyTools.copySelectedLayers() }
-        ShapeMenuItem { text: "粘贴图层\tCtrl+V"; enabled: window.hasOpenDocument && legacyTools.hasLayerClipboard; onTriggered: legacyTools.pasteLayers() }
-        ShapeMenuItem { text: "复制图层样式\tCtrl+Shift+C"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.copySelectedLayerStyle() }
-        ShapeMenuItem { text: "粘贴图层样式\tCtrl+Shift+V"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.pasteSelectedLayerStyle() }
-        ShapeMenuItem { text: "复制选中图层到新图层\tCtrl+J"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onTriggered: workspace.duplicateSelectedLayers() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "全选图层\tCtrl+A"; enabled: window.hasOpenDocument; onTriggered: legacyTools.selectAllLayers() }
-    }
-
-    AppMenu {
-        id: layerMenu
-        ShapeMenuItem { text: "新建空图片图层\tShift+Ctrl+N"; enabled: window.hasOpenDocument; onTriggered: workspace.addEmptyImageLayer() }
-        ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
-        ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: imageFolderDialog.open() }
-        ShapeMenuItem { text: "快速文字图层\tT"; enabled: window.hasOpenDocument; onTriggered: workspace.addQuickTextLayer() }
-        ShapeMenuItem { text: "添加文字图层\tShift+F8"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
-        ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "自由变换\tCtrl+T"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.beginFreeTransform() }
-        ShapeMenuItem { text: "向下合并图层(编组)\tCtrl+E"; enabled: workspace.selectedLayerIndex >= 1; onTriggered: workspace.mergeSelectedDown() }
-        ShapeMenuItem { text: "图层编组\tCtrl+G"; enabled: window.hasOpenDocument && workspace.selectedLayerIndex >= 0; onTriggered: workspace.groupSelectedLayers() }
-        ShapeMenuItem { text: "取消图层编组\tCtrl+Shift+G"; enabled: window.hasOpenDocument; onTriggered: workspace.ungroupSelectedGroups() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "重命名图层\tF2"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealLayerNameEditor() }
-        ShapeMenuItem { text: "图层下移一层\tCtrl+["; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("backward") }
-        ShapeMenuItem { text: "图层上移一层\tCtrl+]"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("forward") }
-        ShapeMenuItem { text: "图层置于底层\tCtrl+Shift+["; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("to_back") }
-        ShapeMenuItem { text: "图层置于顶层\tCtrl+Shift+]"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.moveSelectedLayer("to_front") }
-        ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
-        ShapeMenuItem { text: "绑定管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(0) }
-        ShapeMenuItem { text: "尺寸匹配管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openDataRelations(1) }
-        MenuSeparator { }
-        ShapeMenuItem { text: "删除所选图层\tDelete"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: workspace.deleteSelectedLayers() }
-    }
-
-    AppMenu {
-        id: canvasMenu
-        ShapeMenuItem { text: "修改画布尺寸(Canvas Size)\tAlt+Ctrl+C"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openResizeCanvasDialog() }
-        ShapeMenuItem { text: "画布预设管理"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onTriggered: window.openCanvasPresetDrawer() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "项目预设中心\tCtrl+Shift+P"; enabled: !workspace.operationsBlocked; onTriggered: window.openProjectPresetDrawer() }
-    }
-
-    AppMenu {
-        id: viewMenu
-        ShapeMenuItem { text: "切换标尺显示\tCtrl+R"; enabled: window.hasOpenDocument; onTriggered: workspace.toggleRulers() }
-        ShapeMenuItem { text: "切换参考线\t;"; enabled: window.hasOpenDocument; onTriggered: workspace.toggleGuides() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "放大\tCtrl++"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor + 0.05) }
-        ShapeMenuItem { text: "缩小\tCtrl+-"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(workspace.zoomFactor - 0.05) }
-        ShapeMenuItem { text: "实际大小 100%\tCtrl+0"; enabled: window.hasOpenDocument; onTriggered: workspace.resetView() }
-        ShapeMenuItem { text: "适合窗口"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(canvasWorkspace.fitScale) }
-        MenuSeparator { }
-        ShapeMenuItem { text: (workspace.showRulers ? "✓  " : "    ") + "显示标尺"; enabled: window.hasOpenDocument; onTriggered: workspace.setShowRulers(!workspace.showRulers) }
-        ShapeMenuItem { text: (workspace.showGuides ? "✓  " : "    ") + "显示参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.setShowGuides(!workspace.showGuides) }
-        ShapeMenuItem { text: (workspace.snapToGuides ? "✓  " : "    ") + "吸附到参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.setSnapToGuides(!workspace.snapToGuides) }
-        ShapeMenuItem { text: "清空参考线"; enabled: window.hasOpenDocument; onTriggered: workspace.clearGuides() }
-    }
-
-    AppMenu {
-        id: helpMenu
-        ShapeMenuItem { text: "检查更新"; onTriggered: window.openUpdateDialog() }
-        MenuSeparator { }
-        ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
-    }
+    // 2026-11-04：这里曾有 6 个 AppMenu（fileMenu / editMenu / layerMenu /
+    // canvasMenu / viewMenu / helpMenu），全项目 0 处 .popup()，是没有 UI 入口的死代码。
+    // 其中 3 个命令别处到不了，已迁到 commandMenu 后再删除：
+    // 导入素材文件夹、适合窗口（补 Ctrl+1）、高级图层属性。
 
     AppDialog {
         id: updateDialog
@@ -4798,6 +4715,7 @@ ApplicationWindow {
 
                     // 并列入口保持一点直达：折叠成菜单会让常用动作多一次点击。
                     // 不显示 01/02/03 编号（见 docs/hermes-desktop-design-system.md 6.2）。
+                    // 导出不在这里：工具栏的强调色主按钮是它唯一的可见入口（同屏只留一个）。
                     HermesNavItem {
                         text: "画布"
                         iconName: AppIcons.image
@@ -4811,15 +4729,9 @@ ApplicationWindow {
                         onClicked: window.openProjectPresetDrawer()
                     }
                     HermesNavItem {
-                        text: "导出"
-                        iconName: AppIcons.exportAction
-                        description: "批量导出当前文档 F12"
-                        onClicked: window.openBatchExportDrawer()
-                    }
-                    HermesNavItem {
                         text: "命令"
                         iconName: AppIcons.more
-                        description: "打开命令菜单：项目、图层、检查更新、关于"
+                        description: "打开命令菜单：导入、缩放、检查更新、关于"
                         onClicked: commandMenu.popup()
                     }
                 }
@@ -4837,20 +4749,22 @@ ApplicationWindow {
             Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom }
         }
 
-        // 命令菜单保留完整命令清单：它是顶栏「命令」的展开内容，也是学习快捷键的地方，
-        // 不为了去重砍掉用户已有的路径。
+        // 命令菜单的定位：查找命令 + 学习快捷键。
+        // 收录规则（2026-11-04）：只放「能标注真实快捷键」或「别处没有可见入口」的命令；
+        // 顶栏/工具栏已有同名按钮且没有快捷键的，不在这里重复第二遍。
         AppMenu {
             id: commandMenu
             width: 250
-            ShapeMenuItem { text: "打开项目"; onTriggered: openDialog.open() }
-            ShapeMenuItem { text: "保存当前项目"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+            ShapeMenuItem { text: "打开项目\tCtrl+O"; onTriggered: openDialog.open() }
+            ShapeMenuItem { text: "保存当前项目\tCtrl+S"; enabled: window.hasOpenDocument; onTriggered: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open() }
+            ShapeMenuItem { text: "新建画布\tCtrl+N"; enabled: !workspace.operationsBlocked; onTriggered: window.openNewCanvasDialog() }
             MenuSeparator { }
-            ShapeMenuItem { text: "新建画布\tCtrl+N"; onTriggered: window.openNewCanvasDialog() }
-            ShapeMenuItem { text: "添加文字图层"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
-            ShapeMenuItem { text: "添加异形图层"; enabled: window.hasOpenDocument; onTriggered: shapedLayerDialog.openFresh() }
+            ShapeMenuItem { text: "导入图片为图层"; enabled: window.hasOpenDocument; onTriggered: imageDialog.open() }
+            ShapeMenuItem { text: "导入素材文件夹"; enabled: window.hasOpenDocument; onTriggered: imageFolderDialog.open() }
+            ShapeMenuItem { text: "添加文字图层\tShift+F8"; enabled: window.hasOpenDocument; onTriggered: textLayerDialog.openFresh() }
             MenuSeparator { }
-            ShapeMenuItem { text: "项目预设"; onTriggered: window.openProjectPresetDrawer() }
-            ShapeMenuItem { text: "批量导出"; enabled: window.hasOpenDocument; onTriggered: window.openBatchExportDrawer() }
+            ShapeMenuItem { text: "适合窗口\tCtrl+1"; enabled: window.hasOpenDocument; onTriggered: workspace.setZoomFactor(canvasWorkspace.fitScale) }
+            ShapeMenuItem { text: "高级图层属性"; enabled: workspace.selectedLayerIndex >= 0; onTriggered: window.revealAdvancedProperties() }
             MenuSeparator { }
             ShapeMenuItem { text: "检查更新\tCtrl+Shift+U"; onTriggered: window.openUpdateDialog() }
             ShapeMenuItem { text: "关于批图王"; onTriggered: window.openAboutDialog() }
@@ -4883,12 +4797,8 @@ ApplicationWindow {
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
                 }
-                IconButton {
-                    iconName: AppIcons.fileText
-                    tooltip: "打开项目预设 Ctrl+Shift+P"
-                    enabled: !workspace.operationsBlocked
-                    onClicked: window.openProjectPresetDrawer()
-                }
+                // 项目预设：顶栏「预设」已是同屏一点直达的主入口，工具栏不再放第二个。
+                // Ctrl+Shift+P 仍可用，命令菜单不再重复该文案（见下方 commandMenu 收录规则）。
                 IconButton {
                     iconName: AppIcons.link
                     tooltip: "图层绑定管理"

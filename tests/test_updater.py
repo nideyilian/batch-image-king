@@ -286,7 +286,10 @@ def test_qml_registers_update_manager():
     assert 'setContextProperty("updateManager", update_manager)' in qml_main
     assert "checkForUpdatesSilent" in qml_main
     assert 'id: "updateDialog"' in main_qml or "id: updateDialog" in main_qml
-    assert "id: helpMenu" in main_qml
+    # 2026-11-04：helpMenu 是无入口死菜单，已删除；「检查更新」改由 commandMenu
+    # 的文本别名 + 工具栏按钮承载，两处均带真实快捷键标注。
+    assert "id: helpMenu" not in main_qml
+    assert 'text: "检查更新\\tCtrl+Shift+U"' in main_qml
     assert "id: updateBanner" in main_qml
     assert "updateManager.readyToInstall" in main_qml
     assert "updateManager.installDownloadedUpdate()" in main_qml
