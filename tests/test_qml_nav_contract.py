@@ -228,3 +228,90 @@ def test_design_system_documents_the_rules():
     assert "`showIndex: true`" in doc
     assert "默认不显示编号" in doc
     assert "并列入口保持一点直达" in doc
+
+
+# 工具栏分组：(组名, 该组必须出现的动作)
+TOOLBAR_GROUPS = (
+    ("文件", ("openDialog.open", "workspace.saveDocument")),
+    ("历史", ("workspace.undo", "workspace.redo")),
+    ("新增", ("workspace.addEmptyImageLayer", "textLayerDialog.openFresh")),
+    ("数据", ("window.openDataRelations(0)", "window.openDataRelations(1)")),
+    ("输出", ("exportDialog.open", "window.openMultiTabExportDrawer", "window.openBatchExportDrawer")),
+)
+
+
+@pytest.mark.unit
+def test_toolbar_is_grouped_by_responsibility():
+    """工具栏按职责分组：文件 / 历史 / 新增 / 数据 / 输出。
+
+    数据组（图层绑定、尺寸匹配）不是普通排版动作——它们决定批量出图时
+    哪几层一起换图、素材怎么贴合孔位，混进编辑按钮里会被误读成排版工具。
+    """
+
+    bar = _command_sections(_main_source())["commandBar"]
+    actions = _actions(bar)
+
+    for name, members in TOOLBAR_GROUPS:
+        for action in members:
+            # 保存按钮是三表达式（有路径就存、否则弹另存为），
+            # 提取器只取到三元里的第一个 token，这里补一次原文检查。
+            with_call = action if "(" in action else f"{action}()"
+            ok = action in actions or with_call in bar
+            assert ok, f"{name}组缺少 {action}"
+
+    # 组间必须有分隔，避免整行看起来是一堆平级散按钮。
+    assert bar.count("<Divider") >= 5 or bar.count("Divider {") >= 5
+
+
+@pytest.mark.unit
+def test_ambiguous_toolbar_actions_carry_labels():
+    """易混淆的动作补文案；撤销/重做/对齐这类语义无歧义的保持纯图标。
+
+    文案按窗口宽度收起（`toolbarLabelsVisible`）：1180px 最小宽度塞不下全部标签，
+    窄窗口退回纯图标，但 tooltip 始终保留。
+    """
+
+    source = _main_source()
+    bar = _command_sections(source)["commandBar"]
+
+    labeled = re.findall(r'LabeledToolButton \{[^}]*?text: "([^"]+)"', bar, re.S)
+    assert set(labeled) >= {"图层绑定", "尺寸匹配", "重绘预览", "导出单张", "跨标签导出"}, labeled
+
+    # 每个带文案的按钮都必须有 tooltip 兜底（收起文案后仍能识别）。
+    for block in re.findall(r"LabeledToolButton \{[\s\S]*?\n                \}", bar):
+        assert "tooltip:" in block, block[:80]
+
+    # 宽度开关存在，且是按窗口宽度决定的响应式规则。
+    assert "readonly property bool toolbarLabelsVisible: width >= 1480" in source
+
+
+@pytest.mark.unit
+def test_logo_acts_as_home_button_in_editor_mode():
+    """LOGO 兼作「回到工作台首页」，行为是打开预设工作台而不是关闭文档。
+
+    关文档会触发未保存确认并丢掉编辑状态；首页是导航，不该有销毁语义。
+    """
+
+    source = _main_source()
+    title = _command_sections(source)["titleBar"]
+
+    assert "id: logoArea" in title
+    assert "onClicked: window.openProjectPresetDrawer()" in title
+    # 工作台已经在前台时点击无意义，必须禁用，否则是空操作。
+    assert "enabled: !window.presetWorkbenchVisible" in title
+    # 不允许把 LOGO 做成「关闭所有标签」。
+    assert "requestClose" not in title
+
+
+@pytest.mark.unit
+def test_preset_workbench_shows_same_brand_mark():
+    """工作台是整页覆盖层（z:900），会盖住顶栏——它自己必须有同样的品牌标识，
+    否则「LOGO 在两种模式下都出现」不成立。
+    """
+
+    workbench = (QML_ROOT / "components" / "PresetWorkbench.qml").read_text(encoding="utf-8")
+
+    assert 'text: "批图王"' in workbench
+    assert 'text: "预设工作台"' in workbench
+    # 工作台自己已有返回编辑器的出口，不需要再来一个首页按钮。
+    assert 'tooltip: "返回编辑器（Esc）"' in workbench

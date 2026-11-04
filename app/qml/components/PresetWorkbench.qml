@@ -459,15 +459,48 @@ Item {
                 anchors.rightMargin: 12
                 spacing: 10
 
-                Item {
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    AppIcon {
-                        anchors.centerIn: parent
-                        iconName: AppIcons.layers
-                        iconSize: 18
-                        iconColor: Theme.textPrimary
+                // 品牌标识与主界面顶栏保持一致，让「两种模式下 LOGO 出现在同一位置」成立。
+                // 这里不可点：工作台本身就是首页，再点一次没有意义。
+                Row {
+                    spacing: 10
+
+                    Item {
+                        width: 24
+                        height: 24
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        Rectangle {
+                            width: 17; height: 17
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            color: Theme.textPrimary
+                            rotation: 6
+                            radius: 1
+                        }
+                        Rectangle {
+                            width: 13; height: 13
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            color: Theme.success
+                            rotation: -7
+                            radius: 1
+                        }
                     }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "批图王"
+                        color: Theme.textPrimary
+                        font.family: Theme.displayFont
+                        font.pixelSize: 15
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 18
+                    color: Theme.border
                 }
 
                 Text {

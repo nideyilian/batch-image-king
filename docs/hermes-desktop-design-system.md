@@ -208,9 +208,9 @@ Cascadia Mono -> Consolas -> monospace
 
 ```qml
 HermesNavItem {
-    text: "画布"
+    text: "新建画布"
     iconName: AppIcons.image
-    description: "新建画布：设置尺寸并打开空白文档"
+    description: "设置尺寸后打开一张空白画布（Ctrl+N）"
     onClicked: window.openNewCanvasDialog()
 }
 ```
@@ -221,6 +221,46 @@ HermesNavItem {
 - hover：`Theme.bgHover`。
 - active：`Theme.accent` 黑底白字。
 - disabled：透明度降低，但仍保持可读。
+
+#### `LabeledToolButton`
+
+用于工具栏里「图标语义容易误解」的动作。纯图标按钮的作用只能靠 tooltip 才知道，
+所以易混淆的高频动作用「图标 + 短文案」。
+
+**按窗口宽度收起**：`showLabel: window.toolbarLabelsVisible`（阈值 1480）。
+窗口最小宽度是 1180，全部带文案约需 1500px，硬塞会裁切或换行；窄窗口退回纯图标，
+`tooltip` 始终保留，所以不会丢失信息。
+
+**禁用态仍可悬停**：`IconButton` 的 `MouseArea` 跟着 `enabled` 一起关，禁用时看不到
+tooltip。按钮置灰时更需要知道它能干什么，所以这里 `hoverEnabled` 常开，只在 `onClicked`
+里判断 `enabled`。
+
+```qml
+LabeledToolButton {
+    iconName: AppIcons.link
+    text: "图层绑定"
+    tooltip: "图层绑定管理：设定批量出图时哪几层一起换图"
+    showLabel: window.toolbarLabelsVisible
+    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+    onClicked: window.openDataRelations(0)
+}
+```
+
+工具栏分组（从左到右，组间 `Divider` 分隔）：
+
+| 组 | 内容 | 后续文案策略 |
+| --- | --- | --- |
+| 文件 | 打开、保存 | 纯图标（通用语义） |
+| 历史 | 撤销、重做 | 纯图标（PS/Figma 通用） |
+| 新增 | 新建图层、文字、异形 | 主按钮带文案，其余图标 |
+| 数据 | 图层绑定、尺寸匹配 | **带文案**：决定批量出图换图与孔位贴合，不是排版动作 |
+| 对齐 | 对齐/分布/居中/匹配画板 | 紧凑图标组（图标即语义，且数量多） |
+| 输出 | 重绘预览、导出单张、跨标签导出、批量导出、检查更新 | 三种导出**必须带文案**区分作用域 |
+
+品牌标识兼作导航：LOGO 点击 = 打开预设工作台（首页），**不是**关闭文档。
+关闭标签会触发未保存确认并丢掉编辑状态，首页属于导航、不应有销毁语义。
+预设工作台是 `z: 900` 整页覆盖层，会盖住顶栏，所以工作台顶部必须自带同一套品牌标识，
+否则「LOGO 在两种模式下都存在」不成立。
 
 #### `HermesPanelHeader`
 

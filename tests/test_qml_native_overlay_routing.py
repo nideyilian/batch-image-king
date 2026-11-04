@@ -38,10 +38,10 @@ def test_toolbar_exposes_binding_and_size_match_as_direct_buttons():
     )[0]
 
     assert 'iconName: AppIcons.link' in command_bar
-    assert 'tooltip: "图层绑定管理"' in command_bar
+    assert 'tooltip: "图层绑定管理：设定批量出图时哪几层一起换图"' in command_bar
     assert 'onClicked: window.openDataRelations(0)' in command_bar
     assert 'iconName: AppIcons.fitView' in command_bar
-    assert 'tooltip: "图层尺寸匹配"' in command_bar
+    assert 'tooltip: "图层尺寸匹配：让素材按孔位自动贴合"' in command_bar
     assert 'onClicked: window.openDataRelations(1)' in command_bar
     assert "dataRelationsMenu.popup" not in command_bar
     assert "id: dataRelationsMenu" not in qml_source

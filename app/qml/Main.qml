@@ -44,6 +44,9 @@ ApplicationWindow {
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
+    // 工具栏是否显示按钮文案。1180px（窗口最小宽度）装不下全部带文案的按钮，
+    // 窄窗口退回纯图标（tooltip 仍在），宽窗口才展开标签，避免裁切或换行。
+    readonly property bool toolbarLabelsVisible: width >= 1480
     property real layerPanelWidth: 0
     property bool sidebarWidthsRestored: false
 
@@ -4673,39 +4676,65 @@ ApplicationWindow {
                 anchors.rightMargin: 18
                 spacing: 16
 
-                Row {
+                // LOGO 兼作「回到工作台首页」按钮（2026-11-05）。
+                // 行为刻意定为「打开预设工作台」而不是「关闭所有文档」：
+                // 关闭标签会触发未保存确认、并丢掉当前编辑状态；首页是导航而非销毁操作。
+                // 编辑模式下顶栏可见，所以两种模式都能到达首页。
+                MouseArea {
+                    id: logoArea
                     Layout.preferredWidth: 150
-                    spacing: 12
+                    Layout.preferredHeight: 34
+                    hoverEnabled: true
+                    cursorShape: window.presetWorkbenchVisible
+                                 ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    enabled: !window.presetWorkbenchVisible && !workspace.operationsBlocked
+                    onClicked: window.openProjectPresetDrawer()
 
-                    Item {
-                        width: 28
-                        height: 28
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 12
 
-                        Rectangle {
-                            width: 20; height: 20
-                            anchors.left: parent.left
-                            anchors.bottom: parent.bottom
-                            color: Theme.textPrimary
-                            rotation: 6
-                            radius: 1
+                        Item {
+                            width: 28
+                            height: 28
+
+                            Rectangle {
+                                width: 20; height: 20
+                                anchors.left: parent.left
+                                anchors.bottom: parent.bottom
+                                color: Theme.textPrimary
+                                rotation: 6
+                                radius: 1
+                            }
+                            Rectangle {
+                                width: 15; height: 15
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                color: Theme.success
+                                rotation: -7
+                                radius: 1
+                            }
                         }
-                        Rectangle {
-                            width: 15; height: 15
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            color: Theme.success
-                            rotation: -7
-                            radius: 1
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "批图王"
+                            color: Theme.textPrimary
+                            font.family: Theme.displayFont
+                            font.pixelSize: 16
+                            font.weight: Font.DemiBold
                         }
                     }
 
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "批图王"
-                        color: Theme.textPrimary
-                        font.family: Theme.displayFont
-                        font.pixelSize: 16
-                        font.weight: Font.DemiBold
+                    // 悬停时说明它是可点的，否则用户只会当它是装饰。
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        visible: logoArea.containsMouse && logoArea.enabled
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Theme.border
+                        radius: Theme.radiusSmall
                     }
                 }
 
@@ -4783,8 +4812,20 @@ ApplicationWindow {
                 anchors.rightMargin: 12
                 spacing: 6
 
+                // ============ 工具栏分组（2026-11-05） ============
+                // 从左到右按职责分成 5 组，组间用 Divider 分隔：
+                //   1 文件   —— 打开、保存
+                //   2 历史   —— 撤销、重做
+                //   3 新增   —— 新建图层、文字、异形
+                //   4 数据   —— 图层绑定、尺寸匹配（与批量出图的数据源有关，不是普通编辑）
+                //   5 对齐   —— 对齐、分布、居中、匹配画板（紧凑图标组，画板级批量操作）
+                // 右侧固定为「输出区」：重绘预览、导出（单张/跨标签/批量）、检查更新。
+                // 高频且容易混淆的动作补文案（见 LabeledToolButton），
+                // 撤销/重做/对齐这类图标语义无歧义的保持纯图标。
+
+                // ---- 1 文件 ----
                 // 新建画布按钮归空工作区首页所有（见 test_qml_button_entry_dedup.py），
-                // 工具栏不重复放置；有文档时走顶栏「画布」、命令菜单别名或 Ctrl+N。
+                // 工具栏不重复放置；有文档时走顶栏「新建画布」、命令菜单别名或 Ctrl+N。
                 IconButton {
                     iconName: AppIcons.folderOpen
                     tooltip: "打开项目 Ctrl+O"
@@ -4797,20 +4838,6 @@ ApplicationWindow {
                     tooltip: "保存 Ctrl+S"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: workspace.hasFilePath ? workspace.saveDocument() : saveDialog.open()
-                }
-                // 项目预设：顶栏「预设」已是同屏一点直达的主入口，工具栏不再放第二个。
-                // Ctrl+Shift+P 仍可用，命令菜单不再重复该文案（见下方 commandMenu 收录规则）。
-                IconButton {
-                    iconName: AppIcons.link
-                    tooltip: "图层绑定管理"
-                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: window.openDataRelations(0)
-                }
-                IconButton {
-                    iconName: AppIcons.fitView
-                    tooltip: "图层尺寸匹配"
-                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: window.openDataRelations(1)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
                 IconButton { iconName: AppIcons.undo; tooltip: "撤销 Ctrl+Z"; enabled: workspace.canUndo && !workspace.operationsBlocked; onClicked: workspace.undo() }
@@ -4831,6 +4858,27 @@ ApplicationWindow {
                     tooltip: "添加异形图层"
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: shapedLayerDialog.openFresh()
+                }
+                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+
+                // ---- 4 数据 ----
+                // 这两个不是普通编辑动作：绑定组决定批量出图时哪几层一起换图，
+                // 尺寸匹配决定素材怎么贴合孔位。放回「数据」组才不会被当成排版按钮。
+                LabeledToolButton {
+                    iconName: AppIcons.link
+                    text: "图层绑定"
+                    tooltip: "图层绑定管理：设定批量出图时哪几层一起换图"
+                    showLabel: window.toolbarLabelsVisible
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: window.openDataRelations(0)
+                }
+                LabeledToolButton {
+                    iconName: AppIcons.fitView
+                    text: "尺寸匹配"
+                    tooltip: "图层尺寸匹配：让素材按孔位自动贴合"
+                    showLabel: window.toolbarLabelsVisible
+                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                    onClicked: window.openDataRelations(1)
                 }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
@@ -4867,38 +4915,41 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true }
 
+                // ---- 5 输出（右端固定） ----
+                // 先预览、再导出，顺序与「先看后出」的工作流一致。
                 // 画布本来就是实时预览：交互时 20ms 节流出低画质帧，静止 220ms 后自动
                 // 升级到最高画质。这个按钮做的是「立刻跳到最高画质」，所以必须给出反馈，
                 // 否则用户会觉得点了没反应（低画质与最高画质在正常缩放下肉眼看不出差别）。
-                AppButton {
-                    // 不锁死宽度：文案从「预览」改成「重绘预览」后，92px 会把字挤掉。
-                    Layout.preferredWidth: implicitWidth
-                    text: "重绘预览"
+                LabeledToolButton {
                     iconName: AppIcons.preview
+                    text: "重绘预览"
+                    tooltip: "立即以最高画质重绘画布（平时会自动重绘）"
+                    showLabel: window.toolbarLabelsVisible
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: {
                         if (workspace.renderPreviewNow())
                             window.showToast("已按最高画质重绘画布")
                     }
-                    ToolTip.visible: hovered
-                    ToolTip.text: "立即以最高画质重绘画布（平时会自动重绘）"
-                    ToolTip.delay: 420
                 }
+
+                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
                 // 三个导出入口按作用域区分，并且各用不同图标：
                 // 单张=folder-output、跨标签=list-checks、当前文档批量=send-to-back。
-                IconButton {
+                LabeledToolButton {
                     iconName: AppIcons.folderOutput
+                    text: "导出单张"
                     tooltip: "导出当前画面（单张）Ctrl+Shift+X"
-                    buttonSize: 32
+                    showLabel: window.toolbarLabelsVisible
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
                     onClicked: exportDialog.open()
                 }
 
-                IconButton {
+                LabeledToolButton {
                     iconName: AppIcons.listChecks
+                    text: "跨标签导出"
                     tooltip: "多标签批量导出（跨标签页）Ctrl+Alt+Shift+X"
-                    buttonSize: 32
+                    showLabel: window.toolbarLabelsVisible
                     enabled: window.hasOpenDocument && (!workspace.operationsBlocked || multiTabExport.running)
                     onClicked: window.openMultiTabExportDrawer()
                 }
@@ -4914,6 +4965,8 @@ ApplicationWindow {
                     ToolTip.text: "批量导出当前文档 F12"
                     ToolTip.delay: 420
                 }
+
+                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
                 IconButton {
                     iconName: AppIcons.refresh
