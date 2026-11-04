@@ -366,6 +366,11 @@ def main(app=None, on_ready=None) -> int:
     binding_manager = BindingManagerViewModel(workspace=workspace, parent=engine)
     size_match = SizeMatchViewModel(workspace=workspace, parent=engine)
     update_manager = UpdateViewModel(parent=engine)
+    # 自升级进程已经 spawn 出来之后，主进程必须结束，updater_tool 才能替换安装目录。
+    # 正常路径由 QML 的 window.close() 完成（onClosing 会落盘窗口几何）；这里挂一条
+    # 3 秒保险丝：若窗口关了进程仍未退出（残留顶层窗口 / 退出策略被改过），直接
+    # 结束事件循环，绝不让 --wait-pid 傻等超时。进程正常退出时定时器随之消失。
+    update_manager.restartRequested.connect(lambda: QTimer.singleShot(3000, app.quit))
     engine.addImageProvider("documentPreview", preview_provider)
 
     if wants_initial_document(args):
@@ -513,6 +518,9 @@ def main(app=None, on_ready=None) -> int:
 
         QTimer.singleShot(1800, capture)
 
+    # 自升级是独立无窗口进程，失败时只能落标记；等 QML Connections 建好再消费，
+    # 否则 emit 出去没人接，用户仍然只看到「没动静」。
+    QTimer.singleShot(0, update_manager.consumeUpdateResult)
     # 启动后延迟静默检查更新；发现新版本时由 QML 横幅提示
     QTimer.singleShot(4000, update_manager.checkForUpdatesSilent)
 

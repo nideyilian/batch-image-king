@@ -6,13 +6,14 @@
          progressText / localUpdateAvailable
 - 槽：checkForUpdates() / checkForUpdatesSilent() / downloadAndInstall() /
       installDownloadedUpdate() / openReleasePage() / detectLocalUpdate() /
-      prepareLocalInstall()
+      prepareLocalInstall() / consumeUpdateResult()
 - 信号：stateChanged() / progressChanged() / updateFinished(bool, str) /
         autoUpdateDetected(str) / restartRequested()
 """
 
 from __future__ import annotations
 
+import json
 import os
 import threading
 from pathlib import Path
@@ -329,6 +330,36 @@ class UpdateViewModel(QObject):
     def prepareLocalInstall(self) -> None:
         """用户确认安装本地新版文件：记录路径，待应用关闭时执行替换。"""
         self._local_install_path = self._local_update_path
+
+    @Slot()
+    def consumeUpdateResult(self) -> None:
+        """读取自升级进程留下的失败标记，删除后提示用户。
+
+        自升级是独立进程且无窗口，失败时只能往 exe 同目录落标记；由
+        qml_main 在事件循环启动后延迟调用，保证 QML 的 Connections 已就绪。
+        """
+        path = updater.update_result_path()
+        try:
+            if not path.is_file():
+                return
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        if not isinstance(payload, dict) or payload.get("ok") is True:
+            return
+        message = str(payload.get("message") or "").strip()
+        if not message:
+            message = "自动更新未完成，请重试或手动下载最新版"
+        code = payload.get("code")
+        if code:
+            message = f"{message}（错误码 {code}）"
+        self._error_message = message
+        self.stateChanged.emit()
+        self.updateFinished.emit(False, message)
 
     @Slot(result=bool)
     def openReleasePage(self) -> bool:

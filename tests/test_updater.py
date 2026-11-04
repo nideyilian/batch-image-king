@@ -291,7 +291,30 @@ def test_qml_registers_update_manager():
     assert "updateManager.readyToInstall" in main_qml
     assert "updateManager.installDownloadedUpdate()" in main_qml
     assert "pendingUpdateInstall" in main_qml
-    assert "restartRequested.connect" not in qml_main
+    # 2026-11-04：restartRequested 曾经没有任何接收者，spawn 出更新进程后
+    # 只能靠 window.close() 软退出，进程不退导致更新静默失败。
+    assert "restartRequested.connect" in qml_main
+    assert "QTimer.singleShot(3000, app.quit)" in qml_main
+    assert "consumeUpdateResult" in qml_main
+
+
+@pytest.mark.unit
+def test_quit_policy_restored_before_event_loop():
+    """退出策略必须在事件循环开始之前恢复，且晚于启动画面收起。
+
+    2026-11-04 实测：恢复语句写在 qml_main() 返回之后（app.exec 已结束），
+    全生命周期 quitOnLastWindowClosed=False → 关窗口后进程变无窗口僵尸，
+    updater_tool 的 --wait-pid 永远等不到，更新静默失败。
+    """
+    source = (REPO_ROOT / "main.py").read_text(encoding="utf-8")
+    restore = "app.setQuitOnLastWindowClosed(True)"
+    call = "qml_main(app=app, on_ready=_finish_splash)"
+    assert source.count(restore) == 1, "恢复语句有且只能有一处"
+    assert source.index(restore) < source.index(call), (
+        "恢复退出策略必须发生在 qml_main() 启动事件循环之前"
+    )
+    # 但也不能太早：启动画面还开着时恢复，splash 关闭会误触发退出
+    assert source.index("splash.finish_with(qml_window)") < source.index(restore)
 
 
 @pytest.mark.unit
@@ -751,3 +774,96 @@ def test_build_manifest_includes_installer_sha256(tmp_path, monkeypatch):
     assert payload["installer_sha256"] == build_module._sha256_hex(
         dist / "批图王-Setup.exe"
     )
+
+
+# ---------------------------------------------------------------- 自升级结果标记
+
+
+@pytest.mark.unit
+def test_record_update_result_writes_and_clears(tmp_path):
+    marker = tmp_path / updater.UPDATE_RESULT_NAME
+    updater.record_update_result(False, 3, "主进程未退出", directory=tmp_path)
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["ok"] is False
+    assert payload["code"] == 3
+    assert "主进程未退出" in payload["message"]
+    assert payload["time"]
+
+    updater.record_update_result(True, 0, "", directory=tmp_path)
+    assert not marker.exists()
+
+
+@pytest.mark.unit
+def test_record_update_result_never_breaks_on_unwritable_dir(tmp_path):
+    """写标记失败必须被吞掉，绝不能影响更新主流程。"""
+    blocked = tmp_path / "missing" / "nested"
+    updater.record_update_result(False, 4, "安装失败", directory=blocked)
+    updater.record_update_result(True, 0, "", directory=blocked)
+
+
+@pytest.mark.unit
+def test_apply_update_records_timeout_and_clears_on_success(tmp_path, monkeypatch):
+    current = tmp_path / "批图王.exe"
+    new = tmp_path / "批图王_new.exe"
+    marker = tmp_path / updater.UPDATE_RESULT_NAME
+    current.write_bytes(b"old")
+    new.write_bytes(b"new")
+    monkeypatch.setattr(updater, "is_frozen", lambda: True)
+    monkeypatch.setattr(updater, "wait_for_process", lambda *a, **k: False)
+
+    assert (
+        updater.apply_update(new, current_exe=current, wait_pid=1234, relaunch=False)
+        == 4
+    )
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["code"] == 4
+    assert "1234" in payload["message"]
+
+    # 成功替换后标记必须清掉，避免下次启动误报上一次的失败
+    new.write_bytes(b"new")
+    monkeypatch.setattr(updater, "wait_for_process", lambda *a, **k: True)
+    assert (
+        updater.apply_update(new, current_exe=current, wait_pid=0, relaunch=False) == 0
+    )
+    assert current.read_bytes() == b"new"
+    assert not marker.exists()
+
+
+@pytest.mark.unit
+def test_consume_update_result_reports_failure(tmp_path, monkeypatch):
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
+
+    marker = tmp_path / updater.UPDATE_RESULT_NAME
+    marker.write_text(
+        json.dumps({"ok": False, "code": 3, "message": "主进程 42272 未退出", "time": "x"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(updater, "update_result_path", lambda: marker)
+    vm = UpdateViewModel()
+    finished = []
+    vm.updateFinished.connect(lambda ok, message: finished.append((ok, message)))
+
+    vm.consumeUpdateResult()
+
+    assert not marker.exists(), "标记必须被消费掉，不能反复弹"
+    assert finished and finished[-1][0] is False
+    assert "42272" in finished[-1][1]
+    assert "42272" in vm.errorMessage
+    vm.consumeUpdateResult()
+    assert len(finished) == 1, "标记已删，第二次消费不应重复提示"
+
+
+@pytest.mark.unit
+def test_consume_update_result_ignores_success_marker(tmp_path, monkeypatch):
+    from app.qml.viewmodels.update_view_model import UpdateViewModel
+
+    marker = tmp_path / updater.UPDATE_RESULT_NAME
+    marker.write_text(json.dumps({"ok": True, "code": 0}), encoding="utf-8")
+    monkeypatch.setattr(updater, "update_result_path", lambda: marker)
+    vm = UpdateViewModel()
+    finished = []
+    vm.updateFinished.connect(lambda ok, message: finished.append((ok, message)))
+
+    vm.consumeUpdateResult()
+    assert finished == []
+    assert not marker.exists()

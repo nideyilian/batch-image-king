@@ -378,6 +378,13 @@ def main() -> int:
                 splash.advance(1.0, "准备就绪")
                 splash.finish_with(qml_window)
 
+            # 恢复「最后一个窗口关闭即退出」。启动时设 False 只是防止启动画面
+            # 关闭误触发退出；现在主窗口已就绪、启动画面已收，必须在这里恢复。
+            # 原来这行写在 qml_main() 返回之后（事件循环早已结束），等于从没生效：
+            # 关闭主窗口只隐藏窗口、进程变无窗口僵尸，自动更新的 updater_tool
+            # 永远等不到 --wait-pid 退出，等满 120 秒后静默放弃。
+            app.setQuitOnLastWindowClosed(True)
+
             if previous_crash_notice is not None:
                 QTimer.singleShot(
                     300,
@@ -401,9 +408,6 @@ def main() -> int:
         from app.qml.qml_main import main as qml_main
 
         exit_code = qml_main(app=app, on_ready=_finish_splash)
-
-        # 恢复程序退出策略（当最后一个窗口关闭时退出）
-        app.setQuitOnLastWindowClosed(True)
 
         # 计算并打印实际启动时间
         startup_duration = time.time() - start_time

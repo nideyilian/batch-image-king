@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -28,6 +29,9 @@ from pathlib import Path
 
 APP_NAME = "批图王"
 APP_EXE = f"{APP_NAME}.exe"
+# 与 app/utils/updater.py 的 UPDATE_RESULT_NAME 保持一致（本工具是独立单文件，
+# 不能 import app 包，只能各写一份；改动必须两边同步）。
+RESULT_NAME = "update_result.json"
 _UNINSTALL_KEY = (
     r"Software\Microsoft\Windows\CurrentVersion\Uninstall\批图王"
 )
@@ -128,6 +132,32 @@ def run_installer(setup_exe: Path, install_dir: str = "", timeout: float = 600.0
     return result.returncode
 
 
+def _record_result(setup: Path, ok: bool, code: int, message: str) -> None:
+    """写/清更新结果标记，供主程序下次启动提示失败原因。
+
+    格式与 app/utils/updater.py 的 record_update_result 一致。写失败绝不能
+    影响更新流程本身 —— 这是诊断用的旁路，不是主链路。
+    """
+    path = setup.resolve().parent / RESULT_NAME
+    try:
+        if ok:
+            path.unlink(missing_ok=True)
+            return
+        payload = {
+            "ok": False,
+            "code": int(code),
+            "message": str(message),
+            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        tmp.replace(path)
+    except OSError:
+        pass
+
+
 def apply_installer(
     setup_exe,
     install_dir: str = "",
@@ -138,12 +168,22 @@ def apply_installer(
     """安装版更新主流程；返回码见模块文档。"""
     setup = Path(setup_exe)
     if not setup.is_file():
+        _record_result(setup, False, 2, "未找到下载好的安装包")
         return 2
     if wait_pid > 0 and not wait_for_pid(wait_pid, timeout=wait_timeout):
+        _record_result(
+            setup,
+            False,
+            3,
+            f"主进程 {wait_pid} 未在 {wait_timeout:.0f} 秒内退出，更新已取消",
+        )
         return 3
     code = run_installer(setup, install_dir=install_dir)
     if code != 0:
+        _record_result(setup, False, 4, f"安装包执行失败（退出码 {code}）")
         return 4
+    # 先清掉旧的失败标记再重启，避免新进程读到上一次的失败结果
+    _record_result(setup, True, 0, "")
     if relaunch:
         target = Path(install_dir) / APP_EXE if install_dir else Path()
         if target.is_file():

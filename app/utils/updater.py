@@ -63,6 +63,8 @@ NEW_EXE_NAME = f"{APP_NAME}_new.exe"
 NEW_SETUP_NAME = f"{APP_NAME}-Setup_new.exe"
 # 安装版自带的独立更新工具（随 onedir 一起分发）
 UPDATER_TOOL_NAME = "updater_tool.exe"
+# 自升级进程写的结果标记（exe 同目录）；主程序下次启动读取后提示失败原因
+UPDATE_RESULT_NAME = "update_result.json"
 
 
 @dataclass
@@ -300,6 +302,44 @@ def exe_path() -> Path:
     return Path(sys.executable).resolve()
 
 
+def update_result_path() -> Path:
+    """自升级结果标记文件路径（exe 同目录，安装版与便携版一致）。"""
+    return exe_path().with_name(UPDATE_RESULT_NAME)
+
+
+def record_update_result(
+    ok: bool,
+    code: int,
+    message: str,
+    directory: Optional[Path] = None,
+) -> None:
+    """写/清自升级结果标记。写失败绝不能影响更新流程本身。
+
+    ``directory`` 供自升级进程传「新版文件所在目录」，避免开发/测试模式下
+    往 Python 解释器目录落文件；主程序读取时走默认的 exe 同目录。
+    安装版 updater_tool 是独立单文件程序，无法 import 本模块，因此同一份
+    格式在 updater_tool.py 里各实现一次，改动时必须两边同步。
+    """
+    path = Path(directory or exe_path().parent).resolve() / UPDATE_RESULT_NAME
+    try:
+        if ok:
+            path.unlink(missing_ok=True)
+            return
+        payload = {
+            "ok": False,
+            "code": int(code),
+            "message": str(message),
+            "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        tmp.replace(path)
+    except OSError:
+        pass
+
+
 def new_exe_path() -> Path:
     return exe_path().with_name(NEW_EXE_NAME)
 
@@ -475,16 +515,22 @@ def apply_update(
     返回码：0=成功；1=非冻结环境跳过；2=新版文件缺失；3=替换失败；
     4=等待主进程退出超时。
     """
+    result_dir = Path(new_exe).resolve().parent if str(new_exe) else exe_path().parent
+
+    def finish(code: int, message: str = "") -> int:
+        record_update_result(code == 0, code, message, directory=result_dir)
+        return code
+
     if not is_frozen():
         return 1
     current = Path(current_exe or exe_path()).resolve()
     if not str(new_exe):
-        return 2
+        return finish(2, "未指定新版文件")
     new = Path(new_exe).resolve()
     if not new.is_file():
-        return 2
+        return finish(2, "下载的新版文件不存在")
     if not wait_for_process(wait_pid, timeout=timeout):
-        return 4
+        return finish(4, f"主进程 {wait_pid} 未在 {timeout:.0f} 秒内退出，更新已取消")
     backup = current.with_name(current.name + ".bak")
     try:
         if backup.exists():
@@ -497,7 +543,9 @@ def apply_update(
                 os.replace(backup, current)
         except OSError:
             pass
-        return 3
+        return finish(3, "替换主程序文件失败，已回滚")
+    # 先清掉旧的失败标记再重启，避免新进程读到上一次的失败结果
+    finish(0)
     if relaunch:
         try:
             subprocess.Popen([str(current)], cwd=str(current.parent))
