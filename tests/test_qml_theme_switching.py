@@ -120,9 +120,10 @@ def test_title_bar_only_keeps_real_navigation_actions():
 
     # 顶栏保留 3 个一点直达的并列入口，不折叠成菜单；编号不再显示；
     # 「导出」下沉到工具栏强调色主按钮，同屏只留一个。
+    # 文案用「动词 + 对象」，不用名词缩写。
     assert source.count("HermesNavItem {") == 3
     assert 'text: "更多操作"' not in source
-    for label in ('text: "画布"', 'text: "预设"', 'text: "命令"'):
+    for label in ('text: "新建画布"', 'text: "预设中心"', 'text: "更多命令"'):
         assert label in source
     assert 'text: "导出"' not in source
 

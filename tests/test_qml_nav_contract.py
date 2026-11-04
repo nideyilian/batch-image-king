@@ -29,10 +29,11 @@ QML_ROOT = REPO_ROOT / "app" / "qml"
 DOCS_ROOT = REPO_ROOT / "docs"
 
 # 顶栏必须直达的入口：(标签, 动作)
+# 文案用「动词 + 对象」，不用「画布/预设/命令」这类名词缩写——缩写要靠 tooltip 才看得懂。
 TOP_LEVEL_ACTIONS = (
-    ("画布", "window.openNewCanvasDialog"),
-    ("预设", "window.openProjectPresetDrawer"),
-    ("命令", "commandMenu.popup"),
+    ("新建画布", "window.openNewCanvasDialog"),
+    ("预设中心", "window.openProjectPresetDrawer"),
+    ("更多命令", "commandMenu.popup"),
 )
 
 # 曾只在死菜单里可达的 3 个命令，删除死菜单前已迁出，必须始终有落点。

@@ -18,7 +18,9 @@ Rectangle {
     property string description: ""
     signal clicked()
 
-    implicitWidth: 112
+    // 宽度跟随文案自适应：固定 112 会把「新建画布」这类四字标签挤成省略号。
+    // 同一行里的多项仍保持等宽观感，由使用方按最长标签统一 covered 即可。
+    implicitWidth: Math.max(84, contentRow.implicitWidth + 19)
     implicitHeight: 34
     radius: Theme.radiusSmall
     color: active
@@ -29,6 +31,7 @@ Rectangle {
     activeFocusOnTab: enabled
 
     RowLayout {
+        id: contentRow
         anchors.fill: parent
         anchors.leftMargin: 10
         anchors.rightMargin: 9
@@ -61,8 +64,8 @@ Rectangle {
             font.family: Theme.bodyFont
             font.pixelSize: 12
             font.weight: root.active ? Font.DemiBold : Font.Normal
-            Layout.fillWidth: true
-            elide: Text.ElideRight
+            // 不设 Layout.fillWidth：宽度由文案决定，避免与 implicitWidth 形成绑定环。
+            elide: Text.ElideNone
         }
 
         Text {

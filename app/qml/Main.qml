@@ -4716,22 +4716,23 @@ ApplicationWindow {
                     // 并列入口保持一点直达：折叠成菜单会让常用动作多一次点击。
                     // 不显示 01/02/03 编号（见 docs/hermes-desktop-design-system.md 6.2）。
                     // 导出不在这里：工具栏的强调色主按钮是它唯一的可见入口（同屏只留一个）。
+                    // 文案用「动词 + 对象」：写清点了会发生什么，不用「画布/预设」这类名词缩写。
                     HermesNavItem {
-                        text: "画布"
+                        text: "新建画布"
                         iconName: AppIcons.image
-                        description: "新建画布：设置尺寸并打开空白文档"
+                        description: "设置尺寸后打开一张空白画布（Ctrl+N）"
                         onClicked: window.openNewCanvasDialog()
                     }
                     HermesNavItem {
-                        text: "预设"
+                        text: "预设中心"
                         iconName: AppIcons.fileText
-                        description: "打开项目预设中心"
+                        description: "打开项目预设中心，套用已保存的模板（Ctrl+Shift+P）"
                         onClicked: window.openProjectPresetDrawer()
                     }
                     HermesNavItem {
-                        text: "命令"
+                        text: "更多命令"
                         iconName: AppIcons.more
-                        description: "打开命令菜单：导入、缩放、检查更新、关于"
+                        description: "导入素材、适合窗口、检查更新、关于"
                         onClicked: commandMenu.popup()
                     }
                 }
@@ -4866,12 +4867,22 @@ ApplicationWindow {
 
                 Item { Layout.fillWidth: true }
 
+                // 画布本来就是实时预览：交互时 20ms 节流出低画质帧，静止 220ms 后自动
+                // 升级到最高画质。这个按钮做的是「立刻跳到最高画质」，所以必须给出反馈，
+                // 否则用户会觉得点了没反应（低画质与最高画质在正常缩放下肉眼看不出差别）。
                 AppButton {
-                    Layout.preferredWidth: 92
-                    text: "预览"
+                    // 不锁死宽度：文案从「预览」改成「重绘预览」后，92px 会把字挤掉。
+                    Layout.preferredWidth: implicitWidth
+                    text: "重绘预览"
                     iconName: AppIcons.preview
                     enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: workspace.renderPreviewNow()
+                    onClicked: {
+                        if (workspace.renderPreviewNow())
+                            window.showToast("已按最高画质重绘画布")
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "立即以最高画质重绘画布（平时会自动重绘）"
+                    ToolTip.delay: 420
                 }
 
                 // 三个导出入口按作用域区分，并且各用不同图标：
