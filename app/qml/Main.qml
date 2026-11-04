@@ -44,9 +44,10 @@ ApplicationWindow {
     property string toastMessage: ""
     property string activeLayerName: workspace.selectedLayerName
     readonly property bool hasOpenDocument: workspaceSessions.count > 0
-    // 工具栏是否显示按钮文案。1180px（窗口最小宽度）装不下全部带文案的按钮，
-    // 窄窗口退回纯图标（tooltip 仍在），宽窗口才展开标签，避免裁切或换行。
-    readonly property bool toolbarLabelsVisible: width >= 1480
+    // 工具栏是否显示按钮文案。
+    // 2026-11-05：新建组上提到顶栏后，工具栏少了约 280px 占用，阈值从 1480 降到 1240。
+    // 实测 1180（最小宽度）仍然放不下全部标签，所以保留收起逻辑而不是硬塞。
+    readonly property bool toolbarLabelsVisible: width >= 1240
     property real layerPanelWidth: 0
     property bool sidebarWidthsRestored: false
 
@@ -4744,14 +4745,52 @@ ApplicationWindow {
 
                     // 并列入口保持一点直达：折叠成菜单会让常用动作多一次点击。
                     // 不显示 01/02/03 编号（见 docs/hermes-desktop-design-system.md 6.2）。
-                    // 导出不在这里：工具栏的强调色主按钮是它唯一的可见入口（同屏只留一个）。
                     // 文案用「动词 + 对象」：写清点了会发生什么，不用「画布/预设」这类名词缩写。
+                    //
+                    // 顶栏放「全局动作」：创建与导航。它们任何时候都可用、不依赖选中图层，
+                    // 因此适合放第一行；依赖选中态的编辑动作（撤销、对齐）留在第二行工具栏，
+                    // 靠近画布且置灰频率高，放这里反而会被一堆 disabled 按钮淹没。
                     HermesNavItem {
                         text: "新建画布"
                         iconName: AppIcons.image
                         description: "设置尺寸后打开一张空白画布（Ctrl+N）"
                         onClicked: window.openNewCanvasDialog()
                     }
+
+                    Rectangle {
+                        width: 1; height: 18
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: Theme.border
+                    }
+
+                    HermesNavItem {
+                        text: "图层"
+                        iconName: AppIcons.imageAdd
+                        description: "新建一个空白图片图层（Shift+Ctrl+N）"
+                        enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                        onClicked: workspace.addEmptyImageLayer()
+                    }
+                    HermesNavItem {
+                        text: "文字"
+                        iconName: AppIcons.type
+                        description: "添加文字图层（Shift+F8）"
+                        enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                        onClicked: textLayerDialog.openFresh()
+                    }
+                    HermesNavItem {
+                        text: "异形"
+                        iconName: AppIcons.shapes
+                        description: "添加异形 / 矢量图层"
+                        enabled: window.hasOpenDocument && !workspace.operationsBlocked
+                        onClicked: shapedLayerDialog.openFresh()
+                    }
+
+                    Rectangle {
+                        width: 1; height: 18
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: Theme.border
+                    }
+
                     HermesNavItem {
                         text: "预设中心"
                         iconName: AppIcons.fileText
@@ -4844,22 +4883,8 @@ ApplicationWindow {
                 IconButton { iconName: AppIcons.redo; tooltip: "重做 Ctrl+Shift+Z"; enabled: workspace.canRedo && !workspace.operationsBlocked; onClicked: workspace.redo() }
                 Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
 
-                AppButton {
-                    Layout.preferredWidth: 106
-                    text: "新建图层"
-                    iconName: AppIcons.imageAdd
-                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: workspace.addEmptyImageLayer()
-                }
-
-                IconButton { iconName: AppIcons.type; tooltip: "添加文字图层 Shift+F8"; enabled: window.hasOpenDocument && !workspace.operationsBlocked; onClicked: textLayerDialog.openFresh() }
-                IconButton {
-                    iconName: AppIcons.shapes
-                    tooltip: "添加异形图层"
-                    enabled: window.hasOpenDocument && !workspace.operationsBlocked
-                    onClicked: shapedLayerDialog.openFresh()
-                }
-                Divider { Layout.preferredHeight: 24; Layout.leftMargin: 3; Layout.rightMargin: 3 }
+                // 「新建图层 / 文字 / 异形」已上提到顶栏：它们是全局创建动作，
+                // 不依赖选中图层，放在这一行会被前后 disabled 的按钮淹没。
 
                 // ---- 4 数据 ----
                 // 这两个不是普通编辑动作：绑定组决定批量出图时哪几层一起换图，

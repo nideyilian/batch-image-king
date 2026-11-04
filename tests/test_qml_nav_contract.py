@@ -30,8 +30,16 @@ DOCS_ROOT = REPO_ROOT / "docs"
 
 # 顶栏必须直达的入口：(标签, 动作)
 # 文案用「动词 + 对象」，不用「画布/预设/命令」这类名词缩写——缩写要靠 tooltip 才看得懂。
+#
+# 2026-11-05 方案 A：新建组（图层/文字/异形）上提到顶栏。
+# 判据是「全局动作 vs 依赖选中态的动作」：
+#   顶栏 = 任何时候都可用、不依赖选中的创建与导航动作
+#   工具栏 = 依赖选中图层/选区的编辑动作（撤销、对齐）+ 数据配置 + 输出
 TOP_LEVEL_ACTIONS = (
     ("新建画布", "window.openNewCanvasDialog"),
+    ("图层", "workspace.addEmptyImageLayer"),
+    ("文字", "textLayerDialog.openFresh"),
+    ("异形", "shapedLayerDialog.openFresh"),
     ("预设中心", "window.openProjectPresetDrawer"),
     ("更多命令", "commandMenu.popup"),
 )
@@ -231,10 +239,10 @@ def test_design_system_documents_the_rules():
 
 
 # 工具栏分组：(组名, 该组必须出现的动作)
+# 「新增」组已整体上提到顶栏（见 TOP_LEVEL_ACTIONS），这里不再列。
 TOOLBAR_GROUPS = (
     ("文件", ("openDialog.open", "workspace.saveDocument")),
     ("历史", ("workspace.undo", "workspace.redo")),
-    ("新增", ("workspace.addEmptyImageLayer", "textLayerDialog.openFresh")),
     ("数据", ("window.openDataRelations(0)", "window.openDataRelations(1)")),
     ("输出", ("exportDialog.open", "window.openMultiTabExportDrawer", "window.openBatchExportDrawer")),
 )
@@ -282,7 +290,10 @@ def test_ambiguous_toolbar_actions_carry_labels():
         assert "tooltip:" in block, block[:80]
 
     # 宽度开关存在，且是按窗口宽度决定的响应式规则。
-    assert "readonly property bool toolbarLabelsVisible: width >= 1480" in source
+    # 阈值 2026-11-05 从 1480 降到 1240：新建组上提后工具栏宽裕了。
+    assert re.search(r"readonly property bool toolbarLabelsVisible: width >= \d+", source)
+    threshold = int(re.search(r"toolbarLabelsVisible: width >= (\d+)", source).group(1))
+    assert 1180 < threshold <= 1480, threshold
 
 
 @pytest.mark.unit

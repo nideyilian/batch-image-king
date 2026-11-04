@@ -118,12 +118,14 @@ def test_qml_theme_button_persists_and_toggles_the_selected_mode():
 def test_title_bar_only_keeps_real_navigation_actions():
     source = (REPO_ROOT / "app/qml/Main.qml").read_text(encoding="utf-8")
 
-    # 顶栏保留 3 个一点直达的并列入口，不折叠成菜单；编号不再显示；
+    # 顶栏保留一点直达的并列入口，不折叠成菜单；编号不再显示；
     # 「导出」下沉到工具栏强调色主按钮，同屏只留一个。
     # 文案用「动词 + 对象」，不用名词缩写。
-    assert source.count("HermesNavItem {") == 3
+    # 2026-11-05：新建组（图层/文字/异形）上提，顶栏由 3 项变 6 项。
+    assert source.count("HermesNavItem {") == 6
     assert 'text: "更多操作"' not in source
-    for label in ('text: "新建画布"', 'text: "预设中心"', 'text: "更多命令"'):
+    for label in ('text: "新建画布"', 'text: "图层"', 'text: "文字"',
+                  'text: "异形"', 'text: "预设中心"', 'text: "更多命令"'):
         assert label in source
     assert 'text: "导出"' not in source
 
